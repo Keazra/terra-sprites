@@ -98,6 +98,20 @@ pub fn builtin_changing(file: &str, changes: &[(&str, &str)]) -> DataPack {
     builtin_changing_files(&[(file, changes)])
 }
 
+/// The built-in data pack, with `file`'s text replaced by `text`.
+pub fn builtin_with(file: &str, text: &str) -> DataPack {
+    let sources = DataPack::builtin_sources();
+    assert!(
+        sources.iter().any(|&(path, _)| path == file),
+        "{file} is in the pack"
+    );
+    let replaced: Vec<(&str, &str)> = sources
+        .iter()
+        .map(|&(path, builtin)| (path, if path == file { text } else { builtin }))
+        .collect();
+    DataPack::from_sources(&replaced).expect("the changed pack is valid")
+}
+
 /// The built-in data pack, with each file's `changes` made to its text.
 pub fn builtin_changing_files(files: &[(&str, &[(&str, &str)])]) -> DataPack {
     let sources: Vec<(&str, String)> = DataPack::builtin_sources()
@@ -330,6 +344,30 @@ pub const OLD: &str = r#"Trait(trait: "grows_up", value: 1.0),
 /// all grown up, made with `data`.
 pub fn world_in(data: DataPack, rows: &[&str], sprites: &[(Pos, &str)]) -> World {
     WorldBuilder::new(rows).data(data).sprites(sprites).build()
+}
+
+/// A world drawn from `rows`, with `objects`, and a [`walker`] on each tile
+/// of `sprites` doing its script, made with `data`.
+pub fn walkers_in(
+    data: DataPack,
+    rows: &[&str],
+    objects: &[(Pos, &str)],
+    sprites: &[(Pos, &[ScriptedAction])],
+) -> World {
+    let mut builder = WorldBuilder::new(rows).data(data).objects(objects);
+    for &(pos, script) in sprites {
+        builder = builder.sprites_made(&[(pos, walker)]).script(pos, script);
+    }
+    builder.build()
+}
+
+/// The same, with the built-in pack.
+pub fn walkers(
+    rows: &[&str],
+    objects: &[(Pos, &str)],
+    sprites: &[(Pos, &[ScriptedAction])],
+) -> World {
+    walkers_in(builtin(), rows, objects, sprites)
 }
 
 /// The ID of the sprite standing on `pos`.

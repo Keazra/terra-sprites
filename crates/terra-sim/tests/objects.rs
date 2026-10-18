@@ -2,27 +2,13 @@
 //! (design §3.5).
 
 mod common;
-use common::{WorldBuilder, at, builtin};
+use common::{WorldBuilder, at, builtin, builtin_with};
 
 use terra_sim::{DataPack, EntityId, Event, EventKind, Pos, Removal, ScenarioError, World};
 
 /// The built-in pack with `objects.ron` holding only `types`.
 fn pack_with(types: &[&str]) -> DataPack {
-    let objects = format!("[{}]", types.join(",\n"));
-    let sources: Vec<(&str, &str)> = DataPack::builtin_sources()
-        .iter()
-        .map(|&(path, text)| {
-            (
-                path,
-                if path == "objects.ron" {
-                    &objects
-                } else {
-                    text
-                },
-            )
-        })
-        .collect();
-    DataPack::from_sources(&sources).expect("valid test pack")
+    builtin_with("objects.ron", &format!("[{}]", types.join(",\n")))
 }
 
 /// A world on a drawn map, with `objects` placed as `(x, y, type name)`.

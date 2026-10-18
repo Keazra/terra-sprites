@@ -3,28 +3,17 @@
 //! worlds with scripted actions.
 
 mod common;
-use common::{at, builtin, endings, walker};
+use common::{WorldBuilder, at, builtin, builtin_with, endings, walker, walkers};
 
 use terra_sim::{
-    DataPack, DeathCause, EntityId, Event, EventKind, Genome, Hurt, Map, ObjectView, Outcome, Pos,
-    Progress, Removal, Scenario, ScriptedAction, Target, Verb, World,
+    DataPack, DeathCause, EntityId, Event, EventKind, Genome, Hurt, ObjectView, Outcome, Pos,
+    Progress, Removal, ScriptedAction, Target, Verb, World,
 };
 
 /// A world drawn from `rows`, with `objects`, and one walker on `sprite`
 /// doing `script`.
 fn world(rows: &[&str], objects: &[(Pos, &str)], sprite: Pos, script: &[ScriptedAction]) -> World {
-    let data = builtin();
-    let map = Map::from_ascii(rows, &data).expect("valid drawing");
-    let sprites = [(sprite, Some(walker(&data)))];
-    let scripted: Vec<(Pos, ScriptedAction)> = script.iter().map(|&s| (sprite, s)).collect();
-    let scenario = Scenario {
-        map,
-        objects,
-        sprites: &sprites,
-        scripted: &scripted,
-        newborns: &[],
-    };
-    World::from_scenario(scenario, data, 1).expect("a valid scenario")
+    walkers(rows, objects, &[(sprite, script)])
 }
 
 /// The object on `pos`.
@@ -230,35 +219,12 @@ fn a_sprite_walks_to_its_target_and_bites_on_the_tick_it_arrives() {
     panic!("the sprite should reach the bush");
 }
 
-/// A world drawn from `rows`, with `objects`, and a walker on each tile of
-/// `sprites` doing its script.
-fn world_of(rows: &[&str], objects: &[(Pos, &str)], sprites: &[(Pos, &[ScriptedAction])]) -> World {
-    let data = builtin();
-    let map = Map::from_ascii(rows, &data).expect("valid drawing");
-    let walkers: Vec<(Pos, Option<Genome>)> = sprites
-        .iter()
-        .map(|&(pos, _)| (pos, Some(walker(&data))))
-        .collect();
-    let scripted: Vec<(Pos, ScriptedAction)> = sprites
-        .iter()
-        .flat_map(|&(pos, script)| script.iter().map(move |&s| (pos, s)))
-        .collect();
-    let scenario = Scenario {
-        map,
-        objects,
-        sprites: &walkers,
-        scripted: &scripted,
-        newborns: &[],
-    };
-    World::from_scenario(scenario, data, 1).expect("a valid scenario")
-}
-
 #[test]
 fn a_target_that_is_gone_ends_the_action_as_failed() {
     // The near sprite eats the berry first; the far one loses its target.
     let berry = at(1, 1);
     let eat = [ScriptedAction::Eat { at: berry }];
-    let mut world = world_of(
+    let mut world = walkers(
         &["........", "........", "........"],
         &[(berry, "berry")],
         &[(at(1, 1), &eat), (at(7, 1), &eat)],
@@ -310,7 +276,7 @@ fn approaching_a_sprite_follows_it_as_it_moves() {
         destination: leader_end,
     }];
     let approach = [ScriptedAction::Approach { at: leader_start }];
-    let mut world = world_of(
+    let mut world = walkers(
         &[
             "................",
             "................",
@@ -440,7 +406,7 @@ const LANE: [&str; 3] = [".......", ".......", "......."];
 fn hitting_a_sprite_hurts_it_and_not_the_hitter() {
     let hitter = [ScriptedAction::Hit { at: at(2, 1) }, ScriptedAction::Rest];
     let hit = [ScriptedAction::Rest; 2];
-    let mut world = world_of(&LANE, &[], &[(at(1, 1), &hitter), (at(2, 1), &hit)]);
+    let mut world = walkers(&LANE, &[], &[(at(1, 1), &hitter), (at(2, 1), &hit)]);
     let events = world.step();
     assert!(
         endings(&events).contains(&(Verb::Hit, Outcome::Applied)),
@@ -465,26 +431,12 @@ fn bored_and_lonely(data: &DataPack) -> Genome {
 
 #[test]
 fn playing_with_a_sprite_eases_both_sprites_boredom_and_loneliness_at_once() {
-    let data = builtin();
-    let map = Map::from_ascii(&LANE, &data).expect("valid drawing");
     let (a, b) = (at(1, 1), at(2, 1));
-    let sprites = [
-        (a, Some(bored_and_lonely(&data))),
-        (b, Some(bored_and_lonely(&data))),
-    ];
-    let scripted = [
-        (a, ScriptedAction::Play { at: b }),
-        (a, ScriptedAction::Rest),
-        (b, ScriptedAction::Rest),
-    ];
-    let scenario = Scenario {
-        map,
-        objects: &[],
-        sprites: &sprites,
-        scripted: &scripted,
-        newborns: &[],
-    };
-    let mut world = World::from_scenario(scenario, data, 1).expect("a valid scenario");
+    let mut world = WorldBuilder::new(&LANE)
+        .sprites_made(&[(a, bored_and_lonely), (b, bored_and_lonely)])
+        .script(a, &[ScriptedAction::Play { at: b }, ScriptedAction::Rest])
+        .script(b, &[ScriptedAction::Rest])
+        .build();
     let levels = |world: &World| {
         [a, b].map(|pos| {
             let sprite = world.sprite_at(pos).expect("a sprite");
@@ -575,7 +527,7 @@ fn an_ended_action_says_which_sprites_its_attempt_hurt() {
         if object.is_none() {
             sprites.push((there, &rest));
         }
-        let mut world = world_of(&LANE, &objects, &sprites);
+        let mut world = walkers(&LANE, &objects, &sprites);
         assert_eq!(hurt_by_first_ending(&world.step()), expected, "{what}");
     }
 }
@@ -597,7 +549,6 @@ fn feeling_world_in(
     script: &[ScriptedAction],
     others: &[Pos],
 ) -> World {
-    let map = Map::from_ascii(rows, &data).expect("valid drawing");
     let text = r#"(format: 1, genes: [
         Trait(trait: "speed", value: 10.0),
         Trait(trait: "sense_radius", value: 10.0),
@@ -605,19 +556,17 @@ fn feeling_world_in(
     ])"#;
     let genome = Genome::from_ron(text, &data).expect("a valid genome");
     let mut sprites = vec![(sprite, Some(genome))];
-    let mut scripted: Vec<(Pos, ScriptedAction)> = script.iter().map(|&s| (sprite, s)).collect();
+    sprites.extend(others.iter().map(|&other| (other, Some(walker(&data)))));
+    let rests = vec![ScriptedAction::Rest; script.len()];
+    let mut builder = WorldBuilder::new(rows)
+        .data(data)
+        .objects(objects)
+        .sprites_with(sprites)
+        .script(sprite, script);
     for &other in others {
-        sprites.push((other, Some(walker(&data))));
-        scripted.extend(script.iter().map(|_| (other, ScriptedAction::Rest)));
+        builder = builder.script(other, &rests);
     }
-    let scenario = Scenario {
-        map,
-        objects,
-        sprites: &sprites,
-        scripted: &scripted,
-        newborns: &[],
-    };
-    World::from_scenario(scenario, data, 1).expect("a valid scenario")
+    builder.build()
 }
 
 /// How much `h1` the sprite placed first has: what its `fruitless` pulses
@@ -664,17 +613,10 @@ fn trying_a_bush_with_no_fruit_is_fruitless_too() {
 fn trying_water_or_a_sprite_with_no_object_type_is_fruitless_too() {
     // Design v20 §5.2: in a pack with no object type for water or sprites,
     // they have no verb table, so no verb has a rule on them.
-    let sources: Vec<(&str, &str)> = DataPack::builtin_sources()
-        .iter()
-        .map(|&(path, text)| match path {
-            "objects.ron" => (
-                path,
-                r#"[(id: 5, name: "pebble", category: "toy", size: Small, hardness: 0.5)]"#,
-            ),
-            _ => (path, text),
-        })
-        .collect();
-    let data = DataPack::from_sources(&sources).expect("a valid test pack");
+    let data = builtin_with(
+        "objects.ron",
+        r#"[(id: 5, name: "pebble", category: "toy", size: Small, hardness: 0.5)]"#,
+    );
     let (me, water, other) = (at(1, 0), at(2, 0), at(1, 1));
     let cases: [(Verb, ScriptedAction, &[Pos]); 2] = [
         (Verb::Drink, ScriptedAction::Drink { at: water }, &[]),
@@ -701,11 +643,7 @@ fn a_thing_s_tags_answer_a_contact_even_without_a_verb_table_for_it() {
     // pricks whoever bites it, so the try isn't fruitless.
     let cactus = r#"[(id: 7, name: "cactus", category: "bush", size: Large, hardness: 1.0,
         tags: [Solid, Fixture, Thorny], verbs: {Hit: [Signal(Actor, "did_hit")]})]"#;
-    let sources: Vec<(&str, &str)> = DataPack::builtin_sources()
-        .iter()
-        .map(|&(path, text)| (path, if path == "objects.ron" { cactus } else { text }))
-        .collect();
-    let data = DataPack::from_sources(&sources).expect("a valid test pack");
+    let data = builtin_with("objects.ron", cactus);
     let spot = at(2, 1);
     let rows = [".....", ".....", "....."];
     let script = [ScriptedAction::Eat { at: spot }];
@@ -733,11 +671,7 @@ fn a_try_a_tag_answers_is_not_fruitless_even_if_the_thing_s_own_rule_fails() {
     let cactus = r#"[(id: 7, name: "cactus", category: "bush", size: Large, hardness: 1.0,
         tags: [Solid, Fixture, Thorny], counters: {"fruit": 6},
         verbs: {Eat: [RequireCounter("fruit", 1), AddCounter("fruit", -1)]})]"#;
-    let sources: Vec<(&str, &str)> = DataPack::builtin_sources()
-        .iter()
-        .map(|&(path, text)| (path, if path == "objects.ron" { cactus } else { text }))
-        .collect();
-    let data = DataPack::from_sources(&sources).expect("a valid test pack");
+    let data = builtin_with("objects.ron", cactus);
     let spot = at(2, 1);
     let rows = [".....", ".....", "....."];
     let script = [ScriptedAction::Eat { at: spot }];

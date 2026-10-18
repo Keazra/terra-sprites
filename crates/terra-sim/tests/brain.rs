@@ -3,11 +3,11 @@
 //! minds when a drive grows.
 
 mod common;
-use common::{at, barren, builtin};
+use common::{WorldBuilder, at, barren, builtin};
 
 use terra_sim::{
-    Command, DataPack, EntityId, Event, EventKind, Expression, Genome, Map, Outcome, Part, Pos,
-    Scenario, ScriptedAction, Target, Thing, Verb, World,
+    Command, DataPack, EntityId, Event, EventKind, Expression, Genome, Outcome, Part, Pos,
+    ScriptedAction, Target, Thing, Verb, World,
 };
 
 const STARTER: &str = include_str!("../../../data/genomes/starter.ron");
@@ -34,16 +34,12 @@ fn world_in(
     genome: Genome,
     seed: u64,
 ) -> World {
-    let map = Map::from_ascii(rows, &data).expect("valid drawing");
-    let sprites = [(pos, Some(genome))];
-    let scenario = Scenario {
-        map,
-        objects,
-        sprites: &sprites,
-        scripted: &[],
-        newborns: &[],
-    };
-    let mut world = World::from_scenario(scenario, data, seed).expect("a valid scenario");
+    let mut world = WorldBuilder::new(rows)
+        .data(data)
+        .objects(objects)
+        .sprites_with(vec![(pos, Some(genome))])
+        .seed(seed)
+        .build();
     for &(at, kind) in objects {
         if kind == "berry_bush" {
             world
@@ -318,18 +314,14 @@ fn a_lone_sprite_with_a_bush_and_water_nearby_survives_10_000_ticks() {
     for seed in [1, 2, 3] {
         // It lives alone, with no young to share its bush (M2 design §10).
         let data = barren();
-        let map = Map::from_ascii(&rows, &data).expect("valid drawing");
-        // The starter genome, with spawn variation, as the first population gets it.
-        let sprites = [(at(7, 3), None)];
         let bush = at(3, 3);
-        let scenario = Scenario {
-            map,
-            objects: &[(bush, "berry_bush")],
-            sprites: &sprites,
-            scripted: &[],
-            newborns: &[],
-        };
-        let mut world = World::from_scenario(scenario, data, seed).expect("a valid scenario");
+        let mut world = WorldBuilder::new(&rows)
+            .data(data)
+            .objects(&[(bush, "berry_bush")])
+            // The starter genome, with spawn variation, as the first population gets it.
+            .starters(&[at(7, 3)])
+            .seed(seed)
+            .build();
         world
             .start_object(bush, "mature", &[("fruit", 6)])
             .expect("a bush");
@@ -484,16 +476,12 @@ fn a_lonely_sprite_goes_over_to_another_or_plays_with_it() {
             &data,
         );
         let content = starter_with(&[], &data);
-        let map = Map::from_ascii(&FIELD, &data).expect("valid drawing");
-        let sprites = [(at(1, 3), Some(lonely)), (at(9, 3), Some(content))];
-        let scenario = Scenario {
-            map,
-            objects: &[],
-            sprites: &sprites,
-            scripted: &[],
-            newborns: &[],
-        };
-        let mut world = World::from_scenario(scenario, data, seed).expect("a valid scenario");
+        let sprites = vec![(at(1, 3), Some(lonely)), (at(9, 3), Some(content))];
+        let mut world = WorldBuilder::new(&FIELD)
+            .data(data)
+            .sprites_with(sprites)
+            .seed(seed)
+            .build();
         let id = world.sprite_at(at(1, 3)).expect("the lonely sprite").id();
         let sought_company = (0..100).any(|_| {
             let events = world.step();
@@ -520,15 +508,12 @@ fn boredom_eased_by_playing(objects: &[(Pos, &str)], sprites_at: &[Pos], with: P
     let me = at(1, 1);
     let mut sprites = vec![(me, Some(bored()))];
     sprites.extend(sprites_at.iter().map(|&pos| (pos, Some(bored()))));
-    let scripted = [(me, ScriptedAction::Play { at: with })];
-    let scenario = Scenario {
-        map: Map::from_ascii(&[".....", ".....", "....."], &data).expect("valid drawing"),
-        objects,
-        sprites: &sprites,
-        scripted: &scripted,
-        newborns: &[],
-    };
-    let mut world = World::from_scenario(scenario, data, 1).expect("a valid scenario");
+    let mut world = WorldBuilder::new(&[".....", ".....", "....."])
+        .data(data)
+        .objects(objects)
+        .sprites_with(sprites)
+        .script(me, &[ScriptedAction::Play { at: with }])
+        .build();
     let boredom = |world: &World| {
         let sprite = world.sprite_at(me).expect("the player");
         sprite.chemical("boredom").expect("boredom")
