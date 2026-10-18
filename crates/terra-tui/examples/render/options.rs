@@ -317,7 +317,7 @@ impl Options {
                 "--map-view draws the map view alone, with no other parts to --hide".into(),
             );
         }
-        if let Scene::World(scene) = &scene
+        if let Scene::World(scene) | Scene::Samples(scene) = &scene
             && scene.tab.is_some()
             && !parts.inspector
         {
@@ -668,6 +668,10 @@ mod tests {
         );
         refused(
             "world --hide inspector --tab brain -o a.gif",
+            "--tab opens one of the inspector's tabs",
+        );
+        refused(
+            "samples --hide inspector --tab brain -o a.gif",
             "--tab opens one of the inspector's tabs",
         );
     }
