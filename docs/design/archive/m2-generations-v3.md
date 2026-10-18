@@ -2,7 +2,7 @@
 
 - **Status:** Draft: the plan, with what each slice settles added in a new revision.
 - **Date:** 2026-10-06
-- **Supersedes:** [v1](archive/m2-generations-v1.md), whose table holds the planning session's decisions
+- **Supersedes:** [v1](m2-generations-v1.md), whose table holds the planning session's decisions
 - **Builds on:** [M1 design v39](https://github.com/Keazra/terra-sprites/blob/refs/tags/design/m1-v39/docs/design/m1-a-sprite-lives-v39.md), which stays the rulebook for everything M2 doesn't change
 - **Covers:** what milestone 2 contains, its slices and their order, the time scale of a sprite's life, the direction for ageing, what "M2 is done" means, and the title screen (Slice 21)
 
