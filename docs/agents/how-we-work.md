@@ -65,6 +65,8 @@ Each slice is a GitHub issue ("Slice N: …") in its milestone; M2's are Slices 
 
 A slice too big for one PR ships as two ("4a", "4b"); only the last PR's description says "Closes #N".
 
+**A milestone's acceptance slice ends with its release** (the owner, 2026-10-18): once the play-through passes, its last PR raises the version, writes the release notes and points the README's install command at the release, and the owner makes the release on GitHub (`docs/agents/releases.md`).
+
 **A slice that promises no visible change proves it.** Run the lab scenarios with the same seeds on `main` and on the branch, and compare the reports byte for byte. Slice 9d, which moved the categories into data, was checked that way: A1 and the thorn trap came out identical.
   - **Start `main`'s reports early.** The thorn trap alone takes about ten minutes in release. In slice 11a they ran in the background from a separate checkout of `main` (`git worktree add --detach <scratch dir> main`), with a `CARGO_TARGET_DIR` of their own so builds didn't wait on each other. The baseline was ready long before the review, and the branch's reports ran the same way, twice: once when the world's work was done, and again after the review's fixes.
 

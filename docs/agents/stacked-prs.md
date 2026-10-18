@@ -8,6 +8,8 @@ The rules for every PR, stacked or not, are in `AGENTS.md`, "Pull requests".
 
 Stack a PR when it needs the one below: it builds on that PR's code, or changes the same lines. The owner may ask for a stack too. Otherwise branch from `main`: a PR in a stack waits for every PR below it, so an independent change on top of one is held up for nothing.
 
+Don't stack a milestone's slices to keep them off `main` until it's done. A stack that long has to carry every fix to a lower PR up through each one above it, and the tool, docs and advertising PRs that make up most of the work would wait too: in M2, 45 of the 60 merged PRs weren't slices. The milestone's release is what gives players a finished build (`docs/agents/releases.md`).
+
 A PR from `main` that touches files another open PR changes: fetch their branch and check the two merge cleanly with `git merge-tree --write-tree HEAD origin/<their branch>`, which prints any conflicts. If they conflict, stack it, or say in both PRs which merges first.
 
 ## Making one
