@@ -1,76 +1,15 @@
 //! The Cursor on screen (design v21 §6.5): its modes, Train's pets and zaps,
 //! and Follow.
 
+mod common;
+use common::{WorldBuilder, app, apply, at, click, field, pointing_at, sprite_on, touched};
+
 use std::time::Duration;
 
-use ratatui::layout::{Position, Rect};
-use terra_sim::{
-    Command, DataPack, DeathCause, EntityId, Event, EventKind, Map, Pos, Rejection, Scenario,
-    ScriptedAction, World,
-};
-use terra_tui::app::{App, Areas, CursorMode, Flow, Screen, StatusMark};
+use ratatui::layout::Position;
+use terra_sim::{Command, DeathCause, EntityId, Event, EventKind, Pos, ScriptedAction, World};
+use terra_tui::app::{App, CursorMode, Screen, StatusMark};
 use terra_tui::input::{Action, Button};
-use terra_tui::theme::Theme;
-
-fn pack() -> DataPack {
-    DataPack::builtin().expect("valid pack")
-}
-
-/// An all-grass world, 10×6, with starter sprites on `sprites`.
-fn field(sprites: &[Pos]) -> World {
-    let rows = vec![".........."; 6];
-    let map = Map::from_ascii(&rows, &pack()).expect("valid drawing");
-    let sprites: Vec<(Pos, _)> = sprites.iter().map(|&pos| (pos, None)).collect();
-    let scenario = Scenario {
-        map,
-        objects: &[],
-        sprites: &sprites,
-        scripted: &[],
-        newborns: &[],
-    };
-    World::from_scenario(scenario, pack(), 1).expect("valid scenario")
-}
-
-/// The app, with the map view's tiles drawn from screen cell (0, 0), so a
-/// tile's cell is its position.
-fn app(world: &World) -> App {
-    let areas = Areas {
-        tiles: Rect::new(0, 0, 10, 6),
-        inspector: None,
-        event_log: None,
-        overlay: None,
-    };
-    App::new(world.map(), Theme::cp437(), 1, areas)
-}
-
-fn at(x: u16, y: u16) -> Pos {
-    Pos { x, y }
-}
-
-/// The screen cell the pointer is on to point at `tile`: one down and right of
-/// it (design v27 §6.5). The map view's tiles are drawn from screen cell (0, 0).
-fn pointing_at(tile: Pos) -> Position {
-    Position::new(tile.x + 1, tile.y + 1)
-}
-
-fn apply(app: &mut App, world: &World, action: Action) {
-    assert_eq!(app.apply(action, world), Flow::Continue);
-}
-
-fn click(app: &mut App, world: &World, tile: Pos, button: Button) {
-    let at = pointing_at(tile);
-    let action = Action::Click {
-        at,
-        button,
-        amplified: false,
-    };
-    apply(app, world, action);
-}
-
-/// The ID of the sprite on `pos`.
-fn sprite_on(world: &World, pos: Pos) -> EntityId {
-    world.sprite_at(pos).expect("a sprite").id()
-}
 
 fn pet(sprite: EntityId, reach_back: u64) -> Command {
     Command::Reward {
@@ -89,7 +28,7 @@ fn zap(sprite: EntityId) -> Command {
 
 #[test]
 fn z_and_x_pick_select_and_train_and_escape_goes_back_to_select() {
-    let world = field(&[]);
+    let world = field(&[], &[]);
     let mut app = app(&world);
     assert_eq!(app.mode(), CursorMode::Select);
     apply(&mut app, &world, Action::Mode(CursorMode::Train));
@@ -111,7 +50,7 @@ fn z_and_x_pick_select_and_train_and_escape_goes_back_to_select() {
 fn the_wheel_cycles_the_cursor_modes_wrapping_round() {
     // Design v21 §6.5: a notch down is the next mode, up the previous:
     // Select, Train, Grab (v23).
-    let world = field(&[]);
+    let world = field(&[], &[]);
     let mut app = app(&world);
     let wheel = |notches| Action::Wheel {
         at: Position::new(4, 2),
@@ -133,7 +72,7 @@ fn the_wheel_cycles_the_cursor_modes_wrapping_round() {
 fn the_wheel_off_the_map_leaves_the_mode_alone() {
     // Design v22 §6.5: over the event log or the bars it does nothing. The
     // map view's tiles are drawn at cells (0, 0) to (9, 5).
-    let world = field(&[]);
+    let world = field(&[], &[]);
     let mut app = app(&world);
     let off_the_map = Action::Wheel {
         at: Position::new(20, 12),
@@ -146,7 +85,7 @@ fn the_wheel_off_the_map_leaves_the_mode_alone() {
 #[test]
 fn in_train_mode_a_left_click_pets_the_sprite_under_it_and_a_right_click_zaps_it() {
     // Design v21 §6.5. At 1×, two seconds is 2.5 ticks: the reach back is 3.
-    let world = field(&[at(4, 2)]);
+    let world = field(&[], &[at(4, 2)]);
     let id = sprite_on(&world, at(4, 2));
     let mut app = app(&world);
     apply(&mut app, &world, Action::Mode(CursorMode::Train));
@@ -158,7 +97,7 @@ fn in_train_mode_a_left_click_pets_the_sprite_under_it_and_a_right_click_zaps_it
 
 #[test]
 fn an_amplified_click_is_a_hug_or_a_shock() {
-    let world = field(&[at(4, 2)]);
+    let world = field(&[], &[at(4, 2)]);
     let id = sprite_on(&world, at(4, 2));
     let mut app = app(&world);
     apply(&mut app, &world, Action::Mode(CursorMode::Train));
@@ -189,7 +128,7 @@ fn an_amplified_click_is_a_hug_or_a_shock() {
 
 #[test]
 fn a_train_click_with_no_sprite_to_act_on_sends_nothing() {
-    let world = field(&[at(4, 2)]);
+    let world = field(&[], &[at(4, 2)]);
     let mut app = app(&world);
     apply(&mut app, &world, Action::Mode(CursorMode::Train));
     click(&mut app, &world, at(1, 1), Button::Left);
@@ -199,7 +138,7 @@ fn a_train_click_with_no_sprite_to_act_on_sends_nothing() {
 
 #[test]
 fn in_select_mode_clicks_send_nothing() {
-    let world = field(&[at(4, 2)]);
+    let world = field(&[], &[at(4, 2)]);
     let mut app = app(&world);
     click(&mut app, &world, at(4, 2), Button::Left);
     assert_eq!(app.take_commands(), []);
@@ -209,7 +148,7 @@ fn in_select_mode_clicks_send_nothing() {
 fn a_pet_reaches_back_two_seconds_of_the_player_s_time() {
     // Design v21 §6.5: 1.25 ticks a second at 1×, so 5 at 2×, 10 at 4×, 20
     // at 8× and 40 at 16×. While paused, the speed time resumes at.
-    let world = field(&[at(4, 2)]);
+    let world = field(&[], &[at(4, 2)]);
     let id = sprite_on(&world, at(4, 2));
     let mut app = app(&world);
     apply(&mut app, &world, Action::Mode(CursorMode::Train));
@@ -250,7 +189,7 @@ fn follow(app: &mut App, world: &World, tile: Pos) {
 fn f_follows_the_sprite_under_the_cursor_without_selecting_it_and_again_stops() {
     // Design v26 §6.5: Follow is the Cursor's, and the selection the
     // inspector's.
-    let world = field(&[at(4, 2)]);
+    let world = field(&[], &[at(4, 2)]);
     let id = sprite_on(&world, at(4, 2));
     let mut app = app(&world);
     follow(&mut app, &world, at(4, 2));
@@ -262,7 +201,7 @@ fn f_follows_the_sprite_under_the_cursor_without_selecting_it_and_again_stops() 
 #[test]
 fn with_no_sprite_under_the_cursor_f_follows_the_selected_one() {
     // Design v26 §6.5: so `Tab` then `F` works without the mouse.
-    let world = field(&[at(4, 2)]);
+    let world = field(&[], &[at(4, 2)]);
     let id = sprite_on(&world, at(4, 2));
     let mut app = app(&world);
     apply(&mut app, &world, Action::Point(Position::new(1, 1)));
@@ -277,7 +216,7 @@ fn with_no_sprite_under_the_cursor_f_follows_the_selected_one() {
 #[test]
 fn a_sprite_under_the_cursor_comes_before_the_selected_one() {
     // Design v26 §6.5.
-    let world = field(&[at(2, 2), at(6, 2)]);
+    let world = field(&[], &[at(2, 2), at(6, 2)]);
     let (first, second) = (sprite_on(&world, at(2, 2)), sprite_on(&world, at(6, 2)));
     let mut app = app(&world);
     click(&mut app, &world, at(2, 2), Button::Left);
@@ -289,7 +228,7 @@ fn a_sprite_under_the_cursor_comes_before_the_selected_one() {
 #[test]
 fn a_middle_click_does_what_f_does_where_it_points() {
     // Design v26 §6.5.
-    let world = field(&[at(4, 2)]);
+    let world = field(&[], &[at(4, 2)]);
     let id = sprite_on(&world, at(4, 2));
     let mut app = app(&world);
     middle_click(&mut app, &world, at(1, 1));
@@ -310,7 +249,7 @@ fn f_and_the_middle_click_follow_in_every_mode() {
     // Design v26 §6.5: Follow has a key of its own, so no mode needs to
     // give up a button for it.
     for mode in [CursorMode::Train, CursorMode::Grab] {
-        let world = field(&[at(4, 2)]);
+        let world = field(&[], &[at(4, 2)]);
         let id = sprite_on(&world, at(4, 2));
         let mut app = app(&world);
         apply(&mut app, &world, Action::Mode(mode));
@@ -326,7 +265,7 @@ fn f_and_the_middle_click_follow_in_every_mode() {
 fn in_select_mode_a_right_click_or_e_activates_and_nothing_can_be_activated_yet() {
     // Design v26 §6.5: right click is Activate; with no devices yet, it
     // says so, and touches neither the selection nor Follow.
-    let world = field(&[at(4, 2)]);
+    let world = field(&[], &[at(4, 2)]);
     let id = sprite_on(&world, at(4, 2));
     let mut app = app(&world);
     click(&mut app, &world, at(4, 2), Button::Right);
@@ -347,7 +286,7 @@ fn in_select_mode_a_right_click_or_e_activates_and_nothing_can_be_activated_yet(
 fn a_left_click_on_empty_ground_clears_the_selection_and_follow_holds() {
     // Design v26 §6.5: the selection no longer carries Follow, so a stray
     // click can't lose it.
-    let world = field(&[at(4, 2)]);
+    let world = field(&[], &[at(4, 2)]);
     let id = sprite_on(&world, at(4, 2));
     let mut app = app(&world);
     click(&mut app, &world, at(4, 2), Button::Left);
@@ -359,7 +298,7 @@ fn a_left_click_on_empty_ground_clears_the_selection_and_follow_holds() {
 #[test]
 fn selecting_another_sprite_leaves_follow_where_it_is() {
     // Design v26 §6.5: a left click on it, or Tab.
-    let world = field(&[at(2, 2), at(6, 2)]);
+    let world = field(&[], &[at(2, 2), at(6, 2)]);
     let first = sprite_on(&world, at(2, 2));
     let mut app = app(&world);
     follow(&mut app, &world, at(2, 2));
@@ -371,7 +310,7 @@ fn selecting_another_sprite_leaves_follow_where_it_is() {
 
 #[test]
 fn following_the_cursor_stays_on_its_sprite_whatever_the_pointer_does() {
-    let world = field(&[at(4, 2)]);
+    let world = field(&[], &[at(4, 2)]);
     let mut app = app(&world);
     follow(&mut app, &world, at(4, 2));
     apply(&mut app, &world, Action::Point(pointing_at(at(8, 5))));
@@ -388,19 +327,13 @@ fn following_the_cursor_stays_on_its_sprite_whatever_the_pointer_does() {
 #[test]
 fn following_the_cursor_moves_with_its_sprite() {
     // Design v21 §6.5: the sprite walks off, and the Cursor goes with it.
-    let data = pack();
-    let map = Map::from_ascii(&[".........."; 6], &data).expect("valid drawing");
     let walk = ScriptedAction::Wander {
         destination: at(8, 2),
     };
-    let scenario = Scenario {
-        map,
-        objects: &[],
-        sprites: &[(at(1, 2), None)],
-        scripted: &[(at(1, 2), walk)],
-        newborns: &[],
-    };
-    let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
+    let mut world = WorldBuilder::grass(10, 6)
+        .starters(&[at(1, 2)])
+        .scripts(&[(at(1, 2), walk)])
+        .build();
     let mut app = app(&world);
     follow(&mut app, &world, at(1, 2));
     for _ in 0..3 {
@@ -415,7 +348,7 @@ fn following_the_cursor_moves_with_its_sprite() {
 #[test]
 fn the_followed_sprite_s_death_ends_follow_and_no_other_does() {
     // Design v26 §6.5: whichever sprite is selected.
-    let world = field(&[at(4, 2), at(7, 2)]);
+    let world = field(&[], &[at(4, 2), at(7, 2)]);
     let (id, other) = (sprite_on(&world, at(4, 2)), sprite_on(&world, at(7, 2)));
     let mut app = app(&world);
     click(&mut app, &world, at(7, 2), Button::Left);
@@ -440,7 +373,7 @@ fn the_followed_sprite_s_death_ends_follow_and_no_other_does() {
 #[test]
 fn in_train_mode_the_followed_sprite_is_the_target_wherever_the_click_or_key_is() {
     // Design v21 §6.5.
-    let world = field(&[at(2, 2), at(6, 2)]);
+    let world = field(&[], &[at(2, 2), at(6, 2)]);
     let first = sprite_on(&world, at(2, 2));
     let mut app = app(&world);
     follow(&mut app, &world, at(2, 2));
@@ -461,7 +394,7 @@ fn in_train_mode_the_followed_sprite_is_the_target_wherever_the_click_or_key_is(
 #[test]
 fn q_and_f_act_where_the_cursor_is() {
     // Design v27 §6.5: where the pointer points, or on the followed sprite.
-    let world = field(&[at(4, 2), at(7, 2)]);
+    let world = field(&[], &[at(4, 2), at(7, 2)]);
     let id = sprite_on(&world, at(4, 2));
     let mut app = app(&world);
     apply(&mut app, &world, Action::Point(pointing_at(at(4, 2))));
@@ -480,40 +413,11 @@ fn q_and_f_act_where_the_cursor_is() {
     );
 }
 
-/// The Cursor touching sprite `id` on `tick`: a pet, hug, zap or shock, or
-/// a pet refused.
-fn touched(tick: u64, id: EntityId, what: &str) -> Event {
-    let kind = match what {
-        "pet" => EventKind::Rewarded {
-            id,
-            amplified: false,
-        },
-        "hug" => EventKind::Rewarded {
-            id,
-            amplified: true,
-        },
-        "zap" => EventKind::Corrected {
-            id,
-            amplified: false,
-        },
-        "shock" => EventKind::Corrected {
-            id,
-            amplified: true,
-        },
-        "refused pet" => EventKind::CommandRejected {
-            command: pet(id, 3),
-            reason: Rejection::Gone,
-        },
-        _ => unreachable!("{what}"),
-    };
-    Event { tick, kind }
-}
-
 #[test]
 fn the_observed_list_tells_what_the_sprite_felt_not_where_it_came_from() {
     // Design v21 §6.1: the Cursor is invisible, so the touch came from
     // nowhere.
-    let world = field(&[at(2, 2), at(6, 2)]);
+    let world = field(&[], &[at(2, 2), at(6, 2)]);
     let (id, other) = (sprite_on(&world, at(2, 2)), sprite_on(&world, at(6, 2)));
     let mut app = app(&world);
     click(&mut app, &world, at(2, 2), Button::Left);
@@ -547,7 +451,7 @@ fn wait(app: &mut App, millis: u64) {
 fn a_train_click_that_sends_a_command_flashes_sent_for_a_moment() {
     // Design v21 §6.5: about 0.3 s of real time. A Select click sends
     // nothing, so it doesn't flash.
-    let world = field(&[at(4, 2)]);
+    let world = field(&[], &[at(4, 2)]);
     let mut app = app(&world);
     click(&mut app, &world, at(4, 2), Button::Left);
     assert_eq!(app.status_mark(), StatusMark::Idle);
@@ -564,7 +468,7 @@ fn a_train_click_that_sends_a_command_flashes_sent_for_a_moment() {
 fn the_world_s_report_flashes_applied_or_rejected() {
     // Design v21 §6.5: `☼` when a pet or zap applied, `?` when it was
     // refused.
-    let world = field(&[at(4, 2)]);
+    let world = field(&[], &[at(4, 2)]);
     let id = sprite_on(&world, at(4, 2));
     let mut app = app(&world);
     app.record(&[touched(1, id, "zap")], &world);
@@ -581,7 +485,7 @@ fn the_world_s_report_flashes_applied_or_rejected() {
 fn a_report_waits_until_sent_has_shown() {
     // Design v22 §6.5: at speed a command can apply in the frame it was
     // sent, so both flashes show, one after the other.
-    let world = field(&[at(4, 2)]);
+    let world = field(&[], &[at(4, 2)]);
     let id = sprite_on(&world, at(4, 2));
     let mut app = app(&world);
     apply(&mut app, &world, Action::Mode(CursorMode::Train));
@@ -601,7 +505,7 @@ fn a_report_waits_until_sent_has_shown() {
 #[test]
 fn a_new_click_flashes_sent_at_once_even_over_a_report() {
     // Design v21 §6.5: each click flashes `+` at once.
-    let world = field(&[at(4, 2)]);
+    let world = field(&[], &[at(4, 2)]);
     let id = sprite_on(&world, at(4, 2));
     let mut app = app(&world);
     apply(&mut app, &world, Action::Mode(CursorMode::Train));
@@ -615,7 +519,7 @@ fn a_new_click_flashes_sent_at_once_even_over_a_report() {
 fn a_refusal_wins_over_a_command_applied_with_it() {
     // Design v22 §6.5: a refusal is what needs noticing, so `☼` doesn't
     // replace a `?` still to show or showing.
-    let world = field(&[at(4, 2)]);
+    let world = field(&[], &[at(4, 2)]);
     let id = sprite_on(&world, at(4, 2));
     let mut app = app(&world);
     let refused = touched(1, id, "refused pet");
@@ -629,7 +533,7 @@ fn a_refusal_wins_over_a_command_applied_with_it() {
 #[test]
 fn while_paused_sent_flashes_at_the_click_and_the_report_when_time_moves() {
     // Design v22 §6.5: the command waits for the next tick.
-    let world = field(&[at(4, 2)]);
+    let world = field(&[], &[at(4, 2)]);
     let id = sprite_on(&world, at(4, 2));
     let mut app = app(&world);
     apply(&mut app, &world, Action::TogglePause);
@@ -646,7 +550,7 @@ fn while_paused_sent_flashes_at_the_click_and_the_report_when_time_moves() {
 fn a_train_click_with_nothing_to_act_on_flashes_rejected_at_once() {
     // Design v21 §6.5: it sends nothing, so there's no `+` to wait for,
     // even after a click that did send.
-    let world = field(&[at(4, 2)]);
+    let world = field(&[], &[at(4, 2)]);
     let mut app = app(&world);
     apply(&mut app, &world, Action::Mode(CursorMode::Train));
     click(&mut app, &world, at(4, 2), Button::Left);
@@ -658,7 +562,7 @@ fn a_train_click_with_nothing_to_act_on_flashes_rejected_at_once() {
 #[test]
 fn a_flash_carries_on_through_a_change_of_mode() {
     // Design v22 §6.5.
-    let world = field(&[at(4, 2)]);
+    let world = field(&[], &[at(4, 2)]);
     let mut app = app(&world);
     apply(&mut app, &world, Action::Mode(CursorMode::Train));
     click(&mut app, &world, at(4, 2), Button::Left);
@@ -670,7 +574,7 @@ fn a_flash_carries_on_through_a_change_of_mode() {
 fn a_miss_then_a_quick_pet_shows_the_pet_applied() {
     // Design v22 §6.5: a refusal wins over a command applied with it, not
     // over a later click's.
-    let world = field(&[at(4, 2)]);
+    let world = field(&[], &[at(4, 2)]);
     let id = sprite_on(&world, at(4, 2));
     let mut app = app(&world);
     apply(&mut app, &world, Action::Mode(CursorMode::Train));
@@ -688,7 +592,7 @@ fn a_miss_then_a_quick_pet_shows_the_pet_applied() {
 fn a_refused_pet_then_a_quick_one_that_works_shows_the_second_applied() {
     // Design v22 §6.5: the marks follow the latest click, so its `+` puts
     // the first click's refusal, still waiting to show, behind it.
-    let world = field(&[at(4, 2)]);
+    let world = field(&[], &[at(4, 2)]);
     let id = sprite_on(&world, at(4, 2));
     let mut app = app(&world);
     apply(&mut app, &world, Action::Mode(CursorMode::Train));
@@ -709,7 +613,7 @@ fn a_refused_pet_then_a_quick_one_that_works_shows_the_second_applied() {
 fn a_new_click_s_sent_isnt_cut_short_by_an_earlier_click_s_result() {
     // Design v22 §6.5: while paused, the first pet's `☼`, still waiting its
     // turn, would read as the second pet landing.
-    let world = field(&[at(4, 2)]);
+    let world = field(&[], &[at(4, 2)]);
     let id = sprite_on(&world, at(4, 2));
     let mut app = app(&world);
     apply(&mut app, &world, Action::Mode(CursorMode::Train));

@@ -25,6 +25,6 @@
 │ ☺ anxiety  ☺ none                                                                                │
 │ EMOTES   ! hurt  ‼ zapped  ? gave up  z resting  ♥ pleased  ♫ danced  ♪ called                   │
 │ LINEAGE  ☺ parents, grandparents  ☺ brothers, sisters  ☺ young, theirs  ☺ the rest               │
-│ FILES    /home/kel/.local/share/terra-sprites                                                    │
+│ FILES    /home/player/.local/share/terra-sprites                                                 │
 └──────────────────────────────────────────────────────────────────────────────────────────────────┘
  (12,4) grass │ SELECT       Z select  X train  C grab  WASD scroll  space pause  . step  +/- speed

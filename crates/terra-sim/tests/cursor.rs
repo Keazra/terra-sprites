@@ -3,11 +3,10 @@
 //! from them.
 
 mod common;
-use common::{WorldBuilder, at, builtin, close, genome, value_of};
+use common::{WorldBuilder, at, close, value_of};
 
 use terra_sim::{
-    Command, EntityId, EventKind, Genome, Learned, Map, Pos, Rejection, Scenario, ScriptedAction,
-    Thing, Verb, World,
+    Command, EntityId, EventKind, Learned, Pos, Rejection, ScriptedAction, Thing, Verb, World,
 };
 
 /// A world drawn from `rows`, with `objects`, and one sprite of `genes` on
@@ -19,13 +18,10 @@ fn world(
     genes: &str,
     script: &[ScriptedAction],
 ) -> World {
-    let data = builtin();
-    let scripted: Vec<(Pos, ScriptedAction)> = script.iter().map(|&s| (sprite, s)).collect();
     WorldBuilder::new(rows)
         .objects(objects)
-        .sprites_with(vec![(sprite, Some(genome(genes, &data)))])
-        .scripts(&scripted)
-        .data(data)
+        .sprites(&[(sprite, genes)])
+        .script(sprite, script)
         .build()
 }
 
@@ -367,46 +363,26 @@ fn in_a_tick_the_cursor_touches_a_sprite_relief_still_looks_back_only_the_touch_
     assert!(close(value_of(&world, id, &balls_good()), 0.25));
 }
 
-/// A world drawn from `rows` with sprites of `genes` on each of `sprites`,
-/// each doing its part of `script`.
-fn scene(rows: &[&str], sprites: &[(Pos, &str)], script: &[(Pos, ScriptedAction)]) -> World {
-    let data = builtin();
-    let map = Map::from_ascii(rows, &data).expect("valid drawing");
-    let sprites: Vec<(Pos, Option<Genome>)> = sprites
-        .iter()
-        .map(|&(pos, genes)| (pos, Some(genome(genes, &data))))
-        .collect();
-    let scenario = Scenario {
-        map,
-        objects: &[],
-        sprites: &sprites,
-        scripted: script,
-        newborns: &[],
-    };
-    World::from_scenario(scenario, data, 1).expect("a valid scenario")
-}
-
 #[test]
 fn a_zap_while_the_sprite_was_just_hit_teaches_fear_of_the_hitter() {
     // Design v21 §5.6, v18 §5.6: with a `was_hit` pulse live, punishment
     // teaches fear of the attacker, a zap's too: the hit's .5 and the zap's
     // .5, at fear_rate 1. Nothing is bad.
     let (me, attacker) = (at(1, 1), at(2, 1));
-    let mut world = scene(
-        &["....", "....", "...."],
-        &[
+    let mut world = WorldBuilder::new(&["....", "....", "...."])
+        .sprites(&[
             (
                 me,
                 r#"Emitter(locus: Locus("was_hit"), mode: Level, gain: 0.5, chem: "punishment"),"#,
             ),
             (attacker, ""),
-        ],
-        &[
-            (me, ScriptedAction::Rest),
-            (attacker, ScriptedAction::Hit { at: me }),
-            (attacker, ScriptedAction::Rest),
-        ],
-    );
+        ])
+        .script(me, &[ScriptedAction::Rest])
+        .script(
+            attacker,
+            &[ScriptedAction::Hit { at: me }, ScriptedAction::Rest],
+        )
+        .build();
     let (me, attacker) = (
         world.sprite_at(me).expect("me").id(),
         world.sprite_at(attacker).expect("the attacker").id(),

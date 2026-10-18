@@ -202,10 +202,7 @@ mod tests {
     use rand_chacha::rand_core::SeedableRng;
 
     use super::*;
-
-    fn data() -> DataPack {
-        DataPack::builtin().expect("built-in data pack is valid")
-    }
+    use crate::test_util::builtin;
 
     /// How many tiles of each terrain `map` has.
     fn counts(map: &Map) -> [usize; 6] {
@@ -226,7 +223,7 @@ mod tests {
 
     #[test]
     fn the_heights_fall_into_bands_of_20_12_8_50_and_10_percent_and_40_percent_of_land_is_dirt() {
-        let data = data();
+        let data = builtin();
         let config = WorldConfig::from_ron("(width: 64, height: 40)", &data).expect("valid");
         for seed in [1, 2, 3] {
             let map = banded(&config, &data, &mut ChaCha8Rng::seed_from_u64(seed));
@@ -253,7 +250,7 @@ mod tests {
             rows.push(format!("{}#{right}", ".".repeat(12)));
         }
         let rows: Vec<&str> = rows.iter().map(String::as_str).collect();
-        let mut map = Map::from_ascii(&rows, &data()).expect("valid drawing");
+        let mut map = Map::from_ascii(&rows, &builtin()).expect("valid drawing");
         regions::connect(&mut map, MIN_REGION);
         let walkable = |x: u16, y: u16| map.is_walkable(Pos { x, y });
         assert!(walkable(13, 0), "the 64 stay land");

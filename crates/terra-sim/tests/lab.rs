@@ -2,13 +2,13 @@
 //! happened in each window counted.
 
 mod common;
-use common::{barren, builtin};
+use common::{WorldBuilder, at, barren, builtin};
 
 use std::collections::BTreeMap;
 
 use terra_sim::{
-    CursorTouch, DeathCause, Event, EventKind, LabError, LabRun, LabScenario, Learned, Map,
-    Outcome, Pos, Scenario, Verb, Window, Without, World, report,
+    CursorTouch, DeathCause, Event, EventKind, LabError, LabRun, LabScenario, Learned, Outcome,
+    Verb, Window, Without, report,
 };
 
 const ARENA: &str = r#"(
@@ -86,19 +86,12 @@ fn a_run_counts_applied_actions_and_deaths_in_each_window() {
     // The same world, drawn by hand, stepped here: objects in reading
     // order, then the sprite.
     let rows = ["........", "........", "......~~", "......~~"];
-    let map = Map::from_ascii(&rows, &data).expect("valid drawing");
-    let objects = [
-        (Pos { x: 4, y: 1 }, "thornbush"),
-        (Pos { x: 4, y: 2 }, "berry_bush"),
-    ];
-    let scenario = Scenario {
-        map,
-        objects: &objects,
-        sprites: &[(Pos { x: 1, y: 1 }, None)],
-        scripted: &[],
-        newborns: &[],
-    };
-    let mut world = World::from_scenario(scenario, data.clone(), 1).expect("a valid scenario");
+    let objects = [(at(4, 1), "thornbush"), (at(4, 2), "berry_bush")];
+    let mut world = WorldBuilder::new(&rows)
+        .data(data)
+        .objects(&objects)
+        .starters(&[at(1, 1)])
+        .build();
     let mut windows = [(0, 1000), (1000, 3000)].map(|(from, to)| Window {
         from,
         to,

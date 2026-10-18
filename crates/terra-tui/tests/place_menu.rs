@@ -2,86 +2,20 @@
 //! in Grab mode opens the menu, the chosen item waits on the Cursor until a
 //! click places it, `r` names the selected sprite and `g` exports its genome.
 
+mod common;
+use common::{
+    WorldBuilder, app, apply, at, click, field, grab_app, lines, pointing_at, render,
+    scratch_folder, status_line, tick,
+};
+
 use std::path::PathBuf;
 
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers};
-use ratatui::layout::{Position, Rect, Size};
-use terra_sim::{Command, DataPack, EntityId, Event, EventKind, Genome, Map, Pos, Scenario, World};
-use terra_tui::app::{App, Areas, CursorMode, Flow, Screen, StatusMark};
+use ratatui::layout::{Position, Size};
+use terra_sim::{Command, EntityId, Event, EventKind, Genome, World};
+use terra_tui::app::{App, CursorMode, Screen, StatusMark};
 use terra_tui::input::{Action, Button, Keys};
-use terra_tui::theme::Theme;
 use terra_tui::ui;
-
-fn pack() -> DataPack {
-    DataPack::builtin().expect("valid pack")
-}
-
-fn at(x: u16, y: u16) -> Pos {
-    Pos { x, y }
-}
-
-/// An all-grass world, 10×6, with `objects`, and starter sprites on
-/// `sprites`.
-fn field(objects: &[(Pos, &str)], sprites: &[Pos]) -> World {
-    let rows = vec![".........."; 6];
-    let map = Map::from_ascii(&rows, &pack()).expect("valid drawing");
-    let sprites: Vec<(Pos, _)> = sprites.iter().map(|&pos| (pos, None)).collect();
-    let scenario = Scenario {
-        map,
-        objects,
-        sprites: &sprites,
-        scripted: &[],
-        newborns: &[],
-    };
-    World::from_scenario(scenario, pack(), 1).expect("valid scenario")
-}
-
-/// The app, with the map view's tiles drawn from screen cell (0, 0), so a
-/// tile's cell is its position.
-fn app_for(world: &World) -> App {
-    let areas = Areas {
-        tiles: Rect::new(0, 0, 10, 6),
-        inspector: None,
-        event_log: None,
-        overlay: None,
-    };
-    App::new(world.map(), Theme::cp437(), 1, areas)
-}
-
-/// The app in Grab mode.
-fn grab_app(world: &World) -> App {
-    let mut app = app_for(world);
-    apply(&mut app, world, Action::Mode(CursorMode::Grab));
-    app
-}
-
-fn apply(app: &mut App, world: &World, action: Action) {
-    assert_eq!(app.apply(action, world), Flow::Continue);
-}
-
-/// The screen cell the pointer is on to point at `tile`: one down and right of
-/// it (design v27 §6.5). The map view's tiles are drawn from screen cell (0, 0).
-fn pointing_at(tile: Pos) -> Position {
-    Position::new(tile.x + 1, tile.y + 1)
-}
-
-fn click(app: &mut App, world: &World, tile: Pos, button: Button) {
-    let action = Action::Click {
-        at: pointing_at(tile),
-        button,
-        amplified: false,
-    };
-    apply(app, world, action);
-}
-
-/// Hands the app's commands to the world and runs a tick, as a frame does.
-fn tick(app: &mut App, world: &mut World) {
-    for command in app.take_commands() {
-        world.submit(command);
-    }
-    let events = world.step();
-    app.record(&events, world);
-}
 
 /// Opens the Place menu and picks its `n`th item by number.
 fn pick(app: &mut App, world: &World, n: u8) {
@@ -94,18 +28,10 @@ fn ball_type(world: &World) -> u16 {
     world.data().object_type_id("ball").expect("a ball type")
 }
 
-/// A fresh, empty folder for genome files.
-fn scratch_folder(name: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("terra-place-menu-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).expect("a scratch folder");
-    dir
-}
-
 #[test]
 fn c_again_in_grab_mode_opens_the_place_menu_and_esc_closes_it() {
     let world = field(&[], &[]);
-    let mut app = app_for(&world);
+    let mut app = app(&world);
     apply(&mut app, &world, Action::Mode(CursorMode::Grab));
     assert_eq!(app.screen(), Screen::Normal, "the first C picks Grab mode");
     apply(&mut app, &world, Action::Mode(CursorMode::Grab));
@@ -253,9 +179,7 @@ fn a_waiting_item_s_key_hints_say_how_to_place_it_or_put_it_away() {
     pick(&mut app, &world, 3);
     let status = status_line(&app, &world);
     assert!(
-        status
-            .trim_end()
-            .ends_with("click to place  right-click put away"),
+        status.ends_with("click to place  right-click put away"),
         "{status:?}"
     );
     // In another mode, clicks don't place: the usual hints.
@@ -342,7 +266,7 @@ fn a_refused_placement_says_why() {
 #[test]
 fn r_names_the_selected_sprite_with_a_random_name_to_start_from() {
     let mut world = field(&[], &[at(4, 2)]);
-    let mut app = app_for(&world);
+    let mut app = app(&world);
     let sprite = world.sprite_at(at(4, 2)).unwrap().id();
     click(&mut app, &world, at(4, 2), Button::Left);
     apply(&mut app, &world, Action::Rename);
@@ -384,7 +308,7 @@ fn r_names_the_selected_sprite_with_a_random_name_to_start_from() {
 #[test]
 fn a_typed_name_stays_within_sixteen_cp437_characters() {
     let world = field(&[], &[at(4, 2)]);
-    let mut app = app_for(&world);
+    let mut app = app(&world);
     click(&mut app, &world, at(4, 2), Button::Left);
     apply(&mut app, &world, Action::Rename);
     apply(&mut app, &world, Action::Type('Z'));
@@ -400,7 +324,7 @@ fn a_typed_name_stays_within_sixteen_cp437_characters() {
 #[test]
 fn esc_leaves_naming_without_sending_anything() {
     let world = field(&[], &[at(4, 2)]);
-    let mut app = app_for(&world);
+    let mut app = app(&world);
     click(&mut app, &world, at(4, 2), Button::Left);
     apply(&mut app, &world, Action::Rename);
     apply(&mut app, &world, Action::Back);
@@ -411,7 +335,7 @@ fn esc_leaves_naming_without_sending_anything() {
 #[test]
 fn r_with_no_sprite_selected_says_so() {
     let world = field(&[], &[]);
-    let mut app = app_for(&world);
+    let mut app = app(&world);
     apply(&mut app, &world, Action::Rename);
     assert_eq!(app.screen(), Screen::Normal);
     assert_eq!(app.refusal(), Some("Select a sprite to name it"));
@@ -543,20 +467,11 @@ fn a_genome_file_that_doesnt_read_is_refused_with_why() {
 #[test]
 fn the_place_menu_draws_over_the_map_with_its_items_numbered() {
     // As small as a preset lets a map be (`data/presets/default.ron`).
-    let rows = vec!["................................"; 32];
-    let map = Map::from_ascii(&rows, &pack()).expect("valid drawing");
-    let scenario = Scenario {
-        map,
-        objects: &[],
-        sprites: &[],
-        scripted: &[],
-        newborns: &[],
-    };
-    let world = World::from_scenario(scenario, pack(), 1).expect("valid scenario");
+    let world = WorldBuilder::grass(32, 32).build();
     let mut app = grab_app(&world);
     app.fit(ui::areas(Size::new(100, 30)));
     apply(&mut app, &world, Action::Mode(CursorMode::Grab));
-    let screen = rendered(&app, &world, 100, 30);
+    let screen = lines(&render(&app, &world)).join("\n");
     assert!(screen.contains("1 berry bush seedling"), "{screen}");
     assert!(screen.contains("5 sprite from a genome file"), "{screen}");
 }
@@ -617,30 +532,6 @@ fn a_menu_longer_than_the_map_view_scrolls_to_keep_the_highlight_in_view() {
     );
     assert_eq!(app.screen(), Screen::Normal);
     let _ = std::fs::remove_dir_all(&dir);
-}
-
-fn status_line(app: &App, world: &World) -> String {
-    let screen = rendered(app, world, 100, 30);
-    screen.lines().last().unwrap_or_default().to_string()
-}
-
-/// The screen drawn into a `width` × `height` buffer, as text, a line a row.
-fn rendered(app: &App, world: &World, width: u16, height: u16) -> String {
-    use ratatui::Terminal;
-    use ratatui::backend::TestBackend;
-    let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
-    terminal
-        .draw(|frame| terra_tui::ui::render(frame, app, world))
-        .unwrap();
-    let buffer = terminal.backend().buffer();
-    (0..height)
-        .map(|y| {
-            (0..width)
-                .map(|x| buffer[(x, y)].symbol().to_string())
-                .collect::<String>()
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
 }
 
 #[test]

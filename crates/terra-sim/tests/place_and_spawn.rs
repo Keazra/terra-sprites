@@ -2,11 +2,11 @@
 //! new object or spawns a new sprite, and the player names sprites.
 
 mod common;
-use common::{at, builtin};
+use common::{WorldBuilder, at, builtin};
 
 use terra_sim::{
-    Blocker, Command, DataPack, EntityId, Event, EventKind, Genome, Map, NameProblem, PlaceRule,
-    Pos, Rejection, Scenario, Terrain, World,
+    Blocker, Command, DataPack, EntityId, Event, EventKind, Genome, NameProblem, PlaceRule, Pos,
+    Rejection, Terrain, World,
 };
 
 /// A world drawn from `rows`, with `objects`, and a starter sprite on each
@@ -15,17 +15,13 @@ fn world(rows: &[&str], objects: &[(Pos, &str)], sprites: &[Pos]) -> World {
     world_in(builtin(), rows, objects, sprites)
 }
 
+/// `world`, made with `data`.
 fn world_in(data: DataPack, rows: &[&str], objects: &[(Pos, &str)], sprites: &[Pos]) -> World {
-    let map = Map::from_ascii(rows, &data).expect("valid drawing");
-    let sprites: Vec<(Pos, Option<Genome>)> = sprites.iter().map(|&pos| (pos, None)).collect();
-    let scenario = Scenario {
-        map,
-        objects,
-        sprites: &sprites,
-        scripted: &[],
-        newborns: &[],
-    };
-    World::from_scenario(scenario, data, 1).expect("a valid scenario")
+    WorldBuilder::new(rows)
+        .data(data)
+        .objects(objects)
+        .starters(sprites)
+        .build()
 }
 
 /// The stable ID of the object type called `name`.

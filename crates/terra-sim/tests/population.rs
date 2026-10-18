@@ -64,7 +64,7 @@ fn empty_world() -> World {
 /// eat or drink: it dies of thirst at about tick 4,000.
 fn doomed_sprite() -> World {
     WorldBuilder::new(&["."])
-        .sprites_with(vec![(at(0, 0), None)])
+        .starters(&[at(0, 0)])
         .newborns(&[at(0, 0)])
         .build()
 }

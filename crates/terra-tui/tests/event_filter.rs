@@ -1,47 +1,23 @@
 //! The event log's filter (design §6.1): all events, the selected sprite's,
 //! or major ones only, switched with `m` or a click on its label.
 
-use ratatui::buffer::Buffer;
-use ratatui::layout::{Position, Size};
-use ratatui::{Terminal, backend::TestBackend};
+mod common;
+use common::{WorldBuilder, app_on, at, render, row};
+
+use ratatui::layout::Position;
 use terra_sim::{
-    ActionView, Command, DataPack, DeathCause, EntityId, Event, EventKind, Hurt, Learned, Map,
-    Outcome, Pos, Progress, Rejection, Scenario, Target, Verb, World,
+    ActionView, Command, DeathCause, EntityId, Event, EventKind, Hurt, Learned, Outcome, Progress,
+    Rejection, Target, Verb, World,
 };
 use terra_tui::app::{App, EventFilter};
 use terra_tui::input::Action;
-use terra_tui::theme::Theme;
-use terra_tui::ui;
-
-fn pack() -> DataPack {
-    DataPack::builtin().expect("built-in data pack is valid")
-}
 
 /// Sprites #1 and #2 in a field.
 fn field() -> World {
-    let pack = pack();
-    let map = Map::from_ascii(&[".........."; 5], &pack).expect("valid drawing");
-    let sprites = [(Pos { x: 2, y: 3 }, None), (Pos { x: 6, y: 1 }, None)];
-    let scenario = Scenario {
-        map,
-        objects: &[],
-        sprites: &sprites,
-        scripted: &[],
-        newborns: &[],
-    };
-    World::from_scenario(scenario, pack, 7).expect("valid scenario")
-}
-
-fn render(app: &App, world: &World) -> Buffer {
-    let mut terminal = Terminal::new(TestBackend::new(100, 30)).unwrap();
-    terminal
-        .draw(|frame| ui::render(frame, app, world))
-        .unwrap();
-    terminal.backend().buffer().clone()
-}
-
-fn row(screen: &Buffer, y: u16) -> String {
-    (0..100).map(|x| screen[(x, y)].symbol()).collect()
+    WorldBuilder::grass(10, 5)
+        .starters(&[at(2, 3), at(6, 1)])
+        .seed(7)
+        .build()
 }
 
 /// The event log's lines, without their ticks.
@@ -88,8 +64,7 @@ fn hit(tick: u64, hitter: u64, hit: u64) -> Event {
 /// refused pet of #2, #1 hitting #2, a pet of #1, #3 hitting #4, and #3's
 /// death.
 fn logged(world: &World) -> App {
-    let areas = ui::areas(Size::new(100, 30));
-    let mut app = App::new(world.map(), Theme::cp437(), 7, areas);
+    let mut app = app_on(world);
     let events = [
         Event {
             tick: 1,

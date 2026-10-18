@@ -2295,10 +2295,7 @@ mod tests {
     use rand_chacha::rand_core::SeedableRng;
 
     use super::*;
-
-    fn builtin() -> DataPack {
-        DataPack::builtin().expect("built-in data pack is valid")
-    }
+    use crate::test_util::{builtin, builtin_changing};
 
     /// The built-in pack's categories (design v20 §3.5.5, Appendix A).
     const BUSH: CategoryId = CategoryId(1);
@@ -2982,25 +2979,13 @@ mod tests {
     fn of_two_needs_pushing_a_verb_equally_the_motive_is_the_lower_input_id() {
         // Design §5.5. The pack lists thirst before hunger, so the tie is
         // settled by input ID (hunger 1, thirst 2), not by the list.
-        let brain_io = include_str!("../../../data/brain_io.ron").replace(
-            r#"needs: ["hunger", "thirst","#,
-            r#"needs: ["thirst", "hunger","#,
+        let data = builtin_changing(
+            "brain_io.ron",
+            &[(
+                r#"needs: ["hunger", "thirst","#,
+                r#"needs: ["thirst", "hunger","#,
+            )],
         );
-        assert_ne!(brain_io, include_str!("../../../data/brain_io.ron"));
-        let sources: Vec<(&str, &str)> = DataPack::builtin_sources()
-            .iter()
-            .map(|&(path, text)| {
-                (
-                    path,
-                    if path == "brain_io.ron" {
-                        &brain_io
-                    } else {
-                        text
-                    },
-                )
-            })
-            .collect();
-        let data = DataPack::from_sources(&sources).expect("a valid pack");
         let genome = Genome::from_ron(
             r#"(format: 1, genes: [
                 Instinct(inputs: [("hunger", false)], verb: Eat, weight: 0.5),

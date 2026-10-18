@@ -1,5 +1,8 @@
+mod common;
+use common::pack;
+
 use ratatui::style::Color;
-use terra_sim::{DataPack, Terrain};
+use terra_sim::Terrain;
 use terra_tui::app::{CursorMode, StatusMark};
 use terra_tui::cp437;
 use terra_tui::space::{Depth, Pane};
@@ -23,10 +26,6 @@ fn the_themes_draw_terrain_as_the_design_table_says() {
         assert_eq!((a.symbol, a.fg), (cp437_glyph, colour), "cp437 {terrain:?}");
         assert_eq!((b.symbol, b.fg), (ascii_glyph, colour), "ascii {terrain:?}");
     }
-}
-
-fn pack() -> DataPack {
-    DataPack::builtin().expect("built-in data pack is valid")
 }
 
 /// Every glyph a theme draws the map with, with the kind of thing it stands

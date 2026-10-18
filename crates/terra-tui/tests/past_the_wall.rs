@@ -2,31 +2,22 @@
 //! the stars going by in it, and the pointer over it, where the Cursor
 //! can't reach.
 
+mod common;
+use common::{SCREEN, WorldBuilder, app_on, apply, render, row, status_line, tick};
+
 use std::time::Duration;
 
 use ratatui::buffer::Buffer;
-use ratatui::layout::{Position, Rect, Size};
+use ratatui::layout::{Position, Rect};
 use ratatui::style::{Color, Modifier};
-use ratatui::{Terminal, backend::TestBackend};
-use terra_sim::{
-    Command, CursorTouch, DataPack, Dir, EntityId, Grip, Map, Pos, Scenario, ScriptedAction, World,
-};
-use terra_tui::app::{App, CursorMode, Flow};
+use terra_sim::{Command, CursorTouch, Dir, EntityId, Grip, Pos, ScriptedAction, World};
+use terra_tui::app::{App, CursorMode};
 use terra_tui::input::{Action, Button};
 use terra_tui::space::Place;
-use terra_tui::theme::Theme;
-use terra_tui::ui;
 
-/// The screen every test draws: the smallest the game allows, with a map
-/// view of 52×21 tiles from screen cell (1, 2).
-const SCREEN: Size = Size::new(100, 30);
-
-/// The map view's tiles on `SCREEN`.
+/// The map view's tiles on `SCREEN`, the screen every test draws: 52×21
+/// of them from screen cell (1, 2).
 const TILES: Rect = Rect::new(1, 2, 52, 21);
-
-fn pack() -> DataPack {
-    DataPack::builtin().expect("valid pack")
-}
 
 /// An all-grass world `width`×`height`, with starter sprites on `sprites`.
 fn field(width: usize, height: usize, sprites: &[Pos]) -> World {
@@ -36,30 +27,15 @@ fn field(width: usize, height: usize, sprites: &[Pos]) -> World {
 /// An all-grass world `width`×`height`, with `objects`, and starter sprites
 /// on `sprites` that rest, so they go only where they're led.
 fn field_with(width: usize, height: usize, objects: &[(Pos, &str)], sprites: &[Pos]) -> World {
-    let row = ".".repeat(width);
-    let map = Map::from_ascii(&vec![row.as_str(); height], &pack()).expect("valid drawing");
     let scripted: Vec<(Pos, ScriptedAction)> = sprites
         .iter()
         .flat_map(|&pos| [(pos, ScriptedAction::Rest); 50])
         .collect();
-    let sprites: Vec<(Pos, _)> = sprites.iter().map(|&pos| (pos, None)).collect();
-    let scenario = Scenario {
-        map,
-        objects,
-        sprites: &sprites,
-        scripted: &scripted,
-        newborns: &[],
-    };
-    World::from_scenario(scenario, pack(), 1).expect("valid scenario")
-}
-
-/// Hands the app's commands to the world and runs a tick, as a frame does.
-fn tick(app: &mut App, world: &mut World) {
-    for command in app.take_commands() {
-        world.submit(command);
-    }
-    let events = world.step();
-    app.record(&events, world);
+    WorldBuilder::grass(width, height)
+        .objects(objects)
+        .starters(sprites)
+        .scripts(&scripted)
+        .build()
 }
 
 /// A 10×6 field with a sprite on (4, 3). It fits in the map view with its
@@ -76,14 +52,11 @@ fn small_field_with_sprite_on(sprite: Pos) -> (World, EntityId) {
     (world, id)
 }
 
+/// An app on `world` on `SCREEN`, its first commands taken.
 fn app(world: &World) -> App {
-    let mut app = App::new(world.map(), Theme::cp437(), 1, ui::areas(SCREEN));
+    let mut app = app_on(world);
     app.take_commands();
     app
-}
-
-fn apply(app: &mut App, world: &World, action: Action) {
-    assert_eq!(app.apply(action, world), Flow::Continue);
 }
 
 /// The small field with a ball on `tile`, and an app in Grab mode whose
@@ -120,14 +93,6 @@ fn past(x: i32, y: i32) -> Position {
 /// A cell over space, well clear of the small field and its glass.
 const SPACE: Position = Position::new(6, 5);
 
-fn render(app: &App, world: &World) -> Buffer {
-    let mut terminal = Terminal::new(TestBackend::new(SCREEN.width, SCREEN.height)).unwrap();
-    terminal
-        .draw(|frame| ui::render(frame, app, world))
-        .unwrap();
-    terminal.backend().buffer().clone()
-}
-
 /// The map view's tiles as drawn, a string a row.
 fn map_view(screen: &Buffer) -> Vec<String> {
     (TILES.top()..TILES.bottom())
@@ -144,12 +109,6 @@ fn stars(screen: &Buffer) -> Vec<Position> {
     TILES
         .positions()
         .filter(|&at| matches!(screen[at].symbol(), "·" | "∙" | "*"))
-        .collect()
-}
-
-fn status_line(screen: &Buffer) -> String {
-    (0..SCREEN.width)
-        .map(|x| screen[(x, SCREEN.height - 1)].symbol())
         .collect()
 }
 
@@ -241,7 +200,7 @@ fn over_space_the_cursor_is_not_drawn_and_the_status_line_says_space() {
             .map(|at| screen[at].symbol().to_string())
             .collect();
         let reversed = screen[cell].modifier.contains(Modifier::REVERSED);
-        (grid, reversed, status_line(&screen))
+        (grid, reversed, row(&screen, SCREEN.height - 1))
     };
     let (grid, reversed, status) = drawn(&app);
     assert_eq!(
@@ -287,7 +246,7 @@ fn a_withdrawn_cursor_is_out_of_reach_until_the_pointer_comes_back() {
     assert_eq!(round, "........");
     assert!(!screen[at].modifier.contains(Modifier::REVERSED));
     assert!(app.cursor_withdrawn());
-    let status = status_line(&screen);
+    let status = row(&screen, SCREEN.height - 1);
     assert!(status.starts_with(" SELECT"), "{status}");
     apply(&mut app, &world, Action::Point(on(sprite)));
     assert!(!app.out_of_reach(), "back over the map");
@@ -344,7 +303,7 @@ fn following_a_sprite_a_click_over_space_and_q_still_reach_it() {
     apply(&mut app, &world, Action::Point(SPACE));
     assert!(!app.out_of_reach(), "following, it isn't out of reach");
     let screen = render(&app, &world);
-    assert!(!status_line(&screen).contains("space"));
+    assert!(!row(&screen, SCREEN.height - 1).contains("space"));
     let cell = cell(sprite);
     assert_eq!(
         screen[(cell.x, cell.y - 1)].symbol(),
@@ -636,7 +595,7 @@ fn off_the_map_view_after_space_the_cursor_shows_on_its_last_tile_again() {
     assert!(!TILES.contains(inspector));
     apply(&mut app, &world, Action::Point(inspector));
     assert!(!app.out_of_reach());
-    let status = status_line(&render(&app, &world));
+    let status = status_line(&app, &world);
     assert!(status.starts_with(" (4,3) grass · Sprite #"), "{status}");
     let q = Action::Press {
         button: Button::Left,

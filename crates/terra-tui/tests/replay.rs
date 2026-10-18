@@ -3,70 +3,28 @@
 //! closed to the player's input, pausing at its end and where it first
 //! parted from its recording; and `--data` reads a folder of pack files.
 
+mod common;
+use common::{at, ball_world, map_app, pack, render_on, row, scratch_folder};
+
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::{Path, PathBuf};
 
-use ratatui::Terminal;
-use ratatui::backend::TestBackend;
-use ratatui::layout::Rect;
-use terra_sim::{Command, DataPack, Map, Playback, Pos, Scenario, World, WorldConfig};
-use terra_tui::app::{AUTOSAVE_EVERY, App, Areas, CursorMode, Flow, REPLAY_REFUSAL, Ticks};
+use ratatui::layout::{Rect, Size};
+use terra_sim::{Command, DataPack, Playback, World, WorldConfig};
+use terra_tui::app::{AUTOSAVE_EVERY, App, CursorMode, Flow, REPLAY_REFUSAL, Ticks};
 use terra_tui::files;
 use terra_tui::input::{Action, Button};
 use terra_tui::session::{self, Session};
-use terra_tui::theme::Theme;
-use terra_tui::ui;
 
-fn pack() -> DataPack {
-    DataPack::builtin().expect("valid pack")
-}
-
-fn at(x: u16, y: u16) -> Pos {
-    Pos { x, y }
-}
-
-/// A grass world with two starter sprites and a ball.
-fn world() -> World {
-    let rows = vec!["..........."; 8];
-    let map = Map::from_ascii(&rows, &pack()).expect("valid drawing");
-    let scenario = Scenario {
-        map,
-        objects: &[(at(5, 5), "ball")],
-        sprites: &[(at(2, 2), None), (at(8, 3), None)],
-        scripted: &[],
-        newborns: &[],
-    };
-    World::from_scenario(scenario, pack(), 7).expect("valid scenario")
-}
-
-/// A fresh, empty folder.
-fn scratch_folder(name: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("terra-replay-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).expect("a scratch folder");
-    dir
-}
-
+/// An app on `world` showing 11×8 tiles of it from screen cell (1, 2), with
+/// no panels.
 fn app_for(world: &World) -> App {
-    let areas = Areas {
-        tiles: Rect::new(1, 2, 11, 8),
-        inspector: None,
-        event_log: None,
-        overlay: None,
-    };
-    App::new(world.map(), Theme::cp437(), world.seed(), areas)
+    map_app(world, Rect::new(1, 2, 11, 8))
 }
 
 /// The top bar, as drawn on a 120×32 screen.
 fn top_bar(app: &App, world: &World) -> String {
-    let mut terminal = Terminal::new(TestBackend::new(120, 32)).expect("a test terminal");
-    terminal
-        .draw(|frame| ui::render(frame, app, world))
-        .expect("drawn");
-    let buffer = terminal.backend().buffer();
-    (0..buffer.area.width)
-        .map(|x| buffer[(x, 0)].symbol().to_string())
-        .collect()
+    row(&render_on(app, world, Size::new(120, 32)), 0)
 }
 
 /// A live session on `world` that has run `ticks` ticks, the Cursor
@@ -97,7 +55,7 @@ fn replaying(playback: &Playback) -> App {
 
 #[test]
 fn a_live_session_writes_a_session_log_that_plays_back_to_the_same_world() {
-    let session = played(world(), 1_200);
+    let session = played(ball_world(), 1_200);
     let mut playback = replay_of(&session, "live");
     assert_eq!(playback.end(), 1_200);
     while playback.world().tick() < playback.end() {
@@ -109,8 +67,8 @@ fn a_live_session_writes_a_session_log_that_plays_back_to_the_same_world() {
 
 #[test]
 fn loading_a_save_starts_the_session_log_afresh_from_it() {
-    let mut session = played(world(), 50);
-    let mut other = world();
+    let mut session = played(ball_world(), 50);
+    let mut other = ball_world();
     for _ in 0..30 {
         other.step();
     }
@@ -124,7 +82,7 @@ fn loading_a_save_starts_the_session_log_afresh_from_it() {
 
 #[test]
 fn a_replay_takes_no_commands_and_writes_no_session_log() {
-    let live = played(world(), 20);
+    let live = played(ball_world(), 20);
     let mut replay = Session::replay(replay_of(&live, "no-commands"));
     let before = replay.world().state_hash();
     let sprite = replay.world().sprites().next().expect("a sprite").id();
@@ -142,7 +100,7 @@ fn a_replay_takes_no_commands_and_writes_no_session_log() {
 
 #[test]
 fn a_session_that_ends_in_a_panic_still_writes_its_session_log() {
-    let mut session = Session::live(world());
+    let mut session = Session::live(ball_world());
     let log = scratch_folder("panic").join(files::SESSION_LOG);
     let panicked = catch_unwind(AssertUnwindSafe(|| {
         session::writing_session_log_on_panic(&mut session, Some(&log), |session| {
@@ -165,7 +123,7 @@ fn a_session_that_ends_in_a_panic_still_writes_its_session_log() {
 
 #[test]
 fn a_replay_starts_paused_saying_what_it_plays() {
-    let playback = replay_of(&played(world(), 40), "start");
+    let playback = replay_of(&played(ball_world(), 40), "start");
     let app = replaying(&playback);
     assert!(app.clock.is_paused());
     assert!(app.replaying());
@@ -192,7 +150,7 @@ fn a_new_world_replays_from_its_seed() {
 
 #[test]
 fn a_replay_refuses_whatever_would_change_the_world() {
-    let playback = replay_of(&played(world(), 10), "refuse");
+    let playback = replay_of(&played(ball_world(), 10), "refuse");
     let world = playback.world();
     let mut app = replaying(&playback);
     for action in [
@@ -235,7 +193,7 @@ fn a_replay_refuses_whatever_would_change_the_world() {
 
 #[test]
 fn a_replay_pauses_at_its_end_once_and_says_so() {
-    let mut session = Session::replay(replay_of(&played(world(), 6), "end"));
+    let mut session = Session::replay(replay_of(&played(ball_world(), 6), "end"));
     let mut app = replaying(session.playback().unwrap());
     app.apply(Action::TogglePause, session.world());
     let mut ticks = Ticks::default();
@@ -271,7 +229,7 @@ fn a_replay_pauses_at_its_end_once_and_says_so() {
 
 #[test]
 fn a_replay_that_parts_from_its_recording_pauses_and_says_where() {
-    let mut playback = replay_of(&played(world(), 2_100), "diverge");
+    let mut playback = replay_of(&played(ball_world(), 2_100), "diverge");
     let mut app = replaying(&playback);
     app.apply(Action::TogglePause, playback.world());
     while playback.world().tick() < 1_200 {
@@ -299,7 +257,7 @@ fn a_replay_that_parts_from_its_recording_pauses_and_says_where() {
 
 #[test]
 fn a_replay_never_autosaves() {
-    let mut playback = replay_of(&played(world(), 10), "autosave");
+    let mut playback = replay_of(&played(ball_world(), 10), "autosave");
     let folder = scratch_folder("autosave-saves");
     let mut app = replaying(&playback);
     // It has run, so a live world would autosave.
@@ -331,7 +289,7 @@ fn ctrl_r_takes_over_a_replay() {
 #[test]
 fn taking_over_a_replay_plays_on_live_without_the_rest_of_the_recording() {
     // The recording puts the ball down at tick 800.
-    let mut live = played(world(), 800);
+    let mut live = played(ball_world(), 800);
     live.submit(vec![Command::PutDown { tile: at(5, 5) }]);
     for _ in 0..400 {
         live.step();
@@ -373,7 +331,7 @@ fn taking_over_a_replay_plays_on_live_without_the_rest_of_the_recording() {
 
 #[test]
 fn taking_over_a_live_session_changes_nothing() {
-    let mut session = played(world(), 5);
+    let mut session = played(ball_world(), 5);
     let before = session.world().state_hash();
     session.take_over();
     assert!(session.playback().is_none());
@@ -382,7 +340,7 @@ fn taking_over_a_live_session_changes_nothing() {
 
 #[test]
 fn after_taking_over_the_world_is_the_player_s() {
-    let mut playback = replay_of(&played(world(), 30), "app-take-over");
+    let mut playback = replay_of(&played(ball_world(), 30), "app-take-over");
     let mut app = replaying(&playback);
     for _ in 0..5 {
         playback.step();
@@ -407,7 +365,7 @@ fn after_taking_over_the_world_is_the_player_s() {
 
 #[test]
 fn ctrl_r_outside_a_replay_does_nothing() {
-    let world = world();
+    let world = ball_world();
     let mut app = app_for(&world);
     app.apply(Action::TakeOver, &world);
     assert!(!app.take_taken_over());
@@ -490,7 +448,7 @@ fn a_data_folder_with_something_not_a_file_in_a_file_s_place_is_refused_naming_i
 #[test]
 fn a_replay_names_the_sprites_its_world_starts_with_before_it_plays() {
     // A replay that starts from a save starts with the save's names (#137).
-    let mut world = world();
+    let mut world = ball_world();
     let sprite = world.sprites().next().expect("a sprite").id();
     world.submit(Command::Rename {
         sprite,
@@ -506,23 +464,16 @@ fn a_replay_names_the_sprites_its_world_starts_with_before_it_plays() {
 
 /// The status line, as drawn on a 120×32 screen.
 fn status_line(app: &App, world: &World) -> String {
-    let mut terminal = Terminal::new(TestBackend::new(120, 32)).expect("a test terminal");
-    terminal
-        .draw(|frame| ui::render(frame, app, world))
-        .expect("drawn");
-    let buffer = terminal.backend().buffer();
-    (0..buffer.area.width)
-        .map(|x| buffer[(x, 31)].symbol().to_string())
-        .collect()
+    row(&render_on(app, world, Size::new(120, 32)), 31)
 }
 
 #[test]
 fn in_a_replay_the_recorded_cursor_isn_t_drawn_and_holds_and_leads_nothing() {
     // Design §2.7: the viewer has a Cursor of their own; the recorded one
     // is the world's, and isn't shown.
-    let held = played(world(), 5);
+    let held = played(ball_world(), 5);
     assert!(held.world().cursor().holds().is_some(), "it holds the ball");
-    let mut leading = Session::live(world());
+    let mut leading = Session::live(ball_world());
     let sprite = leading.world().sprites().next().expect("a sprite").id();
     leading.submit(vec![
         Command::TakeHold { sprite },

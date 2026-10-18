@@ -1,69 +1,30 @@
 //! The help screen (`?`, design §6.1): the keys, the colour legend and the
 //! game's folder.
 
-use std::path::PathBuf;
+mod common;
+use common::{DATA_FOLDER, WorldBuilder, app_in, app_on, at, lines, render};
 
-use ratatui::buffer::Buffer;
-use ratatui::layout::Size;
 use ratatui::style::Color;
-use ratatui::{Terminal, backend::TestBackend};
-use terra_sim::{DataPack, Map, Pos, Scenario, World};
-use terra_tui::app::{App, Flow, Screen};
+use terra_sim::World;
+use terra_tui::app::{Flow, Screen};
 use terra_tui::input::Action;
 use terra_tui::theme::Theme;
-use terra_tui::ui;
 
-fn pack() -> DataPack {
-    DataPack::builtin().expect("built-in data pack is valid")
-}
-
+/// A 10×5 field with a starter sprite on (2, 3).
 fn field() -> World {
-    let pack = pack();
-    let map = Map::from_ascii(&[".........."; 5], &pack).expect("valid drawing");
-    let sprites = [(Pos { x: 2, y: 3 }, None)];
-    let scenario = Scenario {
-        map,
-        objects: &[],
-        sprites: &sprites,
-        scripted: &[],
-        newborns: &[],
-    };
-    World::from_scenario(scenario, pack, 7).expect("valid scenario")
-}
-
-fn app_for(world: &World, theme: Theme) -> App {
-    let areas = ui::areas(Size::new(100, 30));
-    let mut app = App::new(world.map(), theme, 7, areas);
-    app.set_data_folder(PathBuf::from("/home/kel/.local/share/terra-sprites"));
-    app
-}
-
-fn render(app: &App, world: &World) -> Buffer {
-    let mut terminal = Terminal::new(TestBackend::new(100, 30)).unwrap();
-    terminal
-        .draw(|frame| ui::render(frame, app, world))
-        .unwrap();
-    terminal.backend().buffer().clone()
-}
-
-fn text(screen: &Buffer) -> Vec<String> {
-    (0..screen.area.height)
-        .map(|y| {
-            let row: String = (0..screen.area.width)
-                .map(|x| screen[(x, y)].symbol())
-                .collect();
-            row.trim_end().to_string()
-        })
-        .collect()
+    WorldBuilder::grass(10, 5)
+        .starters(&[at(2, 3)])
+        .seed(7)
+        .build()
 }
 
 #[test]
 fn question_mark_opens_help_over_the_panels_and_esc_or_question_mark_closes_it() {
     let world = field();
-    let mut app = app_for(&world, Theme::cp437());
+    let mut app = app_on(&world);
     app.apply(Action::Help, &world);
     assert_eq!(app.screen(), Screen::Help);
-    let screen = text(&render(&app, &world));
+    let screen = lines(&render(&app, &world));
     assert!(screen[0].starts_with(" Terra Sprites"), "the top bar stays");
     assert!(screen[1].starts_with("┌─ Help ─"), "{}", screen[1]);
     assert!(screen[1].ends_with(" esc close ─┐"), "{}", screen[1]);
@@ -84,7 +45,7 @@ fn question_mark_opens_help_over_the_panels_and_esc_or_question_mark_closes_it()
         assert!(all.contains(key), "{key}");
     }
     assert!(!all.contains("Events"), "the event log is covered");
-    assert!(all.contains("FILES    /home/kel/.local/share/terra-sprites"));
+    assert!(all.contains(&format!("FILES    {DATA_FOLDER}")));
 
     assert_eq!(app.apply(Action::Back, &world), Flow::Continue);
     assert_eq!(
@@ -100,7 +61,7 @@ fn question_mark_opens_help_over_the_panels_and_esc_or_question_mark_closes_it()
 #[test]
 fn while_help_is_open_other_keys_do_nothing() {
     let world = field();
-    let mut app = app_for(&world, Theme::cp437());
+    let mut app = app_on(&world);
     app.apply(Action::Help, &world);
     app.apply(Action::SelectNext, &world);
     app.apply(Action::Scroll { dx: 1, dy: 0 }, &world);
@@ -120,10 +81,10 @@ fn the_legend_shows_each_drive_s_colour_and_each_emote() {
         (Theme::ascii(), "@", ["!", "/", "?", "z", "+", "^", "\""]),
     ] {
         let world = field();
-        let mut app = app_for(&world, theme);
+        let mut app = app_in(&world, theme);
         app.apply(Action::Help, &world);
         let screen = render(&app, &world);
-        let rows = text(&screen);
+        let rows = lines(&screen);
         let y = rows
             .iter()
             .position(|row| row.contains(" hunger "))
@@ -182,10 +143,10 @@ fn the_lineage_line_draws_each_sprite_in_its_colour() {
     // sisters  ☺ young, theirs  ☺ the rest`, each `☺` in its colour.
     for (theme, sprite) in [(Theme::cp437(), "☺"), (Theme::ascii(), "@")] {
         let world = field();
-        let mut app = app_for(&world, theme);
+        let mut app = app_in(&world, theme);
         app.apply(Action::Help, &world);
         let screen = render(&app, &world);
-        let y = text(&screen)
+        let y = lines(&screen)
             .iter()
             .position(|row| row.contains(" LINEAGE "))
             .expect("the lineage line") as u16;

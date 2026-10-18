@@ -3,11 +3,10 @@
 //! about it.
 
 mod common;
-use common::{at, builtin, genome};
+use common::{WorldBuilder, at};
 
 use terra_sim::{
-    Command, EventKind, Learned, Map, Outcome, Pos, Progress, Scenario, ScriptedAction, Target,
-    Thing, Verb, World,
+    Command, EventKind, Learned, Outcome, Pos, Progress, ScriptedAction, Target, Thing, Verb, World,
 };
 
 /// Its eye always goes to the Cursor, and it goes over to whatever it
@@ -19,17 +18,7 @@ const DRAWN_TO_THE_CURSOR: &str = r#"
 
 /// A world drawn from `rows`, with one sprite of `genes` on `sprite`.
 fn world(rows: &[&str], sprite: Pos, genes: &str) -> World {
-    let data = builtin();
-    let map = Map::from_ascii(rows, &data).expect("valid drawing");
-    let sprites = [(sprite, Some(genome(genes, &data)))];
-    let scenario = Scenario {
-        map,
-        objects: &[],
-        sprites: &sprites,
-        scripted: &[],
-        newborns: &[],
-    };
-    World::from_scenario(scenario, data, 1).expect("a valid scenario")
+    WorldBuilder::new(rows).sprites(&[(sprite, genes)]).build()
 }
 
 const OPEN: [&str; 5] = [
@@ -207,21 +196,14 @@ fn fears_the_cursor() -> Learned {
 
 /// A sprite that tries to eat a berry it stands on at tick 0, then rests.
 fn eating_a_berry(berry: Pos) -> World {
-    let data = builtin();
-    let map = Map::from_ascii(&OPEN, &data).expect("valid drawing");
-    let sprites = [(berry, Some(genome("", &data)))];
-    let scripted = [
-        (berry, ScriptedAction::Eat { at: berry }),
-        (berry, ScriptedAction::Rest),
-    ];
-    let scenario = Scenario {
-        map,
-        objects: &[(berry, "berry")],
-        sprites: &sprites,
-        scripted: &scripted,
-        newborns: &[],
-    };
-    World::from_scenario(scenario, data, 1).expect("a valid scenario")
+    WorldBuilder::new(&OPEN)
+        .objects(&[(berry, "berry")])
+        .sprites(&[(berry, "")])
+        .script(
+            berry,
+            &[ScriptedAction::Eat { at: berry }, ScriptedAction::Rest],
+        )
+        .build()
 }
 
 /// Pets the one sprite, or shocks it if `shock`, the tick after it ate.
@@ -311,18 +293,10 @@ fn a_sprite_that_fears_the_cursor_backs_away_from_it_and_one_that_likes_it_goes_
     for (shock, verbs) in [(true, &[Verb::Retreat][..]), (false, &going_over)] {
         // It rests while it's taught, so each touch is about the Cursor
         // alone: resting tries nothing on anything.
-        let data = builtin();
-        let map = Map::from_ascii(&OPEN, &data).expect("valid drawing");
-        let sprites = [(at(2, 2), Some(genome(WATCHING_THE_CURSOR, &data)))];
-        let scripted = [(at(2, 2), ScriptedAction::Rest); 2];
-        let scenario = Scenario {
-            map,
-            objects: &[],
-            sprites: &sprites,
-            scripted: &scripted,
-            newborns: &[],
-        };
-        let mut world = World::from_scenario(scenario, data, 1).expect("a valid scenario");
+        let mut world = WorldBuilder::new(&OPEN)
+            .sprites(&[(at(2, 2), WATCHING_THE_CURSOR)])
+            .script(at(2, 2), &[ScriptedAction::Rest; 2])
+            .build();
         show_cursor(&mut world, at(2, 2));
         let sprite = the_sprite(&world).id();
         // Taught over and over, so the feeling counts.
@@ -370,18 +344,10 @@ fn afraid_of_the_cursor() -> World {
 /// As `afraid_of_the_cursor`, in a world drawn from `rows`, the sprite on
 /// (2, 2) resting through its first `rests` ticks.
 fn afraid_of_the_cursor_in(rows: &[&str], rests: usize) -> World {
-    let data = builtin();
-    let map = Map::from_ascii(rows, &data).expect("valid drawing");
-    let sprites = [(at(2, 2), Some(genome("", &data)))];
-    let scripted = vec![(at(2, 2), ScriptedAction::Rest); rests];
-    let scenario = Scenario {
-        map,
-        objects: &[],
-        sprites: &sprites,
-        scripted: &scripted,
-        newborns: &[],
-    };
-    let mut world = World::from_scenario(scenario, data, 1).expect("a valid scenario");
+    let mut world = WorldBuilder::new(rows)
+        .sprites(&[(at(2, 2), "")])
+        .script(at(2, 2), &vec![ScriptedAction::Rest; rests])
+        .build();
     show_cursor(&mut world, at(2, 2));
     let sprite = the_sprite(&world).id();
     for _ in 0..20 {
@@ -451,21 +417,14 @@ fn about_to_be_shoved_into_a_thornbush(visible: bool) -> World {
 /// As `about_to_be_shoved_into_a_thornbush`, into an object of type `into`,
 /// the sprite's genome having `genes` too.
 fn about_to_be_shoved_into(into: &str, visible: bool, genes: &str) -> World {
-    let data = builtin();
-    let map = Map::from_ascii(&OPEN, &data).expect("valid drawing");
     let genes = format!(
         r#"Emitter(locus: Locus("pricked"), mode: Level, gain: 1.0, chem: "punishment"),{genes}"#
     );
-    let sprites = [(at(1, 2), Some(genome(&genes, &data)))];
-    let scripted = [(at(1, 2), ScriptedAction::Rest); 10];
-    let scenario = Scenario {
-        map,
-        objects: &[(at(3, 2), into)],
-        sprites: &sprites,
-        scripted: &scripted,
-        newborns: &[],
-    };
-    let mut world = World::from_scenario(scenario, data, 1).expect("a valid scenario");
+    let mut world = WorldBuilder::new(&OPEN)
+        .objects(&[(at(3, 2), into)])
+        .sprites(&[(at(1, 2), &genes)])
+        .script(at(1, 2), &[ScriptedAction::Rest; 10])
+        .build();
     world.submit(Command::MoveCursor { tile: at(1, 2) });
     world.submit(Command::ShowCursor { visible });
     let sprite = the_sprite(&world).id();
