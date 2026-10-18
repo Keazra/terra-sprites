@@ -41,7 +41,7 @@ fn field() -> World {
     };
     let mut world = WorldBuilder::new(&drawing)
         .objects(&objects)
-        .sprites(&[at(3, 5), at(8, 2), at(15, 6)])
+        .starters(&[at(3, 5), at(8, 2), at(15, 6)])
         .scripts(&[(at(3, 5), wander)])
         .seed(7)
         .build();

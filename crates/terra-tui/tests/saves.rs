@@ -3,14 +3,14 @@
 //! that has run, and the autosaves.
 
 mod common;
-use common::{apply, at, ball_world, map_app, pack, render_on, row, run, scratch_folder};
+use common::{WorldBuilder, apply, at, ball_world, map_app, render_on, row, run, scratch_folder};
 
 use std::path::Path;
 use std::time::Duration;
 
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::layout::{Rect, Size};
-use terra_sim::{Command, Map, Scenario, World};
+use terra_sim::{Command, World};
 use terra_tui::app::{AUTOSAVE_EVERY, App, CursorMode, Origin, Screen};
 use terra_tui::input::{Action, Keys};
 use terra_tui::saves::{self, QUICKSAVE};
@@ -334,16 +334,10 @@ fn a_loaded_world_keeps_the_cursor_as_it_was() {
 #[test]
 fn a_loaded_world_shows_what_the_screen_showed_when_it_was_saved() {
     let folder = scratch_folder("view");
-    let rows = vec!["........................................"; 30];
-    let map = Map::from_ascii(&rows, &pack()).expect("valid drawing");
-    let scenario = Scenario {
-        map,
-        objects: &[],
-        sprites: &[(at(2, 2), None)],
-        scripted: &[],
-        newborns: &[],
-    };
-    let world = World::from_scenario(scenario, pack(), 7).expect("valid scenario");
+    let world = WorldBuilder::grass(40, 30)
+        .starters(&[at(2, 2)])
+        .seed(7)
+        .build();
     let mut app = app_for(&world, &folder);
     // The view starts at the middle of the map; this takes it to a corner,
     // as far past the wall as it goes (M2 design §11.1).

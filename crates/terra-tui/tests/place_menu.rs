@@ -4,15 +4,15 @@
 
 mod common;
 use common::{
-    app, apply, at, click, field, grab_app, lines, pack, pointing_at, render, scratch_folder,
-    status_line, tick,
+    WorldBuilder, app, apply, at, click, field, grab_app, lines, pointing_at, render,
+    scratch_folder, status_line, tick,
 };
 
 use std::path::PathBuf;
 
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers};
 use ratatui::layout::{Position, Size};
-use terra_sim::{Command, EntityId, Event, EventKind, Genome, Map, Scenario, World};
+use terra_sim::{Command, EntityId, Event, EventKind, Genome, World};
 use terra_tui::app::{App, CursorMode, Screen, StatusMark};
 use terra_tui::input::{Action, Button, Keys};
 use terra_tui::ui;
@@ -467,16 +467,7 @@ fn a_genome_file_that_doesnt_read_is_refused_with_why() {
 #[test]
 fn the_place_menu_draws_over_the_map_with_its_items_numbered() {
     // As small as a preset lets a map be (`data/presets/default.ron`).
-    let rows = vec!["................................"; 32];
-    let map = Map::from_ascii(&rows, &pack()).expect("valid drawing");
-    let scenario = Scenario {
-        map,
-        objects: &[],
-        sprites: &[],
-        scripted: &[],
-        newborns: &[],
-    };
-    let world = World::from_scenario(scenario, pack(), 1).expect("valid scenario");
+    let world = WorldBuilder::grass(32, 32).build();
     let mut app = grab_app(&world);
     app.fit(ui::areas(Size::new(100, 30)));
     apply(&mut app, &world, Action::Mode(CursorMode::Grab));

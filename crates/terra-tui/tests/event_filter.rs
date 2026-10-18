@@ -15,7 +15,7 @@ use terra_tui::input::Action;
 /// Sprites #1 and #2 in a field.
 fn field() -> World {
     WorldBuilder::grass(10, 5)
-        .sprites(&[at(2, 3), at(6, 1)])
+        .starters(&[at(2, 3), at(6, 1)])
         .seed(7)
         .build()
 }

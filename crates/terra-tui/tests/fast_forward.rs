@@ -4,15 +4,15 @@
 //! generation and the deaths by cause.
 
 mod common;
-use common::{app_on, pack, scratch_folder};
+use common::{WorldBuilder, app_on, at, pack, scratch_folder};
 
 use std::collections::BTreeMap;
 use std::path::Path;
 use std::time::Duration;
 
 use terra_sim::{
-    DeathCause, EntityId, EventKind, Genome, Map, Mode, Pos, Scenario, World, WorldConfig,
-    gene_values, middle_values,
+    DeathCause, EntityId, EventKind, Genome, Mode, Pos, World, WorldConfig, gene_values,
+    middle_values,
 };
 use terra_tui::clock::Speed;
 use terra_tui::fast_forward::{
@@ -172,21 +172,10 @@ fn the_progress_line_says_how_far_it_has_got() {
 /// another, and the other two die of thirst, each at a different time,
 /// within the hour, as they do with seed 5.
 fn a_deadly_field() -> World {
-    let data = pack();
-    let map = Map::from_ascii(&[".........."; 6], &data).expect("valid drawing");
-    let sprites = [
-        (Pos { x: 2, y: 2 }, None),
-        (Pos { x: 6, y: 3 }, None),
-        (Pos { x: 4, y: 4 }, None),
-    ];
-    let scenario = Scenario {
-        map,
-        objects: &[],
-        sprites: &sprites,
-        scripted: &[],
-        newborns: &[],
-    };
-    World::from_scenario(scenario, data, 5).expect("valid scenario")
+    WorldBuilder::grass(10, 6)
+        .starters(&[at(2, 2), at(6, 3), at(4, 4)])
+        .seed(5)
+        .build()
 }
 
 #[test]
@@ -578,16 +567,7 @@ fn the_report_says_when_no_value_has_moved_yet() {
 
 #[test]
 fn the_report_says_when_no_sprite_is_left_to_measure() {
-    let data = pack();
-    let map = Map::from_ascii(&[".........."; 6], &data).expect("valid drawing");
-    let scenario = Scenario {
-        map,
-        objects: &[],
-        sprites: &[],
-        scripted: &[],
-        newborns: &[],
-    };
-    let empty = World::from_scenario(scenario, data, 1).expect("valid scenario");
+    let empty = WorldBuilder::grass(10, 6).build();
     let mut run = FastForward::new(empty, 1);
     run.run_to(HOUR / 2);
     run.finish();
@@ -642,16 +622,9 @@ fn the_genes_table_is_blank_where_no_sprite_carries_a_value() {
         &data,
     )
     .expect("a valid genome");
-    let map = Map::from_ascii(&[".........."; 6], &data).expect("valid drawing");
-    let sprites = [(Pos { x: 4, y: 3 }, Some(genome))];
-    let scenario = Scenario {
-        map,
-        objects: &[],
-        sprites: &sprites,
-        scripted: &[],
-        newborns: &[],
-    };
-    let world = World::from_scenario(scenario, data, 1).expect("valid scenario");
+    let world = WorldBuilder::grass(10, 6)
+        .sprites_with(vec![(at(4, 3), Some(genome))])
+        .build();
     let run = FastForward::new(world, 1);
     let table = cells(&run.genes().table());
     let (headings, start) = (&table[0], &table[2]);

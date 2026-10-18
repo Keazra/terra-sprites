@@ -7,16 +7,16 @@
 
 mod common;
 use common::{
-    Changes, LETHAL_THORNS, LONE, LONE_MOTHER, QUICK, SCORCHED, app_on, at, changed, group, grow,
-    inspector_rows, lines, lone_line, open, pack_changing, pairs, parched_line, pointer_on, render,
-    rows_from, scratch_folder, select, tree_of,
+    Changes, LETHAL_THORNS, LONE, LONE_MOTHER, QUICK, SCORCHED, WorldBuilder, app_on, at, changed,
+    group, grow, inspector_rows, lines, lone_line, open, pack_changing, pairs, parched_line,
+    pointer_on, render, rows_from, scratch_folder, select, tree_of,
 };
 
 use std::time::Duration;
 
 use ratatui::layout::{Margin, Position, Size};
 use ratatui::style::{Color, Modifier};
-use terra_sim::{Command, DeathCause, EntityId, Genome, Map, Scenario, World};
+use terra_sim::{Command, DeathCause, EntityId, Genome, World};
 use terra_tui::app::{App, ColourMode, Screen, Selection, Tab};
 use terra_tui::input::{Action, Button};
 use terra_tui::policy::{InfoPolicy, Panel, Subject};
@@ -720,16 +720,13 @@ fn a_sprite_hurt_to_death_died_hurt_by_what_hurt_it() {
     Instinct(inputs: [("always", false), ("attended_bush", false)], verb: Hit, weight: 0.5),
 ])"#,
     );
-    let map = Map::from_ascii(&["............"; 6], &pack).expect("valid drawing");
     let mother = Genome::from_ron(&genes, &pack).expect("valid genes");
-    let scenario = Scenario {
-        map,
-        objects: &[(at(2, 4), "thornbush")],
-        sprites: &[(at(1, 4), Some(mother))],
-        scripted: &[],
-        newborns: &[],
-    };
-    let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
+    let mut world = WorldBuilder::grass(12, 6)
+        .objects(&[(at(2, 4), "thornbush")])
+        .sprites_with(vec![(at(1, 4), Some(mother))])
+        .data(pack)
+        .seed(7)
+        .build();
     let mother = world.sprites().next().expect("the mother").id();
     let young = loop {
         if let Some(egg) = world.eggs().next() {

@@ -9,8 +9,8 @@ use std::time::Duration;
 use ratatui::layout::Position;
 use ratatui::style::{Color, Modifier};
 use terra_sim::{
-    ActionView, EntityId, Event, EventKind, Genome, Hurt, Map, Outcome, Pos, Progress, Scenario,
-    ScriptedAction, Target, Thing, Verb, World,
+    ActionView, EntityId, Event, EventKind, Genome, Hurt, Outcome, Pos, Progress, ScriptedAction,
+    Target, Thing, Verb, World,
 };
 use terra_tui::app::{App, ColourMode, PLEASED_AT, Selection, Ticks};
 use terra_tui::clock::Speed;
@@ -476,25 +476,20 @@ fn the_resting_emote_shows_for_a_second_at_16x_and_at_max_through_the_frame_loop
     // taken in through `Ticks`, so a rest over in a blink still shows.
     for speed in [Speed::X16, Speed::Max] {
         let pack = pack();
-        let map = Map::from_ascii(&[".........."; 5], &pack).expect("valid drawing");
         // It never calls, whose emote would take the rest's place (M2
         // design §15.8).
         let quiet = r#"(format: 1, genes: [
             Instinct(inputs: [("always", false)], verb: Call, weight: -5.0),
         ])"#;
         let quiet = Genome::from_ron(quiet, &pack).expect("a valid genome");
-        let sprites = [(at(2, 3), Some(quiet))];
-        let scripted = [(at(2, 3), ScriptedAction::Rest)];
         // Young, so it can't try breeding alone, fail and show that instead
         // (M2 design §10).
-        let scenario = Scenario {
-            map,
-            objects: &[],
-            sprites: &sprites,
-            scripted: &scripted,
-            newborns: &[at(2, 3)],
-        };
-        let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
+        let mut world = WorldBuilder::grass(10, 5)
+            .sprites_with(vec![(at(2, 3), Some(quiet))])
+            .scripts(&[(at(2, 3), ScriptedAction::Rest)])
+            .newborns(&[at(2, 3)])
+            .seed(7)
+            .build();
         let id = world.sprites().next().expect("a sprite").id();
         let mut app = app_for(&world, Theme::cp437());
         while app.clock.speed() != speed {

@@ -7,7 +7,7 @@ use common::{WorldBuilder, app_on, at, pack, render, row};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Size};
 use ratatui::style::{Color, Modifier};
-use terra_sim::{Command, DataPack, EntityId, Genome, Map, Pos, Scenario, ScriptedAction, World};
+use terra_sim::{Command, DataPack, EntityId, Genome, Pos, ScriptedAction, World};
 use terra_tui::app::{App, Flow, Screen};
 use terra_tui::input::Action;
 use terra_tui::policy::{InfoPolicy, Panel, Subject};
@@ -302,16 +302,7 @@ fn a_click_on_a_row_goes_to_its_sprite_and_a_click_elsewhere_does_nothing() {
 
 #[test]
 fn with_no_sprites_the_list_says_so() {
-    let pack = pack();
-    let map = Map::from_ascii(&[".........."; 5], &pack).expect("valid drawing");
-    let scenario = Scenario {
-        map,
-        objects: &[],
-        sprites: &[],
-        scripted: &[],
-        newborns: &[],
-    };
-    let world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
+    let world = WorldBuilder::grass(10, 5).seed(7).build();
     let mut app = app_on(&world);
     app.apply(Action::SpriteList, &world);
     let screen = render(&app, &world);
@@ -323,18 +314,11 @@ fn with_no_sprites_the_list_says_so() {
 
 #[test]
 fn a_long_list_scrolls_to_keep_the_highlight_in_view() {
-    let pack = pack();
-    let row_text = ".".repeat(60);
-    let map = Map::from_ascii(&vec![row_text.as_str(); 40], &pack).expect("valid drawing");
-    let sprites: Vec<(Pos, Option<Genome>)> = (0..30).map(|x| (at(x * 2, 10), None)).collect();
-    let scenario = Scenario {
-        map,
-        objects: &[],
-        sprites: &sprites,
-        scripted: &[],
-        newborns: &[],
-    };
-    let world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
+    let sprites: Vec<Pos> = (0..30).map(|x| at(x * 2, 10)).collect();
+    let world = WorldBuilder::grass(60, 40)
+        .starters(&sprites)
+        .seed(7)
+        .build();
     let mut app = app_on(&world);
     app.apply(Action::SpriteList, &world);
     assert_eq!(app.list_rows(), 25);

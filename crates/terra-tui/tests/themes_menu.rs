@@ -18,7 +18,7 @@ const ASCII_THEME: &str = include_str!("../../../themes/ascii.ron");
 /// An 11×8 grass world with a starter sprite on (2, 2).
 fn world() -> World {
     WorldBuilder::grass(11, 8)
-        .sprites(&[at(2, 2)])
+        .starters(&[at(2, 2)])
         .seed(7)
         .build()
 }

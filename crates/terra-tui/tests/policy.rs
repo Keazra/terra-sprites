@@ -9,7 +9,7 @@ use ratatui::layout::Position;
 use ratatui::style::Color;
 use terra_sim::{
     ActionView, Command, DeathCause, EntityId, Event, EventKind, Grip, Hurt, Map, Outcome, Pos,
-    Progress, Rejection, Scenario, ScriptedAction, Target, Verb, World,
+    Progress, Rejection, ScriptedAction, Target, Verb, World,
 };
 use terra_tui::app::{App, ColourMode, CursorMode, Tab};
 use terra_tui::input::Action;
@@ -44,7 +44,7 @@ fn field() -> World {
     };
     let mut world = WorldBuilder::grass(10, 5)
         .objects(&[(at(1, 1), "berry_bush")])
-        .sprites(&[at(2, 3), at(6, 1)])
+        .starters(&[at(2, 3), at(6, 1)])
         .scripts(&[(at(2, 3), wander)])
         .seed(7)
         .build();
@@ -253,21 +253,15 @@ fn a_policy_that_denies_everything_blanks_every_display() {
 #[test]
 fn a_policy_that_hides_map_colours_draws_sprites_in_their_own_colour() {
     let pack = pack();
-    let map = Map::from_ascii(&[".........."; 5], &pack).expect("valid drawing");
     let hungry = terra_sim::Genome::from_ron(
         r#"(format: 1, genes: [InitialConcentration(chem: "hunger", value: 0.9)])"#,
         &pack,
     )
     .expect("a valid genome");
-    let sprites = [(Pos { x: 2, y: 3 }, Some(hungry))];
-    let scenario = Scenario {
-        map,
-        objects: &[],
-        sprites: &sprites,
-        scripted: &[],
-        newborns: &[],
-    };
-    let world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
+    let world = WorldBuilder::grass(10, 5)
+        .sprites_with(vec![(Pos { x: 2, y: 3 }, Some(hungry))])
+        .seed(7)
+        .build();
     let mut app = app_on(&world);
     app.apply(Action::Point(pointer_on(&app, Pos { x: 9, y: 4 })), &world);
     assert_eq!(render(&app, &world)[cell(WANDERER)].fg, Color::Yellow);
@@ -335,16 +329,10 @@ fn the_cursors_own_lines_ask_the_policy_about_the_sprite_they_name() {
     let line = status(&leading);
     assert!(!line.contains("leading"), "{line}");
 
-    let pack = pack();
-    let map = Map::from_ascii(&[".........."; 5], &pack).expect("valid drawing");
-    let scenario = Scenario {
-        map,
-        objects: &[(Pos { x: 4, y: 1 }, "ball")],
-        sprites: &[],
-        scripted: &[],
-        newborns: &[],
-    };
-    let ball_field = World::from_scenario(scenario, pack, 7).expect("valid scenario");
+    let ball_field = WorldBuilder::grass(10, 5)
+        .objects(&[(Pos { x: 4, y: 1 }, "ball")])
+        .seed(7)
+        .build();
     let holding_line = |app: &App| status_line(app, &ball_field);
     let mut holding = app_on(&ball_field);
     holding.apply(Action::Mode(CursorMode::Grab), &ball_field);

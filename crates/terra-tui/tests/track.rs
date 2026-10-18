@@ -1,10 +1,10 @@
 //! Track (`T`, design v21 §6.1): the view follows the selected sprite.
 
 mod common;
-use common::{LONE, LONE_MOTHER, QUICK, WorldBuilder, at, grow, map_app, pack, pointer_on};
+use common::{LONE, LONE_MOTHER, QUICK, WorldBuilder, at, grow, map_app, pointer_on};
 
 use ratatui::layout::Rect;
-use terra_sim::{Map, Pos, Scenario, ScriptedAction, World};
+use terra_sim::{Pos, ScriptedAction, World};
 use terra_tui::app::{App, Origin, Selection};
 use terra_tui::input::Action;
 
@@ -20,7 +20,7 @@ fn field() -> (World, App) {
         destination: at(42, 30),
     };
     let world = WorldBuilder::grass(60, 40)
-        .sprites(&[at(50, 30), at(5, 5)])
+        .starters(&[at(50, 30), at(5, 5)])
         .scripts(&[(at(50, 30), wander)])
         .build();
     let app = small_view(&world);
@@ -97,16 +97,7 @@ fn track_stops_a_quarter_of_the_view_past_the_wall() {
     // M2 design §11.1: a sprite in the corner, at (1, 1), would be centred
     // from (-9, -4); the 20×10 view goes only 5 tiles past the wall
     // sideways, and 2 up.
-    let row = ".".repeat(60);
-    let map = Map::from_ascii(&vec![row.as_str(); 40], &pack()).expect("valid drawing");
-    let scenario = Scenario {
-        map,
-        objects: &[],
-        sprites: &[(at(1, 1), None)],
-        scripted: &[],
-        newborns: &[],
-    };
-    let world = World::from_scenario(scenario, pack(), 1).expect("valid scenario");
+    let world = WorldBuilder::grass(60, 40).starters(&[at(1, 1)]).build();
     let mut app = small_view(&world);
     select(&mut app, &world, at(1, 1));
     app.apply(Action::Track, &world);

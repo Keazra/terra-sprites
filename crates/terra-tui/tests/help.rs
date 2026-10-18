@@ -13,7 +13,7 @@ use terra_tui::theme::Theme;
 /// A 10×5 field with a starter sprite on (2, 3).
 fn field() -> World {
     WorldBuilder::grass(10, 5)
-        .sprites(&[at(2, 3)])
+        .starters(&[at(2, 3)])
         .seed(7)
         .build()
 }

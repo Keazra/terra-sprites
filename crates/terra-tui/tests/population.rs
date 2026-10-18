@@ -5,7 +5,7 @@
 
 mod common;
 use common::{
-    LONE, WorldBuilder, app_on, at, group, inspector_rows, pack, pack_changing, pointer_on, render,
+    LONE, WorldBuilder, app_on, at, group, inspector_rows, pack_changing, pointer_on, render,
     render_on, row, run, sized_app,
 };
 
@@ -14,7 +14,7 @@ use std::time::Duration;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Size};
 use ratatui::style::{Color, Modifier};
-use terra_sim::{DataPack, Genome, Map, Pos, Scenario, World};
+use terra_sim::{DataPack, Genome, Pos, World};
 use terra_tui::app::{App, CursorMode, Screen};
 use terra_tui::input::{Action, Button};
 use terra_tui::policy::{InfoPolicy, Panel, Subject};
@@ -32,8 +32,8 @@ fn field(young: u16, adults: u16) -> World {
     let young: Vec<Pos> = (0..young).map(|x| at(x, 0)).collect();
     let adults: Vec<Pos> = (0..adults).map(|x| at(x, 1)).collect();
     WorldBuilder::grass(12, 4)
-        .sprites(&young)
-        .sprites(&adults)
+        .starters(&young)
+        .starters(&adults)
         .newborns(&young)
         .seed(7)
         .build()
@@ -44,7 +44,7 @@ fn field(young: u16, adults: u16) -> World {
 fn doomed() -> World {
     let tile = at(0, 0);
     WorldBuilder::grass(1, 1)
-        .sprites(&[tile])
+        .starters(&[tile])
         .newborns(&[tile])
         .build()
 }
@@ -141,15 +141,10 @@ fn mother() -> World {
         &pack,
     )
     .expect("a valid genome");
-    let map = Map::from_ascii(&["............"; 4], &pack).expect("valid drawing");
-    let scenario = Scenario {
-        map,
-        objects: &[],
-        sprites: &[(Pos { x: 5, y: 2 }, Some(mother))],
-        scripted: &[],
-        newborns: &[],
-    };
-    World::from_scenario(scenario, pack, 1).expect("valid scenario")
+    WorldBuilder::grass(12, 4)
+        .sprites_with(vec![(Pos { x: 5, y: 2 }, Some(mother))])
+        .data(pack)
+        .build()
 }
 
 #[test]
@@ -451,27 +446,11 @@ fn a_save_from_before_generations_reads_none_for_its_earlier_moments() {
 fn the_small_graph_reaches_past_most_sprites_when_the_cursor_spawned_past_it() {
     // M2 design §14.2: 101 sprites in a world that holds 100. The full
     // graph shows shares, so only the small one has a height in sprites.
-    let pack = pack();
-    let map = Map::from_ascii(&["............"; 9], &pack).expect("valid drawing");
-    let sprites: Vec<(Pos, Option<Genome>)> = (0..101)
-        .map(|i| {
-            (
-                Pos {
-                    x: i % 12,
-                    y: i / 12,
-                },
-                None,
-            )
-        })
-        .collect();
-    let scenario = Scenario {
-        map,
-        objects: &[],
-        sprites: &sprites,
-        scripted: &[],
-        newborns: &[],
-    };
-    let world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
+    let sprites: Vec<Pos> = (0..101).map(|i| at(i % 12, i / 12)).collect();
+    let world = WorldBuilder::grass(12, 9)
+        .starters(&sprites)
+        .seed(7)
+        .build();
     let app = app_on(&world);
     // The graph's top row, under its title.
     let top = &inspector_rows(&app, &world, 30).1[1];

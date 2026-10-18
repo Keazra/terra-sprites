@@ -4,11 +4,10 @@
 
 mod common;
 use common::{
-    WorldBuilder, apply, at, click, field, follow, grab_app, object_on, pack, point, sprite_on,
-    tick,
+    WorldBuilder, apply, at, click, field, follow, grab_app, object_on, point, sprite_on, tick,
 };
 
-use terra_sim::{Command, Grip, Map, Scenario, ScriptedAction, World};
+use terra_sim::{Command, Grip, ScriptedAction, World};
 use terra_tui::app::{App, CursorMode, Screen, StatusMark};
 use terra_tui::input::{Action, Button};
 
@@ -192,20 +191,14 @@ fn leading_the_followed_sprite_the_cursor_follows_the_pointer_and_follow_comes_b
 
 #[test]
 fn while_leading_a_cursor_following_another_walking_sprite_tells_the_world_where_it_goes() {
-    let rows = vec![".........."; 6];
-    let map = Map::from_ascii(&rows, &pack()).expect("valid drawing");
     let walker = at(5, 3);
     let wander = ScriptedAction::Wander {
         destination: at(9, 3),
     };
-    let scenario = Scenario {
-        map,
-        objects: &[],
-        sprites: &[(at(1, 1), None), (walker, None)],
-        scripted: &[(walker, wander)],
-        newborns: &[],
-    };
-    let mut world = World::from_scenario(scenario, pack(), 1).expect("valid scenario");
+    let mut world = WorldBuilder::grass(10, 6)
+        .starters(&[at(1, 1), walker])
+        .scripts(&[(walker, wander)])
+        .build();
     let mut app = grab_app(&world);
     let id = sprite_on(&world, walker);
     click(&mut app, &world, at(1, 1), Button::Left);
@@ -229,20 +222,14 @@ fn while_leading_a_cursor_following_another_walking_sprite_tells_the_world_where
 #[test]
 fn the_observed_list_tells_of_being_pulled_away_and_along_as_the_sprite_felt_it() {
     // Design v23 §6.1: the Cursor is invisible, so it comes out of nowhere.
-    let rows = vec![".........."; 6];
-    let map = Map::from_ascii(&rows, &pack()).expect("valid drawing");
     let start = at(1, 1);
     let wander = ScriptedAction::Wander {
         destination: at(9, 1),
     };
-    let scenario = Scenario {
-        map,
-        objects: &[],
-        sprites: &[(start, None)],
-        scripted: &[(start, wander)],
-        newborns: &[],
-    };
-    let mut world = World::from_scenario(scenario, pack(), 1).expect("valid scenario");
+    let mut world = WorldBuilder::grass(10, 6)
+        .starters(&[start])
+        .scripts(&[(start, wander)])
+        .build();
     let mut app = grab_app(&world);
     apply(&mut app, &world, Action::SelectNext);
     tick(&mut app, &mut world);
@@ -267,7 +254,7 @@ fn resting_sprite_and_ball() -> World {
     let resting = at(4, 2);
     WorldBuilder::grass(10, 6)
         .objects(&[(at(1, 1), "ball")])
-        .sprites(&[resting])
+        .starters(&[resting])
         .scripts(&[(resting, ScriptedAction::Rest); 5])
         .build()
 }
@@ -340,7 +327,7 @@ fn leading_the_followed_sprite_follow_steps_aside_in_every_mode() {
 fn leading_in_a_wide_field() -> (World, App) {
     let (led, other) = (at(1, 1), at(12, 3));
     let world = WorldBuilder::grass(20, 6)
-        .sprites(&[led, other])
+        .starters(&[led, other])
         .scripts(&[(led, ScriptedAction::Rest); 9])
         .scripts(&[(other, ScriptedAction::Rest); 9])
         .build();

@@ -73,8 +73,9 @@ impl<'a> WorldBuilder<'a> {
         self
     }
 
-    /// Sprites with the starter genome on `tiles` (appends).
-    pub fn sprites(mut self, tiles: &[Pos]) -> Self {
+    /// A sprite of the starter genome, with spawn variation, on each of
+    /// `tiles` (appends).
+    pub fn starters(mut self, tiles: &[Pos]) -> Self {
         self.sprites.extend(tiles.iter().map(|&tile| (tile, None)));
         self
     }
@@ -132,7 +133,7 @@ impl<'a> WorldBuilder<'a> {
 pub fn field(objects: &[(Pos, &str)], sprites: &[Pos]) -> World {
     WorldBuilder::grass(10, 6)
         .objects(objects)
-        .sprites(sprites)
+        .starters(sprites)
         .build()
 }
 
@@ -141,7 +142,7 @@ pub fn field(objects: &[(Pos, &str)], sprites: &[Pos]) -> World {
 pub fn ball_world() -> World {
     WorldBuilder::grass(11, 8)
         .objects(&[(at(5, 5), "ball")])
-        .sprites(&[at(2, 2), at(8, 3)])
+        .starters(&[at(2, 2), at(8, 3)])
         .seed(7)
         .build()
 }

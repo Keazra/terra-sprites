@@ -2,14 +2,12 @@
 //! and Follow.
 
 mod common;
-use common::{app, apply, at, click, field, pack, pointing_at, sprite_on, touched};
+use common::{WorldBuilder, app, apply, at, click, field, pointing_at, sprite_on, touched};
 
 use std::time::Duration;
 
 use ratatui::layout::Position;
-use terra_sim::{
-    Command, DeathCause, EntityId, Event, EventKind, Map, Pos, Scenario, ScriptedAction, World,
-};
+use terra_sim::{Command, DeathCause, EntityId, Event, EventKind, Pos, ScriptedAction, World};
 use terra_tui::app::{App, CursorMode, Screen, StatusMark};
 use terra_tui::input::{Action, Button};
 
@@ -329,19 +327,13 @@ fn following_the_cursor_stays_on_its_sprite_whatever_the_pointer_does() {
 #[test]
 fn following_the_cursor_moves_with_its_sprite() {
     // Design v21 §6.5: the sprite walks off, and the Cursor goes with it.
-    let data = pack();
-    let map = Map::from_ascii(&[".........."; 6], &data).expect("valid drawing");
     let walk = ScriptedAction::Wander {
         destination: at(8, 2),
     };
-    let scenario = Scenario {
-        map,
-        objects: &[],
-        sprites: &[(at(1, 2), None)],
-        scripted: &[(at(1, 2), walk)],
-        newborns: &[],
-    };
-    let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
+    let mut world = WorldBuilder::grass(10, 6)
+        .starters(&[at(1, 2)])
+        .scripts(&[(at(1, 2), walk)])
+        .build();
     let mut app = app(&world);
     follow(&mut app, &world, at(1, 2));
     for _ in 0..3 {

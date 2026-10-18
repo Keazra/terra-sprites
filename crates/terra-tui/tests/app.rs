@@ -11,7 +11,7 @@ use terra_tui::input::{Action, Button};
 
 /// An all-grass world, with starter sprites on `sprites`.
 fn grass_with(width: usize, height: usize, sprites: &[Pos]) -> World {
-    WorldBuilder::grass(width, height).sprites(sprites).build()
+    WorldBuilder::grass(width, height).starters(sprites).build()
 }
 
 /// An all-grass world with no sprites.

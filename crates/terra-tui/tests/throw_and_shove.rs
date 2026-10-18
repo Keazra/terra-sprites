@@ -9,7 +9,7 @@ use common::{
     pointing_at, sprite_on, tick,
 };
 
-use terra_sim::{Command, DataPack, Dir, EntityId, Map, Pos, Scenario, ScriptedAction, World};
+use terra_sim::{Command, Dir, EntityId, Pos, ScriptedAction, World};
 use terra_tui::app::{App, CursorMode, StatusMark};
 use terra_tui::input::{Action, Button};
 
@@ -18,7 +18,7 @@ use terra_tui::input::{Action, Button};
 fn field(objects: &[(Pos, &str)], sprites: &[Pos]) -> World {
     WorldBuilder::grass(20, 12)
         .objects(objects)
-        .sprites(sprites)
+        .starters(sprites)
         .build()
 }
 
@@ -144,39 +144,17 @@ fn letting_go_where_aiming_began_sends_nothing_and_esc_cancels_in_grab_mode() {
 #[test]
 fn the_aim_is_cancelled_when_what_the_cursor_held_is_gone() {
     // A berry that lasts 3 ticks expires in the Cursor while the player aims.
-    let text = DataPack::builtin_sources()
-        .iter()
-        .find(|(path, _)| *path == "objects.ron")
-        .map(|(_, text)| {
-            text.replace(
-                "ticks: (1500, 2500), next: Expire",
-                "ticks: (3, 3), next: Expire",
-            )
-        })
-        .expect("objects.ron");
-    let sources: Vec<(&str, &str)> = DataPack::builtin_sources()
-        .iter()
-        .map(|&(path, builtin)| {
-            (
-                path,
-                if path == "objects.ron" {
-                    text.as_str()
-                } else {
-                    builtin
-                },
-            )
-        })
-        .collect();
-    let data = DataPack::from_sources(&sources).expect("a valid pack");
-    let map = Map::from_ascii(&["...................."; 12], &data).expect("valid drawing");
-    let scenario = Scenario {
-        map,
-        objects: &[(at(5, 5), "berry")],
-        sprites: &[],
-        scripted: &[],
-        newborns: &[],
-    };
-    let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
+    let data = pack_changing(&[(
+        "objects.ron",
+        &[(
+            "ticks: (1500, 2500), next: Expire",
+            "ticks: (3, 3), next: Expire",
+        )],
+    )]);
+    let mut world = WorldBuilder::grass(20, 12)
+        .objects(&[(at(5, 5), "berry")])
+        .data(data)
+        .build();
     let mut app = grab_app(&world);
     hold(&mut app, &mut world, at(5, 5));
     click(&mut app, &world, at(5, 5), Button::Right);
@@ -299,7 +277,7 @@ fn shove_seen(objects: &[(Pos, &str)], others: &[Pos]) -> Vec<String> {
         .collect();
     let mut world = WorldBuilder::grass(20, 12)
         .objects(objects)
-        .sprites(&sprites)
+        .starters(&sprites)
         .scripts(&rests)
         .build();
     let mut app = grab_app(&world);
@@ -493,37 +471,18 @@ fn following_with_the_cursor_empty_a_right_press_anywhere_aims_the_followed_spri
 fn the_aim_is_cancelled_when_the_led_sprite_dies() {
     // Design v25 §6.5. Newborns here start with no energy and starve fast,
     // dying a few ticks in.
-    let text = DataPack::builtin_sources()
-        .iter()
-        .find(|(path, _)| *path == "physiology.ron")
-        .map(|(_, text)| {
-            text.replace("newborn: (energy: 1.0,", "newborn: (energy: 0.0,")
-                .replace("starvation: 0.0011,", "starvation: 0.3,")
-        })
-        .expect("physiology.ron");
-    let sources: Vec<(&str, &str)> = DataPack::builtin_sources()
-        .iter()
-        .map(|&(path, builtin)| {
-            (
-                path,
-                if path == "physiology.ron" {
-                    text.as_str()
-                } else {
-                    builtin
-                },
-            )
-        })
-        .collect();
-    let data = DataPack::from_sources(&sources).expect("a valid pack");
-    let map = Map::from_ascii(&["...................."; 12], &data).expect("valid drawing");
-    let scenario = Scenario {
-        map,
-        objects: &[],
-        sprites: &[(at(5, 5), None)],
-        scripted: &[(at(5, 5), ScriptedAction::Rest)],
-        newborns: &[],
-    };
-    let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
+    let data = pack_changing(&[(
+        "physiology.ron",
+        &[
+            ("newborn: (energy: 1.0,", "newborn: (energy: 0.0,"),
+            ("starvation: 0.0011,", "starvation: 0.3,"),
+        ],
+    )]);
+    let mut world = WorldBuilder::grass(20, 12)
+        .starters(&[at(5, 5)])
+        .scripts(&[(at(5, 5), ScriptedAction::Rest)])
+        .data(data)
+        .build();
     let mut app = grab_app(&world);
     lead(&mut app, &mut world, at(5, 5));
     click(&mut app, &world, at(5, 5), Button::Right);

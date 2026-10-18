@@ -1,7 +1,7 @@
 mod common;
 use common::{
-    LETHAL_THORNS, LONE, finished, group, inspector_line, inspector_rows, lines, open, pack,
-    pack_changing, render_on, select, sized_app, status_line,
+    LETHAL_THORNS, LONE, WorldBuilder, finished, group, inspector_line, inspector_rows, lines,
+    open, pack, pack_changing, render_on, select, sized_app, status_line,
 };
 
 use std::time::Duration;
@@ -13,7 +13,7 @@ use ratatui::{Terminal, backend::TestBackend};
 use terra_sim::{
     ActionView, Blocker, Command, CopyChangeView, DataPack, DeathCause, Emptied, EntityId, Event,
     EventKind, GeneView, Grip, Hurt, Learned, Map, Outcome, Pos, Progress, Rejection, Removal,
-    Scenario, ScriptedAction, Target, Terrain, Thing, Verb, World, WorldConfig,
+    ScriptedAction, Target, Terrain, Thing, Verb, World, WorldConfig,
 };
 use terra_tui::app::{App, CursorMode, Flow, Selection, Tab};
 use terra_tui::input::{Action, Button};
@@ -381,16 +381,12 @@ fn a_grab_click_with_nothing_to_act_on_flashes_a_question_mark() {
 fn a_flashing_dotted_leash_runs_from_the_cursor_to_the_led_sprite_over_empty_ground() {
     // Design v23 §6.5. The sprite is on map tile (1, 2) and a berry on
     // (4, 2).
-    let pack = pack();
-    let map = Map::from_ascii(&["............"; 5], &pack).expect("valid drawing");
-    let scenario = Scenario {
-        map,
-        objects: &[(Pos { x: 4, y: 2 }, "berry")],
-        sprites: &[(Pos { x: 1, y: 2 }, None)],
-        scripted: &[(Pos { x: 1, y: 2 }, ScriptedAction::Rest)],
-        newborns: &[],
-    };
-    let world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
+    let world = WorldBuilder::grass(12, 5)
+        .objects(&[(Pos { x: 4, y: 2 }, "berry")])
+        .starters(&[Pos { x: 1, y: 2 }])
+        .scripts(&[(Pos { x: 1, y: 2 }, ScriptedAction::Rest)])
+        .seed(7)
+        .build();
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
     app.apply(Action::Mode(CursorMode::Grab), &world);
     app.apply(Action::left_click(pointer_on(&world, 1, 2)), &world);
@@ -612,45 +608,32 @@ fn a_frame_bigger_than_the_fitted_view_draws_the_glass_and_space_past_the_wall()
 
 /// A 10×5 field of grass with a berry bush, a thornbush, a berry and a ball.
 fn garden(pack: DataPack) -> World {
-    let map = Map::from_ascii(&[".........."; 5], &pack).expect("valid drawing");
     let objects = [
         (terra_sim::Pos { x: 1, y: 1 }, "berry_bush"),
         (terra_sim::Pos { x: 4, y: 1 }, "thornbush"),
         (terra_sim::Pos { x: 7, y: 1 }, "berry"),
         (terra_sim::Pos { x: 6, y: 3 }, "ball"),
     ];
-    let scenario = Scenario {
-        map,
-        objects: &objects,
-        sprites: &[],
-        scripted: &[],
-        newborns: &[],
-    };
-    World::from_scenario(scenario, pack, 7).expect("valid scenario")
+    WorldBuilder::grass(10, 5)
+        .objects(&objects)
+        .data(pack)
+        .seed(7)
+        .build()
 }
 
 /// The garden, with starter sprites at (2, 3) and on the berry at (7, 1).
 fn garden_with_sprites() -> World {
-    let pack = pack();
-    let map = Map::from_ascii(&[".........."; 5], &pack).expect("valid drawing");
     let objects = [
         (terra_sim::Pos { x: 1, y: 1 }, "berry_bush"),
         (terra_sim::Pos { x: 4, y: 1 }, "thornbush"),
         (terra_sim::Pos { x: 7, y: 1 }, "berry"),
         (terra_sim::Pos { x: 6, y: 3 }, "ball"),
     ];
-    let sprites = [
-        (terra_sim::Pos { x: 2, y: 3 }, None),
-        (terra_sim::Pos { x: 7, y: 1 }, None),
-    ];
-    let scenario = Scenario {
-        map,
-        objects: &objects,
-        sprites: &sprites,
-        scripted: &[],
-        newborns: &[],
-    };
-    World::from_scenario(scenario, pack, 7).expect("valid scenario")
+    WorldBuilder::grass(10, 5)
+        .objects(&objects)
+        .starters(&[Pos { x: 2, y: 3 }, Pos { x: 7, y: 1 }])
+        .seed(7)
+        .build()
 }
 
 #[test]
@@ -1418,19 +1401,16 @@ fn one_sprite_in(
     scripted: &[ScriptedAction],
     ticks: u32,
 ) -> (World, App) {
-    let map = Map::from_ascii(&[".........."; 5], &pack).expect("valid drawing");
     let genome = terra_sim::Genome::from_ron(genome, &pack).expect("a valid genome");
     let start = Pos { x: 2, y: 3 };
-    let sprites = [(start, Some(genome))];
     let scripted: Vec<(Pos, ScriptedAction)> = scripted.iter().map(|&a| (start, a)).collect();
-    let scenario = Scenario {
-        map,
-        objects,
-        sprites: &sprites,
-        scripted: &scripted,
-        newborns: &[],
-    };
-    let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
+    let mut world = WorldBuilder::grass(10, 5)
+        .objects(objects)
+        .sprites_with(vec![(start, Some(genome))])
+        .scripts(&scripted)
+        .data(pack)
+        .seed(7)
+        .build();
     for _ in 0..ticks {
         world.step();
     }
@@ -1509,20 +1489,17 @@ fn the_body_tab_says_when_the_young_grow_up_and_the_old_are_old() {
         );
         terra_sim::Genome::from_ron(&genes, &pack).expect("a valid genome")
     };
-    let map = Map::from_ascii(&[".........."; 5], &pack).expect("valid drawing");
     let (young, grown) = (Pos { x: 2, y: 3 }, Pos { x: 6, y: 1 });
-    let sprites = [
+    let sprites = vec![
         (young, Some(genes(4500.0, 13500.0))),
         (grown, Some(genes(10.0, 20.0))),
     ];
-    let scenario = Scenario {
-        map,
-        objects: &[],
-        sprites: &sprites,
-        scripted: &[],
-        newborns: &[young],
-    };
-    let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
+    let mut world = WorldBuilder::grass(10, 5)
+        .sprites_with(sprites)
+        .newborns(&[young])
+        .data(pack)
+        .seed(7)
+        .build();
     world.step();
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
     app.apply(Action::SelectNext, &world);
@@ -1863,20 +1840,16 @@ fn the_brain_tab_opens_the_rest_of_a_things_lessons() {
 #[test]
 fn choosing_another_sprite_shuts_lessons_that_were_open() {
     let pack = pack();
-    let map = Map::from_ascii(&[".........."; 5], &pack).expect("valid drawing");
     let genome = terra_sim::Genome::from_ron(EVERY_NEED_GENOME, &pack).expect("a valid genome");
     let neighbor = terra_sim::Genome::from_ron("(format: 1, genes: [])", &pack).expect("valid");
     let (eater, bystander) = (Pos { x: 2, y: 3 }, Pos { x: 8, y: 1 });
-    let sprites = [(eater, Some(genome)), (bystander, Some(neighbor))];
+    let sprites = vec![(eater, Some(genome)), (bystander, Some(neighbor))];
     let objects = [(Pos { x: 3, y: 3 }, "berry")];
-    let scenario = Scenario {
-        map,
-        objects: &objects,
-        sprites: &sprites,
-        scripted: &[],
-        newborns: &[],
-    };
-    let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
+    let mut world = WorldBuilder::grass(10, 5)
+        .objects(&objects)
+        .sprites_with(sprites)
+        .seed(7)
+        .build();
     for _ in 0..2 {
         world.step();
     }
@@ -1911,11 +1884,10 @@ fn sprites_in_general_sit_above_the_sprites_it_remembers() {
     // Sprites in general are half that average until it knows three: -.50,
     // and that line comes before either of them.
     let pack = pack();
-    let map = Map::from_ascii(&[".........."; 5], &pack).expect("valid drawing");
     let genome = |text: &str| terra_sim::Genome::from_ron(text, &pack).expect("a valid genome");
     let walker = r#"(format: 1, genes: [Trait(trait: "speed", value: 10.0)])"#;
     let (me, first, second) = (Pos { x: 2, y: 3 }, Pos { x: 3, y: 3 }, Pos { x: 1, y: 3 });
-    let sprites = [
+    let sprites = vec![
         (me, Some(genome(SKITTISH_GENOME))),
         (first, Some(genome(walker))),
         (second, Some(genome(walker))),
@@ -1931,14 +1903,11 @@ fn sprites_in_general_sit_above_the_sprites_it_remembers() {
         ),
         (second, ScriptedAction::Hit { at: me }),
     ];
-    let scenario = Scenario {
-        map,
-        objects: &[],
-        sprites: &sprites,
-        scripted: &scripted,
-        newborns: &[],
-    };
-    let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
+    let mut world = WorldBuilder::grass(10, 5)
+        .sprites_with(sprites)
+        .scripts(&scripted)
+        .seed(7)
+        .build();
     for _ in 0..8 {
         world.step();
     }
@@ -2029,7 +1998,6 @@ fn a_habit_about_sprites_sits_with_what_it_thinks_of_them_in_general() {
     // and what it thinks of sprites in general, are the first step under
     // Sprites. That step is not folded at three (design v40 §6.1).
     let pack = pack();
-    let map = Map::from_ascii(&[".........."; 5], &pack).expect("valid drawing");
     let hitter = r#"(format: 1, genes: [
         Trait(trait: "speed", value: 10.0),
         InitialConcentration(chem: "loneliness", value: 1.0),
@@ -2047,19 +2015,15 @@ fn a_habit_about_sprites_sits_with_what_it_thinks_of_them_in_general() {
     ])"#;
     let genome = |text: &str| terra_sim::Genome::from_ron(text, &pack).expect("a valid genome");
     let (me, first, second) = (Pos { x: 2, y: 3 }, Pos { x: 3, y: 3 }, Pos { x: 1, y: 3 });
-    let sprites = [
+    let sprites = vec![
         (me, Some(genome(hitter))),
         (first, Some(genome(bully))),
         (second, Some(genome(bully))),
     ];
-    let scenario = Scenario {
-        map,
-        objects: &[],
-        sprites: &sprites,
-        scripted: &[],
-        newborns: &[],
-    };
-    let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
+    let mut world = WorldBuilder::grass(10, 5)
+        .sprites_with(sprites)
+        .seed(7)
+        .build();
     for _ in 0..16 {
         world.step();
     }
@@ -2194,27 +2158,23 @@ fn the_brain_tab_lists_the_places_the_sprite_remembers() {
     // M2 design §7: a scripted drink at the water on its west eases its
     // thirst, so it remembers the water there.
     let pack = pack();
-    let map = Map::from_ascii(&["~........."; 5], &pack).expect("valid drawing");
     let genome = r#"(format: 1, genes: [
         InitialConcentration(chem: "thirst", value: 1.0),
         Emitter(locus: Locus("drank"), mode: Level, gain: -0.5, chem: "thirst"),
     ])"#;
     let genome = terra_sim::Genome::from_ron(genome, &pack).expect("a valid genome");
     let start = Pos { x: 1, y: 3 };
-    let sprites = [(start, Some(genome))];
+    let sprites = vec![(start, Some(genome))];
     let water = Pos { x: 0, y: 3 };
     let scripted = [
         (start, ScriptedAction::Drink { at: water }),
         (start, ScriptedAction::Rest),
     ];
-    let scenario = Scenario {
-        map,
-        objects: &[],
-        sprites: &sprites,
-        scripted: &scripted,
-        newborns: &[],
-    };
-    let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
+    let mut world = WorldBuilder::new(&["~........."; 5])
+        .sprites_with(sprites)
+        .scripts(&scripted)
+        .seed(7)
+        .build();
     for _ in 0..2 {
         world.step();
     }
@@ -2238,7 +2198,6 @@ fn the_brain_tab_lists_the_places_best_remembered_first_below_what_it_has_learne
     // the bush on its east, and its places fade fast, so the water is
     // remembered less well by the time it looks.
     let pack = pack();
-    let map = Map::from_ascii(&["~........."; 5], &pack).expect("valid drawing");
     let genome = r#"(format: 1, genes: [
         InitialConcentration(chem: "thirst", value: 1.0),
         Emitter(locus: Locus("drank"), mode: Level, gain: -0.5, chem: "thirst"),
@@ -2248,20 +2207,18 @@ fn the_brain_tab_lists_the_places_best_remembered_first_below_what_it_has_learne
     ])"#;
     let genome = terra_sim::Genome::from_ron(genome, &pack).expect("a valid genome");
     let (start, water, bush) = (Pos { x: 1, y: 3 }, Pos { x: 0, y: 3 }, Pos { x: 4, y: 3 });
-    let sprites = [(start, Some(genome))];
+    let sprites = vec![(start, Some(genome))];
     let scripted = [
         (start, ScriptedAction::Drink { at: water }),
         (start, ScriptedAction::Eat { at: bush }),
         (start, ScriptedAction::Rest),
     ];
-    let scenario = Scenario {
-        map,
-        objects: &[(bush, "berry_bush")],
-        sprites: &sprites,
-        scripted: &scripted,
-        newborns: &[],
-    };
-    let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
+    let mut world = WorldBuilder::new(&["~........."; 5])
+        .objects(&[(bush, "berry_bush")])
+        .sprites_with(sprites)
+        .scripts(&scripted)
+        .seed(7)
+        .build();
     world
         .start_object(bush, "mature", &[("fruit", 6)])
         .expect("the bush");
@@ -2772,20 +2729,15 @@ fn a_tab_goes_back_to_the_top_when_the_tab_or_the_selection_changes() {
 #[test]
 fn selecting_another_sprite_starts_its_tab_from_the_top_and_the_same_one_again_does_not() {
     let pack = pack();
-    let map = Map::from_ascii(&[".........."; 5], &pack).expect("valid drawing");
     let genome = || Some(terra_sim::Genome::from_ron(&long_genome(), &pack).expect("valid"));
-    let sprites = [
+    let sprites = vec![
         (terra_sim::Pos { x: 2, y: 3 }, genome()),
         (terra_sim::Pos { x: 6, y: 1 }, genome()),
     ];
-    let scenario = Scenario {
-        map,
-        objects: &[],
-        sprites: &sprites,
-        scripted: &[],
-        newborns: &[],
-    };
-    let world = World::from_scenario(scenario, pack.clone(), 7).expect("valid scenario");
+    let world = WorldBuilder::grass(10, 5)
+        .sprites_with(sprites)
+        .seed(7)
+        .build();
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
     app.apply(Action::SelectNext, &world);
     open(&mut app, &world, Tab::Genome);
@@ -2882,17 +2834,12 @@ fn the_world_tab_shows_the_population_and_the_deaths_by_cause() {
             ("dehydration: 0.0011", "dehydration: 0.5"),
         ],
     )]);
-    let map = Map::from_ascii(&[".........."; 5], &pack).expect("valid drawing");
-    let at = |x, y| (terra_sim::Pos { x, y }, None);
-    let sprites = [at(1, 1), at(4, 2), at(8, 3)];
-    let scenario = Scenario {
-        map,
-        objects: &[],
-        sprites: &sprites,
-        scripted: &[],
-        newborns: &[],
-    };
-    let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
+    let at = |x, y| Pos { x, y };
+    let mut world = WorldBuilder::grass(10, 5)
+        .starters(&[at(1, 1), at(4, 2), at(8, 3)])
+        .data(pack)
+        .seed(7)
+        .build();
     let app = app_for(&world, Theme::cp437(), 100, 30);
     let (_, text) = inspector(&app, &world);
     let text = &text[GRAPH_LINES..];
@@ -2988,16 +2935,11 @@ fn chemical_names_show_with_spaces_for_underscores() {
         ("brain_io.ron", renamed),
         ("genomes/starter.ron", renamed),
     ]);
-    let map = Map::from_ascii(&[".........."; 5], &pack).expect("valid drawing");
-    let sprites = [(terra_sim::Pos { x: 2, y: 3 }, None)];
-    let scenario = Scenario {
-        map,
-        objects: &[],
-        sprites: &sprites,
-        scripted: &[],
-        newborns: &[],
-    };
-    let world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
+    let world = WorldBuilder::grass(10, 5)
+        .starters(&[Pos { x: 2, y: 3 }])
+        .data(pack)
+        .seed(7)
+        .build();
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
     app.apply(Action::SelectNext, &world);
     let (_, body) = inspector(&app, &world);
@@ -3143,11 +3085,10 @@ const SKITTISH_GENOME: &str = r#"(format: 1, genes: [
 /// `ticks` ticks on, with an app that logged every tick and selects #1.
 fn hit_by_a_bully(ticks: u32) -> (World, App) {
     let pack = pack();
-    let map = Map::from_ascii(&[".........."; 5], &pack).expect("valid drawing");
     let genome = |text: &str| terra_sim::Genome::from_ron(text, &pack).expect("a valid genome");
     let walker = r#"(format: 1, genes: [Trait(trait: "speed", value: 10.0)])"#;
     let (me, bully) = (Pos { x: 2, y: 3 }, Pos { x: 3, y: 3 });
-    let sprites = [
+    let sprites = vec![
         (me, Some(genome(SKITTISH_GENOME))),
         (bully, Some(genome(walker))),
     ];
@@ -3155,14 +3096,11 @@ fn hit_by_a_bully(ticks: u32) -> (World, App) {
         (bully, ScriptedAction::Hit { at: me }),
         (bully, ScriptedAction::Rest),
     ];
-    let scenario = Scenario {
-        map,
-        objects: &[],
-        sprites: &sprites,
-        scripted: &scripted,
-        newborns: &[],
-    };
-    let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
+    let mut world = WorldBuilder::grass(10, 5)
+        .sprites_with(sprites)
+        .scripts(&scripted)
+        .seed(7)
+        .build();
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
     for _ in 0..ticks {
         let events = world.step();
@@ -3645,16 +3583,7 @@ fn a_refusal_shows_even_when_the_status_line_is_crowded() {
 /// A world on a 20×5 grass map with `objects`, and the app for it in Grab
 /// mode, holding the item on `held`, on a 100×30 screen.
 fn holding_world(objects: &[(Pos, &str)], held: Pos) -> (World, App) {
-    let pack = pack();
-    let map = Map::from_ascii(&["...................."; 5], &pack).expect("valid drawing");
-    let scenario = Scenario {
-        map,
-        objects,
-        sprites: &[],
-        scripted: &[],
-        newborns: &[],
-    };
-    let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
+    let mut world = WorldBuilder::grass(20, 5).objects(objects).seed(7).build();
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
     app.apply(Action::Mode(CursorMode::Grab), &world);
     app.apply(
@@ -4024,16 +3953,12 @@ fn the_body_tab_says_how_near_a_male_is_to_turning_female_once_grown() {
         InitialConcentration(chem: "feminiser", value: 0.4),
     ])"#;
     let genome = terra_sim::Genome::from_ron(genome, &pack).expect("a valid genome");
-    let map = Map::from_ascii(&[".........."; 5], &pack).expect("valid drawing");
     let (grown, young) = (Pos { x: 2, y: 3 }, Pos { x: 6, y: 1 });
-    let scenario = Scenario {
-        map,
-        objects: &[],
-        sprites: &[(grown, Some(genome.clone())), (young, Some(genome))],
-        scripted: &[],
-        newborns: &[young],
-    };
-    let world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
+    let world = WorldBuilder::grass(10, 5)
+        .sprites_with(vec![(grown, Some(genome.clone())), (young, Some(genome))])
+        .newborns(&[young])
+        .seed(7)
+        .build();
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
     app.apply(Action::SelectNext, &world);
     assert_eq!(
@@ -4137,16 +4062,12 @@ fn paused_the_leash_runs_over_ground_as_the_map_shows_it() {
     // Design §6.5, #203: the berry picked up from (3, 2) and put down on
     // (4, 2), both waiting, then the sprite on (1, 2) taken hold of. The
     // leash's dots run over (3, 2) and stop at the berry on (4, 2).
-    let pack = pack();
-    let map = Map::from_ascii(&["............"; 5], &pack).expect("valid drawing");
-    let scenario = Scenario {
-        map,
-        objects: &[(Pos { x: 3, y: 2 }, "berry")],
-        sprites: &[(Pos { x: 1, y: 2 }, None)],
-        scripted: &[(Pos { x: 1, y: 2 }, ScriptedAction::Rest)],
-        newborns: &[],
-    };
-    let world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
+    let world = WorldBuilder::grass(12, 5)
+        .objects(&[(Pos { x: 3, y: 2 }, "berry")])
+        .starters(&[Pos { x: 1, y: 2 }])
+        .scripts(&[(Pos { x: 1, y: 2 }, ScriptedAction::Rest)])
+        .seed(7)
+        .build();
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
     app.apply(Action::Mode(CursorMode::Grab), &world);
     for x in [3, 4, 1] {
@@ -4166,18 +4087,12 @@ fn leading_a_young_sprite_the_cursor_s_mark_shows_it_small() {
     // M2 design §9.6: the bottom left mark shows what the Cursor has hold
     // of, as the map draws it. Away from the map's edges, so the marks are
     // drawn.
-    let pack = pack();
-    let map = Map::from_ascii(&[".........."; 5], &pack).expect("valid drawing");
     let at = Pos { x: 4, y: 2 };
-    let sprites = [(at, None)];
-    let scenario = Scenario {
-        map,
-        objects: &[],
-        sprites: &sprites,
-        scripted: &[],
-        newborns: &[at],
-    };
-    let world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
+    let world = WorldBuilder::grass(10, 5)
+        .starters(&[at])
+        .newborns(&[at])
+        .seed(7)
+        .build();
     for (theme, glyph) in [(Theme::cp437(), "ö"), (Theme::ascii(), "a")] {
         let mut app = app_for(&world, theme, 100, 30);
         let on = pointer_on(&world, at.x, at.y);
@@ -4208,16 +4123,12 @@ fn a_lone_egg(changes: &[(&str, &str)]) -> (World, EntityId) {
         &pack,
     )
     .expect("a valid genome");
-    let map = Map::from_ascii(&[".........."; 5], &pack).expect("valid drawing");
-    let sprites = [(Pos { x: 1, y: 4 }, Some(genome))];
-    let scenario = Scenario {
-        map,
-        objects: &[],
-        sprites: &sprites,
-        scripted: &[],
-        newborns: &[],
-    };
-    let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
+    let sprites = vec![(Pos { x: 1, y: 4 }, Some(genome))];
+    let mut world = WorldBuilder::grass(10, 5)
+        .sprites_with(sprites)
+        .data(pack)
+        .seed(7)
+        .build();
     let egg = (0..50)
         .flat_map(|_| world.step())
         .find_map(|event| match event.kind {
@@ -4246,19 +4157,16 @@ fn a_pair(pack: DataPack, his: &str) -> (World, EntityId, EntityId) {
         terra_sim::Genome::from_ron(&text, &pack).expect("a valid genome")
     };
     let hers = r#"InitialConcentration(chem: "feminiser", value: 1.0),"#;
-    let map = Map::from_ascii(&["......"; 2], &pack).expect("valid drawing");
-    let sprites = [
+    let sprites = vec![
         (Pos { x: 1, y: 0 }, Some(keen(hers))),
         (Pos { x: 2, y: 0 }, Some(keen(his))),
     ];
-    let scenario = Scenario {
-        map,
-        objects: &[(Pos { x: 4, y: 1 }, "thornbush")],
-        sprites: &sprites,
-        scripted: &[],
-        newborns: &[],
-    };
-    let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
+    let mut world = WorldBuilder::grass(6, 2)
+        .objects(&[(Pos { x: 4, y: 1 }, "thornbush")])
+        .sprites_with(sprites)
+        .data(pack)
+        .seed(7)
+        .build();
     let paired = (0..100)
         .flat_map(|_| world.step())
         .find_map(|event| match event.kind {

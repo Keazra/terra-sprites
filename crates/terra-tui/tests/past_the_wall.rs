@@ -33,7 +33,7 @@ fn field_with(width: usize, height: usize, objects: &[(Pos, &str)], sprites: &[P
         .collect();
     WorldBuilder::grass(width, height)
         .objects(objects)
-        .sprites(sprites)
+        .starters(sprites)
         .scripts(&scripted)
         .build()
 }
