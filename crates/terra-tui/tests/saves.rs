@@ -2,71 +2,24 @@
 //! by name, the list of saves, the question before loading over a world
 //! that has run, and the autosaves.
 
-use std::path::{Path, PathBuf};
+mod common;
+use common::{WorldBuilder, apply, at, ball_world, map_app, render_on, row, run, scratch_folder};
+
+use std::path::Path;
 use std::time::Duration;
 
-use ratatui::Terminal;
-use ratatui::backend::TestBackend;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-use ratatui::layout::Rect;
-use terra_sim::{Command, DataPack, Map, Pos, Scenario, World};
-use terra_tui::app::{AUTOSAVE_EVERY, App, Areas, CursorMode, Flow, Origin, Screen};
+use ratatui::layout::{Rect, Size};
+use terra_sim::{Command, World};
+use terra_tui::app::{AUTOSAVE_EVERY, App, CursorMode, Origin, Screen};
 use terra_tui::input::{Action, Keys};
 use terra_tui::saves::{self, QUICKSAVE};
-use terra_tui::theme::Theme;
-use terra_tui::ui;
-
-fn pack() -> DataPack {
-    DataPack::builtin().expect("valid pack")
-}
-
-fn at(x: u16, y: u16) -> Pos {
-    Pos { x, y }
-}
-
-/// A grass world with two starter sprites and a ball.
-fn world() -> World {
-    let rows = vec!["..........."; 8];
-    let map = Map::from_ascii(&rows, &pack()).expect("valid drawing");
-    let scenario = Scenario {
-        map,
-        objects: &[(at(5, 5), "ball")],
-        sprites: &[(at(2, 2), None), (at(8, 3), None)],
-        scripted: &[],
-        newborns: &[],
-    };
-    World::from_scenario(scenario, pack(), 7).expect("valid scenario")
-}
-
-/// A fresh, empty folder for saves.
-fn scratch_folder(name: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("terra-saves-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).expect("a scratch folder");
-    dir
-}
 
 /// An app for `world`, saving in `folder`.
 fn app_for(world: &World, folder: &Path) -> App {
-    let areas = Areas {
-        tiles: Rect::new(1, 2, 11, 8),
-        inspector: None,
-        event_log: None,
-        overlay: None,
-    };
-    let mut app = App::new(world.map(), Theme::cp437(), world.seed(), areas);
+    let mut app = map_app(world, Rect::new(1, 2, 11, 8));
     app.set_save_folder(folder.to_path_buf());
     app
-}
-
-fn apply(app: &mut App, world: &World, action: Action) {
-    assert_eq!(app.apply(action, world), Flow::Continue);
-}
-
-fn run(world: &mut World, ticks: u64) {
-    for _ in 0..ticks {
-        world.step();
-    }
 }
 
 fn type_text(app: &mut App, world: &World, text: &str) {
@@ -77,19 +30,14 @@ fn type_text(app: &mut App, world: &World, text: &str) {
 
 /// The top bar and the status line, as drawn on a 120×32 screen.
 fn bars(app: &App, world: &World) -> (String, String) {
-    let mut terminal = Terminal::new(TestBackend::new(120, 32)).expect("a test terminal");
-    terminal
-        .draw(|frame| ui::render(frame, app, world))
-        .expect("drawn");
-    let buffer = terminal.backend().buffer();
-    let row = |y: u16| -> String { (0..120).map(|x| buffer[(x, y)].symbol()).collect() };
-    (row(0), row(31))
+    let screen = render_on(app, world, Size::new(120, 32));
+    (row(&screen, 0), row(&screen, 31))
 }
 
 #[test]
 fn f5_saves_the_quicksave_and_the_top_bar_says_so() {
     let folder = scratch_folder("f5");
-    let mut world = world();
+    let mut world = ball_world();
     let mut app = app_for(&world, &folder);
     run(&mut world, 5);
     assert!(bars(&app, &world).0.contains("│ not saved"));
@@ -108,7 +56,7 @@ fn f5_saves_the_quicksave_and_the_top_bar_says_so() {
 #[test]
 fn f9_with_no_quicksave_says_so() {
     let folder = scratch_folder("f9-none");
-    let world = world();
+    let world = ball_world();
     let mut app = app_for(&world, &folder);
     apply(&mut app, &world, Action::Quickload);
     assert_eq!(
@@ -121,7 +69,7 @@ fn f9_with_no_quicksave_says_so() {
 #[test]
 fn f9_loads_the_quicksave_after_asking_if_the_world_has_run_since() {
     let folder = scratch_folder("f9-ask");
-    let mut world = world();
+    let mut world = ball_world();
     let mut app = app_for(&world, &folder);
     run(&mut world, 10);
     apply(&mut app, &world, Action::Quicksave);
@@ -154,7 +102,7 @@ fn f9_loads_the_quicksave_after_asking_if_the_world_has_run_since() {
 #[test]
 fn f9_answers_its_own_question() {
     let folder = scratch_folder("f9-twice");
-    let mut world = world();
+    let mut world = ball_world();
     let mut app = app_for(&world, &folder);
     apply(&mut app, &world, Action::Quicksave);
     run(&mut world, 3);
@@ -168,7 +116,7 @@ fn f9_answers_its_own_question() {
 #[test]
 fn f9_doesnt_answer_for_another_save() {
     let folder = scratch_folder("f9-other");
-    let mut world = world();
+    let mut world = ball_world();
     let mut app = app_for(&world, &folder);
     saves::write(&folder, "Bush gardens", &world.save()).expect("written");
     run(&mut world, 3);
@@ -186,7 +134,7 @@ fn f9_doesnt_answer_for_another_save() {
 #[test]
 fn any_other_key_keeps_the_world_as_it_is() {
     let folder = scratch_folder("f9-cancel");
-    let mut world = world();
+    let mut world = ball_world();
     let mut app = app_for(&world, &folder);
     apply(&mut app, &world, Action::Quicksave);
     run(&mut world, 3);
@@ -200,7 +148,7 @@ fn any_other_key_keeps_the_world_as_it_is() {
 #[test]
 fn a_world_that_hasnt_run_since_its_save_loads_without_asking() {
     let folder = scratch_folder("f9-quiet");
-    let mut world = world();
+    let mut world = ball_world();
     let mut app = app_for(&world, &folder);
     run(&mut world, 4);
     apply(&mut app, &world, Action::Quicksave);
@@ -212,7 +160,7 @@ fn a_world_that_hasnt_run_since_its_save_loads_without_asking() {
 #[test]
 fn a_world_never_saved_asks_saying_so() {
     let folder = scratch_folder("never");
-    let mut world = world();
+    let mut world = ball_world();
     let mut app = app_for(&world, &folder);
     saves::write(&folder, QUICKSAVE, &world.save()).expect("written");
     run(&mut world, 2);
@@ -226,7 +174,7 @@ fn a_world_never_saved_asks_saying_so() {
 #[test]
 fn ctrl_s_saves_by_the_name_typed_offering_the_seed_and_tick() {
     let folder = scratch_folder("save-as");
-    let mut world = world();
+    let mut world = ball_world();
     let mut app = app_for(&world, &folder);
     run(&mut world, 12);
     apply(&mut app, &world, Action::SaveAs);
@@ -248,7 +196,7 @@ fn ctrl_s_saves_by_the_name_typed_offering_the_seed_and_tick() {
 #[test]
 fn a_save_needs_a_name_and_esc_gives_up() {
     let folder = scratch_folder("save-as-empty");
-    let world = world();
+    let world = ball_world();
     let mut app = app_for(&world, &folder);
     apply(&mut app, &world, Action::SaveAs);
     apply(&mut app, &world, Action::Erase);
@@ -267,7 +215,7 @@ fn a_save_needs_a_name_and_esc_gives_up() {
 #[test]
 fn ctrl_o_lists_the_saves_newest_first_and_picking_one_loads_it() {
     let folder = scratch_folder("open");
-    let mut world = world();
+    let mut world = ball_world();
     let mut app = app_for(&world, &folder);
     saves::write(&folder, "older", &world.save()).expect("written");
     // File times can be coarse: make the order plain.
@@ -292,7 +240,7 @@ fn ctrl_o_lists_the_saves_newest_first_and_picking_one_loads_it() {
 #[test]
 fn the_load_list_says_when_there_are_no_saves() {
     let folder = scratch_folder("open-empty");
-    let world = world();
+    let world = ball_world();
     let mut app = app_for(&world, &folder);
     apply(&mut app, &world, Action::OpenSaves);
     assert!(app.menu_items(&world).is_empty());
@@ -307,7 +255,7 @@ fn the_load_list_says_when_there_are_no_saves() {
 #[test]
 fn a_damaged_save_is_refused_on_the_status_line() {
     let folder = scratch_folder("damaged");
-    let world = world();
+    let world = ball_world();
     let mut app = app_for(&world, &folder);
     std::fs::write(saves::path_for(&folder, QUICKSAVE), b"TSPR not really").expect("written");
     apply(&mut app, &world, Action::Quickload);
@@ -325,7 +273,7 @@ fn a_save_that_cant_be_written_is_refused_on_the_status_line() {
     // A file where the saves folder should be.
     let blocked = folder.join("saves");
     std::fs::write(&blocked, b"").expect("written");
-    let world = world();
+    let world = ball_world();
     let mut app = app_for(&world, &blocked);
     apply(&mut app, &world, Action::Quicksave);
     let refusal = app.refusal().expect("refused");
@@ -339,7 +287,7 @@ fn an_autosave_that_cant_be_written_says_why_for_the_world_left() {
     let folder = scratch_folder("unwritable-autosave");
     let blocked = folder.join("saves");
     std::fs::write(&blocked, b"").expect("written");
-    let mut world = world();
+    let mut world = ball_world();
     let mut app = app_for(&world, &blocked);
     run(&mut world, 3);
     let why = app.autosave(&world).expect("it couldn't");
@@ -365,14 +313,14 @@ fn a_file_that_isnt_a_save_loads_as_nothing_naming_it() {
 #[test]
 fn a_loaded_world_keeps_the_cursor_as_it_was() {
     let folder = scratch_folder("cursor");
-    let mut world = world();
+    let mut world = ball_world();
     let ball = world.object_at(at(5, 5)).expect("the ball").id();
     world.submit(Command::PickUp { item: ball });
     world.submit(Command::MoveCursor { tile: at(4, 6) });
     world.submit(Command::ShowCursor { visible: true });
     world.step();
     saves::write(&folder, QUICKSAVE, &world.save()).expect("written");
-    let fresh = self::world();
+    let fresh = ball_world();
     let mut app = app_for(&fresh, &folder);
     apply(&mut app, &fresh, Action::Quickload);
     let loaded = app.take_loaded().expect("loaded");
@@ -386,16 +334,10 @@ fn a_loaded_world_keeps_the_cursor_as_it_was() {
 #[test]
 fn a_loaded_world_shows_what_the_screen_showed_when_it_was_saved() {
     let folder = scratch_folder("view");
-    let rows = vec!["........................................"; 30];
-    let map = Map::from_ascii(&rows, &pack()).expect("valid drawing");
-    let scenario = Scenario {
-        map,
-        objects: &[],
-        sprites: &[(at(2, 2), None)],
-        scripted: &[],
-        newborns: &[],
-    };
-    let world = World::from_scenario(scenario, pack(), 7).expect("valid scenario");
+    let world = WorldBuilder::grass(40, 30)
+        .starters(&[at(2, 2)])
+        .seed(7)
+        .build();
     let mut app = app_for(&world, &folder);
     // The view starts at the middle of the map; this takes it to a corner,
     // as far past the wall as it goes (M2 design §11.1).
@@ -414,7 +356,7 @@ fn a_loaded_world_shows_what_the_screen_showed_when_it_was_saved() {
 #[test]
 fn time_running_for_ten_minutes_autosaves_keeping_the_last_three() {
     let folder = scratch_folder("autosave");
-    let mut world = world();
+    let mut world = ball_world();
     let mut app = app_for(&world, &folder);
     let mut ticks = Vec::new();
     for _ in 0..4 {
@@ -438,7 +380,7 @@ fn time_running_for_ten_minutes_autosaves_keeping_the_last_three() {
 #[test]
 fn paused_time_doesnt_count_towards_an_autosave() {
     let folder = scratch_folder("autosave-paused");
-    let mut world = world();
+    let mut world = ball_world();
     let mut app = app_for(&world, &folder);
     run(&mut world, 3);
     apply(&mut app, &world, Action::TogglePause);
@@ -450,7 +392,7 @@ fn paused_time_doesnt_count_towards_an_autosave() {
 #[test]
 fn quitting_autosaves_unless_the_world_hasnt_run_since_its_last_save() {
     let folder = scratch_folder("quit");
-    let mut world = world();
+    let mut world = ball_world();
     let mut app = app_for(&world, &folder);
     app.autosave(&world);
     assert!(
@@ -514,7 +456,7 @@ fn a_save_name_becomes_a_file_name_any_system_can_hold() {
 #[test]
 fn a_save_is_announced_by_the_name_the_load_list_shows() {
     let folder = scratch_folder("save-as-unsafe");
-    let world = world();
+    let world = ball_world();
     let mut app = app_for(&world, &folder);
     apply(&mut app, &world, Action::SaveAs);
     type_text(&mut app, &world, "my/world:1");
@@ -536,7 +478,7 @@ fn ctrl_c_quits_while_a_name_is_typed_with_caps_lock_on() {
 #[test]
 fn a_save_name_takes_only_what_the_screen_can_show() {
     let folder = scratch_folder("save-as-cp437");
-    let world = world();
+    let world = ball_world();
     let mut app = app_for(&world, &folder);
     apply(&mut app, &world, Action::SaveAs);
     type_text(&mut app, &world, "Café ☃ 1\t");
@@ -548,7 +490,7 @@ fn a_loaded_world_s_names_show_at_once_while_paused() {
     // Before any tick runs, the screen names the sprites the save named
     // (#137).
     let folder = scratch_folder("names");
-    let mut world = world();
+    let mut world = ball_world();
     let sprite = world.sprites().next().expect("a sprite").id();
     world.submit(Command::Rename {
         sprite,
@@ -568,7 +510,7 @@ fn saved_just_now_lasts_3_seconds_then_the_bar_counts_up() {
     // #129: a minute of "just now" read as stuck. Seconds count whole up to
     // 10, then in tens, then minutes as before.
     let folder = scratch_folder("ago");
-    let world = world();
+    let world = ball_world();
     let mut app = app_for(&world, &folder);
     apply(&mut app, &world, Action::Quicksave);
     let mut after = |secs: u64| {
@@ -586,7 +528,7 @@ fn saved_just_now_lasts_3_seconds_then_the_bar_counts_up() {
 #[test]
 fn a_save_loaded_from_the_title_screen_starts_as_a_load_in_a_world_does() {
     // M2 design §8.2: paused, saying what was loaded.
-    let mut world = world();
+    let mut world = ball_world();
     run(&mut world, 10);
     let loaded = World::load(&world.save()).expect("it loads");
     let folder = scratch_folder("from-title");

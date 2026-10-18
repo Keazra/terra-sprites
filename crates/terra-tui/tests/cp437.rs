@@ -2,23 +2,14 @@
 //! draw every panel (design §6.2).
 
 mod common;
+use common::{app_in, pack, pairs, render, render_on, tree_of};
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::Size;
-use ratatui::{Terminal, backend::TestBackend};
-use terra_sim::{DataPack, EntityId, World, WorldConfig};
+use terra_sim::{EntityId, World, WorldConfig};
 use terra_tui::app::{App, CursorMode, Ticks};
 use terra_tui::input::Action;
 use terra_tui::theme::Theme;
-use terra_tui::ui;
-
-fn render(app: &App, world: &World, width: u16, height: u16) -> Buffer {
-    let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
-    terminal
-        .draw(|frame| ui::render(frame, app, world))
-        .unwrap();
-    terminal.backend().buffer().clone()
-}
 
 /// Fails naming the screen and the row if a cell holds anything CP437
 /// can't show.
@@ -36,11 +27,9 @@ fn assert_cp437(screen: &Buffer, what: &str) {
 /// The game on the default world, `ticks` ticks on, with the app having
 /// seen each tick's events, in `theme`.
 fn played(ticks: u32, theme: Theme) -> (World, App) {
-    let pack = DataPack::builtin().expect("built-in data pack is valid");
+    let pack = pack();
     let mut world = World::new(WorldConfig::builtin(&pack), pack, 7);
-    let areas = ui::areas(Size::new(100, 30));
-    let mut app = App::new(world.map(), theme, 7, areas);
-    app.set_data_folder("/home/kel/.local/share/terra-sprites".into());
+    let mut app = app_in(&world, theme);
     for _ in 0..ticks {
         let mut tick = Ticks::default();
         tick.step(&mut world);
@@ -57,7 +46,7 @@ fn every_screen_s_text_is_within_cp437() {
             if let Some(action) = action {
                 app.apply(action, &world);
             }
-            assert_cp437(&render(app, &world, 100, 30), what);
+            assert_cp437(&render(app, &world), what);
         };
         check(&mut app, None, "the main screen");
         check(&mut app, Some(Action::Track), "a refusal");
@@ -96,7 +85,10 @@ fn every_screen_s_text_is_within_cp437() {
         check(&mut app, Some(Action::Back), "the Place menu closed");
         check(&mut app, Some(Action::Back), "back to Select");
         check(&mut app, Some(Action::Back), "the quit prompt");
-        assert_cp437(&render(&app, &world, 80, 20), "a screen too small");
+        assert_cp437(
+            &render_on(&app, &world, Size::new(80, 20)),
+            "a screen too small",
+        );
     }
 }
 
@@ -104,10 +96,10 @@ fn every_screen_s_text_is_within_cp437() {
 fn the_family_tree_s_lines_and_arrows_are_within_cp437() {
     // M2 design §17.2: the lines joining the generations, `◄` and `►` past
     // the edge of a row that scrolls, and ` · ` between a card's parts.
-    let world = common::pairs(230);
+    let world = pairs(230);
     for theme in [Theme::cp437(), Theme::ascii()] {
-        let mut app = App::new(world.map(), theme, 7, ui::areas(Size::new(100, 30)));
-        common::tree_of(&mut app, &world, EntityId(16));
-        assert_cp437(&render(&app, &world, 100, 30), "the family tree");
+        let mut app = app_in(&world, theme);
+        tree_of(&mut app, &world, EntityId(16));
+        assert_cp437(&render(&app, &world), "the family tree");
     }
 }

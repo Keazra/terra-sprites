@@ -2,11 +2,11 @@
 //! something that stays put eased a need, and goes back to it out of sight.
 
 mod common;
-use common::{at, builtin};
+use common::{WorldBuilder, at, builtin, builtin_changing};
 
 use terra_sim::{
-    Command, DataPack, EventKind, Genome, Map, Outcome, Pos, RememberedPlace, Scenario,
-    ScriptedAction, Target, Thing, Verb, World,
+    Command, DataPack, EventKind, Genome, Outcome, Pos, RememberedPlace, ScriptedAction, Target,
+    Thing, Verb, World,
 };
 
 /// A thirsty sprite that sees 6 tiles: thirst creeps up all the time and
@@ -39,17 +39,8 @@ const ROOM: [&str; 5] = [
 /// A thirsty sprite in `ROOM` on `start`, doing `script` first.
 fn room(start: Pos, script: &[ScriptedAction]) -> World {
     let data = builtin();
-    let map = Map::from_ascii(&ROOM, &data).expect("valid drawing");
-    let sprites = [(start, Some(thirsty(&data)))];
-    let scripted: Vec<(Pos, ScriptedAction)> = script.iter().map(|&s| (start, s)).collect();
-    let scenario = Scenario {
-        map,
-        objects: &[],
-        sprites: &sprites,
-        scripted: &scripted,
-        newborns: &[],
-    };
-    World::from_scenario(scenario, data, 1).expect("a valid scenario")
+    let sprite = thirsty(&data);
+    world_in(data, &ROOM, &[], start, sprite, script)
 }
 
 /// Runs `world` for up to `ticks` ticks, and returns where the sprite stood
@@ -405,7 +396,8 @@ fn a_sprite_that_never_found_the_water_never_goes_to_it_from_out_of_sight() {
 }
 
 /// A genome of `speed` that sees 6 tiles, with `genes`, whose remembered
-/// places never fade.
+/// places never fade. Not `common::genome`: that one sees 10 tiles, and
+/// stops what it learns fading but not its remembered places.
 fn genome(speed: f32, genes: &str, data: &DataPack) -> Genome {
     let text = format!(
         r#"(format: 1, genes: [
@@ -433,17 +425,12 @@ fn world_in(
     genome: Genome,
     script: &[ScriptedAction],
 ) -> World {
-    let map = Map::from_ascii(rows, &data).expect("valid drawing");
-    let sprites = [(start, Some(genome))];
-    let scripted: Vec<(Pos, ScriptedAction)> = script.iter().map(|&s| (start, s)).collect();
-    let scenario = Scenario {
-        map,
-        objects,
-        sprites: &sprites,
-        scripted: &scripted,
-        newborns: &[],
-    };
-    World::from_scenario(scenario, data, 1).expect("a valid scenario")
+    WorldBuilder::new(rows)
+        .data(data)
+        .objects(objects)
+        .sprites_with(vec![(start, Some(genome))])
+        .script(start, script)
+        .build()
 }
 
 /// The places the world's one sprite remembers.
@@ -562,22 +549,13 @@ fn a_sprite_sees_a_remembered_bush_is_gone_and_forgets_it() {
 
 /// The built-in pack with the object type `entry` added.
 fn with_object(entry: &str) -> DataPack {
-    let sources: Vec<(&str, String)> = DataPack::builtin_sources()
-        .iter()
-        .map(|&(path, text)| {
-            let text = if path == "objects.ron" {
-                text.replace(
-                    "    // Pseudo types",
-                    &format!("    {entry}\n    // Pseudo types"),
-                )
-            } else {
-                text.to_string()
-            };
-            (path, text)
-        })
-        .collect();
-    let sources: Vec<(&str, &str)> = sources.iter().map(|(p, t)| (*p, t.as_str())).collect();
-    DataPack::from_sources(&sources).expect("a valid test pack")
+    builtin_changing(
+        "objects.ron",
+        &[(
+            "    // Pseudo types",
+            &format!("    {entry}\n    // Pseudo types"),
+        )],
+    )
 }
 
 #[test]

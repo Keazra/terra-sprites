@@ -206,10 +206,7 @@ pub(crate) fn breaks_restrictions(gene: &Gene, data: &DataPack) -> Option<String
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn builtin() -> DataPack {
-        DataPack::builtin().expect("built-in data pack is valid")
-    }
+    use crate::test_util::builtin;
 
     /// How each gene of a genome holding `genes` is expressed.
     fn expressions_of(genes: &[&str]) -> Vec<Expression> {

@@ -3,11 +3,10 @@
 //! build, or a damaged one, is refused rather than crashing.
 
 mod common;
-use common::{at, builtin};
+use common::{WorldBuilder, at, builtin, builtin_changing};
 
 use terra_sim::{
-    Command, DataPack, EntityId, EventKind, Genome, LoadError, Map, SCHEMA_VERSION, Scenario,
-    World, WorldConfig,
+    Command, DataPack, EntityId, EventKind, Genome, LoadError, SCHEMA_VERSION, World, WorldConfig,
 };
 
 /// The default world, with the Cursor busy: it leads a sprite for a while,
@@ -131,19 +130,7 @@ fn a_loaded_sprite_shows_its_chemicals_at_once() {
 fn a_loaded_world_uses_the_pack_its_save_embeds_not_the_built_in_one() {
     // A pack whose name differs from the built-in one's, so the loaded
     // world's pack shows where it came from.
-    let sources: Vec<(&str, String)> = DataPack::builtin_sources()
-        .iter()
-        .map(|&(path, text)| {
-            let text = if path == "pack.ron" {
-                text.replace("name: \"", "name: \"Modded ")
-            } else {
-                text.to_string()
-            };
-            (path, text)
-        })
-        .collect();
-    let borrowed: Vec<(&str, &str)> = sources.iter().map(|(p, t)| (*p, t.as_str())).collect();
-    let data = DataPack::from_sources(&borrowed).expect("the modded pack is valid");
+    let data = builtin_changing("pack.ron", &[("name: \"", "name: \"Modded ")]);
     let name = data.name().to_string();
     assert!(name.starts_with("Modded "), "{name}");
     let mut original = World::new(WorldConfig::builtin(&data), data, 9);
@@ -170,15 +157,10 @@ fn an_unknown_gene_survives_a_save_and_load_byte_for_byte() {
         "genes: [\n        Gene(type: 900, version: 3, payload: \"c0ffee\"),",
     );
     let genome = Genome::from_ron(&unknown, &data).expect("a valid genome");
-    let map = Map::from_ascii(&["....", "...."], &data).expect("valid drawing");
-    let scenario = Scenario {
-        map,
-        objects: &[],
-        sprites: &[(at(1, 1), Some(genome.clone()))],
-        scripted: &[],
-        newborns: &[],
-    };
-    let world = World::from_scenario(scenario, data, 1).expect("a valid scenario");
+    let world = WorldBuilder::new(&["....", "...."])
+        .data(data)
+        .sprites_with(vec![(at(1, 1), Some(genome.clone()))])
+        .build();
 
     let loaded = World::load(&world.save()).expect("the save loads");
     let sprite = loaded.sprites().next().expect("the sprite");
@@ -262,32 +244,23 @@ const GOLDEN_V1: &[u8] = include_bytes!("golden/save-v1.tspr");
 /// map, after 60 ticks, with a sprite named, the Cursor holding a ball, and
 /// a rename waiting for the next tick.
 fn golden_world() -> World {
-    let data = builtin();
-    let map = Map::from_ascii(
-        &[
-            "............~~",
-            "............~~",
-            "..............",
-            "..............",
-            "..............",
-            "..............",
-        ],
-        &data,
-    )
-    .expect("valid drawing");
-    let scenario = Scenario {
-        map,
-        objects: &[
-            (at(2, 1), "berry_bush"),
-            (at(8, 4), "thornbush"),
-            (at(5, 2), "ball"),
-            (at(10, 5), "ball"),
-        ],
-        sprites: &[(at(3, 3), None), (at(9, 2), None)],
-        scripted: &[],
-        newborns: &[],
-    };
-    let mut world = World::from_scenario(scenario, data, 2026).expect("a valid scenario");
+    let mut world = WorldBuilder::new(&[
+        "............~~",
+        "............~~",
+        "..............",
+        "..............",
+        "..............",
+        "..............",
+    ])
+    .objects(&[
+        (at(2, 1), "berry_bush"),
+        (at(8, 4), "thornbush"),
+        (at(5, 2), "ball"),
+        (at(10, 5), "ball"),
+    ])
+    .starters(&[at(3, 3), at(9, 2)])
+    .seed(2026)
+    .build();
     let [first, second] = sprite_ids(&world);
     world.submit(Command::Rename {
         sprite: first,

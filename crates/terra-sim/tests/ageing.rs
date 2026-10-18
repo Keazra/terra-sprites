@@ -3,7 +3,7 @@
 
 mod common;
 use common::{
-    AGES_AT_ONCE, BARREN, WorldBuilder, at, builtin, builtin_changing, close, genome, starting_with,
+    AGES_AT_ONCE, BARREN, WorldBuilder, at, builtin, builtin_changing, close, starting_with,
 };
 
 use terra_sim::{
@@ -24,13 +24,11 @@ fn world_in(
     script: &[ScriptedAction],
 ) -> World {
     let sprite = at(1, 1);
-    let genome = genome(genes, &data);
-    let scripted: Vec<_> = script.iter().map(|&s| (sprite, s)).collect();
     WorldBuilder::new(&["......", "......", "......"])
         .data(data)
         .objects(objects)
-        .sprites_with(vec![(sprite, Some(genome))])
-        .scripts(&scripted)
+        .sprites(&[(sprite, genes)])
+        .script(sprite, script)
         .newborns(&[sprite])
         .build()
 }
@@ -286,7 +284,7 @@ fn a_starter_sprite_grows_up_at_about_an_hour_and_grows_old_at_about_five() {
     let sprite = at(1, 1);
     let mut world = WorldBuilder::new(&["......", "......", "......"])
         .data(data)
-        .sprites_with(vec![(sprite, None)])
+        .starters(&[sprite])
         .newborns(&[sprite])
         .build();
     // Spawn variation moves growing up by up to a tenth, and growing old by

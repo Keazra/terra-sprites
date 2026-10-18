@@ -1,57 +1,33 @@
 //! The themes folder (design v34 §6.7): `Ctrl+T` lists the built-in
 //! themes and the player's own, and picking one draws the map with it.
 
-use std::path::{Path, PathBuf};
+mod common;
+use common::{WorldBuilder, apply, at, map_app, scratch_folder};
+
+use std::path::Path;
 
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::layout::Rect;
-use terra_sim::{DataPack, Map, Pos, Scenario, World};
-use terra_tui::app::{App, Areas, Flow, Screen};
+use terra_sim::World;
+use terra_tui::app::{App, Screen};
 use terra_tui::input::{Action, Keys};
-use terra_tui::theme::{SemanticTile, Theme};
+use terra_tui::theme::SemanticTile;
 
 const ASCII_THEME: &str = include_str!("../../../themes/ascii.ron");
 
-fn pack() -> DataPack {
-    DataPack::builtin().expect("valid pack")
-}
-
+/// An 11×8 grass world with a starter sprite on (2, 2).
 fn world() -> World {
-    let rows = vec!["..........."; 8];
-    let map = Map::from_ascii(&rows, &pack()).expect("valid drawing");
-    let scenario = Scenario {
-        map,
-        objects: &[],
-        sprites: &[(Pos { x: 2, y: 2 }, None)],
-        scripted: &[],
-        newborns: &[],
-    };
-    World::from_scenario(scenario, pack(), 7).expect("valid scenario")
-}
-
-/// A fresh, empty themes folder.
-fn scratch_folder(name: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("terra-themes-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).expect("a scratch folder");
-    dir
+    WorldBuilder::grass(11, 8)
+        .starters(&[at(2, 2)])
+        .seed(7)
+        .build()
 }
 
 /// An app for `world` in the default theme, reading themes from `folder`.
 fn app_for(world: &World, folder: &Path) -> App {
-    let areas = Areas {
-        tiles: Rect::new(1, 2, 40, 12),
-        inspector: None,
-        event_log: None,
-        overlay: None,
-    };
-    let mut app = App::new(world.map(), Theme::cp437(), world.seed(), areas);
+    let mut app = map_app(world, Rect::new(1, 2, 40, 12));
     app.set_theme_folder(folder.to_path_buf());
     app
-}
-
-fn apply(app: &mut App, world: &World, action: Action) {
-    assert_eq!(app.apply(action, world), Flow::Continue);
 }
 
 /// The ascii theme with its sprite drawn as `glyph`.
@@ -144,13 +120,7 @@ fn a_theme_that_doesnt_load_is_refused_and_the_theme_in_use_stays() {
 #[test]
 fn with_no_themes_folder_the_menu_still_offers_the_built_in_themes() {
     let world = world();
-    let areas = Areas {
-        tiles: Rect::new(1, 2, 40, 12),
-        inspector: None,
-        event_log: None,
-        overlay: None,
-    };
-    let mut app = App::new(world.map(), Theme::cp437(), world.seed(), areas);
+    let mut app = map_app(&world, Rect::new(1, 2, 40, 12));
     apply(&mut app, &world, Action::OpenThemes);
     assert_eq!(
         app.menu_items(&world),

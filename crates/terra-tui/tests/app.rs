@@ -1,31 +1,17 @@
+mod common;
+use common::{WorldBuilder, at, finished, map_app, map_only, sprite_on};
+
 use ratatui::layout::{Position, Rect};
 use terra_sim::{
-    ActionView, DataPack, DeathCause, EntityId, Event, EventKind, Hurt, Map, Outcome, Pos,
-    Progress, Scenario, Target, Verb, World,
+    ActionView, DeathCause, EntityId, Event, EventKind, Outcome, Pos, Target, Verb, World,
 };
-use terra_tui::app::{App, Areas, Flow, Origin, Screen, Selection, Tab};
+use terra_tui::app::{App, Flow, Origin, Screen, Selection, Tab};
 use terra_tui::clock::Speed;
 use terra_tui::input::{Action, Button};
-use terra_tui::theme::Theme;
-
-fn pack() -> DataPack {
-    DataPack::builtin().expect("valid pack")
-}
 
 /// An all-grass world, with starter sprites on `sprites`.
 fn grass_with(width: usize, height: usize, sprites: &[Pos]) -> World {
-    let row = ".".repeat(width);
-    let rows = vec![row.as_str(); height];
-    let map = Map::from_ascii(&rows, &pack()).expect("valid drawing");
-    let sprites: Vec<(Pos, _)> = sprites.iter().map(|&pos| (pos, None)).collect();
-    let scenario = Scenario {
-        map,
-        objects: &[],
-        sprites: &sprites,
-        scripted: &[],
-        newborns: &[],
-    };
-    World::from_scenario(scenario, pack(), 1).expect("valid scenario")
+    WorldBuilder::grass(width, height).starters(sprites).build()
 }
 
 /// An all-grass world with no sprites.
@@ -36,24 +22,6 @@ fn grass(width: usize, height: usize) -> World {
 /// Where the map view draws its tiles on screen: `width`×`height` tiles from cell (1, 2).
 fn tile_area(width: u16, height: u16) -> Rect {
     Rect::new(1, 2, width, height)
-}
-
-fn app(world: &World, tile_area: Rect) -> App {
-    App::new(world.map(), Theme::cp437(), 1, no_inspector(tile_area))
-}
-
-/// Panels with the map view's tiles on `tiles`, and no room for the inspector.
-fn no_inspector(tiles: Rect) -> Areas {
-    Areas {
-        tiles,
-        inspector: None,
-        event_log: None,
-        overlay: None,
-    }
-}
-
-fn at(x: u16, y: u16) -> Pos {
-    Pos { x, y }
 }
 
 /// A viewport starting at (`x`, `y`), which past the wall is negative.
@@ -79,22 +47,20 @@ fn click(app: &mut App, world: &World, column: u16, row: u16) {
     );
 }
 
-/// The ID of the sprite on `pos`.
-fn sprite_on(world: &World, pos: Pos) -> EntityId {
-    world.sprite_at(pos).expect("a sprite").id()
-}
-
 #[test]
 fn the_cursor_starts_at_the_centre_of_the_map() {
-    assert_eq!(app(&grass(160, 96), tile_area(60, 20)).cursor(), at(80, 48));
-    assert_eq!(app(&grass(5, 3), tile_area(5, 3)).cursor(), at(2, 1));
+    assert_eq!(
+        map_app(&grass(160, 96), tile_area(60, 20)).cursor(),
+        at(80, 48)
+    );
+    assert_eq!(map_app(&grass(5, 3), tile_area(5, 3)).cursor(), at(2, 1));
 }
 
 #[test]
 fn the_viewport_starts_centred_on_the_cursor() {
     // The cursor starts at (80, 48); a 60×20 view centred on it starts at (50, 38).
     assert_eq!(
-        app(&grass(160, 96), tile_area(60, 20)).viewport(),
+        map_app(&grass(160, 96), tile_area(60, 20)).viewport(),
         origin(50, 38)
     );
 }
@@ -104,7 +70,7 @@ fn a_map_that_fits_in_the_view_with_its_glass_is_in_its_middle_and_doesnt_scroll
     // M2 design §11.1: two tiles narrower and shorter than the view, or
     // more, leaves room for the glass, a tile out on each side.
     let world = grass(16, 8);
-    let mut app = app(&world, tile_area(20, 10));
+    let mut app = map_app(&world, tile_area(20, 10));
     assert_eq!(app.viewport(), origin(-2, -1));
     for (dx, dy) in [(-100, -100), (100, 100), (1, 0), (0, -1)] {
         scroll(&mut app, &world, dx, dy);
@@ -113,7 +79,7 @@ fn a_map_that_fits_in_the_view_with_its_glass_is_in_its_middle_and_doesnt_scroll
     // A map as narrow as that, but taller than the view, scrolls only up
     // and down.
     let world = grass(16, 30);
-    let mut app = self::app(&world, tile_area(20, 10));
+    let mut app = map_app(&world, tile_area(20, 10));
     scroll(&mut app, &world, -100, -100);
     assert_eq!(app.viewport(), origin(-2, -2));
 }
@@ -124,7 +90,7 @@ fn a_map_as_wide_as_the_view_or_a_tile_narrower_scrolls_to_show_its_glass() {
     // quarter of the view past the wall, 5 tiles sideways and 2 up or down.
     for (width, height, furthest) in [(20, 10, origin(5, 2)), (19, 9, origin(4, 1))] {
         let world = grass(width, height);
-        let mut app = app(&world, tile_area(20, 10));
+        let mut app = map_app(&world, tile_area(20, 10));
         scroll(&mut app, &world, -100, -100);
         assert_eq!(app.viewport(), origin(-5, -2), "{width}×{height}");
         scroll(&mut app, &world, 100, 100);
@@ -137,7 +103,7 @@ fn scrolling_moves_the_viewport_and_stops_a_quarter_of_the_view_past_the_wall() 
     // M2 design §11.1: the 20×10 view goes 5 tiles past the wall sideways
     // and 2 up or down, on every side.
     let world = grass(160, 96);
-    let mut app = app(&world, tile_area(20, 10));
+    let mut app = map_app(&world, tile_area(20, 10));
     assert_eq!(app.viewport(), origin(70, 43));
     scroll(&mut app, &world, 1, 0);
     assert_eq!(app.viewport(), origin(71, 43));
@@ -159,7 +125,7 @@ fn pointing_puts_the_cursor_one_tile_up_and_left_of_the_pointer() {
     // lower-right corner, not over the tile pointed at. The view shows tiles
     // (70, 43) to (89, 52), drawn from screen cell (1, 2).
     let world = grass(160, 96);
-    let mut app = app(&world, tile_area(20, 10));
+    let mut app = map_app(&world, tile_area(20, 10));
     point(&mut app, &world, 11, 7); // over (80, 48)
     assert_eq!(app.cursor(), at(79, 47));
     point(&mut app, &world, 20, 11); // over (89, 52)
@@ -169,7 +135,7 @@ fn pointing_puts_the_cursor_one_tile_up_and_left_of_the_pointer() {
 #[test]
 fn on_the_map_view_s_top_row_or_left_column_the_cursor_stays_in_that_row_or_column() {
     let world = grass(160, 96);
-    let mut app = app(&world, tile_area(20, 10));
+    let mut app = map_app(&world, tile_area(20, 10));
     point(&mut app, &world, 1, 2);
     assert_eq!(app.cursor(), at(70, 43));
     point(&mut app, &world, 1, 7);
@@ -183,7 +149,7 @@ fn the_border_right_of_and_below_the_tiles_points_at_the_last_column_and_row() {
     // Otherwise, with the wall in view, the map's last column and row
     // couldn't be pointed at.
     let world = grass(160, 96);
-    let mut app = app(&world, tile_area(20, 10));
+    let mut app = map_app(&world, tile_area(20, 10));
     point(&mut app, &world, 21, 12);
     assert_eq!(app.cursor(), at(89, 52));
     point(&mut app, &world, 21, 5);
@@ -195,7 +161,7 @@ fn the_border_right_of_and_below_the_tiles_points_at_the_last_column_and_row() {
 #[test]
 fn pointing_outside_the_map_view_leaves_the_cursor_on_its_last_tile() {
     let world = grass(160, 96);
-    let mut app = app(&world, tile_area(20, 10));
+    let mut app = map_app(&world, tile_area(20, 10));
     point(&mut app, &world, 5, 5);
     assert_eq!(app.cursor(), at(73, 45));
     for (column, row) in [(0, 5), (22, 5), (5, 1), (5, 13), (22, 13)] {
@@ -207,7 +173,7 @@ fn pointing_outside_the_map_view_leaves_the_cursor_on_its_last_tile() {
 #[test]
 fn scrolling_under_a_still_pointer_moves_the_cursor_with_the_map() {
     let world = grass(160, 96);
-    let mut app = app(&world, tile_area(20, 10));
+    let mut app = map_app(&world, tile_area(20, 10));
     point(&mut app, &world, 12, 8);
     assert_eq!(app.cursor(), at(80, 48));
     scroll(&mut app, &world, 3, -1);
@@ -217,7 +183,7 @@ fn scrolling_under_a_still_pointer_moves_the_cursor_with_the_map() {
 #[test]
 fn with_the_pointer_off_the_map_scrolling_leaves_the_cursor_on_its_tile() {
     let world = grass(160, 96);
-    let mut app = app(&world, tile_area(20, 10));
+    let mut app = map_app(&world, tile_area(20, 10));
     scroll(&mut app, &world, 3, 0); // no pointer yet
     assert_eq!(app.cursor(), at(80, 48));
     point(&mut app, &world, 12, 8); // pointing at (83, 48) now
@@ -229,7 +195,7 @@ fn with_the_pointer_off_the_map_scrolling_leaves_the_cursor_on_its_tile() {
 #[test]
 fn a_click_puts_the_cursor_on_a_tile_without_scrolling() {
     let world = grass(160, 96);
-    let mut app = app(&world, tile_area(20, 10));
+    let mut app = map_app(&world, tile_area(20, 10));
     assert_eq!(
         app.apply(Action::left_click(Position::new(1, 2)), &world),
         Flow::Continue
@@ -241,18 +207,18 @@ fn a_click_puts_the_cursor_on_a_tile_without_scrolling() {
 #[test]
 fn a_bigger_view_after_a_resize_stops_at_its_own_margin() {
     let world = grass(160, 96);
-    let mut app = app(&world, tile_area(20, 10));
+    let mut app = map_app(&world, tile_area(20, 10));
     scroll(&mut app, &world, 1000, 1000);
     assert_eq!(app.viewport(), origin(145, 88));
     // A 40×20 view goes 10 tiles past the wall sideways and 5 up or down.
-    app.fit(no_inspector(tile_area(40, 20)));
+    app.fit(map_only(tile_area(40, 20)));
     assert_eq!(app.viewport(), origin(130, 81));
 }
 
 #[test]
 fn time_actions_reach_the_clock() {
     let world = grass(40, 30);
-    let mut app = app(&world, tile_area(20, 10));
+    let mut app = map_app(&world, tile_area(20, 10));
     app.apply(Action::Faster { held: false }, &world);
     assert_eq!(app.clock.speed(), Speed::X2);
     app.apply(Action::TogglePause, &world);
@@ -262,7 +228,7 @@ fn time_actions_reach_the_clock() {
 #[test]
 fn plus_and_minus_change_the_speed_while_paused() {
     let world = grass(40, 30);
-    let mut app = app(&world, tile_area(20, 10));
+    let mut app = map_app(&world, tile_area(20, 10));
     app.apply(Action::TogglePause, &world);
     app.apply(Action::Faster { held: false }, &world);
     app.apply(Action::Faster { held: false }, &world);
@@ -278,7 +244,7 @@ fn plus_and_minus_change_the_speed_while_paused() {
 #[test]
 fn escape_asks_to_quit_and_y_quits() {
     let world = grass(40, 30);
-    let mut app = app(&world, tile_area(20, 10));
+    let mut app = map_app(&world, tile_area(20, 10));
     assert_eq!(app.apply(Action::Back, &world), Flow::Continue);
     assert_eq!(app.screen(), Screen::QuitPrompt);
     assert_eq!(app.apply(Action::Confirm, &world), Flow::Quit);
@@ -288,12 +254,12 @@ fn escape_asks_to_quit_and_y_quits() {
 fn t_at_the_quit_prompt_goes_back_to_the_title_screen() {
     // M2 design §8.4.
     let world = grass(40, 30);
-    let mut app = app(&world, tile_area(20, 10));
+    let mut app = map_app(&world, tile_area(20, 10));
     app.apply(Action::Back, &world);
     assert_eq!(app.apply(Action::Track, &world), Flow::Title);
     // Without the prompt, `t` still tracks: here, with nothing selected, it's
     // refused.
-    let mut app = self::app(&world, tile_area(20, 10));
+    let mut app = map_app(&world, tile_area(20, 10));
     assert_eq!(app.apply(Action::Track, &world), Flow::Continue);
 }
 
@@ -302,7 +268,7 @@ fn a_second_escape_cancels_the_quit_prompt_rather_than_quitting() {
     // Esc never quits on its own: only `y` answers the prompt (design v33
     // §6.6).
     let world = grass(40, 30);
-    let mut app = app(&world, tile_area(20, 10));
+    let mut app = map_app(&world, tile_area(20, 10));
     app.apply(Action::Back, &world);
     assert_eq!(app.apply(Action::Back, &world), Flow::Continue);
     assert_eq!(app.screen(), Screen::Normal);
@@ -311,7 +277,7 @@ fn a_second_escape_cancels_the_quit_prompt_rather_than_quitting() {
 #[test]
 fn any_other_key_cancels_the_quit_prompt_and_does_nothing_else() {
     let world = grass(160, 96);
-    let mut app = app(&world, tile_area(20, 10));
+    let mut app = map_app(&world, tile_area(20, 10));
     for key in [
         Action::Dismiss,
         Action::TogglePause,
@@ -337,7 +303,7 @@ fn any_other_key_cancels_the_quit_prompt_and_does_nothing_else() {
 #[test]
 fn moving_the_mouse_leaves_the_quit_prompt_open() {
     let world = grass(40, 30);
-    let mut app = app(&world, tile_area(20, 10));
+    let mut app = map_app(&world, tile_area(20, 10));
     app.apply(Action::Back, &world);
     point(&mut app, &world, 3, 3);
     assert_eq!(app.screen(), Screen::QuitPrompt);
@@ -347,7 +313,7 @@ fn moving_the_mouse_leaves_the_quit_prompt_open() {
 fn letting_go_of_a_mouse_button_leaves_the_quit_prompt_open() {
     // Any other key cancels the prompt (design §6.6); the mouse doesn't.
     let world = grass(40, 30);
-    let mut app = app(&world, tile_area(20, 10));
+    let mut app = map_app(&world, tile_area(20, 10));
     app.apply(Action::Back, &world);
     let release = Action::Release {
         button: Button::Right,
@@ -362,7 +328,7 @@ fn a_click_or_a_turn_of_the_wheel_leaves_the_quit_prompt_open() {
     // Only a key answers the prompt (design §6.6), as on the title screen
     // (M2 design §8.2).
     let world = grass(40, 30);
-    let mut app = app(&world, tile_area(20, 10));
+    let mut app = map_app(&world, tile_area(20, 10));
     app.apply(Action::Back, &world);
     let at = Position::new(3, 3);
     for pointer in [
@@ -384,7 +350,7 @@ fn a_click_or_a_turn_of_the_wheel_leaves_the_quit_prompt_open() {
 fn a_middle_click_leaves_the_quit_prompt_open_and_f_cancels_it() {
     // A middle click is the mouse, and `F` a key (design v26 §6.5).
     let world = grass(40, 30);
-    let mut app = app(&world, tile_area(20, 10));
+    let mut app = map_app(&world, tile_area(20, 10));
     app.apply(Action::Back, &world);
     app.apply(Action::middle_click(Position::new(3, 3)), &world);
     assert_eq!(app.screen(), Screen::QuitPrompt);
@@ -395,7 +361,7 @@ fn a_middle_click_leaves_the_quit_prompt_open_and_f_cancels_it() {
 #[test]
 fn ctrl_c_quits_at_once() {
     let world = grass(40, 30);
-    let mut app = app(&world, tile_area(20, 10));
+    let mut app = map_app(&world, tile_area(20, 10));
     assert_eq!(app.apply(Action::Quit, &world), Flow::Quit);
 }
 
@@ -404,7 +370,7 @@ fn clicking_a_sprite_selects_it_and_clicking_a_tile_with_none_clears_the_selecti
     // The whole map fits in the view, so tile (x, y) is drawn at cell (1 + x,
     // 2 + y), and pointed at from the cell one down and right (design v27 §6.5).
     let world = grass_with(20, 10, &[at(3, 4), at(6, 2)]);
-    let mut app = app(&world, tile_area(20, 10));
+    let mut app = map_app(&world, tile_area(20, 10));
     assert_eq!(app.selection(), None, "nothing is selected at first");
     click(&mut app, &world, 2 + 6, 3 + 2);
     assert_eq!(
@@ -424,7 +390,7 @@ fn clicking_a_sprite_selects_it_and_clicking_a_tile_with_none_clears_the_selecti
 #[test]
 fn moving_the_pointer_over_a_sprite_does_not_select_it() {
     let world = grass_with(20, 10, &[at(6, 2)]);
-    let mut app = app(&world, tile_area(20, 10));
+    let mut app = map_app(&world, tile_area(20, 10));
     point(&mut app, &world, 1 + 6, 2 + 2);
     assert_eq!(app.selection(), None);
 }
@@ -433,7 +399,7 @@ fn moving_the_pointer_over_a_sprite_does_not_select_it() {
 fn tab_selects_sprites_in_id_order_and_wraps_around() {
     let world = grass_with(20, 10, &[at(3, 4), at(6, 2), at(9, 9)]);
     let ids: Vec<EntityId> = world.sprites().map(|s| s.id()).collect();
-    let mut app = app(&world, tile_area(20, 10));
+    let mut app = map_app(&world, tile_area(20, 10));
     let mut tab = |action| {
         app.apply(action, &world);
         app.selection()
@@ -455,7 +421,7 @@ fn tab_selects_sprites_in_id_order_and_wraps_around() {
 fn shift_tab_with_nothing_selected_starts_from_the_highest_id() {
     let world = grass_with(20, 10, &[at(3, 4), at(6, 2)]);
     let last = world.sprites().last().expect("sprites").id();
-    let mut app = app(&world, tile_area(20, 10));
+    let mut app = map_app(&world, tile_area(20, 10));
     app.apply(Action::SelectPrevious, &world);
     assert_eq!(app.selection(), Some(Selection::Living(last)));
 }
@@ -463,7 +429,7 @@ fn shift_tab_with_nothing_selected_starts_from_the_highest_id() {
 #[test]
 fn tab_with_no_sprites_selects_nothing() {
     let world = grass(20, 10);
-    let mut app = app(&world, tile_area(20, 10));
+    let mut app = map_app(&world, tile_area(20, 10));
     app.apply(Action::SelectNext, &world);
     app.apply(Action::SelectPrevious, &world);
     assert_eq!(app.selection(), None);
@@ -473,7 +439,7 @@ fn tab_with_no_sprites_selects_nothing() {
 fn tab_centres_the_view_on_a_sprite_out_of_view_and_leaves_it_alone_otherwise() {
     // The 20×10 view starts at (70, 43), showing tiles (70, 43) to (89, 52).
     let world = grass_with(160, 96, &[at(75, 45), at(150, 5), at(158, 1)]);
-    let mut app = app(&world, tile_area(20, 10));
+    let mut app = map_app(&world, tile_area(20, 10));
     app.apply(Action::SelectNext, &world);
     assert_eq!(app.viewport(), origin(70, 43), "(75, 45) is in view");
     app.apply(Action::SelectNext, &world);
@@ -489,7 +455,7 @@ fn tab_centres_the_view_on_a_sprite_out_of_view_and_leaves_it_alone_otherwise() 
 #[test]
 fn the_inspector_starts_on_the_world_tab_and_the_brackets_go_round_the_tabs() {
     let world = grass(20, 10);
-    let mut app = app(&world, tile_area(20, 10));
+    let mut app = map_app(&world, tile_area(20, 10));
     assert_eq!(app.tab(), Tab::World);
     let mut next = |action| {
         app.apply(action, &world);
@@ -507,11 +473,11 @@ fn the_inspector_starts_on_the_world_tab_and_the_brackets_go_round_the_tabs() {
 #[test]
 fn selecting_a_sprite_from_the_world_tab_opens_body_and_from_another_tab_stays() {
     let world = grass_with(20, 10, &[at(3, 4), at(6, 2)]);
-    let mut app = app(&world, tile_area(20, 10));
+    let mut app = map_app(&world, tile_area(20, 10));
     click(&mut app, &world, 2 + 3, 3 + 4);
     assert_eq!(app.tab(), Tab::Body, "by a click");
 
-    let mut app = self::app(&world, tile_area(20, 10));
+    let mut app = map_app(&world, tile_area(20, 10));
     app.apply(Action::SelectNext, &world);
     assert_eq!(app.tab(), Tab::Body, "by Tab");
     app.apply(Action::NextTab, &world);
@@ -524,7 +490,7 @@ fn selecting_a_sprite_from_the_world_tab_opens_body_and_from_another_tab_stays()
 #[test]
 fn clearing_the_selection_leaves_the_tab_open() {
     let world = grass_with(20, 10, &[at(3, 4)]);
-    let mut app = app(&world, tile_area(20, 10));
+    let mut app = map_app(&world, tile_area(20, 10));
     click(&mut app, &world, 2 + 3, 3 + 4);
     click(&mut app, &world, 2 + 5, 3 + 5);
     assert_eq!((app.selection(), app.tab()), (None, Tab::Body));
@@ -546,7 +512,7 @@ fn died(id: EntityId, cause: DeathCause, age: u64) -> Event {
 fn the_selection_remembers_how_the_selected_sprite_died() {
     let world = grass_with(20, 10, &[at(3, 4), at(6, 2)]);
     let ids: Vec<EntityId> = world.sprites().map(|s| s.id()).collect();
-    let mut app = app(&world, tile_area(20, 10));
+    let mut app = map_app(&world, tile_area(20, 10));
     app.apply(Action::SelectNext, &world);
     app.record(&[died(ids[1], DeathCause::Starvation, 90)], &world);
     assert_eq!(
@@ -571,7 +537,7 @@ fn after_the_selected_sprite_dies_tab_carries_on_from_its_id() {
     // Tab stepping past it shows it goes by ID.
     let world = grass_with(20, 10, &[at(3, 4), at(6, 2), at(9, 9)]);
     let ids: Vec<EntityId> = world.sprites().map(|s| s.id()).collect();
-    let mut app = app(&world, tile_area(20, 10));
+    let mut app = map_app(&world, tile_area(20, 10));
     app.apply(Action::SelectNext, &world);
     app.apply(Action::SelectNext, &world);
     app.record(&[died(ids[1], DeathCause::OldAge, 70_000)], &world);
@@ -586,7 +552,7 @@ fn after_the_selected_sprite_dies_tab_carries_on_from_its_id() {
 #[test]
 fn the_detail_view_starts_off_and_toggles_whatever_is_selected() {
     let world = grass_with(20, 10, &[at(3, 4)]);
-    let mut app = app(&world, tile_area(20, 10));
+    let mut app = map_app(&world, tile_area(20, 10));
     assert!(!app.detail());
     app.apply(Action::ToggleDetail, &world);
     assert!(app.detail());
@@ -594,32 +560,6 @@ fn the_detail_view_starts_off_and_toggles_whatever_is_selected() {
     assert!(app.detail(), "a new selection keeps it");
     app.apply(Action::ToggleDetail, &world);
     assert!(!app.detail());
-}
-
-/// Sprite `id` finished `verb`, aimed at nothing, with `outcome`, on `tick`.
-fn finished(tick: u64, id: EntityId, verb: Verb, outcome: Outcome) -> Event {
-    let action = ActionView {
-        verb,
-        destination: None,
-        target: None,
-        target_type: None,
-        attempted: false,
-        target_gone: false,
-        hurt: Hurt::default(),
-        progress: Progress::Ended(outcome),
-        remembered: false,
-        heard: None,
-        egg_at: None,
-    };
-    Event {
-        tick,
-        kind: EventKind::ActionEnded {
-            id,
-            verb,
-            outcome,
-            action,
-        },
-    }
 }
 
 /// The observed list, newest first, as `(line, count, tick)`.
@@ -633,7 +573,7 @@ fn observed(app: &App) -> Vec<(&str, u32, u64)> {
 fn the_observed_list_keeps_what_the_selected_sprite_finished_newest_first() {
     let world = grass_with(20, 10, &[at(3, 4), at(6, 2)]);
     let ids: Vec<EntityId> = world.sprites().map(|s| s.id()).collect();
-    let mut app = app(&world, tile_area(20, 10));
+    let mut app = map_app(&world, tile_area(20, 10));
     app.record(&[finished(1, ids[0], Verb::Rest, Outcome::Applied)], &world);
     assert_eq!(observed(&app), [], "nothing is watched before a selection");
     app.apply(Action::SelectNext, &world);
@@ -687,7 +627,7 @@ fn the_observed_list_also_keeps_what_others_did_to_the_selected_sprite() {
     let world = grass_with(20, 10, &[at(3, 4), at(6, 2)]);
     let ids: Vec<EntityId> = world.sprites().map(|s| s.id()).collect();
     let (me, other) = (ids[0], ids[1]);
-    let mut app = app(&world, tile_area(20, 10));
+    let mut app = map_app(&world, tile_area(20, 10));
     app.apply(Action::SelectNext, &world);
     app.record(
         &[
@@ -713,7 +653,7 @@ fn the_observed_list_also_keeps_what_others_did_to_the_selected_sprite() {
 fn selecting_another_sprite_starts_its_observed_list_afresh() {
     let world = grass_with(20, 10, &[at(3, 4), at(6, 2)]);
     let ids: Vec<EntityId> = world.sprites().map(|s| s.id()).collect();
-    let mut app = app(&world, tile_area(20, 10));
+    let mut app = map_app(&world, tile_area(20, 10));
     app.apply(Action::SelectNext, &world);
     app.record(&[finished(5, ids[0], Verb::Rest, Outcome::Applied)], &world);
     // Clicking the selected sprite again keeps what was watched.
@@ -729,7 +669,7 @@ fn selecting_another_sprite_starts_its_observed_list_afresh() {
 fn the_observed_list_keeps_the_latest_500_lines() {
     let world = grass_with(20, 10, &[at(3, 4)]);
     let id = world.sprites().next().expect("a sprite").id();
-    let mut app = app(&world, tile_area(20, 10));
+    let mut app = map_app(&world, tile_area(20, 10));
     app.apply(Action::SelectNext, &world);
     for tick in 0..600 {
         // Alternating, so no two lines in a row read the same.

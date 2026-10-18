@@ -3,15 +3,9 @@
 //! with scripted kicks.
 
 mod common;
-use common::{WorldBuilder, at, builtin, walker};
+use common::{at, builtin_with, walkers, walkers_in};
 
 use terra_sim::{DataPack, EventKind, Outcome, Pos, Removal, ScriptedAction, Verb, World};
-
-/// A world drawn from `rows`, with `objects`, and walkers on the given tiles
-/// doing their scripts.
-fn world(rows: &[&str], objects: &[(Pos, &str)], sprites: &[(Pos, &[ScriptedAction])]) -> World {
-    world_with(builtin(), rows, objects, sprites)
-}
 
 /// The built-in pack, with the object types `extra` added.
 fn builtin_and(extra: &str) -> DataPack {
@@ -22,45 +16,7 @@ fn builtin_and(extra: &str) -> DataPack {
         .1;
     let body = objects.trim_end().strip_suffix(']').expect("a list");
     let body = body.trim_end().trim_end_matches(',');
-    let objects = format!("{body}, {extra}]");
-    let sources: Vec<(&str, &str)> = DataPack::builtin_sources()
-        .iter()
-        .map(|&(path, text)| {
-            (
-                path,
-                if path == "objects.ron" {
-                    &objects
-                } else {
-                    text
-                },
-            )
-        })
-        .collect();
-    DataPack::from_sources(&sources).expect("a valid pack")
-}
-
-/// A world drawn from `rows` with the pack `data`, `objects`, and walkers on
-/// the given tiles doing their scripts.
-fn world_with(
-    data: DataPack,
-    rows: &[&str],
-    objects: &[(Pos, &str)],
-    sprites: &[(Pos, &[ScriptedAction])],
-) -> World {
-    let walkers: Vec<_> = sprites
-        .iter()
-        .map(|&(pos, _)| (pos, Some(walker(&data))))
-        .collect();
-    let scripted: Vec<(Pos, ScriptedAction)> = sprites
-        .iter()
-        .flat_map(|&(pos, script)| script.iter().map(move |&s| (pos, s)))
-        .collect();
-    WorldBuilder::new(rows)
-        .data(data)
-        .objects(objects)
-        .sprites_with(walkers)
-        .scripts(&scripted)
-        .build()
+    builtin_with("objects.ron", &format!("{body}, {extra}]"))
 }
 
 /// A kick at the item on `pos`, then rest, so the kicker stays out of the way.
@@ -125,7 +81,7 @@ const LANE: [&str; 3] = ["...........", "...........", "..........."];
 #[test]
 fn a_kicked_ball_rolls_four_tiles_away_from_the_kicker_one_a_tick() {
     // The kick lands on tick 1; the ball moves from tick 2.
-    let mut world = world(&LANE, &[(at(2, 1), "ball")], &[(at(1, 1), &kick(at(2, 1)))]);
+    let mut world = walkers(&LANE, &[(at(2, 1), "ball")], &[(at(1, 1), &kick(at(2, 1)))]);
     let path = rolls(&mut world, 7);
     let expected = [(2, 1), (3, 1), (4, 1), (5, 1), (6, 1), (6, 1), (6, 1)];
     assert_eq!(path, expected.map(|(x, y)| at(x, y)));
@@ -143,7 +99,7 @@ const FIELD: [&str; 7] = [
 
 #[test]
 fn a_ball_kicked_from_its_own_tile_rolls_the_way_the_kicker_last_stepped() {
-    let mut world = world(
+    let mut world = walkers(
         &FIELD,
         &[(at(3, 3), "ball")],
         &[(
@@ -164,7 +120,7 @@ fn a_ball_kicked_from_its_own_tile_rolls_the_way_the_kicker_last_stepped() {
 
 #[test]
 fn a_ball_kicked_from_its_own_tile_by_a_sprite_that_never_stepped_rolls_north() {
-    let mut world = world(
+    let mut world = walkers(
         &FIELD,
         &[(at(3, 5), "ball")],
         &[(at(3, 5), &kick(at(3, 5)))],
@@ -191,7 +147,7 @@ fn a_ball_meeting_anything_head_on_bounces_straight_back() {
     for (what, rows, object) in cases {
         let mut objects = vec![(at(2, 1), "ball")];
         objects.extend(object.map(|kind| (ahead, kind)));
-        let mut world = world(&rows, &objects, &[(at(1, 1), &kick(at(2, 1)))]);
+        let mut world = walkers(&rows, &objects, &[(at(1, 1), &kick(at(2, 1)))]);
         let path = rolls(&mut world, 6);
         let expected = [(2, 1), (3, 1), (4, 1), (5, 1), (4, 1), (4, 1)];
         assert_eq!(path, expected.map(|(x, y)| at(x, y)), "{what}");
@@ -201,7 +157,7 @@ fn a_ball_meeting_anything_head_on_bounces_straight_back() {
 #[test]
 fn a_ball_meeting_a_sprite_head_on_bounces_straight_back_and_doesnt_hurt_it() {
     let rest = [ScriptedAction::Rest; 3];
-    let mut world = world(
+    let mut world = walkers(
         &LANE,
         &[(at(2, 1), "ball")],
         &[(at(1, 1), &kick(at(2, 1))), (at(6, 1), &rest)],
@@ -219,7 +175,7 @@ fn a_ball_meeting_a_sprite_head_on_bounces_straight_back_and_doesnt_hurt_it() {
 /// The ball's path when kicked north-east from (1, 4) at a ball on (2, 3),
 /// in a world drawn from `rows`.
 fn kicked_north_east(rows: &[&str]) -> Vec<Pos> {
-    let mut world = world(rows, &[(at(2, 3), "ball")], &[(at(1, 4), &kick(at(2, 3)))]);
+    let mut world = walkers(rows, &[(at(2, 3), "ball")], &[(at(1, 4), &kick(at(2, 3)))]);
     rolls(&mut world, 6)
 }
 
@@ -261,7 +217,7 @@ fn a_ball_cant_cut_a_corner_so_it_glances_off_it() {
 fn a_ball_with_no_way_back_stops_for_good() {
     // Rock ahead and the kicker behind, so the roll ends on tick 2. The
     // kicker then walks off, and the ball stays where it is.
-    let mut world = world(
+    let mut world = walkers(
         &["...........", "...#.......", "..........."],
         &[(at(2, 1), "ball")],
         &[(
@@ -284,7 +240,7 @@ fn kicking_a_rolling_ball_starts_a_fresh_roll() {
     // The first kick would stop the ball on (6, 1) after tick 5. On tick 2,
     // with the ball on (3, 1), the kicker steps up beside it and kicks
     // again, so it rolls 4 more from there.
-    let mut world = world(
+    let mut world = walkers(
         &LANE,
         &[(at(2, 1), "ball")],
         &[(
@@ -315,7 +271,7 @@ fn kicking_a_rolling_ball_starts_a_fresh_roll() {
 fn a_sprite_going_to_kick_a_rolling_ball_follows_it_and_kicks_it() {
     // One sprite kicks the ball east along row 1. Another sets off for it
     // from (1, 6) as it goes, follows it to (6, 1), where it stops, and kicks.
-    let mut world = world(
+    let mut world = walkers(
         &FIELD,
         &[(at(2, 1), "ball")],
         &[(at(1, 1), &kick(at(2, 1))), (at(1, 6), &kick(at(2, 1)))],
@@ -358,7 +314,7 @@ fn a_sprite_on_a_way_round_follows_a_ball_that_rolls_off() {
     let wait = [ScriptedAction::Rest; 6];
     let mut late_kick = vec![ScriptedAction::Rest];
     late_kick.extend(kick(at(5, 0)));
-    let mut world = world(
+    let mut world = walkers(
         &rows,
         &[(at(5, 0), "ball")],
         &[
@@ -404,7 +360,7 @@ fn a_ball_rolling_into_a_ball_at_rest_stops_and_sends_it_on() {
     // A knock-on swaps rolls (design §3.5.4). The kick of 4 meets the other
     // ball on tick 3, after a tile, so it stops, and the other rolls on from
     // tick 4 with the 2 tiles left after the knock.
-    let mut world = world(
+    let mut world = walkers(
         &LANE,
         &[(at(2, 1), "ball"), (at(4, 1), "ball")],
         &[(at(1, 1), &kick(at(2, 1)))],
@@ -422,7 +378,7 @@ fn a_ball_rolling_into_a_ball_at_rest_stops_and_sends_it_on() {
 
 #[test]
 fn a_ball_on_its_last_tile_only_nudges_a_ball_and_neither_moves() {
-    let mut world = world(
+    let mut world = walkers(
         &LANE,
         &[(at(2, 1), "ball"), (at(6, 1), "ball")],
         &[(at(1, 1), &kick(at(2, 1)))],
@@ -437,7 +393,7 @@ fn two_balls_meeting_head_on_both_bounce_back_with_each_other_s_distance() {
     // Both kicked on tick 1, towards each other. On tick 3 the first reaches
     // (4, 1) with 2 tiles to go, and the second, with 3, meets it: they swap,
     // so each goes back 2.
-    let mut world = world(
+    let mut world = walkers(
         &LANE,
         &[(at(2, 1), "ball"), (at(6, 1), "ball")],
         &[
@@ -458,7 +414,7 @@ fn two_balls_meeting_head_on_both_bounce_back_with_each_other_s_distance() {
 
 #[test]
 fn a_ball_crushes_a_berry_in_its_way_and_rolls_on() {
-    let mut world = world(
+    let mut world = walkers(
         &LANE,
         &[(at(2, 1), "ball"), (at(4, 1), "berry")],
         &[(at(1, 1), &kick(at(2, 1)))],
@@ -492,7 +448,7 @@ const CRATE: &str = r#"(id: 6, name: "crate", category: "toy", size: Large, hard
 
 #[test]
 fn a_ball_knocks_on_a_smaller_harder_item_rather_than_crushing_it() {
-    let mut world = world_with(
+    let mut world = walkers_in(
         builtin_and(PEBBLE),
         &LANE,
         &[(at(2, 1), "ball"), (at(4, 1), "pebble")],
@@ -507,7 +463,7 @@ fn a_ball_knocks_on_a_smaller_harder_item_rather_than_crushing_it() {
 
 #[test]
 fn a_ball_bounces_off_a_bigger_item() {
-    let mut world = world_with(
+    let mut world = walkers_in(
         builtin_and(CRATE),
         &LANE,
         &[(at(2, 1), "ball"), (at(6, 1), "crate")],
@@ -524,7 +480,7 @@ fn a_ball_knocked_on_never_moves_twice_in_a_tick() {
     // The first ball, kicked east, meets the second on tick 2 as the second
     // starts rolling south. They swap. The second, later in ID order, then
     // waits for tick 3 before it heads east (design §3.5.4).
-    let mut world = world(
+    let mut world = walkers(
         &FIELD,
         &[(at(3, 1), "ball"), (at(4, 1), "ball")],
         &[(at(2, 1), &kick(at(3, 1))), (at(4, 0), &kick(at(4, 1)))],
@@ -551,7 +507,7 @@ fn after_a_bounce_a_ball_crushes_or_knocks_on_what_it_meets() {
         "...........",
         "...........",
     ];
-    let mut crush = world(
+    let mut crush = walkers(
         &rows,
         &[(at(2, 3), "ball"), (at(3, 0), "berry")],
         &[(at(1, 4), &kick(at(2, 3)))],
@@ -560,7 +516,7 @@ fn after_a_bounce_a_ball_crushes_or_knocks_on_what_it_meets() {
     assert_eq!(rolls(&mut crush, 6), expected.map(|(x, y)| at(x, y)));
     assert!(tiles_of(&crush, "berry").is_empty());
 
-    let mut knock = world(
+    let mut knock = walkers(
         &rows,
         &[(at(2, 3), "ball"), (at(3, 0), "ball")],
         &[(at(1, 4), &kick(at(2, 3)))],
@@ -585,7 +541,7 @@ fn a_ball_beside_a_diagonal_is_not_a_wall_for_a_ball_glancing_off() {
         "...........",
         "...........",
     ];
-    let mut world = world(
+    let mut world = walkers(
         &rows,
         &[(at(2, 3), "ball"), (at(4, 2), "ball")],
         &[(at(1, 4), &kick_and_leave(at(2, 3), at(0, 6)))],
@@ -602,7 +558,7 @@ const PIP: &str = r#"(id: 5, name: "pip", category: "fruit", size: Small, hardne
 fn a_rolling_item_can_be_crushed_before_its_turn() {
     // The pip starts rolling south as the ball, earlier in ID order, arrives
     // from the west and crushes it.
-    let mut world = world_with(
+    let mut world = walkers_in(
         builtin_and(PIP),
         &FIELD,
         &[(at(3, 1), "ball"), (at(4, 1), "pip")],
@@ -618,7 +574,7 @@ fn a_rolling_item_can_be_crushed_before_its_turn() {
 fn a_berry_under_a_sprite_bounces_a_ball_rather_than_being_crushed() {
     // A tile uses its strongest result, and the sprite bounces it (design §3.5.4).
     let rest = [ScriptedAction::Rest; 3];
-    let mut world = world(
+    let mut world = walkers(
         &LANE,
         &[(at(2, 1), "ball"), (at(6, 1), "berry")],
         &[(at(1, 1), &kick(at(2, 1))), (at(6, 1), &rest)],

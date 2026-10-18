@@ -3,17 +3,13 @@
 //! away, and some hits are hit back. Driven through hand-made worlds.
 
 mod common;
-use common::{at, builtin, id_at, walker};
+use common::{MakeGenome, WorldBuilder, at, builtin, id_at, walker};
 
 use terra_sim::{
-    DataPack, EntityId, EventKind, Genome, Map, Outcome, Pos, Scenario, ScriptedAction, Target,
-    Verb, World,
+    DataPack, EntityId, EventKind, Genome, Outcome, Pos, ScriptedAction, Target, Verb, World,
 };
 
 const STARTER: &str = include_str!("../../../data/genomes/starter.ron");
-
-/// Makes a sprite's genome from the data pack.
-type MakeGenome = fn(&DataPack) -> Genome;
 
 /// The starter genome, without spawn variation.
 fn starter(data: &DataPack) -> Genome {
@@ -51,20 +47,12 @@ fn scene_with(
     scripted: &[(Pos, ScriptedAction)],
     seed: u64,
 ) -> World {
-    let data = builtin();
-    let map = Map::from_ascii(rows, &data).expect("valid drawing");
-    let sprites: Vec<(Pos, Option<Genome>)> = sprites
-        .iter()
-        .map(|&(pos, genome)| (pos, Some(genome(&data))))
-        .collect();
-    let scenario = Scenario {
-        map,
-        objects,
-        sprites: &sprites,
-        scripted,
-        newborns: &[],
-    };
-    World::from_scenario(scenario, data, seed).expect("a valid scenario")
+    WorldBuilder::new(rows)
+        .objects(objects)
+        .sprites_made(sprites)
+        .scripts(scripted)
+        .seed(seed)
+        .build()
 }
 
 /// The verb and target of the first action sprite `id` starts in the next
@@ -152,17 +140,14 @@ fn hit_once(young: bool) -> (u32, u32) {
             (attacker, ScriptedAction::Hit { at: me }),
             (attacker, ScriptedAction::Rest),
         ];
-        let data = builtin();
-        let sprites = [(me, None), (attacker, Some(walker(&data)))];
         let newborns = if young { &[me][..] } else { &[] };
-        let scenario = Scenario {
-            map: Map::from_ascii(&rows, &data).expect("valid drawing"),
-            objects: &[],
-            sprites: &sprites,
-            scripted: &script,
-            newborns,
-        };
-        let mut world = World::from_scenario(scenario, data, seed).expect("a valid scenario");
+        let mut world = WorldBuilder::new(&rows)
+            .starters(&[me])
+            .sprites_made(&[(attacker, walker)])
+            .scripts(&script)
+            .newborns(newborns)
+            .seed(seed)
+            .build();
         let (id, them) = (id_at(&world, me), id_at(&world, attacker));
         let hit = (0..40).any(|_| {
             world.step().iter().any(|e| {
@@ -218,14 +203,13 @@ fn crowded(young: bool) -> (u32, u32) {
         sprites.extend(neighbours.map(|pos| (pos, Some(walker(&data)))));
         let script = neighbours.map(|pos| (pos, ScriptedAction::Rest));
         let newborns = if young { &[me][..] } else { &[] };
-        let scenario = Scenario {
-            map: Map::from_ascii(&["........"; 8], &data).expect("valid drawing"),
-            objects: &[],
-            sprites: &sprites,
-            scripted: &script,
-            newborns,
-        };
-        let mut world = World::from_scenario(scenario, data, seed).expect("a valid scenario");
+        let mut world = WorldBuilder::new(&["........"; 8])
+            .sprites_with(sprites)
+            .scripts(&script)
+            .newborns(newborns)
+            .seed(seed)
+            .data(data)
+            .build();
         let id = id_at(&world, me);
         match next_choice(&mut world, id, 1) {
             Some((Verb::Retreat, Some(Target::Sprite(_)))) => backed_away += 1,

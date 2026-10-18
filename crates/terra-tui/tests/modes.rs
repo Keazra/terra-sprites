@@ -2,33 +2,21 @@
 //! at 4× at most and says so when `+` asks for more, in a replay too, a Lab
 //! world runs up to Max, and the top bar says when a world is a Lab world.
 
-use ratatui::Terminal;
-use ratatui::backend::TestBackend;
-use ratatui::layout::Size;
-use terra_sim::{DataPack, Mode, Playback, World, WorldConfig};
+mod common;
+use common::{app_on, pack, render, row, scratch_folder};
+
+use terra_sim::{Mode, Playback, World, WorldConfig};
 use terra_tui::app::App;
 use terra_tui::clock::Speed;
 use terra_tui::files;
 use terra_tui::input::Action;
 use terra_tui::session::Session;
-use terra_tui::theme::Theme;
-use terra_tui::ui;
-
-fn pack() -> DataPack {
-    DataPack::builtin().expect("valid pack")
-}
 
 /// A small generated world, made in `mode`.
 fn world_in(mode: Mode) -> World {
     let data = pack();
     let config = WorldConfig::builtin(&data).sized(40, 32);
     World::new_in(config, data, 7, mode)
-}
-
-/// An app for `world` on a 100×30 screen.
-fn app_for(world: &World) -> App {
-    let areas = ui::areas(Size::new(100, 30));
-    App::new(world.map(), Theme::cp437(), world.seed(), areas)
 }
 
 /// `+` pressed, or held, `times` times.
@@ -40,18 +28,13 @@ fn faster(app: &mut App, world: &World, held: bool, times: usize) {
 
 /// The top bar of a 100×30 frame.
 fn top_bar(app: &App, world: &World) -> String {
-    let mut terminal = Terminal::new(TestBackend::new(100, 30)).unwrap();
-    terminal
-        .draw(|frame| ui::render(frame, app, world))
-        .unwrap();
-    let buffer = terminal.backend().buffer();
-    (0..100).map(|x| buffer[(x, 0)].symbol()).collect()
+    row(&render(app, world), 0)
 }
 
 #[test]
 fn in_a_story_world_plus_stops_at_4x_and_says_so() {
     let world = world_in(Mode::Story);
-    let mut app = app_for(&world);
+    let mut app = app_on(&world);
     faster(&mut app, &world, false, 2);
     assert_eq!(app.clock.speed(), Speed::X4);
     assert_eq!(app.notice(), None, "nothing said on the way up");
@@ -63,7 +46,7 @@ fn in_a_story_world_plus_stops_at_4x_and_says_so() {
 #[test]
 fn holding_plus_in_a_story_world_stops_at_4x_too() {
     let world = world_in(Mode::Story);
-    let mut app = app_for(&world);
+    let mut app = app_on(&world);
     // A fresh press crosses 1×, as a held key won't (design §6.6).
     faster(&mut app, &world, false, 1);
     faster(&mut app, &world, true, 5);
@@ -75,7 +58,7 @@ fn holding_plus_in_a_story_world_stops_at_4x_too() {
 fn the_population_graph_keeps_a_story_world_to_4x() {
     // Time runs as usual with the graph open (M2 design §14).
     let world = world_in(Mode::Story);
-    let mut app = app_for(&world);
+    let mut app = app_on(&world);
     app.apply(Action::Population, &world);
     faster(&mut app, &world, false, 3);
     assert_eq!(app.clock.speed(), Speed::X4);
@@ -90,14 +73,12 @@ fn replayed(world: World, name: &str) -> (Playback, App) {
     for _ in 0..20 {
         session.step();
     }
-    let folder = std::env::temp_dir().join(format!("terra-modes-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&folder);
-    std::fs::create_dir_all(&folder).expect("a scratch folder");
+    let folder = scratch_folder(name);
     let log = folder.join(files::SESSION_LOG);
     session.write_session_log(&log).expect("the log is written");
     let playback = Playback::new(&std::fs::read(&log).expect("the log")).expect("it plays");
     let _ = std::fs::remove_dir_all(&folder);
-    let mut app = app_for(playback.world());
+    let mut app = app_on(playback.world());
     app.start_replay("last_session.replay", &playback);
     (playback, app)
 }
@@ -119,7 +100,7 @@ fn a_replay_plays_at_its_worlds_speeds() {
 #[test]
 fn in_a_lab_world_plus_goes_on_to_max() {
     let world = world_in(Mode::Lab);
-    let mut app = app_for(&world);
+    let mut app = app_on(&world);
     faster(&mut app, &world, false, 6);
     assert_eq!(app.clock.speed(), Speed::Max);
     assert_eq!(app.notice(), None);
@@ -128,7 +109,7 @@ fn in_a_lab_world_plus_goes_on_to_max() {
 #[test]
 fn loading_a_story_world_slows_a_faster_clock_to_4x() {
     let lab = world_in(Mode::Lab);
-    let mut app = app_for(&lab);
+    let mut app = app_on(&lab);
     faster(&mut app, &lab, false, 4);
     assert_eq!(app.clock.speed(), Speed::X16);
     app.load_from_title(world_in(Mode::Story), "story".into());
@@ -140,14 +121,14 @@ fn loading_a_story_world_slows_a_faster_clock_to_4x() {
 #[test]
 fn a_lab_worlds_top_bar_says_lab_after_the_speed() {
     let lab = world_in(Mode::Lab);
-    let app = app_for(&lab);
+    let app = app_on(&lab);
     assert!(
         top_bar(&app, &lab).contains("► 1x lab │"),
         "{}",
         top_bar(&app, &lab)
     );
     let story = world_in(Mode::Story);
-    let app = app_for(&story);
+    let app = app_on(&story);
     let bar = top_bar(&app, &story);
     assert!(bar.contains("► 1x │") && !bar.contains("lab"), "{bar}");
 }
@@ -156,7 +137,7 @@ fn a_lab_worlds_top_bar_says_lab_after_the_speed() {
 fn a_paused_lab_worlds_top_bar_says_lab_after_the_speed_too() {
     // M2 design §16.1: `|| paused 4x lab`.
     let lab = world_in(Mode::Lab);
-    let mut app = app_for(&lab);
+    let mut app = app_on(&lab);
     faster(&mut app, &lab, false, 2);
     app.apply(Action::TogglePause, &lab);
     let bar = top_bar(&app, &lab);

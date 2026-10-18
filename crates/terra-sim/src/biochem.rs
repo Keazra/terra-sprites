@@ -728,11 +728,7 @@ fn physiology(program: &Program, body: &mut Body, senses: &Senses, data: &DataPa
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_util::builtin_changing;
-
-    fn builtin() -> DataPack {
-        DataPack::builtin().expect("built-in data pack is valid")
-    }
+    use crate::test_util::{builtin, builtin_changing, builtin_with};
 
     /// The built-in physiology with every rate at 0, so only genes change a body.
     fn quiet() -> DataPack {
@@ -763,18 +759,7 @@ mod tests {
             }
             assert!(from > 0, "{rate} is in physiology.ron");
         }
-        let sources: Vec<(&str, &str)> = DataPack::builtin_sources()
-            .iter()
-            .map(|&(path, text)| {
-                let text = if path == "physiology.ron" {
-                    physiology.as_str()
-                } else {
-                    text
-                };
-                (path, text)
-            })
-            .collect();
-        DataPack::from_sources(&sources).expect("the quiet pack is valid")
+        builtin_with("physiology.ron", &physiology)
     }
 
     /// A sprite with a genome of `genes`, newborn in `data`.

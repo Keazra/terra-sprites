@@ -1,17 +1,375 @@
-//! Shared helpers for terra-tui integration tests: worlds where
-//! generations come quickly, for the family tree (M2 design §17).
+//! Shared helpers for terra-tui integration tests: hand-drawn worlds, apps
+//! on them, frames drawn as text, the player's clicks and ticks (#156), and
+//! worlds where generations come quickly, for the family tree (M2 design
+//! §17).
 //!
 //! Each test file is its own crate, so it `mod common;` and uses only the
 //! pieces it needs. Helpers a given file never calls are allowed here so the
 //! shared API stays one place, as in terra-sim's (#155).
 #![allow(dead_code)]
 
-use ratatui::layout::{Position, Size};
+use std::path::PathBuf;
+
+use ratatui::buffer::Buffer;
+use ratatui::layout::{Position, Rect, Size};
 use ratatui::{Terminal, backend::TestBackend};
-use terra_sim::{DataPack, EntityId, Genome, Map, Pos, Scenario, World};
-use terra_tui::app::{App, Screen, Selection, Tab};
-use terra_tui::input::Action;
+use terra_sim::{
+    ActionView, Command, DataPack, EntityId, Event, EventKind, Genome, Hurt, Map, Outcome, Pos,
+    Progress, Rejection, Scenario, ScriptedAction, Verb, World,
+};
+use terra_tui::app::{App, Areas, CursorMode, Flow, Screen, Selection, Tab};
+use terra_tui::input::{Action, Button};
+use terra_tui::theme::Theme;
 use terra_tui::ui;
+
+/// The built-in data pack.
+pub fn pack() -> DataPack {
+    DataPack::builtin().expect("built-in data pack is valid")
+}
+
+/// A position at `(x, y)`.
+pub fn at(x: u16, y: u16) -> Pos {
+    Pos { x, y }
+}
+
+/// Builds a test world on a hand-drawn map: objects, sprites with their own
+/// genes or the starter genome, scripted actions, newborns, the data and a
+/// seed, as terra-sim's tests build theirs (#155).
+///
+/// Sprite and script methods append; [`Self::objects`] replaces.
+pub struct WorldBuilder<'a> {
+    rows: Vec<String>,
+    objects: &'a [(Pos, &'a str)],
+    sprites: Vec<(Pos, Option<Genome>)>,
+    scripted: Vec<(Pos, ScriptedAction)>,
+    newborns: Vec<Pos>,
+    data: Option<DataPack>,
+    seed: u64,
+}
+
+impl<'a> WorldBuilder<'a> {
+    /// Starts from an ascii drawing of the map.
+    pub fn new(rows: &[&str]) -> Self {
+        Self {
+            rows: rows.iter().map(|row| row.to_string()).collect(),
+            objects: &[],
+            sprites: Vec::new(),
+            scripted: Vec::new(),
+            newborns: Vec::new(),
+            data: None,
+            seed: 1,
+        }
+    }
+
+    /// Starts from a map all of grass, `width`×`height`.
+    pub fn grass(width: usize, height: usize) -> Self {
+        let row = ".".repeat(width);
+        Self::new(&vec![row.as_str(); height])
+    }
+
+    /// Objects as `(tile, object type name)` (replaces any previous list).
+    pub fn objects(mut self, objects: &'a [(Pos, &'a str)]) -> Self {
+        self.objects = objects;
+        self
+    }
+
+    /// A sprite of the starter genome, with spawn variation, on each of
+    /// `tiles` (appends).
+    pub fn starters(mut self, tiles: &[Pos]) -> Self {
+        self.sprites.extend(tiles.iter().map(|&tile| (tile, None)));
+        self
+    }
+
+    /// Sprites as `(tile, genes)`, the starter genome where there are none
+    /// (appends).
+    pub fn sprites_with(mut self, sprites: Vec<(Pos, Option<Genome>)>) -> Self {
+        self.sprites.extend(sprites);
+        self
+    }
+
+    /// Scripted actions by starting tile (appends).
+    pub fn scripts(mut self, scripted: &[(Pos, ScriptedAction)]) -> Self {
+        self.scripted.extend_from_slice(scripted);
+        self
+    }
+
+    /// The tiles of sprites that start as newborns, not grown up (M2 design
+    /// §9.1) (appends).
+    pub fn newborns(mut self, newborns: &[Pos]) -> Self {
+        self.newborns.extend_from_slice(newborns);
+        self
+    }
+
+    /// Uses this data pack instead of the built-in one.
+    pub fn data(mut self, data: DataPack) -> Self {
+        self.data = Some(data);
+        self
+    }
+
+    /// The world seed (default 1).
+    pub fn seed(mut self, seed: u64) -> Self {
+        self.seed = seed;
+        self
+    }
+
+    /// Builds the world, before its first tick.
+    pub fn build(self) -> World {
+        let data = self.data.unwrap_or_else(pack);
+        let rows: Vec<&str> = self.rows.iter().map(String::as_str).collect();
+        let map = Map::from_ascii(&rows, &data).expect("valid drawing");
+        let scenario = Scenario {
+            map,
+            objects: self.objects,
+            sprites: &self.sprites,
+            scripted: &self.scripted,
+            newborns: &self.newborns,
+        };
+        World::from_scenario(scenario, data, self.seed).expect("valid scenario")
+    }
+}
+
+/// An all-grass world, 10×6, with `objects`, and starter sprites on
+/// `sprites`.
+pub fn field(objects: &[(Pos, &str)], sprites: &[Pos]) -> World {
+    WorldBuilder::grass(10, 6)
+        .objects(objects)
+        .starters(sprites)
+        .build()
+}
+
+/// An 11×8 grass world with starter sprites on (2, 2) and (8, 3) and a
+/// ball on (5, 5).
+pub fn ball_world() -> World {
+    WorldBuilder::grass(11, 8)
+        .objects(&[(at(5, 5), "ball")])
+        .starters(&[at(2, 2), at(8, 3)])
+        .seed(7)
+        .build()
+}
+
+/// Steps `world` `ticks` ticks.
+pub fn run(world: &mut World, ticks: u64) {
+    for _ in 0..ticks {
+        world.step();
+    }
+}
+
+/// The ID of the sprite on `pos`.
+pub fn sprite_on(world: &World, pos: Pos) -> EntityId {
+    world.sprite_at(pos).expect("a sprite").id()
+}
+
+/// The ID of the object on `pos`.
+pub fn object_on(world: &World, pos: Pos) -> EntityId {
+    world.object_at(pos).expect("an object").id()
+}
+
+/// The data folder the help screen shows, made up so the screen reads the
+/// same on every machine.
+pub const DATA_FOLDER: &str = "/home/player/.local/share/terra-sprites";
+
+/// A fresh, empty folder for files, named for the test file and `name`.
+pub fn scratch_folder(name: &str) -> PathBuf {
+    let file = env!("CARGO_CRATE_NAME");
+    let dir = std::env::temp_dir().join(format!("terra-{file}-{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("a scratch folder");
+    dir
+}
+
+/// Panels with only the map view, its tiles drawn on `tiles`.
+pub fn map_only(tiles: Rect) -> Areas {
+    Areas {
+        tiles,
+        inspector: None,
+        event_log: None,
+        overlay: None,
+    }
+}
+
+/// The app on `world` in the default theme, with only the map view, its
+/// tiles drawn from screen cell (0, 0), as many as the map has: so a
+/// tile's cell is its position (see `pointing_at`).
+pub fn app(world: &World) -> App {
+    let map = world.map();
+    map_app(world, Rect::new(0, 0, map.width(), map.height()))
+}
+
+/// The same app in Grab mode.
+pub fn grab_app(world: &World) -> App {
+    let mut app = app(world);
+    apply(&mut app, world, Action::Mode(CursorMode::Grab));
+    app
+}
+
+/// An app on `world` in the default theme, with only the map view, its
+/// tiles drawn on `tiles`.
+pub fn map_app(world: &World, tiles: Rect) -> App {
+    App::new(world.map(), Theme::cp437(), world.seed(), map_only(tiles))
+}
+
+/// The smallest screen the game draws on (design §6.1).
+pub const SCREEN: Size = Size::new(100, 30);
+
+/// An app on `world` in the default theme, on a 100×30 screen.
+pub fn app_on(world: &World) -> App {
+    app_in(world, Theme::cp437())
+}
+
+/// An app on `world` in `theme`, on a 100×30 screen.
+pub fn app_in(world: &World, theme: Theme) -> App {
+    sized_app(world, theme, SCREEN)
+}
+
+/// An app on `world` in `theme`, with its panels laid out for a screen of
+/// `size`. Its help screen shows [`DATA_FOLDER`].
+pub fn sized_app(world: &World, theme: Theme, size: Size) -> App {
+    let mut app = App::new(world.map(), theme, world.seed(), ui::areas(size));
+    app.set_data_folder(PathBuf::from(DATA_FOLDER));
+    app
+}
+
+/// One frame on a 100×30 screen.
+pub fn render(app: &App, world: &World) -> Buffer {
+    render_on(app, world, SCREEN)
+}
+
+/// One frame on a screen of `size`.
+pub fn render_on(app: &App, world: &World, size: Size) -> Buffer {
+    let mut terminal = Terminal::new(TestBackend::new(size.width, size.height)).unwrap();
+    terminal
+        .draw(|frame| ui::render(frame, app, world))
+        .unwrap();
+    terminal.backend().buffer().clone()
+}
+
+/// Row `y` of `screen` as text, without the spaces at its end.
+pub fn row(screen: &Buffer, y: u16) -> String {
+    let text: String = (0..screen.area.width)
+        .map(|x| screen[(x, y)].symbol())
+        .collect();
+    text.trim_end().to_string()
+}
+
+/// The status line of a 100×30 screen, without the spaces at its end.
+pub fn status_line(app: &App, world: &World) -> String {
+    row(&render(app, world), SCREEN.height - 1)
+}
+
+/// The screen's text, a line per row, without the spaces at each line's
+/// end.
+pub fn lines(screen: &Buffer) -> Vec<String> {
+    (0..screen.area.height).map(|y| row(screen, y)).collect()
+}
+
+/// Carries out `action`, which leaves the game running.
+pub fn apply(app: &mut App, world: &World, action: Action) {
+    assert_eq!(app.apply(action, world), Flow::Continue);
+}
+
+/// The screen cell the pointer is on to point at `tile` when the map view's
+/// tiles are drawn from screen cell (0, 0), as `app` draws them: one down
+/// and right of it (design v27 §6.5).
+pub fn pointing_at(tile: Pos) -> Position {
+    Position::new(tile.x + 1, tile.y + 1)
+}
+
+/// Points at `tile`, the map view's tiles drawn from screen cell (0, 0).
+pub fn point(app: &mut App, world: &World, tile: Pos) {
+    apply(app, world, Action::Point(pointing_at(tile)));
+}
+
+/// Clicks `button` on `tile`, the map view's tiles drawn from screen cell
+/// (0, 0).
+pub fn click(app: &mut App, world: &World, tile: Pos, button: Button) {
+    let action = Action::Click {
+        at: pointing_at(tile),
+        button,
+        amplified: false,
+    };
+    apply(app, world, action);
+}
+
+/// Has the Cursor follow the sprite on `tile`, with a middle click (design
+/// v26 §6.5), the map view's tiles drawn from screen cell (0, 0).
+pub fn follow(app: &mut App, world: &World, tile: Pos) {
+    apply(app, world, Action::middle_click(pointing_at(tile)));
+}
+
+/// Hands the app's commands to the world and runs a tick, as a frame does.
+pub fn tick(app: &mut App, world: &mut World) {
+    for command in app.take_commands() {
+        world.submit(command);
+    }
+    let events = world.step();
+    app.record(&events, world);
+}
+
+/// Sprite `id` finished `verb`, aimed at nothing, with `outcome`, on `tick`.
+pub fn finished(tick: u64, id: EntityId, verb: Verb, outcome: Outcome) -> Event {
+    let action = ActionView {
+        verb,
+        destination: None,
+        target: None,
+        target_type: None,
+        attempted: false,
+        target_gone: false,
+        hurt: Hurt::default(),
+        progress: Progress::Ended(outcome),
+        remembered: false,
+        heard: None,
+        egg_at: None,
+    };
+    Event {
+        tick,
+        kind: EventKind::ActionEnded {
+            id,
+            verb,
+            outcome,
+            action,
+        },
+    }
+}
+
+/// The Cursor touching sprite `id` on `tick`: a pet, hug, zap or shock by
+/// name, or a pet or shock refused.
+pub fn touched(tick: u64, id: EntityId, what: &str) -> Event {
+    let kind = match what {
+        "pet" => EventKind::Rewarded {
+            id,
+            amplified: false,
+        },
+        "hug" => EventKind::Rewarded {
+            id,
+            amplified: true,
+        },
+        "zap" => EventKind::Corrected {
+            id,
+            amplified: false,
+        },
+        "shock" => EventKind::Corrected {
+            id,
+            amplified: true,
+        },
+        "refused pet" => EventKind::CommandRejected {
+            command: Command::Reward {
+                sprite: id,
+                amplified: false,
+                reach_back: 3,
+            },
+            reason: Rejection::Gone,
+        },
+        "refused shock" => EventKind::CommandRejected {
+            command: Command::Correct {
+                sprite: id,
+                amplified: true,
+            },
+            reason: Rejection::Gone,
+        },
+        _ => unreachable!("{what}"),
+    };
+    Event { tick, kind }
+}
 
 /// What to change in a data file: its name, and each text to replace in
 /// it, with what.
@@ -148,10 +506,6 @@ pub fn keen(female: bool) -> String {
     )
 }
 
-pub fn at(x: u16, y: u16) -> Pos {
-    Pos { x, y }
-}
-
 /// The screen cell the pointer is on to point at map tile `tile` as `app`
 /// shows it: one down and right of the cell the tile is drawn in (design
 /// v27 §6.5).
@@ -183,8 +537,6 @@ pub fn grow(
     ticks: u64,
 ) -> World {
     let pack = pack_changing(changes);
-    let row = ".".repeat(width);
-    let map = Map::from_ascii(&vec![row.as_str(); height], &pack).expect("valid drawing");
     let sprites: Vec<(Pos, Option<Genome>)> = sprites
         .iter()
         .map(|&(pos, genes)| {
@@ -194,17 +546,12 @@ pub fn grow(
             )
         })
         .collect();
-    let scenario = Scenario {
-        map,
-        objects: &[],
-        sprites: &sprites,
-        scripted: &[],
-        newborns: &[],
-    };
-    let mut world = World::from_scenario(scenario, pack, 7).expect("valid scenario");
-    for _ in 0..ticks {
-        world.step();
-    }
+    let mut world = WorldBuilder::grass(width, height)
+        .sprites_with(sprites)
+        .data(pack)
+        .seed(7)
+        .build();
+    run(&mut world, ticks);
     world
 }
 
@@ -285,11 +632,7 @@ pub fn open(app: &mut App, world: &World, tab: Tab) {
 /// log's 7 rows.
 pub fn inspector_rows(app: &App, world: &World, height: u16) -> (String, Vec<String>) {
     let size = Size::new(100, height);
-    let mut terminal = Terminal::new(TestBackend::new(size.width, size.height)).unwrap();
-    terminal
-        .draw(|frame| ui::render(frame, app, world))
-        .unwrap();
-    let screen = terminal.backend().buffer();
+    let screen = render_on(app, world, size);
     let rows: Vec<String> = (0..size.height)
         .map(|y| {
             let row: String = (size.width - 46..size.width)
