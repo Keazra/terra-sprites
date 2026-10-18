@@ -2,11 +2,11 @@
 //! learns what things are worth and its habits.
 
 mod common;
-use common::{at, builtin, close, genome};
+use common::{WorldBuilder, at, builtin, builtin_changing, builtin_with, close};
 
 use terra_sim::{
-    Command, DataPack, Dir, EntityId, Event, EventKind, Genome, Learned, Map, Part, Pos, Scenario,
-    ScriptedAction, Thing, Verb, World,
+    Command, DataPack, Dir, EntityId, Event, EventKind, Learned, Part, Pos, ScriptedAction, Thing,
+    Verb, World,
 };
 
 /// A world drawn from `rows`, with `objects`, and one sprite of `genes` on
@@ -32,22 +32,13 @@ const BRAMBLE: &str = r#"(id: 5, name: "bramble", plural: "brambles",
 
 /// The built-in pack with a third bush, brambles (design v19 §3.5.5).
 fn with_brambles() -> DataPack {
-    let sources: Vec<(&str, String)> = DataPack::builtin_sources()
-        .iter()
-        .map(|&(path, text)| {
-            let text = if path == "objects.ron" {
-                text.replace(
-                    "    // Pseudo types",
-                    &format!("    {BRAMBLE}\n    // Pseudo types"),
-                )
-            } else {
-                text.to_string()
-            };
-            (path, text)
-        })
-        .collect();
-    let sources: Vec<(&str, &str)> = sources.iter().map(|(p, t)| (*p, t.as_str())).collect();
-    DataPack::from_sources(&sources).expect("a valid test pack")
+    builtin_changing(
+        "objects.ron",
+        &[(
+            "    // Pseudo types",
+            &format!("    {BRAMBLE}\n    // Pseudo types"),
+        )],
+    )
 }
 
 /// `world`, in the pack `data`.
@@ -59,17 +50,12 @@ fn world_in(
     genes: &str,
     script: &[ScriptedAction],
 ) -> World {
-    let map = Map::from_ascii(rows, &data).expect("valid drawing");
-    let sprites = [(sprite, Some(genome(genes, &data)))];
-    let scripted: Vec<(Pos, ScriptedAction)> = script.iter().map(|&s| (sprite, s)).collect();
-    let scenario = Scenario {
-        map,
-        objects,
-        sprites: &sprites,
-        scripted: &scripted,
-        newborns: &[],
-    };
-    World::from_scenario(scenario, data, 1).expect("a valid scenario")
+    WorldBuilder::new(rows)
+        .data(data)
+        .objects(objects)
+        .sprites(&[(sprite, genes)])
+        .script(sprite, script)
+        .build()
 }
 
 #[test]
@@ -366,17 +352,10 @@ fn in_a_pack_with_no_object_type_for_water_water_is_learned_about_as_its_categor
     // about. With no verb table, a drink does nothing, but the sprite's
     // genome rewards it by .5 every tick, and the tick after the drink that
     // is credited to the water: .5 × worth_rate_good (.5).
-    let sources: Vec<(&str, &str)> = DataPack::builtin_sources()
-        .iter()
-        .map(|&(path, text)| match path {
-            "objects.ron" => (
-                path,
-                r#"[(id: 5, name: "pebble", category: "toy", size: Small, hardness: 0.5)]"#,
-            ),
-            _ => (path, text),
-        })
-        .collect();
-    let data = DataPack::from_sources(&sources).expect("a valid test pack");
+    let data = builtin_with(
+        "objects.ron",
+        r#"[(id: 5, name: "pebble", category: "toy", size: Small, hardness: 0.5)]"#,
+    );
     let water = at(2, 0);
     let mut world = world_in(
         data,
@@ -554,20 +533,10 @@ fn a_sprite_that_keeps_biting_a_thornbush_learns_each_lesson_once() {
 /// A world drawn from `rows` with sprites of `genes` on each of `sprites`,
 /// each doing its part of `script`.
 fn scene(rows: &[&str], sprites: &[(Pos, &str)], script: &[(Pos, ScriptedAction)]) -> World {
-    let data = builtin();
-    let map = Map::from_ascii(rows, &data).expect("valid drawing");
-    let sprites: Vec<(Pos, Option<Genome>)> = sprites
-        .iter()
-        .map(|&(pos, genes)| (pos, Some(genome(genes, &data))))
-        .collect();
-    let scenario = Scenario {
-        map,
-        objects: &[],
-        sprites: &sprites,
-        scripted: script,
-        newborns: &[],
-    };
-    World::from_scenario(scenario, data, 1).expect("a valid scenario")
+    WorldBuilder::new(rows)
+        .sprites(sprites)
+        .scripts(script)
+        .build()
 }
 
 /// What sprite `id` has learned, as `(learned, value)`.
@@ -745,19 +714,11 @@ fn a_sprite_that_dies_is_forgotten() {
     let mut script = vec![(me, ScriptedAction::Rest); 50];
     script.push((attacker, ScriptedAction::Hit { at: me }));
     script.extend(vec![(attacker, ScriptedAction::Eat { at: thornbush }); 100]);
-    let data = builtin();
-    let sprites = [
-        (me, Some(genome(HIT_HURTS, &data))),
-        (attacker, Some(genome("", &data))),
-    ];
-    let scenario = Scenario {
-        map: Map::from_ascii(&["....", "....", "...."], &data).expect("valid drawing"),
-        objects: &[(thornbush, "thornbush")],
-        sprites: &sprites,
-        scripted: &script,
-        newborns: &[],
-    };
-    let mut world = World::from_scenario(scenario, data, 1).expect("a valid scenario");
+    let mut world = WorldBuilder::new(&["....", "....", "...."])
+        .objects(&[(thornbush, "thornbush")])
+        .sprites(&[(me, HIT_HURTS), (attacker, "")])
+        .scripts(&script)
+        .build();
     let (me, attacker) = (
         world.sprite_at(me).expect("me").id(),
         world.sprite_at(attacker).expect("the attacker").id(),

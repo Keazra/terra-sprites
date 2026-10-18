@@ -2,11 +2,11 @@
 //! re-planning, driven through hand-made worlds.
 
 mod common;
-use common::{at, builtin, traits_only};
+use common::{WorldBuilder, at, builtin, id_at, traits_only};
 
 use terra_sim::{
-    ActionView, Command, DataPack, EntityId, Event, EventKind, Genome, Hurt, Map, Outcome, Pos,
-    Progress, Scenario, ScriptedAction, Verb, World,
+    ActionView, Command, DataPack, EntityId, Event, EventKind, Genome, Hurt, Outcome, Pos,
+    Progress, ScriptedAction, Verb, World,
 };
 
 /// Sense radius 14 (not [`common::walker`]'s 10).
@@ -41,24 +41,17 @@ fn seeded(
     seed: u64,
 ) -> World {
     let data = builtin();
-    let map = Map::from_ascii(rows, &data).expect("valid drawing");
-    let sprites: Vec<(Pos, Option<Genome>)> = sprites
+    let sprites = sprites
         .iter()
         .map(|&pos| (pos, Some(walker(speed, &data))))
         .collect();
-    let scenario = Scenario {
-        map,
-        objects,
-        sprites: &sprites,
-        scripted,
-        newborns: &[],
-    };
-    World::from_scenario(scenario, data, seed).expect("a valid scenario")
-}
-
-/// The ID of the sprite on `pos`.
-fn sprite_on(world: &World, pos: Pos) -> EntityId {
-    world.sprite_at(pos).expect("a sprite there").id()
+    WorldBuilder::new(rows)
+        .objects(objects)
+        .sprites_with(sprites)
+        .scripts(scripted)
+        .seed(seed)
+        .data(data)
+        .build()
 }
 
 /// Steps `world` until sprite `id`'s first action ends, at most `ticks`
@@ -101,7 +94,7 @@ fn a_sprite_told_to_wander_to_a_spot_walks_there_a_step_at_a_time_and_arrives() 
         destination: at(5, 0),
     };
     let mut world = world(&["........"], 10.0, &[at(0, 0)], &[(at(0, 0), wander)]);
-    let id = sprite_on(&world, at(0, 0));
+    let id = id_at(&world, at(0, 0));
 
     let (events, tiles) = run(&mut world, id, 5);
 
@@ -167,7 +160,7 @@ fn walk_east(rows: &[&str], speed: f32, ticks: usize) -> Vec<u16> {
         destination: at(far, 0),
     };
     let mut world = world(rows, speed, &[at(0, 0)], &[(at(0, 0), wander)]);
-    let id = sprite_on(&world, at(0, 0));
+    let id = id_at(&world, at(0, 0));
     let (_, tiles) = run(&mut world, id, ticks);
     tiles.iter().map(|pos| pos.x).collect()
 }
@@ -205,7 +198,7 @@ fn walking_past_a_thornbush_never_hurts() {
     ];
     let rows = ["...", "...", "..."];
     let mut world = world_with(&rows, &[(at(1, 1), "thornbush")], 10.0, &[start], &scripted);
-    let id = sprite_on(&world, start);
+    let id = id_at(&world, start);
     let (events, tiles) = run(&mut world, id, 8);
     assert_eq!(tiles.last(), Some(&start), "round it: {tiles:?}");
     let hurts = events.iter().any(|event| {
@@ -229,7 +222,7 @@ fn a_step_costs_what_the_terrain_it_lands_on_costs() {
 fn route(rows: &[&str], objects: &[(Pos, &str)], from: Pos, to: Pos) -> Vec<Pos> {
     let wander = ScriptedAction::Wander { destination: to };
     let mut world = world_with(rows, objects, 10.0, &[from], &[(from, wander)]);
-    let id = sprite_on(&world, from);
+    let id = id_at(&world, from);
     let (tiles, outcome) = first_action(&mut world, id, 30);
     assert_eq!(outcome, Outcome::Applied, "arrived");
     let mut route: Vec<Pos> = Vec::new();
@@ -248,7 +241,7 @@ fn a_diagonal_step_costs_14_tenths_of_an_orthogonal_one() {
         destination: at(3, 3),
     };
     let mut world = world(&rows, 10.0, &[at(0, 0)], &[(at(0, 0), wander)]);
-    let id = sprite_on(&world, at(0, 0));
+    let id = id_at(&world, at(0, 0));
     let (_, tiles) = run(&mut world, id, 5);
     // 140 tenths a step, at 100 a tick.
     assert_eq!(tiles, [at(0, 0), at(1, 1), at(2, 2), at(2, 2), at(3, 3)]);
@@ -280,19 +273,15 @@ fn a_sprite_never_steps_onto_a_bush_or_cuts_a_corner_past_one() {
 fn wander_east(distance: u16, sense_radius: f32) -> Outcome {
     let data = builtin();
     let row = ".".repeat(usize::from(distance) + 1);
-    let map = Map::from_ascii(&[row.as_str()], &data).expect("valid drawing");
-    let sprites = [(at(0, 0), Some(traits_only(10.0, sense_radius, &data)))];
+    let sprites = vec![(at(0, 0), Some(traits_only(10.0, sense_radius, &data)))];
     let wander = ScriptedAction::Wander {
         destination: at(distance, 0),
     };
-    let scenario = Scenario {
-        map,
-        objects: &[],
-        sprites: &sprites,
-        scripted: &[(at(0, 0), wander)],
-        newborns: &[],
-    };
-    let mut world = World::from_scenario(scenario, data, 1).expect("a valid scenario");
+    let mut world = WorldBuilder::new(&[row.as_str()])
+        .sprites_with(sprites)
+        .script(at(0, 0), &[wander])
+        .data(data)
+        .build();
     for _ in 0..30 {
         for event in world.step() {
             if let EventKind::ActionEnded { outcome, .. } = event.kind {
@@ -324,7 +313,7 @@ fn change(world: &World, id: EntityId, name: &str) -> f32 {
 fn a_rest_lasts_10_ticks_and_ends_applied() {
     let start = at(0, 0);
     let mut world = world(&["..."], 10.0, &[start], &[(start, ScriptedAction::Rest)]);
-    let id = sprite_on(&world, start);
+    let id = id_at(&world, start);
     let (_, tiles) = run(&mut world, id, 4);
     let progress = world
         .sprite(id)
@@ -359,7 +348,7 @@ fn walking_tires_a_sprite_and_resting_restores_it() {
     };
     let scripted = [(start, wander), (start, ScriptedAction::Rest)];
     let mut world = world(&["..............."], 10.0, &[start], &scripted);
-    let id = sprite_on(&world, start);
+    let id = id_at(&world, start);
     let (mut stamina, mut energy) = (Vec::new(), Vec::new());
     for _ in 0..25 {
         world.step();
@@ -384,7 +373,7 @@ fn a_sprite_walks_around_another_when_that_costs_less_than_3_grass_steps_more() 
     };
     let scripted = [(walker, wander), (rester, ScriptedAction::Rest)];
     let mut world = world(&["......."; 3], 10.0, &[walker, rester], &scripted);
-    let id = sprite_on(&world, walker);
+    let id = id_at(&world, walker);
     let (tiles, outcome) = first_action(&mut world, id, 8);
     assert_eq!(outcome, Outcome::Applied, "arrived: {tiles:?}");
     assert!(!tiles.contains(&rester), "{tiles:?}");
@@ -407,7 +396,7 @@ fn action_events(events: &[Event]) -> Vec<(u64, Verb, Option<Outcome>)> {
 fn a_sprite_with_nothing_to_do_wanders_or_rests_of_its_own_accord() {
     let start = at(4, 4);
     let mut world = world(&["........."; 9], 7.0, &[start], &[]);
-    let id = sprite_on(&world, start);
+    let id = id_at(&world, start);
     let (events, _) = run(&mut world, id, 300);
     let started: Vec<Verb> = action_events(&events)
         .into_iter()
@@ -430,7 +419,7 @@ fn a_sprite_with_nothing_to_do_wanders_or_rests_of_its_own_accord() {
 fn a_sprite_with_nowhere_to_go_gives_up_each_wander_at_once() {
     let start = at(0, 0);
     let mut world = world(&["."], 7.0, &[start], &[]);
-    let id = sprite_on(&world, start);
+    let id = id_at(&world, start);
     let (events, _) = run(&mut world, id, 100);
     let wanders: Vec<(u64, Verb, Option<Outcome>)> = action_events(&events)
         .into_iter()
@@ -462,7 +451,7 @@ fn a_swap_ends_both_sprites_walking_for_the_tick() {
         let (west, east) = (at(0, 0), at(10, 0));
         let scripted = [(west, wander_to(east)), (east, wander_to(west))];
         let mut world = seeded(&["..........."], &[], 12.0, &[west, east], &scripted, seed);
-        let (a, b) = (sprite_on(&world, west), sprite_on(&world, east));
+        let (a, b) = (id_at(&world, west), id_at(&world, east));
         for _ in 0..5 {
             world.step();
         }
@@ -478,10 +467,10 @@ fn of_two_sprites_stepping_onto_one_tile_the_first_in_the_tick_s_shuffled_order_
     let mut winners = Vec::new();
     for seed in 1..=20 {
         let mut world = seeded(&["..."], &[], 10.0, &[left, right], &scripted, seed);
-        let (a, b) = (sprite_on(&world, left), sprite_on(&world, right));
+        let (a, b) = (id_at(&world, left), id_at(&world, right));
         world.step();
         assert_eq!(world.check_invariants(), Ok(()));
-        let winner = sprite_on(&world, middle);
+        let winner = id_at(&world, middle);
         let loser = if winner == a { b } else { a };
         let stayed = world.sprite(loser).expect("alive").pos();
         assert!(stayed == left || stayed == right, "the other waits");
@@ -499,7 +488,7 @@ fn two_sprites_meeting_head_on_in_a_one_tile_corridor_swap_and_pass() {
     let rows = ["#######", ".......", "#######"];
     let scripted = [(west, wander_to(east)), (east, wander_to(west))];
     let mut world = world(&rows, 10.0, &[west, east], &scripted);
-    let (a, b) = (sprite_on(&world, west), sprite_on(&world, east));
+    let (a, b) = (id_at(&world, west), id_at(&world, east));
     let mut arrived = Vec::new();
     for _ in 0..12 {
         for event in world.step() {
@@ -521,7 +510,7 @@ fn two_sprites_swap_diagonally_when_neither_cuts_a_corner() {
     let (a_start, b_start) = (at(0, 0), at(1, 1));
     let scripted = [(a_start, wander_to(b_start)), (b_start, wander_to(a_start))];
     let mut world = world(&["..", ".."], 10.0, &[a_start, b_start], &scripted);
-    let (a, b) = (sprite_on(&world, a_start), sprite_on(&world, b_start));
+    let (a, b) = (id_at(&world, a_start), id_at(&world, b_start));
     world.step();
     world.step();
     assert_eq!(world.sprite(a).expect("alive").pos(), b_start);
@@ -539,7 +528,7 @@ fn a_sprite_that_can_find_no_way_past_gives_up_after_3_blocked_ticks() {
     let mut scripted = vec![(walker, wander_to(at(4, 0)))];
     scripted.extend(rests(rester, 5));
     let mut world = world(&["....."], 10.0, &[walker, rester], &scripted);
-    let id = sprite_on(&world, walker);
+    let id = id_at(&world, walker);
     run(&mut world, id, 2);
     let progress = world
         .sprite(id)
@@ -568,7 +557,7 @@ fn a_stuck_sprite_keeps_to_the_way_round_it_found() {
     let mut scripted = vec![(walker, wander_to(at(7, 3)))];
     scripted.extend(rests(rester, 10));
     let mut world = world(&LOOP, 10.0, &[walker, rester], &scripted);
-    let id = sprite_on(&world, walker);
+    let id = id_at(&world, walker);
     let (tiles, outcome) = first_action(&mut world, id, 60);
     assert_eq!(outcome, Outcome::Applied, "{tiles:?}");
     assert!(tiles.contains(&at(4, 1)), "round the top: {tiles:?}");
@@ -586,7 +575,7 @@ fn a_sprite_blocked_again_on_its_way_round_searches_again() {
     scripted.push((lurker, wander_to(at(3, 1))));
     scripted.extend(rests(lurker, 10));
     let mut world = world(&LOOP, 10.0, &[walker, rester, lurker], &scripted);
-    let id = sprite_on(&world, walker);
+    let id = id_at(&world, walker);
     let (tiles, outcome) = first_action(&mut world, id, 60);
     assert_eq!(outcome, Outcome::Blocked, "{tiles:?}");
     assert!(
@@ -619,7 +608,7 @@ fn a_sprite_whose_target_leaves_its_reach_on_its_way_round_gives_up_at_the_way_s
     let mut scripted = vec![(walker, ScriptedAction::Approach { at: ball })];
     scripted.extend(rests(rester, 10));
     let mut world = world_with(&HOOK, &[(ball, "ball")], 10.0, &[walker, rester], &scripted);
-    let id = sprite_on(&world, walker);
+    let id = id_at(&world, walker);
     let (_, tiles) = run(&mut world, id, 6);
     assert!(
         tiles.contains(&at(0, 2)),
@@ -653,7 +642,7 @@ fn an_approach_whose_target_leaves_the_flood_ends_as_failed() {
         &[walker],
         &scripted,
     );
-    let id = sprite_on(&world, walker);
+    let id = id_at(&world, walker);
     run(&mut world, id, 2);
     let item = world.object_at(ball).expect("the ball").id();
     world.submit(Command::PickUp { item });
@@ -668,7 +657,7 @@ fn an_action_still_going_after_60_ticks_times_out() {
     let start = at(0, 0);
     let row = ["~~~~~~~~~~~~~~~"];
     let mut world = world(&row, 4.0, &[start], &[(start, wander_to(at(14, 0)))]);
-    let id = sprite_on(&world, start);
+    let id = id_at(&world, start);
     let (events, _) = run(&mut world, id, 61);
     let ended: Vec<_> = action_events(&events)
         .into_iter()
@@ -684,7 +673,7 @@ fn an_action_still_going_after_60_ticks_times_out() {
 fn a_wander_to_the_tile_the_sprite_stands_on_arrives_at_once() {
     let start = at(1, 0);
     let mut world = world(&["..."], 10.0, &[start], &[(start, wander_to(start))]);
-    let id = sprite_on(&world, start);
+    let id = id_at(&world, start);
     let (tiles, outcome) = first_action(&mut world, id, 5);
     assert_eq!((tiles.len(), outcome), (1, Outcome::Applied));
 }

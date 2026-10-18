@@ -33,6 +33,20 @@ pub fn builtin_changing(file: &str, changes: &[(&str, &str)]) -> DataPack {
     DataPack::from_sources(&borrowed).expect("the changed pack is valid")
 }
 
+/// The built-in data pack, with `file`'s text replaced by `text`.
+pub fn builtin_with(file: &str, text: &str) -> DataPack {
+    let sources = DataPack::builtin_sources();
+    assert!(
+        sources.iter().any(|&(path, _)| path == file),
+        "{file} is in the pack"
+    );
+    let replaced: Vec<(&str, &str)> = sources
+        .iter()
+        .map(|&(path, builtin)| (path, if path == file { text } else { builtin }))
+        .collect();
+    DataPack::from_sources(&replaced).expect("the changed pack is valid")
+}
+
 /// One gene of every type the build knows, and an unknown one, each value
 /// well inside its range.
 const EVERY_KIND: &str = r#"(format: 1, genes: [

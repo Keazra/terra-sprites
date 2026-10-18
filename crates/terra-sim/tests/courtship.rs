@@ -9,7 +9,7 @@
 mod common;
 use common::{
     ALONE, FEMALE, KEEN, LONE, WorldBuilder, at, builtin, builtin_changing, builtin_changing_files,
-    genome, hatch, id_at, laid, pulse_in_h1, until, world_in,
+    hatch, id_at, laid, pulse_in_h1, until, world_in,
 };
 
 use terra_sim::{
@@ -258,16 +258,12 @@ fn a_sprite_with_no_way_to_a_call_never_sets_off_and_forgets_it() {
     // across a row of bushes; with no gap there's no way there, and the
     // call is forgotten at once, long before `heard_for`. With a gap, it
     // sets off. The caller calls once.
-    let data = builtin();
     let trip = |gap: bool| {
         let (rows, bushes) = walled(gap);
         let rows: Vec<&str> = rows.iter().map(String::as_str).collect();
-        let placed = [(at(1, 2), CALLER), (at(25, 2), ANSWERS)]
-            .map(|(pos, genes)| (pos, Some(genome(genes, &data))))
-            .to_vec();
         let mut world = WorldBuilder::new(&rows)
             .objects(&bushes)
-            .sprites_with(placed)
+            .sprites(&[(at(1, 2), CALLER), (at(25, 2), ANSWERS)])
             .build();
         let (caller, answerer) = (id_at(&world, at(1, 2)), id_at(&world, at(25, 2)));
         world.step();
@@ -511,11 +507,6 @@ fn a_sprite_known_only_by_sight_is_forgotten_once_out_of_sight_it_fades() {
     "#;
     let field = row(30);
     let rows = [field.as_str()];
-    let data = builtin();
-    let placed = vec![
-        (at(0, 0), Some(genome(fading, &data))),
-        (at(3, 0), Some(genome(RESTER, &data))),
-    ];
     // It walks off in legs it can see the end of.
     let away = [12, 21, 29].map(|x| {
         (
@@ -526,7 +517,7 @@ fn a_sprite_known_only_by_sight_is_forgotten_once_out_of_sight_it_fades() {
         )
     });
     let mut world = WorldBuilder::new(&rows)
-        .sprites_with(placed)
+        .sprites(&[(at(0, 0), fading), (at(3, 0), RESTER)])
         .scripts(&away)
         .build();
     let (a, b) = (id_at(&world, at(0, 0)), id_at(&world, at(3, 0)));
@@ -584,12 +575,8 @@ fn a_dance_is_felt_by_the_one_danced_for_and_the_dancer() {
 fn an_adult_never_dances_for_a_young_sprite_nor_a_young_one_at_all() {
     // M2 design §5, §15.3: Court is offered only between adults.
     let rows = ["......"];
-    let placed = vec![
-        (at(1, 0), Some(genome(DANCER, &builtin()))),
-        (at(2, 0), Some(genome(DANCER, &builtin()))),
-    ];
     let mut world = WorldBuilder::new(&rows)
-        .sprites_with(placed)
+        .sprites(&[(at(1, 0), DANCER), (at(2, 0), DANCER)])
         .newborns(&[at(2, 0)])
         .build();
     for _ in 0..200 {

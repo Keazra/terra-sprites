@@ -4,13 +4,13 @@
 //! another build, or with the wrong data pack, is refused, never a crash.
 
 mod common;
-use common::{at, builtin};
+use common::{WorldBuilder, at, builtin};
 
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use terra_sim::{
-    CHECKPOINT_EVERY, Command, Dir, Divergence, EventKind, Map, Playback, ReplayError, Scenario,
-    World, WorldConfig,
+    CHECKPOINT_EVERY, Command, Dir, Divergence, EventKind, Playback, ReplayError, World,
+    WorldConfig,
 };
 
 /// The default world, recording from its first tick.
@@ -132,16 +132,11 @@ fn a_session_started_from_a_save_replays_from_it() {
 
 #[test]
 fn a_hand_made_world_replays_from_its_save() {
-    let data = builtin();
-    let map = Map::from_ascii(&["......", "......", "......", "......"], &data).unwrap();
-    let scenario = Scenario {
-        map,
-        objects: &[(at(4, 1), "ball")],
-        sprites: &[(at(1, 1), None), (at(2, 3), None)],
-        scripted: &[],
-        newborns: &[],
-    };
-    let mut world = World::from_scenario(scenario, data, 5).unwrap();
+    let mut world = WorldBuilder::new(&["......", "......", "......", "......"])
+        .objects(&[(at(4, 1), "ball")])
+        .starters(&[at(1, 1), at(2, 3)])
+        .seed(5)
+        .build();
     world.start_recording();
     let item = world.objects().next().unwrap().id();
     world.submit(Command::PickUp { item });

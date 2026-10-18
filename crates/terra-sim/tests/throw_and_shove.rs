@@ -3,11 +3,11 @@
 //! and may crash into what stops it.
 
 mod common;
-use common::{at, builtin, builtin_changing, builtin_changing_files, close};
+use common::{WorldBuilder, at, builtin, builtin_changing, builtin_changing_files, close};
 
 use terra_sim::{
-    Command, DataPack, DeathCause, Dir, EntityId, Event, EventKind, Map, Pos, Rejection, Scenario,
-    ScriptedAction, Thing, World,
+    Command, DataPack, DeathCause, Dir, EntityId, Event, EventKind, Pos, Rejection, ScriptedAction,
+    Thing, World,
 };
 
 /// A world drawn from `rows`, with `objects`, and a starter sprite on each
@@ -29,16 +29,12 @@ fn world_in(
     sprites: &[Pos],
     script: &[(Pos, ScriptedAction)],
 ) -> World {
-    let map = Map::from_ascii(rows, &data).expect("valid drawing");
-    let sprites: Vec<(Pos, Option<_>)> = sprites.iter().map(|&pos| (pos, None)).collect();
-    let scenario = Scenario {
-        map,
-        objects,
-        sprites: &sprites,
-        scripted: script,
-        newborns: &[],
-    };
-    World::from_scenario(scenario, data, 1).expect("a valid scenario")
+    WorldBuilder::new(rows)
+        .data(data)
+        .objects(objects)
+        .starters(sprites)
+        .scripts(script)
+        .build()
 }
 
 /// The object on `pos`.

@@ -1,23 +1,22 @@
-use terra_sim::{ConfigError, DataPack, WorldConfig};
+mod common;
+use common::builtin;
 
-fn pack() -> DataPack {
-    DataPack::builtin().expect("built-in data pack is valid")
-}
+use terra_sim::{ConfigError, WorldConfig};
 
 fn preset(text: &str) -> Result<WorldConfig, ConfigError> {
-    WorldConfig::from_ron(text, &pack())
+    WorldConfig::from_ron(text, &builtin())
 }
 
 #[test]
 fn the_built_in_preset_is_256_by_160() {
-    let config = WorldConfig::builtin(&pack());
+    let config = WorldConfig::builtin(&builtin());
     assert_eq!((config.width(), config.height()), (256, 160));
 }
 
 #[test]
 fn the_built_in_preset_gives_the_design_object_counts_on_the_default_map() {
     // Design §3.9: 150 berry bushes, 40 thornbushes and 6 balls per 15,360 tiles.
-    let config = WorldConfig::builtin(&pack());
+    let config = WorldConfig::builtin(&builtin());
     assert_eq!(config.object_count("berry_bush"), 400);
     assert_eq!(config.object_count("thornbush"), 107);
     assert_eq!(config.object_count("ball"), 16);
@@ -98,7 +97,7 @@ fn a_preset_that_names_objects_needs_an_area_to_count_them_in() {
 fn a_preset_resized_keeps_its_densities_and_sprites_on_the_new_map() {
     // The title screen's world is the default preset at the terminal's
     // size (M2 design §8.1).
-    let config = WorldConfig::builtin(&pack()).sized(120, 64);
+    let config = WorldConfig::builtin(&builtin()).sized(120, 64);
     assert_eq!((config.width(), config.height()), (120, 64));
     assert_eq!(config.sprites(), 30);
     // 150 berry bushes per 15,360 tiles, on 7,680 tiles.
@@ -107,6 +106,6 @@ fn a_preset_resized_keeps_its_densities_and_sprites_on_the_new_map() {
 
 #[test]
 fn a_preset_resized_keeps_each_side_within_what_a_map_may_be() {
-    let config = WorldConfig::builtin(&pack()).sized(20, 2000);
+    let config = WorldConfig::builtin(&builtin()).sized(20, 2000);
     assert_eq!((config.width(), config.height()), (32, 1024));
 }

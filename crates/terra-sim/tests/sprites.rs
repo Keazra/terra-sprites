@@ -2,13 +2,13 @@
 //! death without food or water.
 
 mod common;
-use common::{builtin, builtin_changing};
+use common::{WorldBuilder, at, builtin, builtin_changing, builtin_with};
 
 use std::collections::BTreeSet;
 
 use terra_sim::{
     ChemicalKind, DataPack, DeathCause, EmitterMode, EntityId, EventKind, Expression, GeneView,
-    Genome, LifeStage, Map, Pos, Scenario, ScriptedAction, Trait, Traits, Whom, World, WorldConfig,
+    Genome, LifeStage, Pos, ScriptedAction, Trait, Traits, Whom, World, WorldConfig,
 };
 
 #[test]
@@ -86,17 +86,12 @@ fn a_preset_may_set_20_to_100_sprites_or_leave_them_out() {
 /// the starter genome with spawn variation. With nowhere to go, it never
 /// walks, so walking costs it nothing.
 fn lone_sprite(data: DataPack, genome: Option<&str>) -> World {
-    let map = Map::from_ascii(&["."], &data).expect("valid drawing");
     let genome = genome.map(|text| Genome::from_ron(text, &data).expect("a valid genome"));
-    let sprites = [(Pos { x: 0, y: 0 }, genome)];
-    let scenario = Scenario {
-        map,
-        objects: &[],
-        sprites: &sprites,
-        scripted: &[],
-        newborns: &[Pos { x: 0, y: 0 }],
-    };
-    World::from_scenario(scenario, data, 1).expect("a valid scenario")
+    WorldBuilder::new(&["."])
+        .data(data)
+        .sprites_with(vec![(at(0, 0), genome)])
+        .newborns(&[at(0, 0)])
+        .build()
 }
 
 /// A death: the tick it happened in, and the `Died` event's fields.
@@ -207,28 +202,20 @@ const SOLIDS: &str = r#"[
     (id: 5, name: "pebble", category: "toy", size: Small, hardness: 0.5),
 ]"#;
 
-/// A 5×5 field of grass holding `objects` and newborn starter sprites on
-/// `sprites`, each resting where it stands for its first 300 ticks.
+/// A 5×5 field of grass holding `objects` and starter sprites on `sprites`,
+/// each resting where it stands for its first 300 ticks.
 fn field(objects: &[(Pos, &str)], sprites: &[Pos]) -> Result<World, terra_sim::ScenarioError> {
-    let objects_ron = include_str!("../../../data/objects.ron");
-    let data = builtin_changing("objects.ron", &[(objects_ron, SOLIDS)]);
-    let map = Map::from_ascii(&["....."; 5], &data).expect("valid drawing");
+    let data = builtin_with("objects.ron", SOLIDS);
     let rests: Vec<(Pos, ScriptedAction)> = sprites
         .iter()
         .flat_map(|&pos| [(pos, ScriptedAction::Rest); 30])
         .collect();
-    let sprites: Vec<(Pos, Option<Genome>)> = sprites.iter().map(|&pos| (pos, None)).collect();
-    World::from_scenario(
-        Scenario {
-            map,
-            objects,
-            sprites: &sprites,
-            scripted: &rests,
-            newborns: &[],
-        },
-        data,
-        1,
-    )
+    WorldBuilder::new(&["....."; 5])
+        .data(data)
+        .objects(objects)
+        .starters(sprites)
+        .scripts(&rests)
+        .try_build()
 }
 
 #[test]
@@ -236,18 +223,11 @@ fn sprites_see_water_and_each_other_in_a_pack_with_no_object_types_for_them() {
     // Water tiles and sprites are perceived by their categories (design v19
     // §3.5.5). With no object types to give them verb tables, a verb on one
     // does nothing, as on anything without a rule for it.
-    let objects_ron = include_str!("../../../data/objects.ron");
-    let data = builtin_changing("objects.ron", &[(objects_ron, SOLIDS)]);
-    let map = Map::from_ascii(&["..~..", ".....", "....."], &data).expect("valid drawing");
-    let sprites = [(Pos { x: 0, y: 1 }, None), (Pos { x: 4, y: 1 }, None)];
-    let scenario = Scenario {
-        map,
-        objects: &[],
-        sprites: &sprites,
-        scripted: &[],
-        newborns: &[],
-    };
-    let mut world = World::from_scenario(scenario, data, 1).expect("a valid scenario");
+    let data = builtin_with("objects.ron", SOLIDS);
+    let mut world = WorldBuilder::new(&["..~..", ".....", "....."])
+        .data(data)
+        .starters(&[at(0, 1), at(4, 1)])
+        .build();
     let ids: Vec<EntityId> = world.sprites().map(|sprite| sprite.id()).collect();
     for _ in 0..2_000 {
         world.step();
@@ -271,7 +251,7 @@ fn a_sprite_can_share_a_tile_with_an_item_but_not_a_solid_object() {
 #[test]
 fn an_item_under_a_sprite_is_not_replaced_by_a_solid_object() {
     let mut control = field(&[(MIDDLE, "seed")], &[]).expect("valid");
-    let mut world = field(&[(MIDDLE, "seed")], &[Pos { x: 0, y: 0 }, MIDDLE]).expect("valid");
+    let mut world = field(&[(MIDDLE, "seed")], &[at(0, 0), MIDDLE]).expect("valid");
     for _ in 0..5 {
         control.step();
         world.step();

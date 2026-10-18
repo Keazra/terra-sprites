@@ -3,7 +3,7 @@
 
 mod common;
 use common::{
-    AGES_AT_ONCE, OLD, WorldBuilder, at, builtin, builtin_changing, close, genome, id_at, value_of,
+    AGES_AT_ONCE, OLD, WorldBuilder, at, builtin, builtin_changing, close, id_at, value_of,
     world_in,
 };
 
@@ -65,14 +65,10 @@ fn room_in(
     sprites: &[(Pos, &str)],
     scripted: &[(Pos, ScriptedAction)],
 ) -> World {
-    let sprites = sprites
-        .iter()
-        .map(|&(pos, genes)| (pos, Some(genome(genes, &data))))
-        .collect();
     WorldBuilder::new(&ROOM)
         .data(data)
         .objects(objects)
-        .sprites_with(sprites)
+        .sprites(sprites)
         .scripts(scripted)
         .build()
 }
@@ -390,15 +386,8 @@ fn young_looks(weight: f32) -> (Option<Pos>, Pos, Pos) {
         BrainParam(param: "tau_att_base", value: 0.05),"#
     );
     let rester = r#"Instinct(inputs: [("always", false)], verb: Rest, weight: 1.0),"#;
-    let data = builtin();
-    let sprites = vec![
-        (me, Some(genome(&genes, &data))),
-        (young, Some(genome(rester, &data))),
-        (grown, Some(genome(rester, &data))),
-    ];
     let mut world = WorldBuilder::new(&ROOM)
-        .data(data)
-        .sprites_with(sprites)
+        .sprites(&[(me, &genes), (young, rester), (grown, rester)])
         .newborns(&[me, young])
         .build();
     world.step();
