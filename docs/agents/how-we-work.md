@@ -112,3 +112,5 @@ The owner runs Gemini, and sometimes Codex, on each PR. Gemini's review is one r
 ## Triage
 
 Issues are labelled `afk` (an agent can do it alone) or `hitl` (it needs the owner), plus `needs-triage` and `needs-info`; see `docs/agents/triage-labels.md`. Untriaged issues go through `/triage`. Design ideas parked outside M1 are `hitl` issues.
+
+- **A small design question can be settled by an agent alone** (the owner, 2026-10-19), labelled `afk-design`: its questions are already answered by the owner's principles and earlier decisions, nothing owns it or is measuring what it touches, and it needs no long run on the PC. Asked "what could be designed without me?", `/triage` ranks the `hitl` issues that qualify, and the owner picks which move. A minor one is designed and built in one draft PR; one the owner would playtest stops at a design for their OK. The tests and the design brief are in `.claude/skills/triage/AUTONOMOUS-DESIGN.md`.

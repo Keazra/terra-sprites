@@ -121,7 +121,7 @@ Issues live in GitHub Issues for Keazra/terra-sprites and are handled with the `
 
 ### Triage labels
 
-The default triage labels, except `ready-for-agent` is `afk` and `ready-for-human` is `hitl`. See `docs/agents/triage-labels.md`.
+The default triage labels, except `ready-for-agent` is `afk` and `ready-for-human` is `hitl`, plus this project's `afk-design` for a design an agent can settle alone. See `docs/agents/triage-labels.md`.
 
 ### Domain docs
 
