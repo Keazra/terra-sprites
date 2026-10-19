@@ -18,16 +18,19 @@
 //! - **At least 60% of the young hatched grow up.** Those still growing at
 //!   the end aren't counted.
 //! - **Adults dying of hunger or thirst are under 1 in 20 of grown-up
-//!   deaths.** Old sprites' are reported apart.
+//!   deaths,** over the run and over its last 50 hours (#226). Old
+//!   sprites' are reported apart.
 //! - **At most 1 in 10 bites are tried by a sprite too full to eat,** over
 //!   the run and over its last 50 hours.
 //! - **The bushes hold:** over the last 50 hours they average at least half
 //!   of what they did over hours 50–100, in at least 9 seeds of 10.
 //!
 //! Reported with no bar: the fewest sprites after hour 10; adults' time on
-//! the move over the last 50 hours, which #318 asks to be a quarter; the
-//! share of the hatched sprites alive at the end lacking each needs gene;
-//! and lone newborns. For each seed whose world lasted, the unattended run
+//! the move over the last 50 hours, which #318 asks to be a quarter; what
+//! killed the hatched young, and how those that saw a parent for most of
+//! their childhood fared against those that didn't; the share of the
+//! hatched sprites alive at the end lacking each needs gene; and lone
+//! newborns. For each seed whose world lasted, the unattended run
 //! (`scenarios/unattended.ron`) on the same seed, its newborns taking after
 //! the hatched sprites alive at the end, until each grows up or dies.
 //! 10%–30% growing up says the species hasn't fallen behind. Careful
@@ -125,6 +128,13 @@ impl Counts {
     }
 }
 
+/// How many young grew up, and how many died young.
+#[derive(Debug, Default, Clone, Copy)]
+struct Raised {
+    grew_up: u64,
+    died_young: u64,
+}
+
 /// One row: the moment, and the counts since the row before.
 #[derive(Debug)]
 struct Row {
@@ -147,6 +157,9 @@ struct Run {
     late: Counts,
     /// What killed the hatched young, by cause.
     died_young_of: BTreeMap<String, u64>,
+    /// The hatched young that grew up and that died young: those that saw
+    /// a parent for at least half their childhood, then the rest.
+    by_parent: [Raised; 2],
     /// The bushes at the end of each hour.
     bushes: Vec<usize>,
     /// The fewest sprites at the end of an hour after the first 10.
@@ -219,7 +232,9 @@ fn run(data: &DataPack, starter: &BTreeMap<String, usize>, seed: u64, options: &
         .sprites()
         .map(|sprite| (sprite.id(), sprite.life_stage()))
         .collect();
-    let mut hatched: BTreeSet<EntityId> = BTreeSet::new();
+    // The hatched young growing up, each with its ticks so far and those
+    // with a parent in sight.
+    let mut hatched: BTreeMap<EntityId, (u64, u64)> = BTreeMap::new();
     let mut last: BTreeMap<EntityId, Pos> = BTreeMap::new();
     let late_from = options.hours.saturating_sub(LATE_HOURS) * HOUR;
     let mut out = Run {
@@ -228,6 +243,7 @@ fn run(data: &DataPack, starter: &BTreeMap<String, usize>, seed: u64, options: &
         whole: Counts::default(),
         late: Counts::default(),
         died_young_of: BTreeMap::new(),
+        by_parent: [Raised::default(); 2],
         bushes: Vec::new(),
         fewest: None,
         died_out: None,
@@ -242,15 +258,16 @@ fn run(data: &DataPack, starter: &BTreeMap<String, usize>, seed: u64, options: &
             match event.kind {
                 EventKind::Hatched { id, .. } => {
                     stages.insert(id, LifeStage::Young);
-                    hatched.insert(id);
+                    hatched.insert(id, (0, 0));
                 }
                 EventKind::Spawned { id, .. } => {
                     stages.insert(id, LifeStage::Young);
                 }
                 EventKind::GrewUp { id } => {
                     stages.insert(id, LifeStage::Adult);
-                    if hatched.remove(&id) {
+                    if let Some(sight) = hatched.remove(&id) {
                         now.grew_up += 1;
+                        out.by_parent[apart(sight)].grew_up += 1;
                     }
                 }
                 EventKind::GrewOld { id } => {
@@ -261,8 +278,9 @@ fn run(data: &DataPack, starter: &BTreeMap<String, usize>, seed: u64, options: &
                     let need = matches!(cause, DeathCause::Starvation | DeathCause::Dehydration);
                     match stage {
                         LifeStage::Young => {
-                            if hatched.remove(&id) {
+                            if let Some(sight) = hatched.remove(&id) {
                                 now.died_young += 1;
+                                out.by_parent[apart(sight)].died_young += 1;
                                 *out.died_young_of.entry(cause_name(cause)).or_insert(0) += 1;
                             }
                         }
@@ -295,6 +313,11 @@ fn run(data: &DataPack, starter: &BTreeMap<String, usize>, seed: u64, options: &
                 now.moving += u64::from(moved);
             }
             here.insert(sprite.id(), sprite.pos());
+            if let Some(sight) = hatched.get_mut(&sprite.id()) {
+                let mut parents = sprite.parents().iter().filter_map(|&p| world.sprite(p));
+                let seen = parents.any(|parent| sprite.sees(parent.pos()));
+                *sight = (sight.0 + 1, sight.1 + u64::from(seen));
+            }
         }
         last = here;
         row.add(&now);
@@ -337,6 +360,12 @@ fn run(data: &DataPack, starter: &BTreeMap<String, usize>, seed: u64, options: &
         out.newborns = World::unattended_like(config, data.clone(), seed, &world).map(newborns);
     }
     out
+}
+
+/// Which of `Run::by_parent` a young sprite counts in, by its ticks and
+/// those with a parent in sight: 0 if it saw one for at least half of them.
+fn apart((ticks, seen): (u64, u64)) -> usize {
+    usize::from(2 * seen < ticks)
 }
 
 /// Runs the lone newborns' world until each of its first sprites has
@@ -518,12 +547,12 @@ fn middle(mut shares: Vec<f64>) -> Option<f64> {
 fn bars(runs: &[Run], options: &Options) {
     println!("\nEach seed against the bars");
     println!(
-        "{:>5} {:>7} {:>7} {:>15} {:>12} {:>8} {:>17} {:>11} {:>8} {:>13}",
+        "{:>5} {:>7} {:>7} {:>15} {:>17} {:>8} {:>17} {:>11} {:>8} {:>13}",
         "Seed",
         "Lasted",
         "Fewest",
         "Young grew up",
-        "Adult H/T",
+        "AdultH/T run/late",
         "Old H/T",
         "TooFull run/late",
         "Bushes held",
@@ -544,7 +573,9 @@ fn bars(runs: &[Run], options: &Options) {
         let lasted = run.died_out.is_none();
         let raised = whole.grew_up + whole.died_young;
         let young_ok = 100 * whole.grew_up >= 60 * raised;
-        let needs_ok = 20 * whole.adult_hunger_thirst < whole.grown_deaths.max(1);
+        let needs_ok = [whole, late]
+            .iter()
+            .all(|c| 20 * c.adult_hunger_thirst < c.grown_deaths.max(1));
         let full_ok = 10 * whole.too_full <= whole.bites && 10 * late.too_full <= late.bites;
         let held = bushes_held(run, options.hours);
         let newborns = match run.newborns {
@@ -557,12 +588,16 @@ fn bars(runs: &[Run], options: &Options) {
             None => "-".into(),
         };
         println!(
-            "{:>5} {:>7} {:>7} {:>15} {:>12} {:>8} {:>17} {:>11} {:>8} {:>13}",
+            "{:>5} {:>7} {:>7} {:>15} {:>17} {:>8} {:>17} {:>11} {:>8} {:>13}",
             run.seed,
             if lasted { "yes" } else { "no" },
             run.fewest.map_or("-".into(), |fewest| fewest.to_string()),
             format!("{} of {raised}", whole.grew_up),
-            format!("{} of {}", whole.adult_hunger_thirst, whole.grown_deaths),
+            format!(
+                "{}/{}",
+                percent(whole.adult_hunger_thirst, whole.grown_deaths),
+                percent(late.adult_hunger_thirst, late.grown_deaths)
+            ),
             whole.old_hunger_thirst,
             format!(
                 "{}/{}",
@@ -627,6 +662,23 @@ fn bars(runs: &[Run], options: &Options) {
         .map(|(cause, n)| format!("{cause} {n}"))
         .collect();
     println!("What killed the hatched young: {}.", causes.join(", "));
+    let [with, without] = [0, 1].map(|n| {
+        let raised = runs.iter().map(|run| run.by_parent[n]);
+        raised.fold(Raised::default(), |sum, r| Raised {
+            grew_up: sum.grew_up + r.grew_up,
+            died_young: sum.died_young + r.died_young,
+        })
+    });
+    println!(
+        "Of the hatched young that saw a parent for most of their childhood, {} grew up ({} of \
+         {}); of the rest, {} ({} of {}).",
+        percent(with.grew_up, with.grew_up + with.died_young),
+        with.grew_up,
+        with.grew_up + with.died_young,
+        percent(without.grew_up, without.grew_up + without.died_young),
+        without.grew_up,
+        without.grew_up + without.died_young,
+    );
     println!("\nNeeds genes lacked by the hatched sprites alive at the end");
     print!("{:<30}", "Gene");
     for run in runs {

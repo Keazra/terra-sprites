@@ -1762,7 +1762,7 @@ Implementation is **test-first, one vertical slice at a time.** Everything in `t
 |---|---|---|---|
 | A1 | 1 sprite; berry bushes, thornbushes, water. The world may be shaped to meet the baseline: a small walled arena where thornbushes outnumber berry bushes | none | Applied thornbush contacts (Eat, Play and Hit on a thornbush) over ticks 0–20,000 ≤ 50% of the control's, where the control is the same seed with learning switched off (v16, §7.1). The control needs ≥20 such contacts; below that the test fails as badly calibrated. The learning sprite must live through the run. |
 | A2 | 1 sprite; balls, food, water | Each applied Play on a Ball at tick *t* < 9,900 → a pet, `Reward(actor)`, stamped *t+1* | Applied Play-on-Ball count ≥ 1.5× control |
-| A3 | 4 sprites in a small arena; food, water | Each applied Hit on a Sprite at tick *t* < 9,900 → a shock, `Correct(actor, amplified)`, meaning **the hitter**, stamped *t+1* | Applied Hit-on-Sprite count, all sprites combined, ≤ 0.5× control |
+| A3 | 4 sprites in a small walled arena, 7 by 5 inside; food, water. Since sprites act only when moved (M2 design §19.2), sprites with room to roam seldom meet to hit each other, so the arena keeps them close | Each applied Hit on a Sprite at tick *t* < 9,900 → a shock, `Correct(actor, amplified)`, meaning **the hitter**, stamped *t+1* | Applied Hit-on-Sprite count, all sprites combined, ≤ 0.5× control |
 
 **Measured with slice 10's PR** (v21), not CI tests:
 - **The strength sweep:** A2's and A3's trained runs with the pet or zap at a few strengths (¼, ½ and full), to see how many a lesson takes and what they do to the result.
@@ -1781,7 +1781,7 @@ M1 is **done** when all of the following hold:
 | A1 | The thornbush lesson (§7.3) | Scenario test |
 | A2 | Reward training (§7.3) | Scenario test |
 | A3 | Correct training (§7.3) | Scenario test |
-| A4 | **Viability,** a safety floor (v37). In the default world, ≥80% of sprites survive the first 10,000 ticks (median of 10 seeds), and starvation plus dehydration cause <25% of the grown-up deaths, those in ticks 10,000–50,000, over all 10 seeds together; with fewer than 10 such deaths it's met | Baseline run's viability run (§7.6) |
+| A4 | **Viability,** a safety floor (v37), and since Slice 29 M2's G5 too (M2 design §19.6). Of the unattended run's newborns, 10% to 30% grow up (median of 10 seeds); of the young hatched in the viability run, at least 60% grow up, over all 10 seeds together, those still growing at the end not counted; and adults dying of starvation or dehydration are under 1 in 20 of the grown-up deaths, those of sprites grown up, adult or old, over all 10 seeds together, with old sprites' reported apart; with fewer than 10 such deaths it's met. Until Slice 29 it asked that ≥80% of sprites survive the first 10,000 ticks, and counted grown-up deaths as those in ticks 10,000–50,000, under 25% | Baseline run's viability and unattended runs (§7.6) |
 | A5 | **Performance.** 100 sprites at ≥200 ticks per second in a release build on the development machine | Benchmark |
 | A6 | **Determinism and persistence.** Test layers 3 and 4 pass | Tests |
 | A7 | **Robustness.** A headless soak of 1,000,000 ticks at Max speed with a random script of the Cursor's commands produces no panics and no invariant violations | Baseline run's soak (§7.6) |
@@ -1814,9 +1814,10 @@ What's too slow for CI is measured on `main` instead, each time it moves, by a *
 
 - **What it measures:**
   - **The viability run:** the default world on seeds 1–10, 50,000 ticks each, with no player. It gives:
-    - A4: survival at tick 10,000, as the median of 10 seeds, and the grown-up deaths over all of them, with how many were of starvation or dehydration (v37)
+    - A4: the young hatched that grew up, over all 10 seeds, and the grown-up deaths over all of them, adult or old, with how many were of starvation or dehydration (v37; by life stage since Slice 29, M2 design §19.6)
     - the thorn trap's count: deaths by thornbush in ticks 0–30,000, the same worlds as its lab scenario (§7.3)
     - per seed, who survived, what killed the rest, and how often each verb was applied.
+  - **The unattended run** (Slice 29, M2 design §19.6): the default world on seeds 1–10 with its first sprites newborns and nobody else, until each has grown up or died. It gives A4's share of newborns that grew up, as the median of 10 seeds, with each seed's and what killed the rest.
   - **A1–A3's numbers:** each scenario's medians, for its runs and their controls, on CI's seeds. CI stays the judge; the report records them so that a change shows.
   - **The soak (A7)** (v37): the default world for a million ticks with a random script of the Cursor's commands, on a new seed each run, from the clock unless one is given. It runs first, as the longest job.
     - **The script plays the player:** pets, hugs, zaps and shocks; taking hold, letting go and shoving; picking up, putting down and throwing; moving the Cursor and showing or hiding it; placing, spawning and naming. It acts on about one tick in ten, and while the Cursor leads a sprite, moves it on half the ticks.

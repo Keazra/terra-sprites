@@ -8,7 +8,7 @@ cargo run --release -p terra-sim --example lab -- scenarios/a1-thornbush.ron --s
 
 | Field | Meaning |
 |---|---|
-| `world` | `Generated`, a world from the built-in default preset; or `Drawn(rows: [...], key: {...})`, a map drawn by hand. |
+| `world` | `Generated`, a world from the built-in default preset; `Unattended`, the same world with its first sprites newborns spread over the whole map and nobody else, the unattended run (M2 design §19.6); or `Drawn(rows: [...], key: {...})`, a map drawn by hand. |
 | `grows_old` | Optional. The age, in ticks, the world's sprites grow old at, whatever their genes say: for watching the same sprites for longer than a life, 18,000 to 36,000 ticks. A1 to A3 use 60,000. |
 | `most_sprites` | Optional. The most sprites the world holds, eggs included (M2 design §10): for a scenario that watches only its own sprites. A1 to A3 hold as many as they start with. |
 | `ticks` | How long each seed runs. |
@@ -26,7 +26,7 @@ cargo run --release -p terra-sim --example lab -- scenarios/a1-thornbush.ron --s
 - `reach_back`: optional, for a pet or hug only, how far back the feeling looks for what the sprite just tried. Left out, it's physiology's `touch_window`.
 - `until`: it answers actions before this tick.
 
-**The report** gives each seed's counts, then the median across seeds: for each window, the actions applied by verb and target (`eat thornbush 23`), deaths by cause, the Cursor's touches (`given: pet`), and lessons learned (`lesson: ball is good`). With a control, both runs are printed.
+**The report** gives each seed's counts, then the median across seeds: for each window, the actions applied by verb and target (`eat thornbush 23`), deaths by cause, the Cursor's touches (`given: pet`), and lessons learned (`lesson: ball is good`). With a control, both runs are printed. Where any young grew up or died young in a window, it counts them (M2 design §19.6): the world's first sprites that started young (`grew up: first`, `died young: first`) apart from the young that appeared later, hatched or given (`grew up: later`, `died young: later`); a young sprite still growing at the window's end is in neither. And it counts each death by the life stage it came at, as `died, adult: dehydration`.
 
 ## Working example
 
