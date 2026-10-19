@@ -1586,6 +1586,31 @@ fn the_body_tab_starts_with_what_the_sprite_is_doing_in_plain_words() {
 }
 
 #[test]
+fn a_sprite_with_nothing_to_do_shows_how_its_action_ended_then_what_it_watches() {
+    // M2 design §19.2: the ending shows on the tick the action ended. From
+    // the next, with nothing pulling as hard as the act threshold, it
+    // stands, its eye on the bush beside its way.
+    let genome = r#"(format: 1, genes: [
+        Trait(trait: "speed", value: 10.0),
+        BrainParam(param: "act_threshold", value: 0.25),
+    ])"#;
+    let wander = ScriptedAction::Wander {
+        destination: Pos { x: 7, y: 3 },
+    };
+    let bush = Pos { x: 5, y: 1 };
+    let (mut world, mut app) = one_sprite_among(genome, &[(bush, "berry_bush")], &[wander], 5);
+    assert_eq!(inspector(&app, &world).1[0], "Arrived");
+    world.step();
+    assert_eq!(inspector(&app, &world).1[0], "Watching the berry bush");
+    app.apply(Action::ToggleDetail, &world);
+    let id = world.object_at(bush).expect("the bush").id();
+    assert_eq!(
+        inspector(&app, &world).1[0],
+        format!("STAND → berry_bush #{}", id.0)
+    );
+}
+
+#[test]
 fn the_body_tab_says_a_led_sprite_is_being_led_and_how_far_behind() {
     // Design v23 §6.1. It walks a grass step a tick, from (2, 3).
     let (mut world, mut app) = one_sprite_doing(SPEED_10, &[], 0);
