@@ -4065,12 +4065,15 @@ mod tests {
         fn known(brain: &mut Brain) -> &mut TypeMemory {
             brain.experience.learn_about(Subject::ObjectType(1), 1)
         }
-        let breaks: [fn(&mut Brain); 6] = [
+        let breaks: [fn(&mut Brain); 8] = [
             |brain| known(brain).worth[0] = -0.1,
             |brain| known(brain).good = 1.5,
             |brain| known(brain).bad = 0.2,
             |brain| known(brain).habits[0] = f32::NAN,
             |brain| known(brain).taught_habits[0] = 1.5,
+            // What it took on by watching (M2 design §19.7).
+            |brain| known(brain).watched_bad = 0.2,
+            |brain| known(brain).watched_habits[0] = 1.5,
             |brain| known(brain).familiarity = 2.0,
         ];
         for (i, broken) in breaks.into_iter().enumerate() {

@@ -855,8 +855,9 @@ impl Brain {
         // which brings every learned value nearer 0 while each fade and the
         // Cursor's calming stay from 0 to 1, as the built-in pack's ranges
         // keep them, but for two things: a summary whose sprites, object types
-        // or generalising changed, and a learned habit and a taught one
-        // pulling opposite ways, as one fades faster than the other. So
+        // or generalising changed, and two of a learned habit, a taught one
+        // and a watched one (M2 design §19.7) pulling opposite ways, as one
+        // fades faster than the other. So
         // with none of these there's no lesson to look for. Every kind of
         // learning above is counted here.
         let learned_anything = hitter.is_some()
@@ -3253,6 +3254,32 @@ mod tests {
     }
 
     #[test]
+    fn a_learned_and_a_watched_habit_pulling_apart_can_tip_a_lesson_in_a_tick_it_learns_nothing() {
+        // M2 design §19.7: a watched habit counts with the one it learned,
+        // and fades as a taught one does. Playing with balls learned at .7
+        // and taken on by watching at −.21 make .49, no lesson; the watched
+        // one fades by taught_fade (.01) a tick and the learned one not at
+        // all, so after five ticks of fading they pass .5.
+        let data = builtin();
+        let mut brain = brain(&[
+            r#"BrainParam(param: "habit_fade", value: 0.0)"#,
+            r#"BrainParam(param: "taught_fade", value: 0.01)"#,
+        ]);
+        let ball = teach(&mut brain, types::BALL);
+        ball.habits[column(Verb::Play)] = 0.7;
+        ball.watched_habits[column(Verb::Play)] = -0.21;
+        let learned: Vec<(u64, Vec<(Learned, bool)>)> = (1..=10)
+            .map(|tick| (tick, brain.learn(tick, &nothing_felt(&data), 1.0, &data)))
+            .filter(|(_, lessons)| !lessons.is_empty())
+            .collect();
+        let playing_with_balls = Learned::Habit {
+            thing: "ball".into(),
+            verb: Verb::Play,
+        };
+        assert_eq!(learned, [(6, vec![(playing_with_balls, true)])]);
+    }
+
+    #[test]
     fn touching_a_new_object_type_can_tip_a_category_lesson_in_a_tick_it_learns_nothing() {
         // Design v19 §5.6: a category's summary is the mean over the object
         // types in it the sprite has touched, at no strength while it knows
@@ -4273,6 +4300,27 @@ mod tests {
         assert_eq!(ball.bad, -0.2);
         assert!(close(ball.watched_bad, -0.4), "{ball:?}");
         assert!(close(ball.badness(), -0.6), "{ball:?}");
+    }
+
+    #[test]
+    fn a_decision_and_the_memory_weigh_badness_taken_on_by_watching() {
+        // M2 design §19.7: kept apart, weighed together. Found out at −.2
+        // and taken on at −.4, balls are worth −.6 to a decision, and the
+        // memory lists them so.
+        let data = builtin();
+        let learner = watching_with(|mine| mine.bad = -0.2, |theirs| theirs.bad = -0.8);
+        let general = learner.sprites_in_general(&data);
+        let worth = learner.worth_of(types::BALL, None, &inputs(&[]), &general, &data);
+        assert!(
+            close(worth, -0.6),
+            "decisions weigh what it watched: {worth}"
+        );
+        let balls = Learned::Bad {
+            thing: "ball".into(),
+        };
+        let memory = learner.memory(&data);
+        let listed = memory.iter().find(|m| m.learned == balls);
+        assert!(listed.is_some_and(|m| close(m.amount, -0.6)), "{memory:#?}");
     }
 
     #[test]
