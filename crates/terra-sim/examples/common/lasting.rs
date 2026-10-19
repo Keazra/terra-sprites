@@ -58,7 +58,11 @@ impl Census {
     /// squeeze doubles it once the step has counted), and at the end of
     /// each hour.
     pub fn count(&mut self, world: &World, every: u64) {
-        let (tick, sprites) = (world.tick(), world.sprites().count());
+        self.note(world.tick(), world.sprites().count(), every);
+    }
+
+    /// Notes `sprites` at `tick`, after a step, as `count` does.
+    pub fn note(&mut self, tick: u64, sprites: usize, every: u64) {
         if tick.is_multiple_of(every) {
             self.fewest = self.fewest.min(sprites);
         }

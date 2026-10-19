@@ -46,12 +46,13 @@
 //! hatched sprites alive at the end lacking each needs gene, and each other
 //! starter gene that a tenth or more of some seed's living lack (#237 rule
 //! 4), a gene with a life-stage switch listed by it, so the young's and
-//! grown sprites' Wander genes show apart; and lone newborns. For each seed whose world lasted, the
+//! grown sprites' Wander genes show apart; and lone newborns. For each seed
+//! that didn't die out, with hatched sprites alive at the end, the
 //! unattended run (`scenarios/unattended.ron`) on the same seed, its
-//! newborns taking after the hatched sprites alive at the end, until each
-//! grows up or dies, set beside the unattended band of 10%–30%. Whether the
-//! species has fallen behind is the race against the starter's genes,
-//! which Slice 30 runs (#237 rules 1 and 8).
+//! newborns taking after those sprites, until each grows up or dies, set
+//! beside the unattended band of 10%–30%. Whether the species has fallen
+//! behind is the race against the starter's genes, which Slice 30 runs
+//! (#237 rules 1 and 8).
 //!
 //! Careful copying would switch on for a seed that failed a bar (or the
 //! race is lost overall, which Slice 30 runs and this doesn't) while more
@@ -294,14 +295,26 @@ struct Run {
     died_out: Option<u64>,
     /// Each starter gene, by what it does and when, and the share of the
     /// hatched sprites alive at the end of hour `lacking_hour` that lack
-    /// it: the last hour any was alive, so the end for a world that lasted
-    /// and the last before it died out for one that didn't. Empty if none
-    /// ever was.
+    /// it: the last hour any was alive, so the end for a world that didn't
+    /// die out and still had them, and the last before it died out for one
+    /// that did. Empty if none ever was.
     lacking: BTreeMap<String, f64>,
     lacking_hour: u64,
     /// The lone newborns: how many grew up and how many died, if the
-    /// world lasted with hatched sprites alive.
+    /// world didn't die out and had hatched sprites alive at the end.
     newborns: Option<(u64, u64)>,
+}
+
+impl Run {
+    /// Keeps `lacking`, measured at the end of `hour`, unless no hatched
+    /// sprite was alive then, so a world that dies out keeps its living's
+    /// genes from the last hour before it did (#237 rule 4).
+    fn measured(&mut self, lacking: BTreeMap<String, f64>, hour: u64) {
+        if !lacking.is_empty() {
+            self.lacking = lacking;
+            self.lacking_hour = hour;
+        }
+    }
 }
 
 fn main() -> ExitCode {
@@ -411,10 +424,7 @@ fn run(data: &DataPack, starter: &BTreeMap<String, usize>, seed: u64, options: &
             // genes from the last hour before it did.
             let lacking = lacking(&world, starter);
             let needs_lacked = needs_lacked(&lacking).len();
-            if !lacking.is_empty() {
-                out.lacking = lacking;
-                out.lacking_hour = hour;
-            }
+            out.measured(lacking, hour);
             if hour.is_multiple_of(options.every) {
                 out.rows.push(Row {
                     hour,
@@ -967,7 +977,7 @@ fn parse(args: &[String]) -> Result<Options, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use terra_sim::{ActionView, Hurt, Progress};
+    use terra_sim::{ActionView, Genome, Hurt, Map, Progress, Scenario};
 
     /// An Eat by sprite `id` that ended `outcome`, having made its try or
     /// not.
@@ -1074,6 +1084,45 @@ mod tests {
     }
 
     #[test]
+    fn the_census_counts_sprites_at_each_count_of_the_population_record() {
+        // #222 judges the fewest sprites at any count of the record (M2
+        // design §14): its first, before the first step, then every 100
+        // ticks until it squeezes.
+        let data = DataPack::builtin().expect("the built-in data pack is valid");
+        let map = Map::from_ascii(&["....."], &data).expect("a valid drawing");
+        let sprites: Vec<(Pos, Option<Genome>)> = [0, 2, 4].map(|x| (Pos { x, y: 0 }, None)).into();
+        let scenario = Scenario {
+            map,
+            objects: &[],
+            sprites: &sprites,
+            scripted: &[],
+            newborns: &[],
+        };
+        let world = World::from_scenario(scenario, data, 1).expect("a valid scenario");
+        let mut census = Census::new(&world);
+        census.note(100, 30, 100);
+        assert_eq!(census.fewest, 3);
+        assert_eq!(
+            lasting::not_lasted(false, &census, 140),
+            ["under 10 sprites"]
+        );
+        let mut census = Census {
+            fewest: 30,
+            hourly: Vec::new(),
+        };
+        census.note(200, 12, 100);
+        census.note(250, 5, 100);
+        census.note(HOUR, 20, 100);
+        assert_eq!((census.fewest, &census.hourly[..]), (12, &[20][..]));
+        // The record takes its 512th count at tick 51,100, then squeezes to
+        // count every 200 ticks, so that step's `every` from before it is
+        // still 100.
+        census.note(51_100, 11, 100);
+        census.note(51_300, 4, 200);
+        assert_eq!(census.fewest, 11);
+    }
+
+    #[test]
     fn a_seed_lasts_never_under_10_sprites_and_holding_half_its_sprites() {
         // #222: never fewer than 10 sprites at any count of its population
         // record, and its sprites over the last 50 hours averaging at least
@@ -1161,17 +1210,21 @@ mod tests {
         // bar while more than half its living lack a needs gene, a world
         // that died out too.
         let mut runs = ten();
-        for run in &mut runs[..2] {
+        for (run, share) in runs.iter_mut().zip([0.8, 0.5]) {
             run.died_out = Some(180 * HOUR);
             run.census = Census {
                 fewest: 0,
                 hourly: vec![30; 180],
             };
             run.bushes.truncate(180);
-            run.lacking_hour = 170;
+            // Its last hatched sprites die in hour 171.
+            run.measured(lacking_thirst(share), 170);
+            run.measured(BTreeMap::new(), 171);
+            assert_eq!(
+                (&run.lacking, run.lacking_hour),
+                (&lacking_thirst(share), 170)
+            );
         }
-        runs[0].lacking = lacking_thirst(0.8);
-        runs[1].lacking = lacking_thirst(0.5);
         let judged = judge(&runs, 220);
         assert_eq!(
             judged.failed,
