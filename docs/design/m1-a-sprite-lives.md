@@ -1291,11 +1291,37 @@ The species is dropped into a world it doesn't know and has to learn about it. I
 
 | Tab | Shows |
 |---|---|
-| **Body** | What the sprite is doing, in plain words (below); age and lifespan; speed and sense radius as expressed; a bar for each drive, with its level and an arrow for its change over the last tick (`▲` rising, `▼` falling, none when steady); the physical levels; the observed list (below). In M2 it gives the sex and parents after the traits (M2 design §10.7), and from Slice 25 where the sprite came from and its generation (M2 design §17.5) |
+| **Body** | What the sprite is doing, in plain words (below); age and lifespan; speed and sense radius as expressed; a bar for each drive, with its level, an arrow for its change over the last tick (`▲` rising, `▼` falling, none when steady) and, from #328, its sparkline (below); the physical levels; the observed list (below). In M2 it gives the sex and parents after the traits (M2 design §10.7), and from Slice 25 where the sprite came from and its generation (M2 design §17.5) |
 | **Brain** | What it attended to and decided, then its memory grouped under each thing (v40), then its places |
-| **Chem** | One list: each chemical on its own line with its level and its change per tick (`-.0002`, blank when it rounds to 0), the physical chemicals, then a blank line and the signal chemicals. From slice 8 the reward line also shows `last_r` as "felt": `reward  .00  felt -.42`. The 16 hormones sit in a 4×4 grid of levels below, so all of it fits at 100×30. Reward and punishment are consumed every tick, so their levels always read 0 between ticks. |
+| **Chem** | One list: each chemical on its own line with its level, its change per tick (`-.0002`, blank when it rounds to 0) and, from #328, its sparkline (below; none for reward and punishment), the physical chemicals, then a blank line and the signal chemicals. From slice 8 the reward line also shows `last_r` as "felt": `reward  .00  felt -.42`. The 16 hormones sit in a 4×4 grid of levels below, so all of it fits at 100×30. Reward and punishment are consumed every tick, so their levels always read 0 between ticks. |
 | **Genome** | Genes grouped under headings: traits first, on one line (`speed 7.21 · sense 9.87 · lifespan 61,204`), then half-lives, reactions, emitters, receptors, starting levels, brain settings (`tau base .2`), instincts (`thirst & not target adjacent → drink -.5`) and attention instincts (`hunger → attends to bush +.8`, naming the category as the gene does, v19), and unknown genes last, each group in genome order. Each gene is a plain line with 3 significant figures, so spawn variation shows: `low energy → hunger +.00428 past .515`, `hunger falls → reward +1.02 past .0198`, `hunger halves every 2,041 ticks`. A line too long for the tab wraps, indented. A flagged, unexpressed, unknown or unmatched (v19) gene is dimmed, with its reason on the line below (§4.3); an unmatched gene written by number shows as its number, as an unknown gene does. `g` exports to RON. |
 | **World** | The data pack's identity; population and deaths by cause (counted by the sim, so they're saved); each object type in ID order with its count, the count in each stage (left out for a type with only one stage), and the total of each counter (such as the fruit on all bushes). It's drawn from the data, so a pack's new object types appear with no new code. From Slice 26 it starts with a small population graph (M2 design §14.4), and from Slice 25 says the generations alive (M2 design §17.5). |
+
+- **Sparklines** (#272): from #328, eight shades at the end of each drive's line on the Body tab and of each chemical's line on the Chem tab, showing how its level moved over about the last 50 ticks, oldest on the left. So the player sees at once whether hunger is climbing or easing after a meal, which the arrow, a single tick's change, can't show. A sprite that ate 14 ticks ago, was hurt a little before that, and is getting thirsty again:
+
+  ```
+  │ hunger      █░░░░░░░░░ .09 ▲   ████▓░░░    │
+  │ thirst      █░░░░░░░░░ .07 ▲   ░░░░▒▒▒▒    │
+  │ pain        █░░░░░░░░░ .12 ▼   █████▓░░    │
+  │ tiredness   ░░░░░░░░░░ .05 ▲   ░░░░░░░░    │
+  ```
+
+  and on its Chem tab, the water in its gut being taken in, so hydration climbs, beside stamina easing by under .02, which stays one shade:
+
+  ```
+  │ hydration     .32  +.0017      ░░▒▒▒▓▓█    │
+  │ water         .26  -.0020      █▓▓▒▒▒░░    │
+  │ stamina       .37  -.0020      ▒▒▒▒▒▒▒▒    │
+  ```
+
+  - **Each shade is the average of a stretch of six ticks,** the stretches going by the tick count the status line shows once each tick has run (counts 6 to 11 make one, 12 to 17 the next, and so on), so the eight cover the last 43 to 48 ticks. The rightmost is the stretch still running, so a meal shows in it at once, and the row steps one place left as each stretch begins: every 4.8 seconds at 1×, 1.2 at 4×. An average shows a level climbing or easing without flicker, and a meal's drop as a step.
+  - **A row shows its own ups and downs:** its lowest average is drawn `░` and its highest `█`, with `▒` and `▓` between, so a climb or a fall fills the row whatever the level, as `░▒▒▒▓▓██` for hunger climbing from .62 to .70 in a sprite out of energy, as fast as the starter genes make it climb, or `███▓░░░░` for thirst after a drink. The bar and the number beside it say how high the level is; the sparkline says how it got there.
+  - **But a row is never stretched past a tenth,** one cell of the bar: averages that lie within a tenth of each other are drawn as if they spanned a tenth, placed as the level sits between 0 and 1. So a row that hardly moves keeps the shade of its level, `░` under a quarter, `▒` under a half, `▓` under three quarters and `█` above, as stamina's does, and a small drift stays a step or two. In numbers: with the averages' lowest `lo` and highest `hi`, `span` the greater of `hi − lo` and 0.1, and `low = lo − (span − (hi − lo)) × (lo + hi) / 2`, an average `a` is shade `⌊4 × (a − low) / span⌋`, at most 3, where 0 is `░` and 3 is `█`.
+  - **A stretch not yet seen is blank,** so a row fills from the right: a hatchling's, and every sprite's once a world is made or loaded.
+  - **Every chemical on a line of its own has one:** on the Chem tab the physical chemicals, the drives and the named hormones, such as the feminiser. Reward and punishment don't, since they're used up every tick and always read 0 between ticks, nor do the hormone grid and the Body tab's physical levels, three to a line, which have no room. It's drawn from the data, so a pack's new drive or chemical gets one with no new code.
+  - **It starts in the 33rd column inside the inspector on both tabs,** two after the longest drive line, so the rows line up and nothing already on a line moves: a line is then 40 of the inspector's 44 columns. A name too long for its column, from a data pack, pushes it right.
+  - **It's `░▒▓█` in every theme,** as the bar is (§6.2: text stays CP437), and a drive's is drawn in its bar's colour on both tabs, any other in its line's.
+  - **The screen keeps it, not the world** (§6.8): after every tick the game runs, for every living sprite, so selecting a sprite shows its past at once. A replay's ticks count; fast-forward's don't, since it has no screen. It's never saved and isn't part of `state_hash`, and the open tab's policy shows or hides it with the rest of the tab (§6.4). Past 4×, in Lab mode, it turns over faster than it can be read, as the numbers beside it do.
 
 - **The Body tab's action line** describes what the sprite is doing, in the present tense, naming its target, with no coordinates. It never speaks as the sprite: the Brain tab shows *why*, and a line in the sprite's own voice could contradict it. When an action ends, its ending stays until the next one starts.
 
@@ -1661,7 +1687,7 @@ N ═ M
 
 ### 6.8 UI architecture
 
-- **`App`** holds the UI state: where the Cursor is, cursor mode (and each mode's reserve), Follow (v21 as the lock), viewport, selection, screen state (Normal / Menu / Prompt / Help / Sprite list), colour mode, emote and feedback timers, and the active `InfoPolicy`.
+- **`App`** holds the UI state: where the Cursor is, cursor mode (and each mode's reserve), Follow (v21 as the lock), viewport, selection, screen state (Normal / Menu / Prompt / Help / Sprite list), colour mode, emote and feedback timers, from #328 the levels the sparklines draw (§6.1), and the active `InfoPolicy`.
 - **Input:** a keybinding table maps keys to UI `Action`s. Each `Action` either changes `App` or produces a `Command`.
 - **Rendering** is a pure function, `render(frame, &App, &World)`.
 - **Panic hook:** it restores the terminal; the replay is written as the panic carries on (v35, §2.9).

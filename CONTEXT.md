@@ -670,6 +670,10 @@ _Avoid_: sidebar, details
 What the player has watched the selected sprite finish since selecting it, at the end of the Body tab. It only grows while the sprite is selected.
 _Avoid_: history, log (the event log is different)
 
+**Sparkline** (#272):
+The eight shades at the end of a drive's line on the Body tab, or of a chemical's on the Chem tab, showing how its level moved over about the last 50 ticks, oldest on the left. Planned: #328 builds them, kept by the screen for every sprite and never saved.
+_Avoid_: history graph, graph (that's the population graph), trend (the arrow beside it is one tick's change)
+
 **Detail view**:
 A view the player switches on and off that shows the exact workings behind what the screen describes in words, such as a sprite's exact verb and destination.
 _Avoid_: debug mode (it's in every build)
