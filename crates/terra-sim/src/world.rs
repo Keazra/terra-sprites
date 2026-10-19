@@ -1110,9 +1110,43 @@ impl World {
         world.state.most_sprites = config.most_sprites() as u16;
         world.state.mode = Mode::Lab;
         place_objects(&config, &world.data, &mut world.state);
-        place_newborns(&config, &world.data, &mut world.state);
+        place_newborns(&config, &world.data, &mut world.state, &[]);
         world.config = Some(config);
         world
+    }
+
+    /// The unattended run's world as `unattended` makes it, but with its
+    /// newborns taking after the hatched sprites alive in `from`, in turn,
+    /// rather than wild: each one's genome and hidden flaws (M2 design
+    /// §19.6). It's how a species' genes fare with nobody to look after
+    /// their young. None if no hatched sprite is alive in `from`, whose
+    /// data pack must be `data`.
+    pub fn unattended_like(
+        config: WorldConfig,
+        data: DataPack,
+        seed: u64,
+        from: &World,
+    ) -> Option<World> {
+        let like: Vec<(Genome, Vec<u8>)> = from
+            .state
+            .sprites
+            .iter()
+            .map(|(_, sprite)| sprite)
+            .filter(|sprite| !sprite.parents.is_empty())
+            .map(|sprite| (sprite.genome.clone(), sprite.flaws.clone()))
+            .collect();
+        if like.is_empty() {
+            return None;
+        }
+        let mut rng = ChaCha8Rng::seed_from_u64(seed);
+        let map = generate(&config, &data, &mut rng);
+        let mut world = World::with(map, data, rng, seed);
+        world.state.most_sprites = config.most_sprites() as u16;
+        world.state.mode = Mode::Lab;
+        place_objects(&config, &world.data, &mut world.state);
+        place_newborns(&config, &world.data, &mut world.state, &like);
+        world.config = Some(config);
+        Some(world)
     }
 
     /// A world on a hand-drawn map, which must form exactly one region.

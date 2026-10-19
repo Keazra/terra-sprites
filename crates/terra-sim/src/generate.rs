@@ -8,6 +8,7 @@ use rand_chacha::ChaCha8Rng;
 use crate::config::WorldConfig;
 use crate::data::DataPack;
 use crate::ecology::aged_object;
+use crate::genome::Genome;
 use crate::map::{Dir, Map, Pos};
 use crate::mutation;
 use crate::random::{uniform, unit};
@@ -173,18 +174,28 @@ pub(crate) fn place_sprites(config: &WorldConfig, data: &DataPack, state: &mut W
 }
 
 /// The unattended run's first sprites (M2 design §19.6): as many as
-/// `config` starts with, each a newborn with a wild sprite's flaws, placed
-/// as the Cursor places one, on a free tile drawn from the whole map, near
-/// water or not.
-pub(crate) fn place_newborns(config: &WorldConfig, data: &DataPack, state: &mut WorldState) {
+/// `config` starts with, each a newborn placed as the Cursor places one, on
+/// a free tile drawn from the whole map, near water or not. Each is a wild
+/// sprite, with a wild sprite's flaws, or if `like` names any, takes after
+/// them in turn, spread through the list: its genome and hidden flaws.
+pub(crate) fn place_newborns(
+    config: &WorldConfig,
+    data: &DataPack,
+    state: &mut WorldState,
+    like: &[(Genome, Vec<u8>)],
+) {
     let mut candidates = standing_room(data, state);
-    for _ in 0..config.sprites() {
+    let count = config.sprites();
+    for n in 0..count {
         if candidates.is_empty() {
             break;
         }
         let choice = uniform(&mut state.rng, candidates.len() as u64) as usize;
         let pos = candidates.swap_remove(choice);
-        let (genome, flaws) = mutation::wild(data, &mut state.rng);
+        let (genome, flaws) = match like {
+            [] => mutation::wild(data, &mut state.rng),
+            _ => like[n * like.len() / count].clone(),
+        };
         let mut sprite = Sprite::newborn(genome, pos, state.tick, data);
         sprite.flaws = flaws;
         sprite.placed = true;

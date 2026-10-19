@@ -575,3 +575,32 @@ ticks 0 to 6,000              seed 1    seed 2    median
 "
     );
 }
+
+#[test]
+fn lone_newborns_can_take_after_the_hatched_sprites_of_another_world() {
+    // M2 design §19.6: the long run's lone newborns, given the genes of the
+    // hatched sprites alive at its end. A world with none gives none.
+    let data = builtin();
+    let config = WorldConfig::builtin(&data);
+    let mut world = World::new(config.clone(), data.clone(), 1);
+    assert!(World::unattended_like(config.clone(), data.clone(), 1, &world).is_none());
+    while !world.sprites().any(|s| !s.parents().is_empty()) {
+        assert!(world.tick() < 10_000, "an egg hatches");
+        world.step();
+    }
+    let hatched: Vec<_> = world
+        .sprites()
+        .filter(|s| !s.parents().is_empty())
+        .map(|s| s.genome().clone())
+        .collect();
+    let lone = World::unattended_like(config.clone(), data, 1, &world).expect("hatched sprites");
+    let newborns: Vec<_> = lone.sprites().collect();
+    assert_eq!(newborns.len(), config.sprites());
+    for newborn in &newborns {
+        assert_eq!(newborn.life_stage(), LifeStage::Young);
+        assert!(
+            hatched.contains(newborn.genome()),
+            "takes after one of them"
+        );
+    }
+}
