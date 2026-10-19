@@ -7,8 +7,8 @@ use common::{WorldBuilder, at, barren, builtin};
 use std::collections::BTreeMap;
 
 use terra_sim::{
-    CursorTouch, DeathCause, Event, EventKind, LabError, LabRun, LabScenario, Learned, Outcome,
-    Verb, Window, Without, report,
+    Childhood, CursorTouch, DeathCause, Event, EventKind, LabError, LabRun, LabScenario, Learned,
+    LifeStage, Outcome, Verb, Window, Without, World, WorldConfig, report,
 };
 
 const ARENA: &str = r#"(
@@ -53,7 +53,8 @@ fn a_key_must_name_an_object_type() {
     ));
 }
 
-/// What `events` add to a window's counts, counted here by hand.
+/// What `events` add to a window's counts, counted here by hand, in a world
+/// whose one sprite is a starter: an adult, and not yet old.
 fn tally(events: &[Event], window: &mut Window) {
     for event in events {
         match &event.kind {
@@ -68,7 +69,13 @@ fn tally(events: &[Event], window: &mut Window) {
                     .entry((*verb, action.target_type))
                     .or_insert(0) += 1
             }
-            EventKind::Died { cause, .. } => *window.deaths.entry(*cause).or_insert(0) += 1,
+            EventKind::Died { cause, .. } => {
+                *window.deaths.entry(*cause).or_insert(0) += 1;
+                *window
+                    .stage_deaths
+                    .entry((LifeStage::Adult, *cause))
+                    .or_insert(0) += 1;
+            }
             EventKind::LearnedMilestone { learned, good, .. } => {
                 *window.lessons.entry((learned.clone(), *good)).or_insert(0) += 1
             }
@@ -100,6 +107,9 @@ fn a_run_counts_applied_actions_and_deaths_in_each_window() {
         touches: BTreeMap::new(),
         lessons: BTreeMap::new(),
         young: None,
+        first: Childhood::default(),
+        later: Childhood::default(),
+        stage_deaths: BTreeMap::new(),
     });
     for _ in 0..3000 {
         let events = world.step();
@@ -143,6 +153,9 @@ fn the_report_lists_each_window_with_a_column_per_seed_and_the_median() {
         touches: BTreeMap::new(),
         lessons: BTreeMap::new(),
         young: None,
+        first: Childhood::default(),
+        later: Childhood::default(),
+        stage_deaths: BTreeMap::new(),
     };
     let runs = [
         (
@@ -192,6 +205,9 @@ fn the_report_lists_the_control_runs_after_the_learning_runs() {
         touches: BTreeMap::new(),
         lessons: BTreeMap::new(),
         young: None,
+        first: Childhood::default(),
+        later: Childhood::default(),
+        stage_deaths: BTreeMap::new(),
     };
     let runs = [
         (
@@ -352,6 +368,9 @@ fn the_report_counts_the_cursor_s_touches_and_lessons_and_names_the_control() {
             BTreeMap::new()
         },
         young: None,
+        first: Childhood::default(),
+        later: Childhood::default(),
+        stage_deaths: BTreeMap::new(),
     };
     let runs = [(
         1,
@@ -487,4 +506,72 @@ fn the_young_s_lessons_count_who_learned_each_and_the_median_ticks_to_it() {
     assert!(text.contains("young learned: "), "{text}");
     assert!(text.contains("ticks to learn: "), "{text}");
     assert!(text.contains("control, orphans"), "{text}");
+}
+
+#[test]
+fn the_unattended_world_starts_with_newborns_only() {
+    // M2 design §19.6: the default world, its first sprites newborns.
+    let data = builtin();
+    let config = WorldConfig::builtin(&data);
+    let sprites = config.sprites();
+    let world = World::unattended(config, data.clone(), 1);
+    let first: Vec<_> = world.sprites().collect();
+    assert_eq!(first.len(), sprites);
+    assert!(
+        first
+            .iter()
+            .all(|s| s.life_stage() == LifeStage::Young && s.age() == 0)
+    );
+    let lab = LabScenario::from_ron("(world: Unattended, ticks: 50, windows: [(0, 50)])", &data)
+        .expect("a valid scenario");
+    let run = lab.run(data, 1);
+    assert_eq!(run.windows[0].first.grew_up, 0, "none grows up so soon");
+}
+
+#[test]
+fn the_report_counts_who_grew_up_and_deaths_by_life_stage() {
+    let data = builtin();
+    let window = |grew_up: u64, died_young: u64| Window {
+        from: 0,
+        to: 6000,
+        applied: BTreeMap::new(),
+        deaths: BTreeMap::from([(DeathCause::Dehydration, died_young)]),
+        touches: BTreeMap::new(),
+        lessons: BTreeMap::new(),
+        young: None,
+        first: Childhood {
+            grew_up,
+            died_young,
+        },
+        later: Childhood::default(),
+        stage_deaths: BTreeMap::from([((LifeStage::Young, DeathCause::Dehydration), died_young)]),
+    };
+    let runs = [
+        (
+            1,
+            LabRun {
+                windows: vec![window(6, 24)],
+                control: None,
+                without: None,
+            },
+        ),
+        (
+            2,
+            LabRun {
+                windows: vec![window(4, 26)],
+                control: None,
+                without: None,
+            },
+        ),
+    ];
+    assert_eq!(
+        report(&runs, &data),
+        "\
+ticks 0 to 6,000              seed 1    seed 2    median
+  died: dehydration               24        26        25
+  grew up: first                   6         4         5
+  died young: first               24        26        25
+  died, young: dehydration        24        26        25
+"
+    );
 }

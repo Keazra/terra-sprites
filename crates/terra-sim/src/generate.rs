@@ -137,11 +137,7 @@ pub(crate) fn place_objects(config: &WorldConfig, data: &DataPack, state: &mut W
 /// `first_population` fractions of the newborn level, so the sprites don't
 /// all run dry together. If the map runs out of room, the rest are skipped.
 pub(crate) fn place_sprites(config: &WorldConfig, data: &DataPack, state: &mut WorldState) {
-    let mut candidates: Vec<Pos> = state
-        .map
-        .positions()
-        .filter(|&pos| state.can_stand(data, pos) && state.objects.at(pos).is_none())
-        .collect();
+    let mut candidates = standing_room(data, state);
     if let Some(near) = config.start_near_water() {
         let far = from_drinkable(&state.map, data);
         let near: Vec<Pos> = candidates
@@ -174,6 +170,36 @@ pub(crate) fn place_sprites(config: &WorldConfig, data: &DataPack, state: &mut W
         }
         state.add_sprite(sprite);
     }
+}
+
+/// The unattended run's first sprites (M2 design §19.6): as many as
+/// `config` starts with, each a newborn with a wild sprite's flaws, placed
+/// as the Cursor places one, on a free tile drawn from the whole map, near
+/// water or not.
+pub(crate) fn place_newborns(config: &WorldConfig, data: &DataPack, state: &mut WorldState) {
+    let mut candidates = standing_room(data, state);
+    for _ in 0..config.sprites() {
+        if candidates.is_empty() {
+            break;
+        }
+        let choice = uniform(&mut state.rng, candidates.len() as u64) as usize;
+        let pos = candidates.swap_remove(choice);
+        let (genome, flaws) = mutation::wild(data, &mut state.rng);
+        let mut sprite = Sprite::newborn(genome, pos, state.tick, data);
+        sprite.flaws = flaws;
+        sprite.placed = true;
+        state.add_sprite(sprite);
+    }
+}
+
+/// Every tile a first sprite may start on: one it may stand on, with no
+/// object, in tile order.
+fn standing_room(data: &DataPack, state: &WorldState) -> Vec<Pos> {
+    state
+        .map
+        .positions()
+        .filter(|&pos| state.can_stand(data, pos) && state.objects.at(pos).is_none())
+        .collect()
 }
 
 /// How far each tile is from the nearest drinkable water, in tiles as the

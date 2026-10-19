@@ -3,11 +3,23 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
-use terra_sim::{DataPack, DeathCause, LabRun, SoakRun, Verb, Window};
+use terra_sim::{DataPack, DeathCause, LabRun, LifeStage, SoakRun, Verb, Window};
 
 /// How many grown-up deaths, over all the seeds, A4 needs before it judges
 /// what share hunger and thirst caused (design v37 §7.4).
 const A4_FEWEST_DEATHS: u64 = 10;
+
+/// The share of unattended newborns A4 asks to grow up, in the middle seed:
+/// from the first to the second (M2 design §19.6).
+const A4_UNATTENDED: (f64, f64) = (0.1, 0.3);
+
+/// The least share of the young hatched in the viability run A4 asks to
+/// grow up, over all the seeds (M2 design §19.6).
+const A4_GUIDED: f64 = 0.6;
+
+/// The most share of grown-up deaths A4 allows adults' hunger and thirst,
+/// over all the seeds: under 1 in 20 (M2 design §19.6).
+const A4_GROWN: f64 = 0.05;
 
 /// A scenario's seeds, each with its run, or what it said when it panicked.
 pub type SeedRuns = [(u64, Result<LabRun, String>)];
@@ -21,13 +33,6 @@ pub enum Verdict {
         until: Option<String>,
     },
     NoData,
-}
-
-/// A criterion's median across the seeds, and its verdict.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Criterion {
-    pub median: Option<f64>,
-    pub verdict: Verdict,
 }
 
 /// A baseline report (design §7.6): what one commit of `main` measured.
@@ -45,6 +50,10 @@ pub struct Report {
     pub seeds: u64,
     /// How many sprites each seed of the viability run starts with.
     pub sprites: u64,
+    /// A4's unattended run (M2 design §19.6). Reports from before Slice 29
+    /// have none.
+    #[serde(default)]
+    pub unattended: Unattended,
     pub viability: Viability,
     pub a1: Behaviour,
     pub a2: Behaviour,
@@ -126,37 +135,7 @@ impl Report {
         }
 
         let v = &self.viability;
-        page.push_str("## A4: viability (design §7.4)\n\n");
-        if (v.finished as u64) < self.seeds {
-            page.push_str(&format!(
-                "Over the {} of {} seeds that finished.\n\n",
-                v.finished, self.seeds
-            ));
-        }
-        page.push_str("| | Median | Pass mark | Verdict |\n|---|---|---|---|\n");
-        page.push_str(&format!(
-            "| Alive at tick 10,000 | {} | at least 80% | {} |\n",
-            percent(v.survival.median),
-            v.survival.verdict
-        ));
-        let g = &v.grown_ups;
-        let share = match g.deaths {
-            0 => "none died".to_string(),
-            n if n < A4_FEWEST_DEATHS => {
-                format!("{} of {n}: too few deaths to judge", g.hunger_and_thirst)
-            }
-            n => format!(
-                "{} of {n}: {}",
-                g.hunger_and_thirst,
-                percent(Some(g.hunger_and_thirst as f64 / n as f64))
-            ),
-        };
-        page.push_str(&format!(
-            "| Hunger and thirst's share of grown-up deaths, ticks 10,000–50,000, all seeds \
-             | {share} | under 25%, once {A4_FEWEST_DEATHS} have died | {} |\n\n",
-            g.verdict
-        ));
-
+        page.push_str(&self.a4_markdown());
         page.push_str("## The thorn trap (design §7.3)\n\n");
         page.push_str(&format!(
             "Deaths by thornbush in ticks 0–30,000: median {}. It has no pass mark.\n\n",
@@ -230,6 +209,88 @@ impl Report {
         page
     }
 
+    /// A4's section of the page (design §7.4), which is G5 too (M2 design
+    /// §6, §19.6): the unattended run, the young hatched in the viability
+    /// run, and the grown-up deaths.
+    fn a4_markdown(&self) -> String {
+        let (v, u) = (&self.viability, &self.unattended);
+        let mut page = String::from("## A4 and G5: viability (design §7.4, M2 design §6)\n\n");
+        for (name, finished) in [("unattended", u.finished), ("viability", v.finished)] {
+            if (finished as u64) < self.seeds {
+                page.push_str(&format!(
+                    "The {name} run: over the {finished} of {} seeds that finished.\n",
+                    self.seeds
+                ));
+            }
+        }
+        if (u.finished as u64) < self.seeds || (v.finished as u64) < self.seeds {
+            page.push('\n');
+        }
+        page.push_str("| | Measured | Pass mark | Verdict |\n|---|---|---|---|\n");
+        let (low, high) = A4_UNATTENDED;
+        page.push_str(&format!(
+            "| Unattended newborns that grow up, middle seed (the unattended run) | {} \
+             | {} to {} | {} |\n",
+            percent(u.median),
+            percent(Some(low)),
+            percent(Some(high)),
+            u.verdict
+        ));
+        let guided = &v.guided;
+        page.push_str(&format!(
+            "| Young hatched in the viability run that grow up, all seeds | {} | at least {} \
+             | {} |\n",
+            share_of(guided.grew_up, guided.grew_up + guided.died_young),
+            percent(Some(A4_GUIDED)),
+            guided.verdict
+        ));
+        let g = &v.grown_ups;
+        let share = match g.deaths {
+            0 => "none died".to_string(),
+            n if n < A4_FEWEST_DEATHS => {
+                format!("{} of {n}: too few deaths to judge", g.hunger_and_thirst)
+            }
+            n => share_of(g.hunger_and_thirst, n),
+        };
+        page.push_str(&format!(
+            "| Adults' deaths of hunger or thirst, of grown-up deaths, all seeds | {share} \
+             | under 1 in 20, once {A4_FEWEST_DEATHS} have died | {} |\n\n",
+            g.verdict
+        ));
+        page.push_str(&format!(
+            "Old sprites' deaths of hunger or thirst, reported apart: {} of the {} grown-up \
+             deaths.",
+            g.old_hunger_and_thirst, g.deaths
+        ));
+        if !u.died_of.is_empty() {
+            let died_of: Vec<String> = u
+                .died_of
+                .iter()
+                .map(|(cause, n)| format!("{cause} {n}"))
+                .collect();
+            page.push_str(&format!(
+                " What unattended newborns died of, all seeds: {}.",
+                died_of.join(", ")
+            ));
+        }
+        page.push_str("\n\n");
+        if !u.per_seed.is_empty() {
+            let (mut seeds, mut rule, mut grew) = (
+                "| Unattended run | ".to_string(),
+                "|---|".to_string(),
+                "| Grew up |".to_string(),
+            );
+            seeds.truncate(seeds.len() - 1);
+            for &(seed, grew_up, died_young) in &u.per_seed {
+                seeds.push_str(&format!(" Seed {seed} |"));
+                rule.push_str("---|");
+                grew.push_str(&format!(" {grew_up} of {} |", grew_up + died_young));
+            }
+            page.push_str(&format!("{seeds}\n{rule}\n{grew}\n\n"));
+        }
+        page
+    }
+
     /// A1–A3: what each counts, what its control lacks, its pass mark, and
     /// what it measured.
     fn behaviours(&self) -> [(&'static str, &'static str, &'static str, &Behaviour); 3] {
@@ -258,22 +319,44 @@ impl Report {
     /// Every number in the report, by name and as it's shown, in the
     /// report's order.
     fn numbers(&self) -> Vec<(String, String)> {
-        let v = &self.viability;
+        let (v, u) = (&self.viability, &self.unattended);
+        let (g, guided) = (&v.grown_ups, &v.guided);
         let mut numbers = vec![
             (
-                "A4: alive at tick 10,000, median".to_string(),
-                percent(v.survival.median),
+                "A4: unattended newborns that grow up, middle seed".to_string(),
+                percent(u.median),
             ),
-            ("A4: grown-up deaths".into(), v.grown_ups.deaths.to_string()),
             (
-                "A4: grown-up deaths of hunger or thirst".into(),
-                v.grown_ups.hunger_and_thirst.to_string(),
+                "A4: young hatched in the viability run that grew up".into(),
+                format!(
+                    "{} of {}",
+                    guided.grew_up,
+                    guided.grew_up + guided.died_young
+                ),
+            ),
+            (
+                "A4: grown-up deaths (adult or old)".into(),
+                g.deaths.to_string(),
+            ),
+            (
+                "A4: adults' deaths of hunger or thirst".into(),
+                g.hunger_and_thirst.to_string(),
+            ),
+            (
+                "A4: old sprites' deaths of hunger or thirst".into(),
+                g.old_hunger_and_thirst.to_string(),
             ),
             (
                 "Thorn trap: deaths by thornbush in ticks 0–30,000, median".into(),
                 number(v.thorn_trap.median),
             ),
         ];
+        for &(seed, grew_up, died_young) in &u.per_seed {
+            numbers.push((
+                format!("Unattended: seed {seed} grew up"),
+                format!("{grew_up} of {}", grew_up + died_young),
+            ));
+        }
         for (what, control, _, behaviour) in self.behaviours() {
             numbers.push((format!("{what}, median"), number(behaviour.median)));
             numbers.push((
@@ -337,15 +420,19 @@ pub fn moved(previous: &Report, current: &Report) -> Vec<Moved> {
     moved
 }
 
-/// What the viability run measured (design §7.6).
+/// What the viability run measured (design §7.6). A report from before
+/// Slice 29 also has the share alive at tick 10,000, which A4 no longer
+/// asks (M2 design §19.6), and reads without it.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Viability {
     /// How many seeds finished; the medians are theirs.
     pub finished: usize,
-    /// A4: the share of sprites alive at tick 10,000.
-    pub survival: Criterion,
-    /// A4: the deaths after childhood, over all the seeds (v37). Reports
-    /// from before it have none.
+    /// A4: what became of the young hatched over the run, all the seeds
+    /// together (M2 design §19.6). Reports from before Slice 29 have none.
+    #[serde(default)]
+    pub guided: Guided,
+    /// A4: the grown-up deaths, over all the seeds (v37; by life stage from
+    /// Slice 29). Reports from before v37 have none.
     #[serde(default)]
     pub grown_ups: GrownUps,
     /// The thorn trap (design §7.3): deaths by thornbush over ticks 0–30,000.
@@ -354,15 +441,21 @@ pub struct Viability {
     pub seeds: Vec<SeedRow>,
 }
 
-/// A4's grown-up deaths (design v37 §7.4): those in ticks 10,000–50,000,
-/// after childhood, over all the seeds that finished.
+/// A4's grown-up deaths (M2 design §19.6): the deaths of sprites that had
+/// grown up, adult or old, over the whole run and all the seeds that
+/// finished. The world's first sprites start grown up, so theirs count from
+/// the start.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GrownUps {
     pub deaths: u64,
-    /// Those of starvation or dehydration.
+    /// Adults' deaths of starvation or dehydration.
     pub hunger_and_thirst: u64,
-    /// Met while fewer than `A4_FEWEST_DEATHS` died, or when hunger and
-    /// thirst caused under a quarter of them.
+    /// Old sprites' deaths of starvation or dehydration, reported apart.
+    /// Reports from before Slice 29 have none.
+    #[serde(default)]
+    pub old_hunger_and_thirst: u64,
+    /// Met while fewer than `A4_FEWEST_DEATHS` died, or when adults' hunger
+    /// and thirst caused under 1 in 20 of them.
     pub verdict: Verdict,
 }
 
@@ -371,8 +464,94 @@ impl Default for GrownUps {
         GrownUps {
             deaths: 0,
             hunger_and_thirst: 0,
+            old_hunger_and_thirst: 0,
             verdict: Verdict::NoData,
         }
+    }
+}
+
+/// A4's guided young (M2 design §19.6): of the young hatched over the
+/// viability run, all the seeds that finished together, how many grew up and
+/// how many died young. Those still growing at the end are in neither.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Guided {
+    pub grew_up: u64,
+    pub died_young: u64,
+    /// Met when at least `A4_GUIDED` of them grew up.
+    pub verdict: Verdict,
+}
+
+impl Default for Guided {
+    fn default() -> Guided {
+        Guided {
+            grew_up: 0,
+            died_young: 0,
+            verdict: Verdict::NoData,
+        }
+    }
+}
+
+/// A4's unattended run (M2 design §19.6): how many of each seed's newborns,
+/// with no one to learn from, grew up and how many died young, and the
+/// middle seed's share that grew up.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Unattended {
+    /// How many seeds finished; the median is theirs.
+    pub finished: usize,
+    /// Each seed, how many grew up, and how many died young.
+    pub per_seed: Vec<(u64, u64, u64)>,
+    pub median: Option<f64>,
+    /// Met when the middle seed's share is within `A4_UNATTENDED`.
+    pub verdict: Verdict,
+    /// What the newborns died of, over all the seeds, by name.
+    pub died_of: BTreeMap<String, u64>,
+}
+
+impl Default for Unattended {
+    fn default() -> Unattended {
+        Unattended {
+            finished: 0,
+            per_seed: Vec::new(),
+            median: None,
+            verdict: Verdict::NoData,
+            died_of: BTreeMap::new(),
+        }
+    }
+}
+
+/// The unattended run's report, from each seed's run or the reason it
+/// broke (M2 design §19.6).
+pub fn unattended(seeds: &SeedRuns, data: &DataPack) -> Unattended {
+    let finished: Vec<(u64, &LabRun)> = seeds
+        .iter()
+        .filter_map(|(seed, run)| Some((*seed, run.as_ref().ok()?)))
+        .collect();
+    let mut died_of = BTreeMap::new();
+    let mut per_seed = Vec::new();
+    let mut shares = Vec::new();
+    for (seed, run) in &finished {
+        let whole = window(run, 6_000);
+        per_seed.push((*seed, whole.first.grew_up, whole.first.died_young));
+        shares.extend(whole.first.share());
+        for (&(stage, cause), &n) in &whole.stage_deaths {
+            if stage == LifeStage::Young {
+                *died_of.entry(cause_name(cause, data)).or_insert(0) += n;
+            }
+        }
+    }
+    let median = median_of(&shares);
+    let (low, high) = A4_UNATTENDED;
+    let verdict = match median {
+        None => Verdict::NoData,
+        Some(share) if (low..=high).contains(&share) => Verdict::Met,
+        Some(_) => Verdict::NotMet { until: None },
+    };
+    Unattended {
+        finished: finished.len(),
+        per_seed,
+        median,
+        verdict,
+        died_of,
     }
 }
 
@@ -401,31 +580,43 @@ pub fn viability(seeds: &SeedRuns, sprites: u64, data: &DataPack) -> Viability {
         .iter()
         .filter_map(|(seed, run)| Some((*seed, run.as_ref().ok()?)))
         .collect();
-    let alive: Vec<f64> = finished
-        .iter()
-        .map(|(_, run)| {
-            let died: u64 = window(run, 10_000).deaths.values().sum();
-            sprites.saturating_sub(died) as f64 / sprites as f64
-        })
-        .collect();
-    // Grown-up deaths: those by tick 50,000 less those in childhood.
+    // The young hatched, and the grown-up deaths, by life stage (M2 design
+    // §19.6).
     let need =
-        |cause: &DeathCause| matches!(cause, DeathCause::Starvation | DeathCause::Dehydration);
-    let (mut deaths, mut hunger_and_thirst) = (0, 0);
+        |cause: DeathCause| matches!(cause, DeathCause::Starvation | DeathCause::Dehydration);
+    let (mut grew_up, mut died_young) = (0, 0);
+    let (mut deaths, mut hunger_and_thirst, mut old_hunger_and_thirst) = (0, 0, 0);
     for (_, run) in &finished {
-        let (childhood, all) = (&window(run, 10_000).deaths, &window(run, 50_000).deaths);
-        for (cause, n) in all {
-            let later = n - childhood.get(cause).copied().unwrap_or(0);
-            deaths += later;
-            if need(cause) {
-                hunger_and_thirst += later;
+        let whole = window(run, 50_000);
+        grew_up += whole.later.grew_up;
+        died_young += whole.later.died_young;
+        for (&(stage, cause), &n) in &whole.stage_deaths {
+            match stage {
+                LifeStage::Young => {}
+                LifeStage::Adult => {
+                    deaths += n;
+                    if need(cause) {
+                        hunger_and_thirst += n;
+                    }
+                }
+                LifeStage::Old => {
+                    deaths += n;
+                    if need(cause) {
+                        old_hunger_and_thirst += n;
+                    }
+                }
             }
         }
     }
     let verdict = match deaths {
         _ if finished.is_empty() => Verdict::NoData,
         n if n < A4_FEWEST_DEATHS => Verdict::Met,
-        n if (hunger_and_thirst as f64) < 0.25 * n as f64 => Verdict::Met,
+        n if (hunger_and_thirst as f64) < A4_GROWN * n as f64 => Verdict::Met,
+        _ => Verdict::NotMet { until: None },
+    };
+    let guided = match grew_up + died_young {
+        0 => Verdict::NoData,
+        n if grew_up as f64 >= A4_GUIDED * n as f64 => Verdict::Met,
         _ => Verdict::NotMet { until: None },
     };
     let thornbush_deaths: Vec<(u64, u64)> = finished
@@ -467,10 +658,15 @@ pub fn viability(seeds: &SeedRuns, sprites: u64, data: &DataPack) -> Viability {
     Viability {
         finished: finished.len(),
         seeds: rows,
-        survival: a4(median_of(&alive), |share| share >= 0.8),
+        guided: Guided {
+            grew_up,
+            died_young,
+            verdict: guided,
+        },
         grown_ups: GrownUps {
             deaths,
             hunger_and_thirst,
+            old_hunger_and_thirst,
             verdict,
         },
         thorn_trap: Count {
@@ -734,22 +930,13 @@ fn thousands(n: u64) -> String {
     out
 }
 
-/// A4's survival: its median, met when it `passes`.
-fn a4(median: Option<f64>, passes: impl Fn(f64) -> bool) -> Criterion {
-    let verdict = match median {
-        None => Verdict::NoData,
-        Some(share) if passes(share) => Verdict::Met,
-        Some(_) => Verdict::NotMet { until: None },
-    };
-    Criterion { median, verdict }
-}
-
-/// The run's window over ticks 0 to `to`, as `scenarios/viability.ron` sets them.
+/// The run's window over ticks 0 to `to`, as `scenarios/viability.ron` and
+/// `scenarios/unattended.ron` set them.
 fn window(run: &LabRun, to: u64) -> &Window {
     run.windows
         .iter()
         .find(|w| w.from == 0 && w.to == to)
-        .unwrap_or_else(|| panic!("the viability run counts ticks 0 to {to}"))
+        .unwrap_or_else(|| panic!("the run counts ticks 0 to {to}"))
 }
 
 /// A verb by name, as the lab runner writes it: "eat".
@@ -785,6 +972,18 @@ fn duration(seconds: u64) -> String {
     match seconds {
         0..60 => format!("{seconds} s"),
         _ => format!("{} min {} s", seconds / 60, seconds % 60),
+    }
+}
+
+/// `part` of `whole` as a report shows it: "3 of 40: 7.5%", or "none" of
+/// none.
+fn share_of(part: u64, whole: u64) -> String {
+    match whole {
+        0 => "none".into(),
+        _ => format!(
+            "{part} of {whole}: {}",
+            percent(Some(part as f64 / whole as f64))
+        ),
     }
 }
 
@@ -825,7 +1024,7 @@ fn median_of(values: &[f64]) -> Option<f64> {
 mod tests {
     use super::*;
     use std::collections::BTreeMap;
-    use terra_sim::{DeathCause, Verb};
+    use terra_sim::{Childhood, DeathCause, LifeStage, Verb};
 
     fn data() -> DataPack {
         DataPack::builtin().expect("the built-in data pack is valid")
@@ -841,108 +1040,168 @@ mod tests {
             touches: BTreeMap::new(),
             lessons: BTreeMap::new(),
             young: None,
+            first: Childhood::default(),
+            later: Childhood::default(),
+            stage_deaths: BTreeMap::new(),
         }
     }
 
-    /// A viability run's seed, with the deaths in its first 10,000, 30,000
-    /// and 50,000 ticks.
-    fn viability_run(
-        by_10k: &[(DeathCause, u64)],
-        by_30k: &[(DeathCause, u64)],
-        by_50k: &[(DeathCause, u64)],
-    ) -> LabRun {
+    /// Deaths of sprites at a life stage, of a cause, and how many.
+    type Dying = [(LifeStage, DeathCause, u64)];
+
+    /// A window over ticks `from` to `to` that counted `deaths`, each at
+    /// the life stage it gives.
+    fn dying_window(from: u64, to: u64, deaths: &Dying) -> Window {
+        let mut window = deaths_window(from, to, &[]);
+        for &(stage, cause, n) in deaths {
+            *window.deaths.entry(cause).or_insert(0) += n;
+            *window.stage_deaths.entry((stage, cause)).or_insert(0) += n;
+        }
+        window
+    }
+
+    /// A viability run's seed, with the deaths in its first 30,000 ticks and
+    /// those, by life stage, in its first 50,000.
+    fn viability_run(by_30k: &[(DeathCause, u64)], by_50k: &Dying) -> LabRun {
         LabRun {
             windows: vec![
-                deaths_window(0, 10_000, by_10k),
                 deaths_window(0, 30_000, by_30k),
-                deaths_window(0, 50_000, by_50k),
+                dying_window(0, 50_000, by_50k),
             ],
             control: None,
             without: None,
         }
     }
 
-    #[test]
-    fn a4_survival_is_met_when_the_median_seed_keeps_80_percent_to_tick_10000() {
-        // Design §7.4, A4: ≥80% of sprites survive the first 10,000 ticks.
-        let six = [(DeathCause::Starvation, 6)]; // 24 of 30 alive: 80%
-        let seeds: Vec<_> = (1..=10)
-            .map(|seed| (seed, Ok(viability_run(&six, &six, &six))))
-            .collect();
-        let survival = viability(&seeds, 30, &data()).survival;
-        assert_eq!(survival.median, Some(0.8));
-        assert_eq!(survival.verdict, Verdict::Met);
-    }
-
-    #[test]
-    fn a4_survival_under_80_percent_is_not_met() {
-        let six = [(DeathCause::Starvation, 6)]; // 24 of 30 alive
-        let seven = [(DeathCause::Starvation, 7)]; // 23 of 30 alive
-        let seeds: Vec<_> = (1..=10)
-            .map(|seed| {
-                let deaths = if seed <= 5 { &seven } else { &six };
-                (seed, Ok(viability_run(deaths, deaths, deaths)))
-            })
-            .collect();
-        let survival = viability(&seeds, 30, &data()).survival;
-        // The median is halfway between 23 and 24 of 30.
-        let median = survival.median.expect("ten seeds finished");
-        assert!((median - 47.0 / 60.0).abs() < 1e-12, "median {median}");
-        assert_eq!(survival.verdict, Verdict::NotMet { until: None });
-    }
-
     /// Ten seeds whose first 50,000 ticks saw these deaths, by seed.
-    fn seeds_dying(deaths: [&[(DeathCause, u64)]; 10]) -> Vec<(u64, Result<LabRun, String>)> {
+    fn seeds_dying(deaths: [&Dying; 10]) -> Vec<(u64, Result<LabRun, String>)> {
         (1..=10)
             .zip(deaths)
-            .map(|(seed, deaths)| (seed, Ok(viability_run(&[], &[], deaths))))
+            .map(|(seed, deaths)| (seed, Ok(viability_run(&[], deaths))))
+            .collect()
+    }
+
+    /// An unattended run's seed, in which `grew_up` of its first sprites
+    /// grew up and the rest of 30 died young of thirst.
+    fn unattended_run(grew_up: u64) -> LabRun {
+        let died_young = 30 - grew_up;
+        let young = [(LifeStage::Young, DeathCause::Dehydration, died_young)];
+        let mut window = dying_window(0, 6_000, &young);
+        window.first = Childhood {
+            grew_up,
+            died_young,
+        };
+        LabRun {
+            windows: vec![window],
+            control: None,
+            without: None,
+        }
+    }
+
+    /// Ten seeds of the unattended run, with how many grew up in each.
+    fn unattended_seeds(grew_up: [u64; 10]) -> Vec<(u64, Result<LabRun, String>)> {
+        (1..=10)
+            .zip(grew_up)
+            .map(|(seed, grew_up)| (seed, Ok(unattended_run(grew_up))))
             .collect()
     }
 
     #[test]
-    fn a4_grown_up_deaths_are_those_after_tick_10000_pooled_over_the_seeds() {
-        // Design v37 §7.4, A4: hunger and thirst cause under 25% of the
-        // deaths after tick 10,000, counted over all the seeds together.
-        // Childhood deaths don't count: a newborn that never finds water
-        // dying of thirst is natural.
-        use DeathCause::{Dehydration, OldAge};
-        let childhood: &[(DeathCause, u64)] = &[(Dehydration, 5)];
-        let later: &[(DeathCause, u64)] = &[(Dehydration, 6), (OldAge, 2)];
-        let seeds: Vec<_> = (1..=10)
-            .map(|seed| (seed, Ok(viability_run(childhood, childhood, later))))
-            .collect();
-        let grown_ups = viability(&seeds, 30, &data()).grown_ups;
-        // Each seed: one thirst death and two of old age after tick 10,000.
-        assert_eq!((grown_ups.deaths, grown_ups.hunger_and_thirst), (30, 10));
+    fn a4_unattended_is_met_when_the_middle_seed_raises_10_to_30_percent() {
+        // M2 design §19.6: of newborns no one looks after, 10% to 30% grow
+        // up, in the middle seed of ten.
+        let data = data();
+        // Sorted, 3 3 4 5 6 6 8 9 10 12 of 30: the middle two are 6 and 6.
+        let met = unattended(&unattended_seeds([6, 3, 10, 4, 6, 12, 5, 3, 8, 9]), &data);
+        assert_eq!(met.median, Some(0.2));
+        assert_eq!(met.verdict, Verdict::Met);
+        assert_eq!(met.per_seed[0], (1, 6, 24));
+        assert_eq!(met.died_of, BTreeMap::from([("dehydration".into(), 234)]));
+        let edges = unattended(&unattended_seeds([3; 10]), &data);
+        assert_eq!(edges.verdict, Verdict::Met, "10% is in the band");
+        let too_few = unattended(&unattended_seeds([2; 10]), &data);
+        assert_eq!(too_few.verdict, Verdict::NotMet { until: None });
+        let too_many = unattended(&unattended_seeds([10; 10]), &data);
+        assert_eq!(too_many.verdict, Verdict::NotMet { until: None });
+        assert_eq!(unattended(&[], &data).verdict, Verdict::NoData);
+    }
+
+    #[test]
+    fn a4_guided_young_are_met_when_at_least_60_percent_of_the_hatched_grow_up() {
+        // M2 design §19.6: the young hatched in the viability run, all the
+        // seeds together; those still growing at the end aren't counted.
+        let hatched = |grew_up, died_young| -> Vec<(u64, Result<LabRun, String>)> {
+            (1..=10)
+                .map(|seed| {
+                    let mut run = viability_run(&[], &[]);
+                    run.windows[1].later = Childhood {
+                        grew_up,
+                        died_young,
+                    };
+                    (seed, Ok(run))
+                })
+                .collect()
+        };
+        let met = viability(&hatched(6, 4), 30, &data()).guided;
+        assert_eq!((met.grew_up, met.died_young), (60, 40));
+        assert_eq!(met.verdict, Verdict::Met);
+        let short = viability(&hatched(5, 4), 30, &data()).guided;
+        assert_eq!(short.verdict, Verdict::NotMet { until: None });
+        let none = viability(&hatched(0, 0), 30, &data()).guided;
+        assert_eq!(none.verdict, Verdict::NoData);
+    }
+
+    #[test]
+    fn a4_grown_up_deaths_are_adults_and_old_sprites_pooled_over_the_seeds() {
+        // M2 design §19.6, A4: adults' hunger and thirst cause under 1 in 20
+        // of grown-up deaths, judged by life stage, counted over all the
+        // seeds together. Young deaths don't count, and old sprites' hunger
+        // and thirst is reported apart.
+        use DeathCause::{Dehydration, OldAge, Starvation};
+        use LifeStage::{Adult, Old, Young};
+        let deaths: &Dying = &[
+            (Young, Dehydration, 5),
+            (Adult, Dehydration, 1),
+            (Old, Starvation, 2),
+            (Old, OldAge, 7),
+        ];
+        let grown_ups = viability(&seeds_dying([deaths; 10]), 30, &data()).grown_ups;
+        assert_eq!(
+            (
+                grown_ups.deaths,
+                grown_ups.hunger_and_thirst,
+                grown_ups.old_hunger_and_thirst
+            ),
+            (100, 10, 20)
+        );
         assert_eq!(grown_ups.verdict, Verdict::NotMet { until: None });
     }
 
     #[test]
-    fn a4_grown_ups_are_met_under_a_quarter_once_ten_have_died() {
+    fn a4_grown_ups_are_met_under_1_in_20_once_ten_have_died() {
         use DeathCause::{OldAge, Starvation};
-        let quarter: &[(DeathCause, u64)] = &[(Starvation, 1), (OldAge, 3)];
-        let at_a_quarter = viability(&seeds_dying([quarter; 10]), 30, &data());
-        assert_eq!(at_a_quarter.grown_ups.deaths, 40);
-        assert_eq!(
-            at_a_quarter.grown_ups.verdict,
-            Verdict::NotMet { until: None }
-        );
-        let under: &[(DeathCause, u64)] = &[(Starvation, 1), (OldAge, 4)];
-        let under_a_quarter = viability(&seeds_dying([under; 10]), 30, &data());
-        assert_eq!(under_a_quarter.grown_ups.verdict, Verdict::Met);
+        use LifeStage::{Adult, Old};
+        let one_in_20: &Dying = &[(Adult, Starvation, 1), (Old, OldAge, 19)];
+        let at = viability(&seeds_dying([one_in_20; 10]), 30, &data());
+        assert_eq!(at.grown_ups.deaths, 200);
+        assert_eq!(at.grown_ups.verdict, Verdict::NotMet { until: None });
+        let under: &Dying = &[(Adult, Starvation, 1), (Old, OldAge, 20)];
+        let under_1_in_20 = viability(&seeds_dying([under; 10]), 30, &data());
+        assert_eq!(under_1_in_20.grown_ups.verdict, Verdict::Met);
     }
 
     #[test]
     fn a4_grown_ups_are_met_with_fewer_than_ten_deaths_whatever_killed_them() {
         // Design v37 §7.4: a share of a handful of deaths means little, and
         // hardly anyone dying is what viability asks.
-        let mut deaths: [&[(DeathCause, u64)]; 10] = [&[]; 10];
-        deaths[0] = &[(DeathCause::Dehydration, 5)];
-        deaths[1] = &[(DeathCause::Starvation, 4)];
+        use LifeStage::Adult;
+        let mut deaths: [&Dying; 10] = [&[]; 10];
+        deaths[0] = &[(Adult, DeathCause::Dehydration, 5)];
+        deaths[1] = &[(Adult, DeathCause::Starvation, 4)];
         let nine = viability(&seeds_dying(deaths), 30, &data()).grown_ups;
         assert_eq!((nine.deaths, nine.hunger_and_thirst), (9, 9));
         assert_eq!(nine.verdict, Verdict::Met);
-        deaths[2] = &[(DeathCause::Dehydration, 1)];
+        deaths[2] = &[(Adult, DeathCause::Dehydration, 1)];
         let ten = viability(&seeds_dying(deaths), 30, &data()).grown_ups;
         assert_eq!(ten.verdict, Verdict::NotMet { until: None });
     }
@@ -959,10 +1218,10 @@ mod tests {
             .map(|(seed, thornbush_deaths)| {
                 let by_30k = [(thornbush, thornbush_deaths), (DeathCause::Dehydration, 2)];
                 let by_50k = [
-                    (thornbush, thornbush_deaths + 5),
-                    (DeathCause::Dehydration, 2),
+                    (LifeStage::Adult, thornbush, thornbush_deaths + 5),
+                    (LifeStage::Adult, DeathCause::Dehydration, 2),
                 ];
-                (seed, Ok(viability_run(&[], &by_30k, &by_50k)))
+                (seed, Ok(viability_run(&by_30k, &by_50k)))
             })
             .collect();
         let thorn_trap = viability(&seeds, 30, &data).thorn_trap;
@@ -992,9 +1251,9 @@ mod tests {
         // and the command that replays it.
         let message = "tick 4,312: no tile holds more than one object".to_string();
         let seeds = vec![
-            (1, Ok(viability_run(&[], &[], &[]))),
+            (1, Ok(viability_run(&[], &[]))),
             (2, Err(message.clone())),
-            (3, Ok(viability_run(&[], &[], &[]))),
+            (3, Ok(viability_run(&[], &[]))),
         ];
         assert_eq!(
             broken("viability", &seeds),
@@ -1021,10 +1280,12 @@ mod tests {
         assert_eq!(data.object_type_name(3), Some("thornbush"), "objects.ron");
         let mut run = viability_run(
             &[],
-            &[],
-            &[(DeathCause::Dehydration, 2), (DeathCause::HurtBy(3), 1)],
+            &[
+                (LifeStage::Adult, DeathCause::Dehydration, 2),
+                (LifeStage::Young, DeathCause::HurtBy(3), 1),
+            ],
         );
-        run.windows[2].applied = BTreeMap::from([
+        run.windows[1].applied = BTreeMap::from([
             ((Verb::Eat, Some(2)), 10),
             ((Verb::Eat, Some(3)), 2),
             ((Verb::Rest, None), 50),
@@ -1076,6 +1337,51 @@ mod tests {
         assert!(!text.contains("grown_ups"), "{text}");
         let report = Report::from_ron(&text).expect("an older report reads");
         assert_eq!(report.viability.grown_ups.verdict, Verdict::NoData);
+    }
+
+    /// `text` without the field `name` and its value, a bracketed one.
+    fn without_field(text: &str, name: &str) -> String {
+        let start = text.find(&format!("{name}:")).expect("the field");
+        let mut depth = 0;
+        let mut end = start;
+        for (at, c) in text[start..].char_indices() {
+            match c {
+                '(' | '[' | '{' => depth += 1,
+                ')' | ']' | '}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        end = start + at + 1;
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+        let end = end + text[end..].find(',').expect("a comma after it") + 1;
+        format!("{}{}", &text[..start], &text[end..])
+    }
+
+    #[test]
+    fn a_report_from_before_slice_29_still_reads() {
+        // Older reports have A4's share alive at tick 10,000 in place of the
+        // unattended run and the guided young, and no old sprites' count.
+        let text = without_field(&sample().to_ron(), "unattended");
+        let text = without_field(&text, "guided");
+        let text = text.replacen(
+            "viability: (",
+            "viability: (survival: (median: Some(0.9), verdict: Met), ",
+            1,
+        );
+        let start = text.find("old_hunger_and_thirst:").expect("the old count");
+        let end = start + text[start..].find(',').expect("its end") + 1;
+        let text = format!("{}{}", &text[..start], &text[end..]);
+        for gone in ["unattended", "guided", "old_hunger_and_thirst"] {
+            assert!(!text.contains(gone), "{text}");
+        }
+        let report = Report::from_ron(&text).expect("an older report reads");
+        assert_eq!(report.unattended.verdict, Verdict::NoData);
+        assert_eq!(report.viability.guided.verdict, Verdict::NoData);
+        assert_eq!(report.viability.grown_ups.old_hunger_and_thirst, 0);
     }
 
     /// A window over ticks `from` to `to` that counted these applied actions.
@@ -1189,11 +1495,12 @@ mod tests {
         assert_eq!(more.verdict, Verdict::NotMet { until: None });
     }
 
-    /// A report of ten seeds, one of which lost a sprite to thirst.
+    /// A report of ten seeds, one of which lost an adult to thirst, whose
+    /// unattended newborns grew up 6 in 30 on each seed.
     fn sample() -> Report {
         let data = data();
-        let mut deaths: [&[(DeathCause, u64)]; 10] = [&[]; 10];
-        deaths[0] = &[(DeathCause::Dehydration, 1)];
+        let mut deaths: [&Dying; 10] = [&[]; 10];
+        deaths[0] = &[(LifeStage::Adult, DeathCause::Dehydration, 1)];
         Report {
             commit: "abc1234".into(),
             compared_with: None,
@@ -1201,6 +1508,7 @@ mod tests {
             seconds: 900,
             seeds: 10,
             sprites: 30,
+            unattended: unattended(&unattended_seeds([6; 10]), &data),
             viability: viability(&seeds_dying(deaths), 30, &data),
             a1: a1(&[], &data),
             a2: a2(&[], &data),
@@ -1293,16 +1601,34 @@ mod tests {
         // pass marks exactly.
         let page = sample().markdown(None);
         assert!(
-            page.contains("| Alive at tick 10,000 | 100% | at least 80% | met |"),
+            page.contains(
+                "| Unattended newborns that grow up, middle seed (the unattended run) | 20% \
+                 | 10% to 30% | met |"
+            ),
             "{page}"
         );
         assert!(
             page.contains(
-                "| Hunger and thirst's share of grown-up deaths, ticks 10,000–50,000, all seeds \
-                 | 1 of 1: too few deaths to judge | under 25%, once 10 have died | met |"
+                "| Young hatched in the viability run that grow up, all seeds | none \
+                 | at least 60% | no data |"
             ),
             "{page}"
         );
+        assert!(
+            page.contains(
+                "| Adults' deaths of hunger or thirst, of grown-up deaths, all seeds \
+                 | 1 of 1: too few deaths to judge | under 1 in 20, once 10 have died | met |"
+            ),
+            "{page}"
+        );
+        assert!(
+            page.contains(
+                "Old sprites' deaths of hunger or thirst, reported apart: 0 of the 1 grown-up \
+                 deaths. What unattended newborns died of, all seeds: dehydration 240.\n"
+            ),
+            "{page}"
+        );
+        assert!(page.contains("| Unattended run | Seed 1 |"), "{page}");
         assert!(
             page.contains("| A1: thornbush contacts | no data | no data |"),
             "{page}"
@@ -1489,7 +1815,8 @@ mod tests {
         let page = report.markdown(None);
         assert!(
             page.contains(
-                "## A4: viability (design §7.4)\n\nOver the 9 of 10 seeds that finished.\n"
+                "## A4 and G5: viability (design §7.4, M2 design §6)\n\n\
+                 The viability run: over the 9 of 10 seeds that finished.\n"
             ),
             "{page}"
         );
@@ -1501,8 +1828,8 @@ mod tests {
 
     #[test]
     fn the_grown_up_rule_counts_only_the_seeds_that_finished() {
-        let mut deaths: [&[(DeathCause, u64)]; 10] = [&[(DeathCause::OldAge, 3)]; 10];
-        deaths[0] = &[(DeathCause::Dehydration, 1)];
+        let mut deaths: [&Dying; 10] = [&[(LifeStage::Old, DeathCause::OldAge, 3)]; 10];
+        deaths[0] = &[(LifeStage::Adult, DeathCause::Dehydration, 1)];
         let mut seeds = seeds_dying(deaths);
         for broken in &mut seeds[5..] {
             broken.1 = Err("tick 3: IDs only go up".into());

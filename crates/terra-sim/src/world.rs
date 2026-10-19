@@ -20,7 +20,7 @@ use crate::ecology::{self, holds_without_drawing, new_object, square};
 use crate::events::{DeathCause, Emptied, Event, EventKind};
 use crate::expression::{Expression, expressions};
 use crate::family;
-use crate::generate::{generate, place_objects, place_sprites};
+use crate::generate::{generate, place_newborns, place_objects, place_sprites};
 use crate::genome::{GeneView, Genome};
 use crate::inheritance;
 use crate::learning::{self, Subject};
@@ -1095,6 +1095,22 @@ impl World {
         world.state.mode = mode;
         place_objects(&config, &world.data, &mut world.state);
         place_sprites(&config, &world.data, &mut world.state);
+        world.config = Some(config);
+        world
+    }
+
+    /// The unattended run's world (M2 design §19.6): `config`'s world as
+    /// generated from `seed`, in Lab mode, but with its first sprites
+    /// newborns, placed as the Cursor places them and spread over the whole
+    /// map, and nobody else, so none has anyone to learn from.
+    pub fn unattended(config: WorldConfig, data: DataPack, seed: u64) -> World {
+        let mut rng = ChaCha8Rng::seed_from_u64(seed);
+        let map = generate(&config, &data, &mut rng);
+        let mut world = World::with(map, data, rng, seed);
+        world.state.most_sprites = config.most_sprites() as u16;
+        world.state.mode = Mode::Lab;
+        place_objects(&config, &world.data, &mut world.state);
+        place_newborns(&config, &world.data, &mut world.state);
         world.config = Some(config);
         world
     }

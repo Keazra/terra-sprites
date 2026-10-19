@@ -275,7 +275,7 @@ fn thing_words(target: Target, at: Pos, data: &Words, world: &World) -> String {
 }
 
 /// The type of object `id`, on tile `at` or held there.
-fn object_type<'w>(id: EntityId, at: Pos, world: &'w World) -> &'w str {
+fn object_type(id: EntityId, at: Pos, world: &World) -> &str {
     let on_tile = world.object_at(at).filter(|object| object.id() == id);
     on_tile
         .or_else(|| world.objects().find(|object| object.id() == id))

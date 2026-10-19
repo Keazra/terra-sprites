@@ -13,12 +13,13 @@ fn default_world(seed: u64) -> World {
 type Tally = BTreeMap<(String, &'static str), usize>;
 
 #[test]
-fn at_speed_bushes_fruit_berries_drop_then_expire_or_sprout_and_thornbushes_spread() {
+fn at_speed_bushes_fruit_berries_drop_then_expire_or_sprout_and_bushes_spread() {
     let pack = DataPack::builtin().expect("built-in data pack is valid");
     let mut world = default_world(21);
     let mut tally = Tally::new();
     // Fruit ripens within about 1,200 ticks and berries expire 1,500–2,500 ticks
-    // later; thornbushes try to spread every 2,000. 5,000 ticks shows them all.
+    // later; grown berry bushes and thornbushes try to spread every 2,000.
+    // 5,000 ticks shows them all.
     for tick in 0..5_000 {
         for event in world.step() {
             let entry = match event.kind {
@@ -65,10 +66,10 @@ fn at_speed_bushes_fruit_berries_drop_then_expire_or_sprout_and_thornbushes_spre
         count("berry", "replaced") > Some(0),
         "berries sprout: {tally:?}"
     );
-    assert_eq!(
-        count("berry", "replaced"),
-        count("berry_bush", "spawned"),
-        "every sprouting berry becomes a bush: {tally:?}"
+    // Grown bushes put up seedlings too (M2 design §19.6).
+    assert!(
+        count("berry_bush", "spawned") > count("berry", "replaced"),
+        "every sprouting berry becomes a bush, and bushes put up seedlings: {tally:?}"
     );
     assert!(
         count("thornbush", "spawned") > Some(0),
