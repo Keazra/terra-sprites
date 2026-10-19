@@ -411,3 +411,35 @@ fn the_first_sprites_start_near_drinkable_water_when_the_preset_says() {
         "{anywhere_far} of 120 started far from water"
     );
 }
+
+#[test]
+fn once_the_tiles_near_water_are_taken_the_other_first_sprites_start_anywhere() {
+    // M2 design §19.1: a small, dry world has fewer free tiles within 1 of
+    // drinkable water than first sprites. Each of those tiles gets one,
+    // and the rest start farther out, so the world starts with all 40.
+    let data = DataPack::builtin().expect("valid pack");
+    let preset = "(width: 32, height: 32, sprites: 40, water: 1, start_near_water: 1)";
+    for seed in [1, 2, 3, 4] {
+        let world = world_of(preset, seed);
+        let map = world.map();
+        let near: Vec<Pos> = positions(map)
+            .filter(|&pos| {
+                from_drinkable(map, pos, &data) <= 1
+                    && data.terrain(map.terrain(pos)).step_cost().is_some()
+                    && world.object_at(pos).is_none()
+            })
+            .collect();
+        assert!(
+            (1..40).contains(&near.len()),
+            "seed {seed}: {} free tiles near water",
+            near.len()
+        );
+        assert_eq!(world.sprites().count(), 40, "seed {seed}");
+        for pos in near {
+            assert!(
+                world.sprite_at(pos).is_some(),
+                "seed {seed}: nobody started on {pos:?}, near water"
+            );
+        }
+    }
+}

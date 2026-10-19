@@ -130,29 +130,32 @@ pub(crate) fn place_objects(config: &WorldConfig, data: &DataPack, state: &mut W
 
 /// Places the preset's first population (design §3.2), after the objects:
 /// each sprite on a tile drawn uniformly from the walkable tiles holding no
-/// object and no sprite, within the preset's `start_near_water` of
-/// drinkable water if it gives one and any such tile is free (M2 design
-/// §19.1), made from the starter genome with spawn variation,
-/// at an age drawn uniformly through adulthood (M2 design §9.1), and with
-/// its energy and hydration drawn between physiology's
+/// object and no sprite. If the preset gives a `start_near_water`, they're
+/// the tiles within that many tiles of drinkable water as the crow flies,
+/// a diagonal step counting one, while any is free, and then the rest of
+/// the map (M2 design §19.1). Each is made from the starter genome with
+/// spawn variation, at an age drawn uniformly through adulthood (M2 design
+/// §9.1), and with its energy and hydration drawn between physiology's
 /// `first_population` fractions of the newborn level, so the sprites don't
 /// all run dry together. If the map runs out of room, the rest are skipped.
 pub(crate) fn place_sprites(config: &WorldConfig, data: &DataPack, state: &mut WorldState) {
     let mut candidates = standing_room(data, state);
+    // The tiles farther from water, drawn from once the near ones are
+    // taken: with none near, the first draw is from the whole map in tile
+    // order, as without a `start_near_water`.
+    let mut rest = Vec::new();
     if let Some(near) = config.start_near_water() {
         let far = from_drinkable(&state.map, data);
-        let near: Vec<Pos> = candidates
-            .iter()
-            .copied()
-            .filter(|&pos| far[state.map.index(pos)] <= u32::from(near))
-            .collect();
-        if !near.is_empty() {
-            candidates = near;
-        }
+        (candidates, rest) = candidates
+            .into_iter()
+            .partition(|&pos| far[state.map.index(pos)] <= u32::from(near));
     }
     let physiology = data.physiology();
     let (low, high) = physiology.first_population;
     for _ in 0..config.sprites() {
+        if candidates.is_empty() {
+            candidates = std::mem::take(&mut rest);
+        }
         if candidates.is_empty() {
             break;
         }
