@@ -3,7 +3,9 @@
 //! worlds with scripted actions.
 
 mod common;
-use common::{WorldBuilder, at, builtin, builtin_with, endings, walker, walkers};
+use common::{
+    WorldBuilder, at, builtin, builtin_changing, builtin_with, endings, walker, walkers, walkers_in,
+};
 
 use terra_sim::{
     DataPack, DeathCause, EntityId, Event, EventKind, Genome, Hurt, ObjectView, Outcome, Pos,
@@ -532,8 +534,8 @@ fn an_ended_action_says_which_sprites_its_attempt_hurt() {
     }
 }
 
-/// A world like `world`'s, whose walker turns a `fruitless` pulse into `h1`,
-/// so a test can see the pulse.
+/// A world like `world`'s, whose walker turns a `fruitless` pulse into `h1`
+/// and a `too_full` one into `h2`, so a test can see the pulses.
 fn feeling_world(objects: &[(Pos, &str)], sprite: Pos, script: &[ScriptedAction]) -> World {
     let rows = [".....", ".....", "....."];
     feeling_world_in(builtin(), &rows, objects, sprite, script, &[])
@@ -553,6 +555,7 @@ fn feeling_world_in(
         Trait(trait: "speed", value: 10.0),
         Trait(trait: "sense_radius", value: 10.0),
         Emitter(locus: Locus("fruitless"), mode: Level, gain: 0.5, chem: "h1"),
+        Emitter(locus: Locus("too_full"), mode: Level, gain: 0.5, chem: "h2"),
     ])"#;
     let genome = Genome::from_ron(text, &data).expect("a valid genome");
     let mut sprites = vec![(sprite, Some(genome))];
@@ -574,6 +577,13 @@ fn feeling_world_in(
 fn felt_fruitless(world: &World) -> f32 {
     let sprite = world.sprite(the_sprite(world)).expect("the sprite");
     sprite.chemical("h1").expect("a hormone")
+}
+
+/// How much `h2` the sprite placed first has: what its `too_full` pulses
+/// made.
+fn felt_too_full(world: &World) -> f32 {
+    let sprite = world.sprite(the_sprite(world)).expect("the sprite");
+    sprite.chemical("h2").expect("a hormone")
 }
 
 #[test]
@@ -702,4 +712,126 @@ fn a_try_that_works_is_not_fruitless() {
     world.step();
     world.step();
     assert_eq!(felt_fruitless(&world), 0.0);
+}
+
+#[test]
+fn a_bite_the_gut_has_no_room_for_is_too_full_and_leaves_the_fruit_on_the_bush() {
+    // M2 design §19.4 (#224): a berry fills 0.3 of the 0.5 gut, so a second
+    // doesn't fit. The fruit stays where it was, and the try teaches
+    // nothing: unlike a fruitless one, whose pulse disappoints the need
+    // that chose it (design §5.6), it sends only a `too_full` pulse.
+    let bush = at(2, 1);
+    let mut world = feeling_world(
+        &[(bush, "berry_bush")],
+        at(1, 1),
+        &[ScriptedAction::Eat { at: bush }; 2],
+    );
+    world
+        .start_object(bush, "mature", &[("fruit", 3)])
+        .expect("a bush with fruit");
+    let id = the_sprite(&world);
+    let food = |world: &World| {
+        let sprite = world.sprite(id).expect("the sprite");
+        sprite.chemical("food").expect("food")
+    };
+    assert_eq!(endings(&world.step()), [(Verb::Eat, Outcome::Applied)]);
+    let (fed, learned) = (food(&world), world.sprite(id).expect("it").memory());
+    let events = world.step();
+    assert_eq!(endings(&events), [(Verb::Eat, Outcome::TooFull)]);
+    assert_eq!(
+        object(&world, bush).counter("fruit"),
+        Some(2),
+        "left on the bush"
+    );
+    assert!(food(&world) <= fed, "{} after {fed}", food(&world));
+    assert_eq!(felt_too_full(&world), 0.0, "the pulse is felt next tick");
+    world.step();
+    assert_eq!(felt_too_full(&world), 0.5);
+    assert_eq!(felt_fruitless(&world), 0.0);
+    assert_eq!(world.sprite(id).expect("the sprite").memory(), learned);
+}
+
+#[test]
+fn a_berry_too_full_to_eat_is_left_whole() {
+    // M2 design §19.4: the food stays on the ground.
+    let (first, second) = (at(1, 1), at(2, 1));
+    let mut world = world(
+        &[".....", ".....", "....."],
+        &[(first, "berry"), (second, "berry")],
+        first,
+        &[
+            ScriptedAction::Eat { at: first },
+            ScriptedAction::Eat { at: second },
+        ],
+    );
+    assert_eq!(endings(&world.step()), [(Verb::Eat, Outcome::Applied)]);
+    let events = world.step();
+    assert_eq!(endings(&events), [(Verb::Eat, Outcome::TooFull)]);
+    assert_eq!(object(&world, second).type_name(), "berry");
+    let removed = events
+        .iter()
+        .any(|e| matches!(e.kind, EventKind::ObjectRemoved { .. }));
+    assert!(!removed, "{events:?}");
+}
+
+/// The changes to `physiology.ron` that keep what's in the gut there, so
+/// a test can fill it exactly.
+const UNDIGESTED: [(&str, &str); 2] = [
+    (
+        "food: (pace: 0.001, waits: true)",
+        "food: (pace: 0.0, waits: true)",
+    ),
+    (
+        "water: (pace: 0.002, waits: false)",
+        "water: (pace: 0.0, waits: false)",
+    ),
+];
+
+#[test]
+fn a_berry_and_a_drink_fill_the_gut_to_the_brim_and_nothing_more_fits() {
+    // M2 design §19.4: the gut's 0.5 is room for a berry (0.3) and a drink
+    // (0.2) together. Nothing digests here, so it stays that full.
+    let (berry, water) = (at(1, 1), at(2, 1));
+    let script = [
+        ScriptedAction::Eat { at: berry },
+        ScriptedAction::Drink { at: water },
+        ScriptedAction::Drink { at: water },
+    ];
+    let data = builtin_changing("physiology.ron", &UNDIGESTED);
+    let rows = [".....", "..~..", "....."];
+    let mut world = walkers_in(data, &rows, &[(berry, "berry")], &[(berry, &script)]);
+    let mut ended = Vec::new();
+    for _ in 0..3 {
+        ended.extend(endings(&world.step()));
+    }
+    assert_eq!(
+        ended,
+        [
+            (Verb::Eat, Outcome::Applied),
+            (Verb::Drink, Outcome::Applied),
+            (Verb::Drink, Outcome::TooFull),
+        ]
+    );
+    let sprite = world.sprite(the_sprite(&world)).expect("the sprite");
+    assert_eq!(sprite.chemical("food"), Some(0.3));
+    assert_eq!(sprite.chemical("water"), Some(0.2), "one drink");
+}
+
+#[test]
+fn a_gut_holds_what_it_is_sized_for_whatever_the_rounding() {
+    // A gut of 0.9 holds three berries, though 0.3 + 0.3 + 0.3 comes to a
+    // hair over 0.9 in the sums the check makes (M2 design §19.4).
+    let berries = [at(1, 1), at(2, 1), at(0, 1)];
+    let script = berries.map(|berry| ScriptedAction::Eat { at: berry });
+    let objects = berries.map(|berry| (berry, "berry"));
+    let mut sized = UNDIGESTED.to_vec();
+    sized.push(("gut: 0.5,", "gut: 0.9,"));
+    let data = builtin_changing("physiology.ron", &sized);
+    let rows = [".....", ".....", "....."];
+    let mut world = walkers_in(data, &rows, &objects, &[(berries[0], &script)]);
+    let mut ended = Vec::new();
+    for _ in 0..3 {
+        ended.extend(endings(&world.step()));
+    }
+    assert_eq!(ended, [(Verb::Eat, Outcome::Applied); 3]);
 }

@@ -1074,6 +1074,11 @@ mod tests {
     /// 10, growing up at 2,000 ticks and old at 20,000, whose genome also
     /// holds `genes`.
     fn physical(genes: &[&str]) -> Subject {
+        physical_in(builtin(), genes)
+    }
+
+    /// The same, with the physiology of `data`.
+    fn physical_in(data: DataPack, genes: &[&str]) -> Subject {
         let mut all = vec![
             r#"Trait(trait: "speed", value: 8.0)"#,
             r#"Trait(trait: "sense_radius", value: 10.0)"#,
@@ -1081,7 +1086,7 @@ mod tests {
             r#"Trait(trait: "grows_old", value: 20000.0)"#,
         ];
         all.extend_from_slice(genes);
-        Subject::new(builtin(), &all)
+        Subject::new(data, &all)
     }
 
     #[test]
@@ -1182,6 +1187,35 @@ mod tests {
             0.0,
             "what's left is less than a tick's digestion"
         );
+    }
+
+    #[test]
+    fn food_waits_for_room_in_a_full_body_so_none_is_lost_while_water_passes_through() {
+        // M2 design §19.4 (#224): nothing a sprite eats is lost to a full
+        // body, while water the body can't hold is.
+        let spent = 0.0001 + 10.0 * 0.0000067;
+        let mut sprite = physical(&[]);
+        sprite.set("food", 0.3);
+        sprite.set("water", 0.2);
+        sprite.step();
+        // Full, its body has room only for what the tick spent.
+        assert_close(sprite.level("energy"), 1.0);
+        assert_close(sprite.level("food"), 0.3 - spent);
+        assert_close(sprite.level("water"), 0.198);
+        assert_eq!(sprite.level("hydration"), 1.0);
+    }
+
+    #[test]
+    fn a_bare_pace_passes_food_through_a_full_body() {
+        // M2 design §19.4: a pack from before Slice 29 gives each thing in
+        // the gut only its pace, and its food passed through, the body
+        // keeping what it could.
+        let bare = ("food: (pace: 0.001, waits: true)", "food: 0.001");
+        let mut sprite = physical_in(builtin_changing("physiology.ron", &[bare]), &[]);
+        sprite.set("food", 0.3);
+        sprite.step();
+        assert_eq!(sprite.level("energy"), 1.0);
+        assert_close(sprite.level("food"), 0.299);
     }
 
     #[test]
