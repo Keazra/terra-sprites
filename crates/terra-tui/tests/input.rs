@@ -733,4 +733,10 @@ fn while_typing_shift_tab_goes_back_as_it_does_elsewhere() {
         Keys::new().typed_action(shift_tab),
         Some(Action::SelectPrevious)
     );
+    // Some terminals report it as Tab with Shift held.
+    let tab_with_shift = KeyEvent::new(KeyCode::Tab, KeyModifiers::SHIFT);
+    assert_eq!(
+        Keys::new().typed_action(tab_with_shift),
+        Some(Action::SelectPrevious)
+    );
 }

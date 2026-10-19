@@ -1,7 +1,7 @@
  Terra Sprites │ tick 3 │ ► 1x │ seed 7 │ sprites 3 │ not saved                              ? help
 ┌─ Sprites ── sorted by number ── filter: #6_ ── 1 of 3 ─────────────────────────────── esc clear ─┐
-│ Sprite       Age  Life stage  Drive        Gen  Doing                                            │
-│ Sprite #6  4,848  adult       -              1  Wandering off · 7 tiles to go                    │
+│ Sprite       Age  Life stage  Drive        Generation  Doing                                     │
+│ Sprite #6  4,848  adult       -                     1  Wandering off · 7 tiles to go             │
 │                                                                                                  │
 │                                                                                                  │
 │                                                                                                  │

@@ -1,5 +1,6 @@
-//! The sprite list (`l`, design §6.1): every sprite, its age, its strongest
-//! drive and what it's doing, sorted as the player chooses.
+//! The sprite list (`l`, design §6.1): every sprite, its age, life stage,
+//! strongest drive, generation and what it's doing, sorted as the player
+//! chooses and filtered by what they type after `/` (#313).
 
 mod common;
 use common::{WorldBuilder, app_on, at, pack, pairs, render, row, status_line};
@@ -427,6 +428,7 @@ fn the_filter_matches_any_column_the_row_shows() {
     assert_eq!(shown("HUNGER"), ["Sprite #2", "Sprite #4"], "a drive");
     assert_eq!(shown("thirst"), ["Abel #3"]);
     assert_eq!(shown("resting"), ["Sprite #2"], "what it's doing");
+    assert!(shown("ing").is_empty(), "words are found from their start");
     assert_eq!(
         shown("zed"),
         ["Zed #1", "Sprite #4"],
@@ -436,6 +438,11 @@ fn the_filter_matches_any_column_the_row_shows() {
         shown("gen 1"),
         ["Zed #1", "Sprite #2", "Abel #3", "Sprite #4"],
         "a generation, as its column heads it"
+    );
+    assert_eq!(
+        shown("generation 1").len(),
+        4,
+        "or in full, as the Body tab says it"
     );
     assert_eq!(shown("  thirst "), ["Abel #3"], "spaces at the ends aside");
 }
@@ -450,7 +457,7 @@ fn the_list_shows_each_sprite_s_generation_and_gen_finds_one() {
     let heading = row(&render(&app, &world), 2);
     let column = |name: &str| heading.find(name).unwrap_or_else(|| panic!("{heading}"));
     assert!(
-        column("Drive") < column("Gen") && column("Gen") < column("Doing"),
+        column("Drive") < column("Generation") && column("Generation") < column("Doing"),
         "after the drive: {heading}"
     );
     let total = world.sprites().count();
@@ -596,6 +603,24 @@ fn the_status_line_says_how_to_filter_and_while_filtering_how_to_clear_it() {
         status.ends_with("↑↓ choose  enter go to it  tab sort  esc clear"),
         "{status}"
     );
+}
+
+#[test]
+fn short_of_room_the_hints_leave_out_slash_filter_first() {
+    // Following Zed #1, the status line's left part is long enough that the
+    // hints with `/ filter` don't fit at 100 columns, and the rest still do.
+    let mut world = field();
+    let mut app = named(&mut world);
+    app.apply(Action::SelectNext, &world);
+    app.apply(Action::Follow { at: None }, &world);
+    app.apply(Action::SpriteList, &world);
+    let status = status_line(&app, &world);
+    assert!(status.contains("following Zed #1"), "{status}");
+    assert!(
+        status.ends_with("  ↑↓ choose  enter go to it  tab sort  esc close"),
+        "{status}"
+    );
+    assert!(!status.contains("/ filter"), "{status}");
 }
 
 #[test]

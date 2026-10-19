@@ -1,6 +1,7 @@
 //! The sprite list (`l`, design §6.1): every sprite the player may see, one
-//! to a row, with its age, its strongest drive, its generation and what it's
-//! doing, sorted as the player chooses and filtered by what they type (#313).
+//! to a row, with its age, life stage, strongest drive, generation and what
+//! it's doing, sorted as the player chooses and filtered by what they type
+//! (#313).
 
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
@@ -39,6 +40,7 @@ pub(crate) const MAX_FILTER_CHARS: usize = 24;
 
 /// A sprite's row as the list shows it, a column at a time.
 struct Row<'a> {
+    id: EntityId,
     label: String,
     age: String,
     stage: &'static str,
@@ -51,6 +53,7 @@ struct Row<'a> {
 impl<'a> Row<'a> {
     fn of(sprite: &SpriteView<'a>, app: &App, world: &World) -> Row<'a> {
         Row {
+            id: sprite.id(),
             label: app.names().label(sprite.id()),
             age: group_thousands(sprite.age()),
             stage: sprite.life_stage().name(),
@@ -65,27 +68,56 @@ impl<'a> Row<'a> {
         self.drive.map_or_else(|| "-".to_string(), display_name)
     }
 
-    /// Whether `filter`, its ends trimmed, is in any of its columns as
-    /// shown, case aside (#313): its generation as `gen 3`, as the column's
-    /// heading and its number.
-    fn matches(&self, filter: &str) -> bool {
-        let filter = filter.trim().to_lowercase();
+    /// Whether the words `typed` into the filter are found in any of its
+    /// columns as shown (#313), its generation read as `generation 3`, the
+    /// column's heading and its number.
+    fn matches(&self, typed: &[String]) -> bool {
+        let drive = self.drive_shown();
+        let generation = format!("generation {}", self.generation);
         [
-            self.label.clone(),
-            self.age.clone(),
-            self.stage.to_string(),
-            self.drive_shown(),
-            format!("gen {}", self.generation),
-            self.doing.clone(),
+            self.label.as_str(),
+            &self.age,
+            self.stage,
+            &drive,
+            &generation,
+            &self.doing,
         ]
-        .iter()
-        .any(|cell| cell.to_lowercase().contains(&filter))
+        .into_iter()
+        .any(|column| found_in(column, typed))
     }
 }
 
-/// The sprites the policy lets the list show (design §6.4), by ID, whatever
-/// the filter.
-fn listed<'a>(app: &App, world: &'a World) -> Vec<SpriteView<'a>> {
+/// The words of `text`, in lower case, split at whatever isn't a letter or a
+/// digit: `Tobek #12` is `tobek` and `12`.
+fn words(text: &str) -> Vec<String> {
+    text.split(|c: char| !c.is_alphanumeric())
+        .filter(|word| !word.is_empty())
+        .map(str::to_lowercase)
+        .collect()
+}
+
+/// Whether the words `typed` into the filter start words of `column`, in
+/// order and side by side (#313), so `old` finds the old and not what's
+/// holding something, and `gen 3` finds `generation 3`. A word ending in a
+/// digit is a whole number: `gen 3` isn't generation 31, nor `#1` Sprite
+/// #12. With nothing typed, every column has it.
+fn found_in(column: &str, typed: &[String]) -> bool {
+    let words = words(column);
+    typed.is_empty()
+        || words.windows(typed.len()).any(|run| {
+            run.iter().zip(typed).all(|(word, typed)| {
+                if typed.ends_with(|c: char| c.is_ascii_digit()) {
+                    word == typed
+                } else {
+                    word.starts_with(typed.as_str())
+                }
+            })
+        })
+}
+
+/// The sprites the policy lets the list show (design §6.4), by ID, before
+/// any filter.
+fn unfiltered<'a>(app: &App, world: &'a World) -> Vec<SpriteView<'a>> {
     world
         .sprites()
         .filter(|sprite| app.can_view(Panel::SpriteList, Subject::Sprite(sprite.id())))
@@ -96,9 +128,10 @@ fn listed<'a>(app: &App, world: &'a World) -> Vec<SpriteView<'a>> {
 /// lets it show (design §6.4) that match the filter, if there is one,
 /// sorted as the player chose.
 pub(crate) fn order(app: &App, world: &World) -> Vec<EntityId> {
-    let mut sprites = listed(app, world);
+    let mut sprites = unfiltered(app, world);
     if let Some(filter) = app.list_filter() {
-        sprites.retain(|sprite| Row::of(sprite, app, world).matches(filter));
+        let typed = words(filter);
+        sprites.retain(|sprite| Row::of(sprite, app, world).matches(&typed));
     }
     let drives: Vec<&str> = world.data().drives().collect();
     match app.list_sort() {
@@ -140,7 +173,7 @@ pub(crate) fn title(app: &App, world: &World) -> String {
         Some(filter) => format!(
             "{sorted}── filter: {filter}_ ── {} of {} ",
             order(app, world).len(),
-            listed(app, world).len()
+            unfiltered(app, world).len()
         ),
         None => sorted,
     }
@@ -162,24 +195,22 @@ pub(crate) fn lines(
             None => " No sprites",
         })];
     }
-    let shown: Vec<Row> = ids
-        .iter()
-        .filter_map(|&id| world.sprite(id))
-        .map(|sprite| Row::of(&sprite, app, world))
-        .collect();
     // The columns are as wide as the whole list needs, so they keep still
     // while the filter narrows it (#313).
-    let every: Vec<Row> = listed(app, world)
+    let every_row: Vec<Row> = unfiltered(app, world)
         .iter()
         .map(|sprite| Row::of(sprite, app, world))
         .collect();
-    let label_width = every
+    let shown = ids
+        .iter()
+        .filter_map(|&id| every_row.iter().find(|row| row.id == id));
+    let label_width = every_row
         .iter()
         .map(|row| row.label.chars().count())
         .chain(["Sprite".len()])
         .max()
         .unwrap_or(0);
-    let age_width = every
+    let age_width = every_row
         .iter()
         .map(|row| row.age.chars().count())
         .chain(["Age".len()])
@@ -200,23 +231,23 @@ pub(crate) fn lines(
         .max()
         .unwrap_or(0);
     // Each sprite's generation after its drive (M2 design §17.5, #313).
-    let generation_width = every
+    let generation_width = every_row
         .iter()
         .map(|row| row.generation.to_string().len())
-        .chain(["Gen".len()])
+        .chain(["Generation".len()])
         .max()
         .unwrap_or(0);
     let heading = format!(
         " {:<label_width$}  {:>age_width$}  {:<stage_width$}  {:<drive_width$}  \
          {:>generation_width$}  Doing",
-        "Sprite", "Age", "Life stage", "Drive", "Gen"
+        "Sprite", "Age", "Life stage", "Drive", "Generation"
     );
     let mut lines = vec![Line::styled(
         clipped(&heading, width),
         Style::default().add_modifier(Modifier::BOLD),
     )];
     let chosen = app.list_row(world);
-    for (index, row) in shown.iter().enumerate().skip(first).take(rows) {
+    for (index, row) in shown.enumerate().skip(first).take(rows) {
         let colour = row.drive.and_then(|drive| app.theme.drive_colour(drive));
         let mut drive_style = Style::default();
         if let Some(colour) = colour {
@@ -253,4 +284,48 @@ pub(crate) fn lines(
 /// The first `width` characters of `text`.
 fn clipped(text: &str, width: usize) -> String {
     text.chars().take(width).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Whether `typed` is found in `column`.
+    fn finds(column: &str, typed: &str) -> bool {
+        found_in(column, &words(typed))
+    }
+
+    #[test]
+    fn a_word_typed_finds_the_start_of_a_word_case_aside() {
+        assert!(finds("Tobek #12", "TOB"));
+        assert!(!finds("Tobek #12", "bek"), "only from a word's start");
+        assert!(finds("old", "old"));
+        assert!(!finds("Holding a berry", "old"));
+        assert!(finds("Going to drink · 2 tiles to go", "drink"));
+    }
+
+    #[test]
+    fn words_typed_are_found_in_order_side_by_side() {
+        assert!(finds("generation 3", "gen 3"));
+        assert!(finds("Going to drink · 2 tiles to go", "to drink"));
+        assert!(!finds("Going to drink · 2 tiles to go", "drink going"));
+        assert!(!finds("Going to drink · 2 tiles to go", "going drink"));
+    }
+
+    #[test]
+    fn a_number_typed_is_a_whole_number() {
+        assert!(!finds("generation 31", "gen 3"));
+        assert!(finds("generation 31", "gen 31"));
+        assert!(!finds("Sprite #12", "#1"));
+        assert!(finds("Sprite #12", "#12"));
+        assert!(finds("Sprite #12", "12"), "with or without the #");
+        assert!(finds("3,410", "3,410"));
+    }
+
+    #[test]
+    fn with_nothing_typed_every_column_has_it() {
+        assert!(finds("-", ""));
+        assert!(finds("young", "  "));
+        assert!(finds("-", "-"), "a dash is no word");
+    }
 }

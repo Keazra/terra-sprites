@@ -1376,7 +1376,7 @@ The species is dropped into a world it doesn't know and has to learn about it. I
   - **Lines that read the same in a row merge** into one with a count, "You petted Sprite #12 x10", as the observed list's do; its tick is the latest one's. Spam-clicking would otherwise fill the log.
 - **Status line:** the tile under the Cursor, the cursor mode, followed by `· seen` while sprites can see the Cursor in it (v29, `TRAIN · seen`), the sprite the Cursor follows (`following Mira #12`, v26), what the Cursor holds or leads (`holding: berry`, `leading: Mira #12`, v23, in every mode), and hints for the active keys. A prompt such as "Quit? (y/n)" takes its place while open.
   - **The key hints** (v22) sit at the right and lead with the mode keys, `Z select  X train  C grab`, then `WASD scroll  space pause  . step  +/- speed  esc quit`. Short of room, whole hints drop from the end, so the mode keys are the last to go, together.
-  - **While aiming** (v25), the key hints read `let go to throw  esc cancel`, or `let go to shove  esc cancel`. **While the sprite list is open** (v30), they read `/ filter  ↑↓ choose  enter go to it  tab sort  esc close`, or while it's filtered, `↑↓ choose  enter go to it  tab sort  esc clear` (#313), and while the population graph is (Slice 26), `←→ pick a moment  space pause  +/- speed  esc close` (M2 design §14.3). While the family tree is (Slice 25), they read `←→↑↓ choose  enter centre on it  space pause  esc close` (M2 design §17.2).
+  - **While aiming** (v25), the key hints read `let go to throw  esc cancel`, or `let go to shove  esc cancel`. **While the sprite list is open** (v30), they read `/ filter  ↑↓ choose  enter go to it  tab sort  esc close`, dropping `/ filter` first when short of room, or while it's filtered, `↑↓ choose  enter go to it  tab sort  esc clear` (#313), and while the population graph is (Slice 26), `←→ pick a moment  space pause  +/- speed  esc close` (M2 design §14.3). While the family tree is (Slice 25), they read `←→↑↓ choose  enter centre on it  space pause  esc close` (M2 design §17.2).
   - **A refused click's reason** (v22) takes the key hints' place for about 3 seconds of real time, worded as the event log words it: "Couldn't pet Sprite #12: it's gone". A Train click with nothing to act on says so the same way: "No sprite here to pet" (or hug, zap, shock). So do an `F` or a middle click with nothing to follow (v26), "No sprite here to follow", and a right click in Select mode while there's nothing to activate, "Nothing here to activate". So does a Grab click (v23): "Nothing here to grab", or on a fixture, "Can't grab the berry bush: it's rooted to the ground"; and a Grab right click with nothing held, led or under the Cursor (v25): "Nothing here to throw or shove", or on a fixture, "Can't throw the thornbush: it's rooted to the ground". On a line too full for it, such as when the Cursor follows a sprite standing on a berry, the reason still shows, and the tile's part of the line is cut short to make room.
   - The tile names its terrain and any object on it, with the object's stage if it has stages: `(61,40) grass · berry bush (mature)`.
   - **Display names** are the data's names with `_` shown as a space (`berry_bush` → "berry bush"), so `objects.ron` needs no separate display name. Its `plural` is the one other form the screen needs (§3.5.1).
@@ -1411,22 +1411,22 @@ The species is dropped into a world it doesn't know and has to learn about it. I
 
     ```
     ┌─ Sprites ── sorted by drive ───────────────────────────────────────────────────────── esc close ─┐
-    │ Sprite       Age  Life stage  Drive        Gen  Doing                                            │
-    │ Mira #12   3,410  adult       hunger         4  Going to eat the berry bush · 3 tiles to go      │
-    │ Sprite #7  1,022  young       thirst         5  Going to drink · 2 tiles to go                   │
-    │ Kel #4     5,903  old         -              2  Resting · 6 ticks left                           │
+    │ Sprite       Age  Life stage  Drive        Generation  Doing                                     │
+    │ Mira #12   3,410  adult       hunger                4  Going to eat the berry bush · 3 tiles to g│
+    │ Sprite #7  1,022  young       thirst                5  Going to drink · 2 tiles to go            │
+    │ Kel #4     5,903  old         -                     2  Resting · 6 ticks left                    │
     └──────────────────────────────────────────────────────────────────────────────────────────────────┘
     ```
 
     - It opens sorted as it was last, starting by number, with the selected sprite highlighted, or else the first. `Tab` sorts by number, name (named sprites first, by name, then the rest by number), age (oldest first) or drive (in the data pack's order, strongest first within each, those with none last); `Shift+Tab` goes back. The title says the order.
     - The arrows, `W` and `S`, or the wheel move the highlight (v38: the scroll keys too), a row in reverse video, which stays on its sprite when the list is re-sorted. A list too long for the screen scrolls to keep it in view.
     - `Enter`, or a click on a row, selects that sprite, centres the view on it and closes the list. `l` or `Esc` closes it without choosing; other keys do nothing while it's open. With no sprites, it reads "No sprites".
-    - **`/` filters it** (#313), as kdash's lists filter, since `l` closes the list and a name can hold an `l`. While it's filtered, keys type into the filter rather than act, up to 24 characters CP437 can show, and the title shows the filter and how many of the sprites the list would show match it. A sprite matches when the filter, its ends trimmed, is in any column its row shows, case aside, with the generation read as `gen 3`, the column's heading and its number: so `old`, `Tobek`, `gen 3`, or a word of what it's doing such as `drink`, all work. The columns keep the widths the whole list needs, so they don't move while the filter narrows it.
+    - **`/` filters it** (#313), as kdash's lists filter, since `l` closes the list and a name can hold an `l`. While it's filtered, keys type into the filter rather than act, up to 24 characters CP437 can show, and the title shows the filter and how many of the sprites the list would show match it. A sprite matches when the words typed start words of one column its row shows, in order and side by side, case aside, with the generation read as `generation 3`, the column's heading and its number. Words are split at whatever isn't a letter or a digit, and a word typed that ends in a digit is a whole number. So `old`, `Tobek`, `gen 3`, `#12` or a word of what it's doing such as `drink` all work, while `old` doesn't find a sprite holding something, nor `gen 3` generation 31, nor `#1` Sprite #12. The columns keep the widths the whole list needs, so they don't move while the filter narrows it.
 
       ```
       ┌─ Sprites ── sorted by drive ── filter: old_ ── 1 of 3 ─────────────────────────────── esc clear ─┐
-      │ Sprite       Age  Life stage  Drive        Gen  Doing                                            │
-      │ Kel #4     5,903  old         -              2  Resting · 6 ticks left                           │
+      │ Sprite       Age  Life stage  Drive        Generation  Doing                                     │
+      │ Kel #4     5,903  old         -                     2  Resting · 6 ticks left                    │
       └──────────────────────────────────────────────────────────────────────────────────────────────────┘
       ```
 

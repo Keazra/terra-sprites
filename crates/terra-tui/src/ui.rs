@@ -1009,14 +1009,22 @@ fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
                 // A Place menu item waiting, how to place it or not (design v28 §6.5).
                 _ if placing => hint_if_fits(room, "click to place  right-click put away"),
                 // While the sprite list is open, how to use it (design §6.1),
-                // and while it's filtered, how to clear the filter (#313).
-                _ if app.screen() == Screen::SpriteList => hint_if_fits(
-                    room,
-                    match app.list_filter() {
-                        Some(_) => "↑↓ choose  enter go to it  tab sort  esc clear",
-                        None => "/ filter  ↑↓ choose  enter go to it  tab sort  esc close",
-                    },
-                ),
+                // without `/ filter` where it would crowd the rest out; and
+                // while it's filtered, how to clear the filter (#313).
+                _ if app.screen() == Screen::SpriteList => {
+                    let hints: &[&str] = match app.list_filter() {
+                        Some(_) => &["↑↓ choose  enter go to it  tab sort  esc clear"],
+                        None => &[
+                            "/ filter  ↑↓ choose  enter go to it  tab sort  esc close",
+                            "↑↓ choose  enter go to it  tab sort  esc close",
+                        ],
+                    };
+                    hints
+                        .iter()
+                        .map(|hint| hint_if_fits(room, hint))
+                        .find(|hint| !hint.is_empty())
+                        .unwrap_or_default()
+                }
                 // And the population graph (M2 design §14).
                 _ if app.screen() == Screen::Population => {
                     hint_if_fits(room, "←→ pick a moment  space pause  +/- speed  esc close")

@@ -547,7 +547,7 @@ pub struct App {
     list_choice: Option<EntityId>,
     /// While the sprite list is filtered, what's typed into its filter
     /// (#313).
-    list_filter: Option<String>,
+    list_filter: Option<Draft>,
     /// The moment the population graph reads, the end of the stretch of
     /// time picked, if one is; otherwise it reads now (M2 design §14.3).
     graph_pick: Option<u64>,
@@ -671,6 +671,12 @@ impl Draft {
         self.text.pop();
         self.typed = true;
     }
+}
+
+/// Whether `c` can be typed into a save's name or the sprite list's filter
+/// (#313): a character the screen can show (design §7.2), not a control one.
+fn typeable(c: char) -> bool {
+    !c.is_control() && cp437::contains(c)
 }
 
 /// A shove of the selected sprite, which its observed list tells of once
@@ -2625,7 +2631,7 @@ impl App {
                 }
             }
             Action::Point(cell) => self.point(cell),
-            Action::FilterList => self.list_filter = Some(String::new()),
+            Action::FilterList => self.list_filter = Some(Draft::offered(String::new())),
             Action::SpriteList | Action::Back => self.screen = Screen::Normal,
             Action::Quit => return Flow::Quit,
             _ => {}
@@ -2643,14 +2649,8 @@ impl App {
             return Some(action);
         };
         match action {
-            Action::Type(c) if !c.is_control() && cp437::contains(c) => {
-                if filter.chars().count() < sprite_list::MAX_FILTER_CHARS {
-                    filter.push(c);
-                }
-            }
-            Action::Erase => {
-                filter.pop();
-            }
+            Action::Type(c) if typeable(c) => filter.type_char(c, sprite_list::MAX_FILTER_CHARS),
+            Action::Erase => filter.erase(),
             Action::Back => {
                 self.list_filter = None;
                 return None;
@@ -2703,7 +2703,7 @@ impl App {
     /// What's typed into the sprite list's filter, while it's filtered
     /// (#313).
     pub fn list_filter(&self) -> Option<&str> {
-        self.list_filter.as_deref()
+        self.list_filter.as_ref().map(Draft::text)
     }
 
     /// Which row of the sprite list is highlighted, from 0, in its current
@@ -3396,9 +3396,7 @@ impl App {
         };
         match action {
             // Only what the screen can show (design §7.2).
-            Action::Type(c) if !c.is_control() && cp437::contains(c) => {
-                draft.type_char(c, MAX_SAVE_NAME_CHARS);
-            }
+            Action::Type(c) if typeable(c) => draft.type_char(c, MAX_SAVE_NAME_CHARS),
             Action::Erase => draft.erase(),
             Action::Enter => {
                 let draft = self.save_naming.take().expect("naming a save").text;

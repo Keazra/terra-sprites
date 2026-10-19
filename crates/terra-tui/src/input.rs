@@ -266,8 +266,12 @@ impl Keys {
         match key.code {
             KeyCode::Char(c) => Some(Action::Type(c)),
             KeyCode::Backspace => Some(Action::Erase),
-            KeyCode::Tab => Some(Action::AnotherName),
+            // Shift+Tab as `action_for` reads it, either way it's reported.
             KeyCode::BackTab => Some(Action::SelectPrevious),
+            KeyCode::Tab if key.modifiers.contains(KeyModifiers::SHIFT) => {
+                Some(Action::SelectPrevious)
+            }
+            KeyCode::Tab => Some(Action::AnotherName),
             KeyCode::Enter => Some(Action::Enter),
             KeyCode::Esc => Some(Action::Back),
             // New world's presets and modes are picked while its seed is
