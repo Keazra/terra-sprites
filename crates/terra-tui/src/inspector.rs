@@ -542,6 +542,7 @@ fn aimed_line(action: &ActionView, data: &Words) -> Option<String> {
         }
         // Its gut had no room (M2 design §19.4).
         Progress::Ended(Outcome::TooFull) => match action.verb {
+            Verb::Eat if eaten_from(action, data) => format!("Too full to eat from {what}"),
             Verb::Eat => format!("Too full to eat {what}"),
             _ => "Too full to drink".into(),
         },
@@ -663,6 +664,16 @@ fn deed(action: &ActionView, what: &str, data: &Words) -> String {
         Verb::Court => format!("danced for {what}"),
         _ => format!("got to {what}"),
     }
+}
+
+/// Whether an Eat aimed at `action`'s target eats from it, as from a berry
+/// bush, rather than eating it whole, as a berry: whether the target's
+/// object type counts what's on it to eat, as a bush counts its fruit
+/// (design §3.5.2). A try the gut has no room for leaves either there, so
+/// its words can't go by whether the target's gone, as `deed`'s do.
+fn eaten_from(action: &ActionView, data: &Words) -> bool {
+    let name = action.target_type.and_then(|t| data.object_type_name(t));
+    name.is_some_and(|name| !data.counter_names(name).is_empty())
 }
 
 /// `name` after "a", or "an" before a vowel, whatever its case: "a ball",
@@ -2634,6 +2645,18 @@ mod tests {
                 "Gave up: the berry was gone",
                 "EAT → berry #9 · failed",
             ),
+            // Its gut had no room (M2 design §19.4): a bush is eaten from,
+            // a berry whole.
+            (
+                tried(bush(Ended(TooFull))),
+                "Too full to eat from the berry bush",
+                "EAT → berry_bush #812 · too_full",
+            ),
+            (
+                tried(berry(Ended(TooFull))),
+                "Too full to eat the berry",
+                "EAT → berry #9 · too_full",
+            ),
             (
                 bush(Ended(Failed)),
                 "Gave up: it couldn't get there",
@@ -2653,6 +2676,11 @@ mod tests {
                 tried(water(Ended(Applied))),
                 "Drank",
                 "DRINK → water (40,12) · applied",
+            ),
+            (
+                tried(water(Ended(TooFull))),
+                "Too full to drink",
+                "DRINK → water (40,12) · too_full",
             ),
             (
                 sprite(Walking { steps_left: 4 }),
@@ -3102,6 +3130,11 @@ mod tests {
                 water(Failed),
                 "Went to drink, but gave up: it couldn't get there",
             ),
+            (
+                tried(bush(TooFull)),
+                "Went to eat the berry bush, but was too full",
+            ),
+            (tried(water(TooFull)), "Went to drink, but was too full"),
             (tried(sprite(Applied)), "Went over to Sprite #530"),
             (
                 gone(sprite(Failed)),
