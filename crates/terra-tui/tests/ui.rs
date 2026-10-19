@@ -1602,6 +1602,10 @@ fn a_sprite_with_nothing_to_do_shows_how_its_action_ended_then_what_it_watches()
     assert_eq!(inspector(&app, &world).1[0], "Arrived");
     world.step();
     assert_eq!(inspector(&app, &world).1[0], "Watching the berry bush");
+    open(&mut app, &world, Tab::Brain);
+    let (_, text) = inspector(&app, &world);
+    assert!(text.iter().any(|row| row == "DECISION: none"), "{text:?}");
+    open(&mut app, &world, Tab::Body);
     app.apply(Action::ToggleDetail, &world);
     let id = world.object_at(bush).expect("the bush").id();
     assert_eq!(

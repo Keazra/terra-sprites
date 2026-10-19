@@ -274,11 +274,12 @@ fn thing_words(target: Target, at: Pos, data: &Words, world: &World) -> String {
     }
 }
 
-/// The type of object `id`, on tile `at` or held there.
+/// The type of object `id` on tile `at`, where the eye found it: a held
+/// object is never attended, and a tile holds one object.
 fn object_type(id: EntityId, at: Pos, world: &World) -> &str {
-    let on_tile = world.object_at(at).filter(|object| object.id() == id);
-    on_tile
-        .or_else(|| world.objects().find(|object| object.id() == id))
+    world
+        .object_at(at)
+        .filter(|object| object.id() == id)
         .map_or("?", |object| object.type_name())
 }
 
@@ -540,11 +541,13 @@ fn aimed_line(action: &ActionView, data: &Words) -> Option<String> {
         Progress::Ended(Outcome::Blocked) if action.verb == Verb::Retreat => {
             "Backed into a corner".into()
         }
-        // Its gut had no room (M2 design §19.4).
+        // Its gut had no room (M2 design §19.4). A pack may feed a sprite
+        // through any verb, so one that isn't Eat or Drink is just too full.
         Progress::Ended(Outcome::TooFull) => match action.verb {
             Verb::Eat if eaten_from(action, data) => format!("Too full to eat from {what}"),
             Verb::Eat => format!("Too full to eat {what}"),
-            _ => "Too full to drink".into(),
+            Verb::Drink => "Too full to drink".into(),
+            _ => return ended_line(Outcome::TooFull),
         },
         Progress::Ended(outcome) => return ended_line(outcome),
     })
@@ -2794,6 +2797,12 @@ mod tests {
                 tried_and_hurt(thorns(Verb::Eat, Ended(Failed))),
                 "Couldn't eat from the thornbush, and got hurt",
                 "EAT → thornbush #77 · failed",
+            ),
+            // A pack may feed a sprite through a play (M2 design §19.4).
+            (
+                tried(ball(Verb::Play, Ended(TooFull))),
+                "Too full",
+                "PLAY → ball #40 · too_full",
             ),
         ];
         for (view, plain, exact) in cases {

@@ -617,12 +617,12 @@ fn physiology(program: &Program, body: &mut Body, senses: &Senses, data: &DataPa
     let pace = traits.speed / 8.0;
     let metabolism = physiology.metabolism;
     // A rest costs less than standing awake (M2 design §19.2).
-    let idle = if senses.resting {
+    let rest = if senses.resting {
         metabolism.resting
     } else {
         1.0
     };
-    chems[indices.energy] -= idle
+    chems[indices.energy] -= rest
         * (metabolism.basal + metabolism.per_sense_tile * traits.sense_radius)
         + steps * metabolism.per_step * pace * pace;
     // Growing up takes the same energy however long it takes, and a later

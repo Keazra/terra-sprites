@@ -179,7 +179,7 @@ struct Tally {
     /// with a parent in sight.
     hatched: BTreeMap<EntityId, (u64, u64)>,
     /// What killed the hatched young, by cause.
-    died_young_of: BTreeMap<String, u64>,
+    died_young_of: BTreeMap<DeathCause, u64>,
     /// The hatched young that grew up and that died young: those that saw
     /// a parent for at least half their childhood, then the rest.
     by_parent: [Raised; 2],
@@ -225,7 +225,7 @@ impl Tally {
                         if let Some(sight) = self.hatched.remove(&id) {
                             now.died_young += 1;
                             self.by_parent[apart(sight)].died_young += 1;
-                            *self.died_young_of.entry(cause_name(cause)).or_insert(0) += 1;
+                            *self.died_young_of.entry(cause).or_insert(0) += 1;
                         }
                     }
                     LifeStage::Adult => {
@@ -445,7 +445,9 @@ fn run(data: &DataPack, starter: &BTreeMap<String, usize>, seed: u64, options: &
             break;
         }
     }
-    out.died_young_of = tally.died_young_of;
+    out.died_young_of = (tally.died_young_of.into_iter())
+        .map(|(cause, n)| (cause_name(cause, data), n))
+        .collect();
     out.by_parent = tally.by_parent;
     if out.died_out.is_none() {
         out.newborns = World::unattended_like(config, data.clone(), seed, &world).map(newborns);
@@ -486,12 +488,12 @@ fn bush_count(world: &World) -> usize {
 }
 
 /// What a death was of, by name.
-fn cause_name(cause: DeathCause) -> String {
+fn cause_name(cause: DeathCause, data: &DataPack) -> String {
     match cause {
-        DeathCause::Starvation => "hunger".into(),
-        DeathCause::Dehydration => "thirst".into(),
+        DeathCause::Starvation => "starvation".into(),
+        DeathCause::Dehydration => "dehydration".into(),
         DeathCause::OldAge => "old age".into(),
-        DeathCause::HurtBy(id) => format!("hurt by object type {id}"),
+        DeathCause::HurtBy(id) => format!("hurt by {}", data.object_type_name(id).unwrap_or("?")),
     }
 }
 
