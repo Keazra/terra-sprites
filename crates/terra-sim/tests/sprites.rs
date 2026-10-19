@@ -7,7 +7,7 @@ use common::{WorldBuilder, at, builtin, builtin_changing, builtin_with, close, i
 use std::collections::BTreeSet;
 
 use terra_sim::{
-    ChemicalKind, Command, DataPack, DeathCause, EmitterMode, EntityId, EventKind, Expression,
+    ChemicalKind, Command, DataPack, DeathCause, Dir, EmitterMode, EntityId, EventKind, Expression,
     GeneView, Genome, LifeStage, Pos, ScriptedAction, Trait, Traits, Whom, World, WorldConfig,
 };
 
@@ -669,6 +669,23 @@ fn a_sprite_that_chose_nothing_is_standing_and_one_the_cursor_leads_is_not() {
         assert!(!world.sprite(id).expect("the sprite").is_standing());
         assert!(close(stood(&world), 0.03), "{}", stood(&world));
     }
+    // Shoved, it's let go and slides a tile a tick (design v25 §3.5.4),
+    // and doesn't stand while it slides.
+    world.submit(Command::Shove {
+        toward: Dir::W,
+        tiles: 2,
+    });
+    world.step();
+    let sprite = world.sprite(id).expect("the sprite");
+    assert!(sprite.slide().is_some(), "a tile left to slide");
+    assert!(!sprite.is_standing());
+    assert!(close(stood(&world), 0.03), "{}", stood(&world));
+    // Its slide ends at step 2, so it stands again from that tick on.
+    world.step();
+    let sprite = world.sprite(id).expect("the sprite");
+    assert_eq!(sprite.slide(), None);
+    assert!(sprite.is_standing());
+    assert!(close(stood(&world), 0.04), "{}", stood(&world));
 }
 
 #[test]
