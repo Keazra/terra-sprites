@@ -989,3 +989,84 @@ fn thousands(n: u64) -> String {
     }
     out
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A window with nothing counted yet.
+    fn empty() -> Window {
+        Window {
+            from: 0,
+            to: 2,
+            applied: BTreeMap::new(),
+            deaths: BTreeMap::new(),
+            touches: BTreeMap::new(),
+            lessons: BTreeMap::new(),
+            young: None,
+            first: Childhood::default(),
+            later: Childhood::default(),
+            stage_deaths: BTreeMap::new(),
+            first_died: 0,
+        }
+    }
+
+    /// The sprite `id` died of `cause`.
+    fn died(id: u64, cause: DeathCause) -> EventKind {
+        EventKind::Died {
+            id: EntityId(id),
+            name: None,
+            cause,
+            age: 0,
+        }
+    }
+
+    #[test]
+    fn a_window_counts_childhoods_by_first_or_later_and_deaths_by_life_stage() {
+        // M2 design §19.6: sprite 1 is a first sprite that starts young and
+        // grows up; sprite 2 a first sprite, grown up, that grows old and
+        // then dies of hunger, counted apart from adults' hunger; and
+        // sprite 3 hatches, and dies young.
+        let first = BTreeSet::from([EntityId(1), EntityId(2)]);
+        let mut stages = BTreeMap::from([
+            (EntityId(1), LifeStage::Young),
+            (EntityId(2), LifeStage::Adult),
+        ]);
+        let ticks = [
+            vec![
+                EventKind::Hatched {
+                    id: EntityId(3),
+                    parents: vec![EntityId(2)],
+                },
+                EventKind::GrewUp { id: EntityId(1) },
+                EventKind::GrewOld { id: EntityId(2) },
+            ],
+            vec![
+                died(2, DeathCause::Starvation),
+                died(3, DeathCause::Dehydration),
+            ],
+        ];
+        let mut window = empty();
+        for (tick, kinds) in (0..).zip(ticks) {
+            let events: Vec<Event> = kinds.into_iter().map(|kind| Event { tick, kind }).collect();
+            for fate in fates(&events, &mut stages, &first) {
+                window.record(fate);
+            }
+        }
+        let childhood = |grew_up, died_young| Childhood {
+            grew_up,
+            died_young,
+        };
+        assert_eq!(window.first, childhood(1, 0));
+        assert_eq!(window.later, childhood(0, 1));
+        assert_eq!(
+            window.stage_deaths,
+            BTreeMap::from([
+                ((LifeStage::Young, DeathCause::Dehydration), 1),
+                ((LifeStage::Old, DeathCause::Starvation), 1),
+            ])
+        );
+        assert_eq!(window.first_died, 1, "sprite 2, of the first sprites");
+        assert_eq!(stages, BTreeMap::from([(EntityId(1), LifeStage::Adult)]));
+    }
+}

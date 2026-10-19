@@ -410,14 +410,19 @@ fn a_scenario_can_have_its_sprites_grow_old_at_another_age() {
     let whole = ARENA
         .replace("ticks: 3000", "ticks: 7000")
         .replace("windows: [(0, 1000), (1000, 3000)]", "windows: [(0, 7000)]");
-    let old_age = |text: &str| {
+    let window = |text: &str| {
         let lab = LabScenario::from_ron(text, &data).expect("a valid scenario");
-        let run = lab.run(data.clone(), 1);
-        run.windows[0].deaths.get(&DeathCause::OldAge).copied()
+        lab.run(data.clone(), 1).windows.remove(0)
     };
-    assert_eq!(old_age(&whole), None);
-    let sooner = whole.replace("ticks: 7000", "grows_old: 6000.0,\n    ticks: 7000");
-    assert_eq!(old_age(&sooner), Some(1));
+    assert_eq!(window(&whole).deaths.get(&DeathCause::OldAge), None);
+    let sooner = window(&whole.replace("ticks: 7000", "grows_old: 6000.0,\n    ticks: 7000"));
+    assert_eq!(sooner.deaths.get(&DeathCause::OldAge), Some(&1));
+    // M2 design §19.6: it died old, one of the world's first sprites.
+    assert_eq!(
+        sooner.stage_deaths,
+        BTreeMap::from([((LifeStage::Old, DeathCause::OldAge), 1)])
+    );
+    assert_eq!(sooner.first_died, 1);
 }
 
 /// Two grown sprites who each get a newborn of their own at tick 100, in a
