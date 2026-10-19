@@ -35,7 +35,8 @@
     (id: 15, name: "young_away",        kind: BodySensor),
     (id: 16, name: "parent_away",       kind: BodySensor),
     (id: 17, name: "partner_away",      kind: BodySensor),
-    // 1 while it has no action, standing where it is (M2 design §19.2).
+    // 1 while it has no action running and isn't led by the Cursor or
+    // sliding from a shove, standing where it is (M2 design §19.2).
     (id: 18, name: "standing",          kind: BodySensor),
 
     (id: 32, name: "ate",               kind: Pulse),

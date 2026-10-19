@@ -381,6 +381,13 @@ pub(crate) fn is_acting(sprite: &Sprite) -> bool {
     sprite.action.as_ref().is_some_and(|a| a.ended.is_none())
 }
 
+/// Whether `sprite` stands where it is (M2 design §19.2): it has no action
+/// running, and neither the Cursor leads it nor a shove slides it, which
+/// would move it whatever it chose.
+pub(crate) fn is_standing(sprite: &Sprite) -> bool {
+    sprite.lead.is_none() && sprite.slide.is_none() && !is_acting(sprite)
+}
+
 /// Step 5 for every sprite not marked dying (design §2.4): refresh its flood
 /// if it moved or the flood is due; end its action if that has timed out, or
 /// lost its target or destination (5.0); then attention and the decision

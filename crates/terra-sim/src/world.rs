@@ -550,17 +550,18 @@ impl<'a> SpriteView<'a> {
         self.sprite.brain.snapshot.as_ref()?.target
     }
 
-    /// Whether it stands with nothing to do (M2 design §19.2): it has no
-    /// action, or its last ended before the latest tick, which still shows
-    /// how it ended. One the Cursor leads or a shove slides isn't standing.
+    /// Whether it stands with nothing to do (M2 design §19.2), as its
+    /// `standing` sensor reads it: no action running, and neither led by the
+    /// Cursor nor sliding from a shove. An action that ended on the latest
+    /// tick still shows how it ended, so the sprite isn't standing yet.
     pub fn is_standing(&self) -> bool {
-        if self.sprite.lead.is_some() || self.sprite.slide.is_some() {
-            return false;
-        }
         let latest = self.world.state.tick.saturating_sub(1);
-        self.sprite.action.as_ref().is_none_or(|action| {
-            action.ended.is_some() && action.ended_at.is_none_or(|t| t < latest)
-        })
+        action::is_standing(self.sprite)
+            && self
+                .sprite
+                .action
+                .as_ref()
+                .is_none_or(|action| action.ended_at.is_none_or(|t| t < latest))
     }
 
     /// The traits its body has: its genes', clamped to physiology's ranges.
@@ -1812,7 +1813,7 @@ impl World {
                     nearby_sprites: (others as f32 / f32::from(nearby.full)).min(1.0),
                     steps: sprite.did.steps,
                     resting: sprite.did.rested,
-                    standing: !action::is_acting(sprite),
+                    standing: action::is_standing(sprite),
                     stage: sprite.stage(),
                     sooner: sprite.sooner(data),
                     fertile: breeding::fertile(state, sprite, data),

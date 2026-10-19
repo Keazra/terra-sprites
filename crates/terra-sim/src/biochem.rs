@@ -517,7 +517,8 @@ pub(crate) struct Senses {
     pub(crate) steps: u32,
     /// Whether it rested during the previous tick.
     pub(crate) resting: bool,
-    /// Whether it has no action, standing where it is (M2 design §19.2).
+    /// Whether it stands where it is (M2 design §19.2): no action running,
+    /// and neither led by the Cursor nor sliding from a shove.
     pub(crate) standing: bool,
     /// Its life stage (M2 design §9.1).
     pub(crate) stage: LifeStage,
@@ -1274,6 +1275,7 @@ mod tests {
         assert_eq!(sprite.locus("nearby_sprites"), 0.5);
         assert_eq!(sprite.locus("moving"), 1.0);
         assert_eq!(sprite.locus("resting"), 0.0);
+        assert_eq!(sprite.locus("standing"), 0.0);
         sprite.step_with(Senses {
             age: 40_000,
             resting: true,
@@ -1282,6 +1284,14 @@ mod tests {
         assert_eq!(sprite.locus("age"), 1.0, "capped at 1 once old");
         assert_eq!(sprite.locus("moving"), 0.0);
         assert_eq!(sprite.locus("resting"), 1.0);
+        assert_eq!(sprite.locus("standing"), 0.0);
+        // M2 design §19.2: with no action, it stands where it is.
+        sprite.step_with(Senses {
+            standing: true,
+            ..adult()
+        });
+        assert_eq!(sprite.locus("resting"), 0.0);
+        assert_eq!(sprite.locus("standing"), 1.0);
     }
 
     #[test]

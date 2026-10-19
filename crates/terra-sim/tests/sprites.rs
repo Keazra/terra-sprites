@@ -1,14 +1,14 @@
-//! Sprites with a body (design §3.2, §4): the first population, and life and
-//! death without food or water.
+//! Sprites with a body (design §3.2, §4): the first population, life and
+//! death without food or water, and standing about with nothing to do.
 
 mod common;
-use common::{WorldBuilder, at, builtin, builtin_changing, builtin_with};
+use common::{WorldBuilder, at, builtin, builtin_changing, builtin_with, close, id_at};
 
 use std::collections::BTreeSet;
 
 use terra_sim::{
-    ChemicalKind, DataPack, DeathCause, EmitterMode, EntityId, EventKind, Expression, GeneView,
-    Genome, LifeStage, Pos, ScriptedAction, Trait, Traits, Whom, World, WorldConfig,
+    ChemicalKind, Command, DataPack, DeathCause, EmitterMode, EntityId, EventKind, Expression,
+    GeneView, Genome, LifeStage, Pos, ScriptedAction, Trait, Traits, Whom, World, WorldConfig,
 };
 
 #[test]
@@ -628,4 +628,79 @@ fn a_starter_sprite_grows_restless_with_need_and_wary_after_hurts() {
         )),
         "pain feeds {wariness}"
     );
+}
+
+/// Genes that add 0.01 of `h1` each tick the `standing` sensor reads 1, so
+/// a test can read it, and that act on nothing pulling less than 0.25, so a
+/// sprite with no instincts chooses nothing (M2 design §19.2).
+const READS_STANDING: &str = r#"
+    Emitter(locus: Locus("standing"), mode: Level, gain: 0.01, chem: "h1"),
+    BrainParam(param: "act_threshold", value: 0.25),
+"#;
+
+#[test]
+fn a_sprite_that_chose_nothing_is_standing_and_one_the_cursor_leads_is_not() {
+    // M2 design §19.2: the `standing` sensor reads 1 while a sprite has no
+    // action running and isn't led by the Cursor or sliding from a shove,
+    // as its doing line says. Taken hold of, it has no action either, but
+    // it goes where it's led.
+    let mut world = WorldBuilder::new(&["....."])
+        .sprites(&[(at(2, 0), READS_STANDING)])
+        .build();
+    let id = id_at(&world, at(2, 0));
+    let stood = |world: &World| {
+        let sprite = world.sprite(id).expect("the sprite");
+        sprite.chemical("h1").expect("a hormone")
+    };
+    for tick in 1..=3 {
+        world.step();
+        let sprite = world.sprite(id).expect("the sprite");
+        assert!(sprite.action().is_none(), "it chose nothing");
+        assert!(sprite.is_standing());
+        assert!(
+            close(stood(&world), 0.01 * tick as f32),
+            "{}",
+            stood(&world)
+        );
+    }
+    world.submit(Command::TakeHold { sprite: id });
+    for _ in 0..3 {
+        world.step();
+        assert!(!world.sprite(id).expect("the sprite").is_standing());
+        assert!(close(stood(&world), 0.03), "{}", stood(&world));
+    }
+}
+
+#[test]
+fn a_newborn_starter_with_nothing_pressing_stands_and_grows_bored_the_faster() {
+    // M2 design §19.2: the young's restless streak, Wander at 0.15, is too
+    // weak for the starter's `act_threshold` of 0.25, so a fed and watered
+    // newborn with nothing about stands where it is. Its boredom then
+    // climbs by the 0.0002 a tick it always does and the 0.0005 that
+    // standing about adds.
+    let data = builtin();
+    let starter = include_str!("../../../data/genomes/starter.ron");
+    let genome = Genome::from_ron(starter, &data).expect("the starter genome");
+    let newborn = at(2, 1);
+    let mut world = WorldBuilder::new(&[".....", ".....", "....."])
+        .data(data)
+        .sprites_with(vec![(newborn, Some(genome))])
+        .newborns(&[newborn])
+        .build();
+    let id = id_at(&world, newborn);
+    for tick in 1..=200 {
+        world.step();
+        let sprite = world.sprite(id).expect("the newborn");
+        assert!(
+            sprite.action().is_none(),
+            "tick {tick}: {:?}",
+            sprite.action()
+        );
+        let boredom = sprite.chemical("boredom").expect("boredom");
+        let expected = 0.0007 * tick as f32;
+        assert!(
+            close(boredom, expected),
+            "tick {tick}: {boredom}, not {expected}"
+        );
+    }
 }
