@@ -81,8 +81,9 @@ pub(crate) struct PhysiologyEntry {
     stamina: Stamina,
     healing: f32,
     injury: Injury,
-    /// A pack from before life stages takes the built-in ageing (design
-    /// §2.8: a save carries its own pack).
+    /// A pack from before life stages takes the built-in ageing, without
+    /// `thirst_childhood`, as it's from before Slice 29 too, so its young
+    /// dry out at the grown rate (design §2.8: a save carries its own pack).
     #[serde(default)]
     ageing: Ageing,
     /// A pack from before breeding takes the built-in breeding (design
@@ -508,7 +509,7 @@ pub(crate) struct Wear {
 }
 
 /// What a saved world's pack from before life stages gets: the built-in
-/// pack's, which a test checks they match.
+/// pack's, which a test checks they match, but for `thirst_childhood`.
 impl Default for Ageing {
     fn default() -> Ageing {
         Ageing {
@@ -533,7 +534,8 @@ impl Default for Ageing {
                 chance: 0.002,
                 hit: 0.05,
             },
-            // From before Slice 29 too.
+            // From before Slice 29 too, so its young dry out at the grown
+            // rate (M2 design §19.5).
             thirst_childhood: None,
         }
     }
@@ -1490,7 +1492,8 @@ mod tests {
             (built_in.held, built_in.per_kind, built_in.merge)
         );
         // A pack from before life stages is from before Slice 29 too, so
-        // its young (there are none) aren't paced (M2 design §19.5).
+        // its young, such as an old save's or one the Cursor places, dry out
+        // at the grown rate (M2 design §19.5).
         let ageing = Ageing {
             thirst_childhood: None,
             ..physiology.ageing
