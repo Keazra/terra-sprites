@@ -675,7 +675,7 @@ A view the player switches on and off that shows the exact workings behind what 
 _Avoid_: debug mode (it's in every build)
 
 **Debug overlay**:
-The small box `F3` shows in the map view's top-right corner, over whatever's open: how the game is running on this computer, the ticks a second it achieved against the speed asked for, the simulation's and the drawing's time each frame, and whether the terminal reports key releases. It's in every build, for a screenshot when the game feels slow. Unlike the help screen and the other overlays, it covers only a corner.
+The small box `F3` shows in the map view's top-right corner, over any menu or overlay in a world: how the game is running on this computer, the ticks a second it achieved against the speed asked for, the simulation's and the drawing's time each frame, and whether the terminal reports key releases. It's in every build, for a screenshot when the game feels slow. Unlike the help screen and the other overlays, it covers only a corner.
 _Avoid_: debug mode (it's in every build), FPS counter, performance panel
 
 **Decision marker**:

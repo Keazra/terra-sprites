@@ -589,9 +589,9 @@ fn run(
     loop {
         // The terminal may have been resized since the last frame.
         app.fit(ui::areas(terminal.size()?));
-        let drawn = Instant::now();
+        let draw_start = Instant::now();
         terminal.draw(|frame| ui::render(frame, app, session.world()))?;
-        let drawing = drawn.elapsed();
+        let drawing = draw_start.elapsed();
         if setup.force_panic {
             panic!("forced panic (--force-panic): the terminal should now be restored");
         }
@@ -650,8 +650,8 @@ fn run(
             },
             || stop.get() || frame_start.elapsed() >= SIM_BUDGET,
         );
-        // What the debug overlay reads (#311): the time the budget counts,
-        // and the drawing's.
+        // What the debug overlay reads (design §6.1): the time the budget
+        // counts, and the drawing's.
         let times = FrameTimes {
             elapsed,
             ticks: ran,

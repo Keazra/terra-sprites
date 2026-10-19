@@ -11,6 +11,7 @@
 use std::path::PathBuf;
 
 use ratatui::buffer::Buffer;
+use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::layout::{Position, Rect, Size};
 use ratatui::{Terminal, backend::TestBackend};
 use terra_sim::{
@@ -260,6 +261,12 @@ pub fn status_line(app: &App, world: &World) -> String {
 /// end.
 pub fn lines(screen: &Buffer) -> Vec<String> {
     (0..screen.area.height).map(|y| row(screen, y)).collect()
+}
+
+/// A key event of `kind` with no modifiers: a press, a repeat or a
+/// release.
+pub fn key(code: KeyCode, kind: KeyEventKind) -> KeyEvent {
+    KeyEvent::new_with_kind(code, KeyModifiers::NONE, kind)
 }
 
 /// Carries out `action`, which leaves the game running.

@@ -99,7 +99,8 @@ pub fn render_with(frame: &mut Frame, app: &App, world: &World, parts: Parts) {
         Screen::FamilyTree => render_family_tree(frame.buffer_mut(), app, world),
         _ => {}
     }
-    // Over whatever's open, so it's in a screenshot of any screen (#311).
+    // Over whatever's open, so it's in a screenshot of any of them (design
+    // §6.1).
     if app.debug_overlay() {
         render_debug_overlay(frame.buffer_mut(), map_view_area(area, parts), app);
     }
@@ -752,11 +753,11 @@ fn render_family_tree(buf: &mut Buffer, app: &App, world: &World) {
     }
 }
 
-/// Draws the debug overlay (`F3`, #311) in the top-right corner inside the
+/// Draws the debug overlay (`F3`, design §6.1, #311) in the top-right corner inside the
 /// map view's border, `map_view`, as far as the map view goes.
 fn render_debug_overlay(buf: &mut Buffer, map_view: Rect, app: &App) {
     let inner = map_view.inner(Margin::new(1, 1));
-    let lines = crate::debug_overlay::lines(app);
+    let lines = app.debug_lines();
     let width = crate::debug_overlay::WIDTH;
     let height = lines.len() as u16 + 2;
     let area =

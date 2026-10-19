@@ -1,26 +1,18 @@
-//! The debug overlay (`F3`, #311): how the game is running on this computer,
-//! in a corner of the map view, for a screenshot when it feels slow.
+//! The debug overlay (`F3`, design §6.1, #311): how the game is running on
+//! this computer, in a corner of the map view, for a screenshot when it
+//! feels slow.
 
 mod common;
-use common::{WorldBuilder, app_on, apply, at, lines, render, tick};
+use common::{WorldBuilder, app_on, apply, at, key, lines, render, tick};
 
 use std::time::Duration;
 
-use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers};
+use ratatui::crossterm::event::{KeyCode, KeyEventKind};
 use terra_sim::World;
 use terra_tui::app::{App, Screen};
 use terra_tui::clock::Speed;
 use terra_tui::debug_overlay::FrameTimes;
 use terra_tui::input::{Action, KeyReports, Keys};
-
-fn key(code: KeyCode, kind: KeyEventKind) -> KeyEvent {
-    KeyEvent {
-        code,
-        modifiers: KeyModifiers::NONE,
-        kind,
-        state: KeyEventState::NONE,
-    }
-}
 
 #[test]
 fn f3_toggles_the_overlay_on_a_fresh_press_only() {
@@ -29,10 +21,44 @@ fn f3_toggles_the_overlay_on_a_fresh_press_only() {
         keys.action_for(key(KeyCode::F(3), KeyEventKind::Press)),
         Some(Action::DebugOverlay)
     );
-    // A held `F3` would flicker it on and off.
+    // A held `F3` would flicker it on and off: a repeat, or a press again
+    // with no release between, where releases are reported.
     assert_eq!(
         keys.action_for(key(KeyCode::F(3), KeyEventKind::Repeat)),
         None
+    );
+    assert_eq!(
+        keys.action_for(key(KeyCode::F(3), KeyEventKind::Press)),
+        None
+    );
+    keys.action_for(key(KeyCode::F(3), KeyEventKind::Release));
+    assert_eq!(
+        keys.action_for(key(KeyCode::F(3), KeyEventKind::Press)),
+        Some(Action::DebugOverlay)
+    );
+}
+
+#[test]
+fn f3_toggles_it_while_a_name_is_typed_too() {
+    // `F3` types nothing, so it needn't wait for the name.
+    let mut keys = Keys::with_release_reporting(true);
+    assert_eq!(
+        keys.typed_action(key(KeyCode::F(3), KeyEventKind::Press)),
+        Some(Action::DebugOverlay)
+    );
+    assert_eq!(
+        keys.typed_action(key(KeyCode::F(3), KeyEventKind::Repeat)),
+        None
+    );
+    assert_eq!(
+        keys.typed_action(key(KeyCode::F(3), KeyEventKind::Press)),
+        None,
+        "pressed again with no release between"
+    );
+    keys.typed_action(key(KeyCode::F(3), KeyEventKind::Release));
+    assert_eq!(
+        keys.typed_action(key(KeyCode::F(3), KeyEventKind::Press)),
+        Some(Action::DebugOverlay)
     );
 }
 
@@ -235,7 +261,21 @@ fn f3_shows_it_over_whatever_is_open_and_answers_no_prompt() {
     assert_eq!(app.screen(), Screen::QuitPrompt);
     apply(&mut app, &world, Action::DebugOverlay);
     assert_eq!(app.screen(), Screen::QuitPrompt, "the question still waits");
-    assert!(!app.debug_overlay());
+    assert!(!app.debug_overlay(), "and F3 hid the overlay");
+}
+
+#[test]
+fn f3_toggles_it_while_naming_without_touching_the_name() {
+    let world = field();
+    let mut app = app_on(&world);
+    apply(&mut app, &world, Action::SelectNext);
+    apply(&mut app, &world, Action::Rename);
+    assert_eq!(app.screen(), Screen::Naming);
+    let draft = app.name_draft().map(str::to_string);
+    apply(&mut app, &world, Action::DebugOverlay);
+    assert!(app.debug_overlay());
+    assert_eq!(app.screen(), Screen::Naming);
+    assert_eq!(app.name_draft().map(str::to_string), draft);
 }
 
 #[test]

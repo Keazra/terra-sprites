@@ -1381,7 +1381,7 @@ The species is dropped into a world it doesn't know and has to learn about it. I
   - The tile names its terrain and any object on it, with the object's stage if it has stages: `(61,40) grass · berry bush (mature)`.
   - **Display names** are the data's names with `_` shown as a space (`berry_bush` → "berry bush"), so `objects.ron` needs no separate display name. Its `plural` is the one other form the screen needs (§3.5.1).
 - **Overlays** (v30) fill the screen between the top bar and the status line, inside a single-lined border with their name at the left of its top edge and ` esc close ` at the right. The status line stays.
-  - **The help screen** (`?`): every key in three columns of groups (time and view; the Cursor; sprites and the inspector), then the colour legend, a sprite glyph in each of the data pack's drives' colours and "none", the emote legend, from Slice 25 the lineage colours (M2 design §17.4), and the game's folder for its files (§6.7). It fits at 100×30, so it doesn't scroll. `?` or `Esc` closes it; other keys do nothing while it's open.
+  - **The help screen** (`?`): every key in three columns of groups (time and view; the Cursor; sprites and the inspector), then the colour legend, a sprite glyph in each of the data pack's drives' colours and "none", the emote legend, from Slice 25 the lineage colours (M2 design §17.4), and the game's folder for its files (§6.7). It fits at 100×30, so it doesn't scroll. `?` or `Esc` closes it; other keys do nothing while it's open, but `F3` (below).
 
     ```
     ┌─ Help ─────────────────────────────────────────────────────────────────────────────── esc close ─┐
@@ -1420,10 +1420,10 @@ The species is dropped into a world it doesn't know and has to learn about it. I
 
     - It opens sorted as it was last, starting by number, with the selected sprite highlighted, or else the first. `Tab` sorts by number, name (named sprites first, by name, then the rest by number), age (oldest first) or drive (in the data pack's order, strongest first within each, those with none last); `Shift+Tab` goes back. The title says the order.
     - The arrows, `W` and `S`, or the wheel move the highlight (v38: the scroll keys too), a row in reverse video, which stays on its sprite when the list is re-sorted. A list too long for the screen scrolls to keep it in view.
-    - `Enter`, or a click on a row, selects that sprite, centres the view on it and closes the list. `l` or `Esc` closes it without choosing; other keys do nothing while it's open. With no sprites, it reads "No sprites".
+    - `Enter`, or a click on a row, selects that sprite, centres the view on it and closes the list. `l` or `Esc` closes it without choosing; other keys do nothing while it's open, but `F3` (below). With no sprites, it reads "No sprites".
   - **The population graph** (`p`, from Slice 26): the world's population over its whole run, each column split by the share of each life stage and of eggs, with a moment picked and read under it (M2 design §14).
   - **The family tree** (`k`, from Slice 25): the selected sprite's grandparents, parents, young, and brothers and sisters, living or dead, walked with the arrows (M2 design §17).
-- **The debug overlay** (`F3`, in every build, [#311](https://github.com/Keazra/terra-sprites/issues/311)) isn't one of these: it's a small box inside the map view's border, at its top right, over whatever's open, until `F3` hides it again. It says how the game is running on the player's computer, so "it feels slow at Max" becomes numbers in a screenshot:
+- **The debug overlay** (`F3`, in every build, [#311](https://github.com/Keazra/terra-sprites/issues/311)) isn't one of these: it's a small box inside the map view's border, at its top right, until `F3` hides it again. In a world it's drawn over any menu or overlay, at 100×30 and up; `F3` works whatever's open, a name being typed included, even where other keys do nothing. It says how the game is running on the player's computer, so "it feels slow at Max" becomes numbers in a screenshot:
 
   ```
   ┌─ Debug ────────────── F3 ─┐
@@ -1439,7 +1439,7 @@ The species is dropped into a world it doesn't know and has to learn about it. I
   - **The drawing's time** in a frame, on average, and the frames a second.
   - **Whether the terminal reports key releases** (§6.6): `releases reported`, `no releases` (a held key is told from taps only by its repeats), or `kitty protocol`.
   - **The frame loop times each frame** and hands the times to the screen, which reads them once a second's worth is in, so the numbers hold still long enough to read; until then they're `-`. It measures the game as it's played, drawing included. The speed example (A5) stays the measure of the simulation alone.
-  - **It never touches the world:** `F3` answers no prompt, sends no command, and works in a replay.
+  - **It never touches the world:** `F3` answers no prompt (a question such as "Quit?" still waits, §6.6), sends no command, and works in a replay.
 
 ### 6.2 Semantic tiles and themes
 
@@ -1643,7 +1643,7 @@ N ═ M
 
 - **Keys:** `space` pauses and resumes; `.` steps while paused (below); `+` and `-` step through ⅛×, ¼×, ½×, 1× (1.25 ticks per second), 2×, 4×, 8×, 16× (20 ticks per second) and **Max**. Each press halves or doubles the rate. The game starts at 1×; `-` stops at ⅛× (5/32 of a tick a second) and `+` at Max, or at 4× in a Story world, saying "4x is Story mode's fastest" (M2 design §16.2). The top bar labels the slow speeds `1/2x`, `1/4x` and `1/8x`, and shows the speed while paused too, as `|| paused 4x` (v27).
 - **A step** (v27) runs one real second's worth of ticks at the speed, rounded down, at least 1 and at most 20: 1 at 1× and slower, 2 at 2×, 5 at 4×, 10 at 8×, 20 at 16× and Max. It runs within the frame's budget like any other ticks, and what the budget cuts short runs on the next frames. A press before a step has finished starts a whole step afresh, at the speed then, rather than adding another. Resuming drops what's left of it.
-- **Quitting:** `Esc` (from Select, with no menu open and nothing in the Cursor's grip) asks "Quit? y quit the game  t title screen  any other key stays" ([M2 design v3 §8.4](archive/m2-generations-v3.md); it asked "Quit? (y/n)" until then). Only `y` quits, and `t` goes back to the title screen; any other key, `Esc` included, cancels (v33), so `Esc` never quits on its own. `Ctrl+C` quits at once.
+- **Quitting:** `Esc` (from Select, with no menu open and nothing in the Cursor's grip) asks "Quit? y quit the game  t title screen  any other key stays" ([M2 design v3 §8.4](archive/m2-generations-v3.md); it asked "Quit? (y/n)" until then). Only `y` quits, and `t` goes back to the title screen; any other key, `Esc` included, cancels (v33), so `Esc` never quits on its own. `F3` alone answers nothing: it shows or hides the debug overlay (§6.1, #311) and the question waits. `Ctrl+C` quits at once.
 - **Exact pacing:** the UI clock counts owed ticks in integer maths, with rates in 32nds of a tick per second, so every speed (including ⅛×) runs at exactly its nominal rate with no drift.
 - **Held keys:**
   - **1× is a stop for held keys.** A held `+` or `-` stops at 1×; a fresh press is needed to go past it, in either direction.
@@ -1658,6 +1658,7 @@ N ═ M
   2. run as many ticks as the speed allows, within a **~25 ms** budget
   3. render, at about 30 fps
 - At Max, the sim uses whatever time rendering leaves.
+- **Each frame is timed** (#311): its ticks and the time they took, as the budget counts it, and the time drawing took. The debug overlay reads them (§6.1).
 
 ### 6.7 Files
 
@@ -1665,7 +1666,7 @@ N ═ M
 - **Replays** (v35, §2.7): the session log is written at each autosave, on quitting and on a panic. `--replay <file>` plays one back, paused at first, saying "Replaying last_session.replay: from a new world to tick 48,210" (or "from a save at tick 300"). Whatever would change the world is refused, saying "It's a replay: only time, the view and the inspector work, until Ctrl+R takes it over" (v36): the Train and Grab modes, the wheel over the map, naming, showing the Cursor (`H`) and loading. Saving and exporting a genome still work. At the end it pauses once, saying "The replay ends here, at tick 48,210: time can run on, with nothing more done"; at a divergence it pauses, saying "The replay parted from its recording between ticks 1,000 and 2,000". The recorded player's Cursor isn't drawn. `Ctrl+R` takes a replay over (v36): "You took over the replay at tick 4,210: it's your world now", and the top bar's save status returns.
 - **Saving and loading:** `F5` quicksaves, `F9` quickloads, and `Ctrl+S` / `Ctrl+O` save or load by name.
   - **By name** (v32): `Ctrl+S` opens a prompt on the status line, `Save as: seed 7 tick 48210_   enter save  esc cancel`, offering the seed and the tick. Typing replaces the name offered, up to 40 characters, `Backspace` rubs out, `Enter` saves and `Esc` gives up; the same name saves over. `Ctrl+O` opens a menu, `Load`, of every save, newest first, the quicksave and autosaves included, picked as the Place menu's items are. `F9` with no quicksave says "There's no quicksave yet: F5 makes one".
-  - **Asking first** (v32): loading over a world that has run since it was last saved asks "Load quicksave? The world has run 4m since it was last saved (y/n)", or "This world has never been saved". `y` loads, as does `F9` again when it's the quicksave asked about; any other key keeps the world.
+  - **Asking first** (v32): loading over a world that has run since it was last saved asks "Load quicksave? The world has run 4m since it was last saved (y/n)", or "This world has never been saved". `y` loads, as does `F9` again when it's the quicksave asked about; any other key keeps the world, but `F3`, which only shows or hides the debug overlay (§6.1, #311).
   - **After a load** (v32) the game is paused. The screen starts afresh on the loaded world, as for a new one, with the view centred where it was when the world was saved, the Cursor where the save left it, in Grab mode if it holds or leads something, and seen if it was. The speed, the theme, the colours, the open tab, the event log's filter and the sprite list's order carry over.
   - **Errors** go on the status line, as a refusal: "Couldn't save: …", "Couldn't load quicksave: a newer Terra Sprites (0.2.0) saved it, …".
 - **Autosave:** every 10 real-time minutes, keeping the last 3. Only time that runs, unpaused, counts (v32), and quitting autosaves too, unless the world hasn't run since its last save.
