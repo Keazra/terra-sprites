@@ -1023,10 +1023,11 @@ mod tests {
 
     #[test]
     fn a_window_counts_childhoods_by_first_or_later_and_deaths_by_life_stage() {
-        // M2 design §19.6: sprite 1 is a first sprite that starts young and
-        // grows up; sprite 2 a first sprite, grown up, that grows old and
-        // then dies of hunger, counted apart from adults' hunger; and
-        // sprite 3 hatches, and dies young.
+        // M2 design §19.6: sprite 1 is a first sprite that starts young,
+        // grows up and dies of thirst as an adult; sprite 2 a first sprite,
+        // grown up, that grows old and then dies of hunger, counted apart
+        // from adults' hunger; and sprite 3 hatches, and dies young, not
+        // counted among the first sprites' deaths.
         let first = BTreeSet::from([EntityId(1), EntityId(2)]);
         let mut stages = BTreeMap::from([
             (EntityId(1), LifeStage::Young),
@@ -1042,6 +1043,7 @@ mod tests {
                 EventKind::GrewOld { id: EntityId(2) },
             ],
             vec![
+                died(1, DeathCause::Dehydration),
                 died(2, DeathCause::Starvation),
                 died(3, DeathCause::Dehydration),
             ],
@@ -1063,10 +1065,11 @@ mod tests {
             window.stage_deaths,
             BTreeMap::from([
                 ((LifeStage::Young, DeathCause::Dehydration), 1),
+                ((LifeStage::Adult, DeathCause::Dehydration), 1),
                 ((LifeStage::Old, DeathCause::Starvation), 1),
             ])
         );
-        assert_eq!(window.first_died, 1, "sprite 2, of the first sprites");
-        assert_eq!(stages, BTreeMap::from([(EntityId(1), LifeStage::Adult)]));
+        assert_eq!(window.first_died, 2, "sprites 1 and 2, not sprite 3");
+        assert!(stages.is_empty(), "every sprite died: {stages:?}");
     }
 }
