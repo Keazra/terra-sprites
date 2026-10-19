@@ -545,6 +545,9 @@ pub struct App {
     /// The sprite the sprite list highlights, if any; the first row's if
     /// it's gone from the list.
     list_choice: Option<EntityId>,
+    /// While the sprite list is filtered, what's typed into its filter
+    /// (#313).
+    list_filter: Option<String>,
     /// The moment the population graph reads, the end of the stretch of
     /// time picked, if one is; otherwise it reads now (M2 design §14.3).
     graph_pick: Option<u64>,
@@ -915,6 +918,7 @@ impl App {
             event_filter: EventFilter::All,
             list_sort: SortBy::Number,
             list_choice: None,
+            list_filter: None,
             graph_pick: None,
             tree_choice: None,
             tree_scroll: family_tree::Scroll::default(),
@@ -1997,7 +2001,8 @@ impl App {
             | Action::Type(_)
             | Action::Erase
             | Action::AnotherName
-            | Action::HelpReleased => {}
+            | Action::HelpReleased
+            | Action::FilterList => {}
             Action::Enter => {
                 if let Some(at) = self.mouse {
                     self.toggle_lesson(at, world);
@@ -2575,6 +2580,7 @@ impl App {
     /// listed, or else the first.
     fn open_list(&mut self, world: &World) {
         self.screen = Screen::SpriteList;
+        self.list_filter = None;
         let listed = sprite_list::order(self, world);
         self.list_choice = self
             .selection
@@ -2585,9 +2591,12 @@ impl App {
 
     /// What an action does while the sprite list is open (design §6.1): the
     /// arrow keys or the wheel move the highlight, `Tab` changes the order,
-    /// `Enter` or a click on a row goes to that sprite, and `l` or `Esc`
-    /// closes the list.
+    /// `Enter` or a click on a row goes to that sprite, `/` starts a filter
+    /// (#313), and `l` or `Esc` closes the list.
     fn apply_in_list(&mut self, action: Action, world: &World) -> Flow {
+        let Some(action) = self.apply_in_filter(action, world) else {
+            return Flow::Continue;
+        };
         let ids = sprite_list::order(self, world);
         let choice = self.list_row(world);
         let moved = |by: i32| ids.get(highlight_moved(choice, by, ids.len())).copied();
@@ -2616,6 +2625,7 @@ impl App {
                 }
             }
             Action::Point(cell) => self.point(cell),
+            Action::FilterList => self.list_filter = Some(String::new()),
             Action::SpriteList | Action::Back => self.screen = Screen::Normal,
             Action::Quit => return Flow::Quit,
             _ => {}
@@ -2623,10 +2633,47 @@ impl App {
         Flow::Continue
     }
 
+    /// What an action does while the sprite list's filter is typed (#313):
+    /// characters CP437 can show are typed, up to the most it takes,
+    /// `Backspace` rubs one out and `Esc` clears it, leaving the list open.
+    /// Anything else, with `Tab` as the next order, is the list's to act
+    /// on, and returned; so is any action with no filter.
+    fn apply_in_filter(&mut self, action: Action, world: &World) -> Option<Action> {
+        let Some(filter) = self.list_filter.as_mut() else {
+            return Some(action);
+        };
+        match action {
+            Action::Type(c) if !c.is_control() && cp437::contains(c) => {
+                if filter.chars().count() < sprite_list::MAX_FILTER_CHARS {
+                    filter.push(c);
+                }
+            }
+            Action::Erase => {
+                filter.pop();
+            }
+            Action::Back => {
+                self.list_filter = None;
+                return None;
+            }
+            Action::AnotherName => return Some(Action::SelectNext),
+            // A character the screen can't show, or `?` let go of.
+            Action::Type(_) | Action::HelpReleased => return None,
+            other => return Some(other),
+        }
+        // The highlight stays on its sprite while it matches, or else goes to
+        // the first that does.
+        let ids = sprite_list::order(self, world);
+        if !self.list_choice.is_some_and(|chosen| ids.contains(&chosen)) {
+            self.list_choice = ids.first().copied();
+        }
+        None
+    }
+
     /// Selects sprite `id`, centres the view on it and closes the sprite
     /// list.
     fn go_to(&mut self, id: EntityId, world: &World) {
         self.screen = Screen::Normal;
+        self.list_filter = None;
         self.select(id);
         if let Some(sprite) = world.sprite(id) {
             self.centre_on(sprite.pos());
@@ -2651,6 +2698,12 @@ impl App {
     /// What the sprite list is sorted by.
     pub fn list_sort(&self) -> SortBy {
         self.list_sort
+    }
+
+    /// What's typed into the sprite list's filter, while it's filtered
+    /// (#313).
+    pub fn list_filter(&self) -> Option<&str> {
+        self.list_filter.as_deref()
     }
 
     /// Which row of the sprite list is highlighted, from 0, in its current
@@ -2964,9 +3017,10 @@ impl App {
     }
 
     /// Whether keys type letters, rather than act: while naming a sprite or
-    /// a save.
+    /// a save, or filtering the sprite list (#313).
     pub fn typing(&self) -> bool {
         matches!(self.screen, Screen::Naming | Screen::SaveNaming)
+            || self.screen == Screen::SpriteList && self.list_filter.is_some()
     }
 
     /// The name being typed, while naming (design §6.5).

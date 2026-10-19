@@ -1285,6 +1285,7 @@ Sprite #24222 is both the father of her second young and her brother, through Sp
 ### 17.5 The inspector
 
 - **The Body tab** says where a sprite came from, and its generation, after its sex: `parents Mira #10386 and Sprite #4072 · generation 4`, on two lines when it's too long for one, or `one of the first sprites · generation 1`, or `placed by the Cursor · generation 1`. An egg's card says its parents and generation the same way.
+- **The sprite list** has a Gen column after the drive, each sprite's generation, which its filter reads as `gen 3` (M1 design §6.1, #313).
 - **The World tab** says the generations alive after the number of sprites, `generations  3 to 6`, or `generation        1` when there's one, the number set to the right as the tab's others are. With no sprites, it leaves the line out. The population graph reads them the same way, now and at each moment it counted (§14.3, #208).
 
 ### 17.6 The information policy

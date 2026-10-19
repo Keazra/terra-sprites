@@ -69,6 +69,7 @@ const COLUMNS: [&[Group]; 3] = [
                 ("Tab", "next sprite"),
                 ("Shift+Tab", "previous sprite"),
                 ("l", "sprite list"),
+                ("l then /", "filter the list"),
                 ("p", "population graph"),
                 ("k", "family tree"),
                 ("r", "name it"),

@@ -4,14 +4,14 @@
 │ space      pause / resume       Z X C      select/train/grab    Tab        next sprite           │
 │ .          step                 Q E        left / right click   Shift+Tab  previous sprite       │
 │ + -        faster / slower      Shift+Q E  hug / shock          l          sprite list           │
-│ VIEW                            Ctrl+click hug / shock          p          population graph      │
-│ WASD       scroll (Shift: 5)    H          show to sprites      k          family tree           │
-│ T          track the selected   F          follow a sprite      r          name it               │
-│ b          sprite colours       middle     follow a sprite      g          save its genome       │
-│ m          event filter         wheel      change mode          INSPECTOR                        │
-│ v          exact detail         C again    the Place menu       [ ]        switch tabs           │
-│ ?          this help            hold E     aim, let go to send  PgUp PgDn  scroll a tab          │
-│ Esc        let go, back, quit?                                                                   │
+│ VIEW                            Ctrl+click hug / shock          l then /   filter the list       │
+│ WASD       scroll (Shift: 5)    H          show to sprites      p          population graph      │
+│ T          track the selected   F          follow a sprite      k          family tree           │
+│ b          sprite colours       middle     follow a sprite      r          name it               │
+│ m          event filter         wheel      change mode          g          save its genome       │
+│ v          exact detail         C again    the Place menu       INSPECTOR                        │
+│ ?          this help            hold E     aim, let go to send  [ ]        switch tabs           │
+│ Esc        let go, back, quit?                                  PgUp PgDn  scroll a tab          │
 │ Ctrl+C     quit at once                                                                          │
 │ FILES                                                                                            │
 │ F5 F9      quicksave / load                                                                      │

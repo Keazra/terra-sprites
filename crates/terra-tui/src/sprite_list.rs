@@ -1,6 +1,6 @@
 //! The sprite list (`l`, design §6.1): every sprite the player may see, one
-//! to a row, with its age, its strongest drive and what it's doing, sorted
-//! as the player chooses.
+//! to a row, with its age, its strongest drive, its generation and what it's
+//! doing, sorted as the player chooses and filtered by what they type (#313).
 
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
@@ -34,13 +34,72 @@ listed_enum! {
     pub fn label(self) -> &'static str;
 }
 
-/// The sprites the list shows, in the order it shows them: those the policy
-/// lets it show (design §6.4), sorted as the player chose.
-pub(crate) fn order(app: &App, world: &World) -> Vec<EntityId> {
-    let mut sprites: Vec<SpriteView> = world
+/// The most characters the list's filter takes (#313): more than a name has.
+pub(crate) const MAX_FILTER_CHARS: usize = 24;
+
+/// A sprite's row as the list shows it, a column at a time.
+struct Row<'a> {
+    label: String,
+    age: String,
+    stage: &'static str,
+    /// Its strongest drive above half, by the data pack's name, if any.
+    drive: Option<&'a str>,
+    generation: u32,
+    doing: String,
+}
+
+impl<'a> Row<'a> {
+    fn of(sprite: &SpriteView<'a>, app: &App, world: &World) -> Row<'a> {
+        Row {
+            label: app.names().label(sprite.id()),
+            age: group_thousands(sprite.age()),
+            stage: sprite.life_stage().name(),
+            drive: strongest_drive(sprite).map(|drive| drive.name),
+            generation: sprite.generation(),
+            doing: inspector::doing_line(sprite, app, world).unwrap_or_default(),
+        }
+    }
+
+    /// What its Drive column says: the drive, or `-` with none above half.
+    fn drive_shown(&self) -> String {
+        self.drive.map_or_else(|| "-".to_string(), display_name)
+    }
+
+    /// Whether `filter`, its ends trimmed, is in any of its columns as
+    /// shown, case aside (#313): its generation as `gen 3`, as the column's
+    /// heading and its number.
+    fn matches(&self, filter: &str) -> bool {
+        let filter = filter.trim().to_lowercase();
+        [
+            self.label.clone(),
+            self.age.clone(),
+            self.stage.to_string(),
+            self.drive_shown(),
+            format!("gen {}", self.generation),
+            self.doing.clone(),
+        ]
+        .iter()
+        .any(|cell| cell.to_lowercase().contains(&filter))
+    }
+}
+
+/// The sprites the policy lets the list show (design §6.4), by ID, whatever
+/// the filter.
+fn listed<'a>(app: &App, world: &'a World) -> Vec<SpriteView<'a>> {
+    world
         .sprites()
         .filter(|sprite| app.can_view(Panel::SpriteList, Subject::Sprite(sprite.id())))
-        .collect();
+        .collect()
+}
+
+/// The sprites the list shows, in the order it shows them: those the policy
+/// lets it show (design §6.4) that match the filter, if there is one,
+/// sorted as the player chose.
+pub(crate) fn order(app: &App, world: &World) -> Vec<EntityId> {
+    let mut sprites = listed(app, world);
+    if let Some(filter) = app.list_filter() {
+        sprites.retain(|sprite| Row::of(sprite, app, world).matches(filter));
+    }
     let drives: Vec<&str> = world.data().drives().collect();
     match app.list_sort() {
         // The world lists its sprites by ID already.
@@ -72,6 +131,21 @@ pub(crate) fn order(app: &App, world: &World) -> Vec<EntityId> {
     sprites.iter().map(SpriteView::id).collect()
 }
 
+/// The list's title: its order, and while it's filtered, the filter being
+/// typed and how many of the sprites it would list match (#313), as
+/// ` Sprites ── sorted by name ── filter: old_ ── 3 of 87 `.
+pub(crate) fn title(app: &App, world: &World) -> String {
+    let sorted = format!(" Sprites ── sorted by {} ", app.list_sort().label());
+    match app.list_filter() {
+        Some(filter) => format!(
+            "{sorted}── filter: {filter}_ ── {} of {} ",
+            order(app, world).len(),
+            listed(app, world).len()
+        ),
+        None => sorted,
+    }
+}
+
 /// The list's heading and its rows, from row `first`, as many as `rows`,
 /// `width` columns wide, with the highlighted sprite in reverse video.
 pub(crate) fn lines(
@@ -83,26 +157,31 @@ pub(crate) fn lines(
 ) -> Vec<Line<'static>> {
     let ids = order(app, world);
     if ids.is_empty() {
-        return vec![Line::from(" No sprites")];
+        return vec![Line::from(match app.list_filter() {
+            Some(_) => " No sprite matches",
+            None => " No sprites",
+        })];
     }
-    let sprites: Vec<SpriteView> = ids.iter().filter_map(|&id| world.sprite(id)).collect();
-    let labels: Vec<String> = sprites
+    let shown: Vec<Row> = ids
         .iter()
-        .map(|sprite| app.names().label(sprite.id()))
+        .filter_map(|&id| world.sprite(id))
+        .map(|sprite| Row::of(&sprite, app, world))
         .collect();
-    let ages: Vec<String> = sprites
+    // The columns are as wide as the whole list needs, so they keep still
+    // while the filter narrows it (#313).
+    let every: Vec<Row> = listed(app, world)
         .iter()
-        .map(|sprite| group_thousands(sprite.age()))
+        .map(|sprite| Row::of(sprite, app, world))
         .collect();
-    let label_width = labels
+    let label_width = every
         .iter()
-        .map(|label| label.chars().count())
+        .map(|row| row.label.chars().count())
         .chain(["Sprite".len()])
         .max()
         .unwrap_or(0);
-    let age_width = ages
+    let age_width = every
         .iter()
-        .map(|age| age.chars().count())
+        .map(|row| row.age.chars().count())
         .chain(["Age".len()])
         .max()
         .unwrap_or(0);
@@ -120,30 +199,35 @@ pub(crate) fn lines(
         .chain(["Life stage".len()])
         .max()
         .unwrap_or(0);
+    // Each sprite's generation after its drive (M2 design §17.5, #313).
+    let generation_width = every
+        .iter()
+        .map(|row| row.generation.to_string().len())
+        .chain(["Gen".len()])
+        .max()
+        .unwrap_or(0);
     let heading = format!(
-        " {:<label_width$}  {:>age_width$}  {:<stage_width$}  {:<drive_width$}  Doing",
-        "Sprite", "Age", "Life stage", "Drive"
+        " {:<label_width$}  {:>age_width$}  {:<stage_width$}  {:<drive_width$}  \
+         {:>generation_width$}  Doing",
+        "Sprite", "Age", "Life stage", "Drive", "Gen"
     );
     let mut lines = vec![Line::styled(
         clipped(&heading, width),
         Style::default().add_modifier(Modifier::BOLD),
     )];
     let chosen = app.list_row(world);
-    let shown = sprites.iter().zip(&labels).zip(&ages).enumerate();
-    for (index, ((sprite, label), age)) in shown.skip(first).take(rows) {
-        let doing = inspector::doing_line(sprite, app, world).unwrap_or_default();
-        let (drive, colour) = match strongest_drive(sprite) {
-            Some(drive) => (display_name(drive.name), app.theme.drive_colour(drive.name)),
-            None => ("-".to_string(), None),
-        };
+    for (index, row) in shown.iter().enumerate().skip(first).take(rows) {
+        let colour = row.drive.and_then(|drive| app.theme.drive_colour(drive));
         let mut drive_style = Style::default();
         if let Some(colour) = colour {
             drive_style = drive_style.fg(colour);
         }
-        let stage = sprite.life_stage().name();
-        let head = format!(" {label:<label_width$}  {age:>age_width$}  {stage:<stage_width$}  ");
-        let drive = format!("{drive:<drive_width$}");
-        let tail = format!("  {doing}");
+        let head = format!(
+            " {:<label_width$}  {:>age_width$}  {:<stage_width$}  ",
+            row.label, row.age, row.stage
+        );
+        let drive = format!("{:<drive_width$}", row.drive_shown());
+        let tail = format!("  {:>generation_width$}  {}", row.generation, row.doing);
         let mut room = width;
         let mut spans = Vec::new();
         for (text, style) in [

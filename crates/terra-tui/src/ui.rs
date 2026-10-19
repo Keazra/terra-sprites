@@ -679,8 +679,12 @@ fn render_sprite_list(buf: &mut Buffer, app: &App, world: &World) {
     let Some(area) = app.overlay() else {
         return;
     };
-    let title = format!(" Sprites ── sorted by {} ", app.list_sort().label());
-    let inner = clear_box(buf, area, &title, " esc close ");
+    // While it's filtered, `Esc` clears the filter first (#313).
+    let corner = match app.list_filter() {
+        Some(_) => " esc clear ",
+        None => " esc close ",
+    };
+    let inner = clear_box(buf, area, &crate::sprite_list::title(app, world), corner);
     let lines = crate::sprite_list::lines(
         app,
         world,
@@ -1004,10 +1008,15 @@ fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
                 (true, Some(Grip::Leads(_))) => hint_if_fits(room, "let go to shove  esc cancel"),
                 // A Place menu item waiting, how to place it or not (design v28 §6.5).
                 _ if placing => hint_if_fits(room, "click to place  right-click put away"),
-                // While the sprite list is open, how to use it (design §6.1).
-                _ if app.screen() == Screen::SpriteList => {
-                    hint_if_fits(room, "↑↓ choose  enter go to it  tab sort  esc close")
-                }
+                // While the sprite list is open, how to use it (design §6.1),
+                // and while it's filtered, how to clear the filter (#313).
+                _ if app.screen() == Screen::SpriteList => hint_if_fits(
+                    room,
+                    match app.list_filter() {
+                        Some(_) => "↑↓ choose  enter go to it  tab sort  esc clear",
+                        None => "/ filter  ↑↓ choose  enter go to it  tab sort  esc close",
+                    },
+                ),
                 // And the population graph (M2 design §14).
                 _ if app.screen() == Screen::Population => {
                     hint_if_fits(room, "←→ pick a moment  space pause  +/- speed  esc close")

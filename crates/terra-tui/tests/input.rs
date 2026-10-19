@@ -707,3 +707,30 @@ fn while_typing_letting_go_of_the_question_mark_says_so() {
     let other = kind(KeyCode::Char('4'), KeyEventKind::Release);
     assert_eq!(keys.typed_action(other), None, "other releases do nothing");
 }
+
+#[test]
+fn slash_starts_the_sprite_list_s_filter_once_per_press() {
+    // #313: holding it doesn't start it again and again.
+    let mut keys = Keys::with_release_reporting(true);
+    assert_eq!(
+        keys.action_for(press(KeyCode::Char('/'))),
+        Some(Action::FilterList)
+    );
+    let repeat = kind(KeyCode::Char('/'), KeyEventKind::Repeat);
+    assert_eq!(keys.action_for(repeat), None, "held");
+    assert_eq!(
+        Keys::new().action_for(press(KeyCode::Char('?'))),
+        Some(Action::Help),
+        "`?`, on the same key, is still help"
+    );
+}
+
+#[test]
+fn while_typing_shift_tab_goes_back_as_it_does_elsewhere() {
+    // So the sprite list's filter can go back through its orders (#313).
+    let shift_tab = KeyEvent::new(KeyCode::BackTab, KeyModifiers::SHIFT);
+    assert_eq!(
+        Keys::new().typed_action(shift_tab),
+        Some(Action::SelectPrevious)
+    );
+}
