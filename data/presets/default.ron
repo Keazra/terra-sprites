@@ -24,7 +24,9 @@
     lake_size: 3,
 
     // The first sprites start within this many tiles of drinkable water, as
-    // the crow flies. Leave it out for anywhere on the map.
+    // the crow flies (a diagonal step counts as one), while any such tile is
+    // free, and then anywhere on the map. Leave it out for anywhere on the
+    // map.
     start_near_water: 10,
 
     // Plants and toys, by density: how many of each object type go in every
