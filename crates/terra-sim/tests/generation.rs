@@ -443,3 +443,22 @@ fn once_the_tiles_near_water_are_taken_the_other_first_sprites_start_anywhere() 
         }
     }
 }
+
+#[test]
+fn the_unattended_run_s_newborns_start_anywhere_near_water_or_not() {
+    // M2 design §19.1, §19.6: the default preset starts its first sprites
+    // within 10 tiles of drinkable water, but the unattended run spreads
+    // its newborns over the whole map. Over the same seeds, the same world
+    // settings with no `start_near_water` start more than 30 far from it
+    // (`the_first_sprites_start_near_drinkable_water_when_the_preset_says`).
+    let data = DataPack::builtin().expect("valid pack");
+    let mut far = 0;
+    for seed in [1, 2, 3, 4] {
+        let world = World::unattended(WorldConfig::builtin(&data), data.clone(), seed);
+        far += world
+            .sprites()
+            .filter(|sprite| from_drinkable(world.map(), sprite.pos(), &data) > 10)
+            .count();
+    }
+    assert!(far > 30, "{far} of 120 newborns started far from water");
+}
