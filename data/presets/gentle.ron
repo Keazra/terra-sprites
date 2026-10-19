@@ -1,0 +1,40 @@
+// The gentle world: the watery world of the game before Slice 29, with a
+// third of the map under water in many small ponds and the first sprites
+// anywhere (M2 design §19.1). Play it with `--preset data/presets/gentle.ron`.
+(
+    // The map's size in tiles. Each side must be from 32 to 1024.
+    width: 256,
+    height: 160,
+
+    // The first population, from 20 to 100. It stays the same on any map
+    // size. Leave it out for a world with no sprites.
+    sprites: 30,
+
+    // The most sprites the world holds, eggs included, from 1 to 1000 and at
+    // least `sprites`: past it, breeding does nothing. The terrarium's glass.
+    // Leave it out for 100.
+    most_sprites: 100,
+
+    // The share of the map's tiles under water, as a percentage, from 1 to
+    // 60. The default world has 4.
+    water: 32,
+
+    // How big the lakes are, from 1 to 5: the hills and hollows are this
+    // many times as broad, so the same water lies in fewer, bigger lakes.
+    // The default world has 3.
+    lake_size: 1,
+
+    // With no `start_near_water`, the first sprites start anywhere on the
+    // map. The default world starts them within 10 tiles of drinkable water.
+
+    // Plants and toys, by density: how many of each object type go in every
+    // `per_tiles` tiles, so a bigger map gets proportionally more. A type not
+    // named here gets none. Names are object types from the data pack's
+    // `objects.ron`.
+    objects: {
+        "berry_bush": 150,
+        "thornbush": 40,
+        "ball": 6,
+    },
+    per_tiles: 15360,
+)

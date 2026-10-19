@@ -368,6 +368,7 @@ fn a_sprite_lists_its_chemicals_in_pack_order_with_their_kinds() {
     expected.push(("longing".to_string(), Hormone));
     expected.push(("receptivity".to_string(), Hormone));
     expected.push(("grief".to_string(), Hormone));
+    expected.push(("fullness".to_string(), Hormone));
     assert_eq!(listed, expected);
 }
 
@@ -397,15 +398,19 @@ fn each_chemical_s_change_is_its_level_now_less_its_level_one_tick_ago() {
             chemical.name
         );
     }
-    // At rest, hydration falls by physiology's 0.00033 a tick (Appendix B).
+    // At rest, hydration falls by physiology's 0.00033 a tick (Appendix B),
+    // paced to a newborn's childhood: × 4,500 ÷ the ticks its genes take to
+    // grow up (M2 design §19.5).
     let hydration = sprite
         .chemicals()
         .find(|c| c.name == "hydration")
         .expect("hydration");
+    let paced = 0.00033 * 4500.0 / sprite.traits().grows_up;
     assert!(
-        (hydration.change + 0.00033).abs() < 1e-6,
-        "{}",
-        hydration.change
+        (hydration.change + paced).abs() < 1e-6,
+        "{} rather than {}",
+        hydration.change,
+        -paced
     );
 }
 

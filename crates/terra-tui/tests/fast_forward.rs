@@ -170,11 +170,11 @@ fn the_progress_line_says_how_far_it_has_got() {
 
 /// Three sprites on a field with no food or water: one is hurt to death by
 /// another, and the other two die of thirst, each at a different time,
-/// within the hour, as they do with seed 5.
+/// within the hour, as they do with seed 20.
 fn a_deadly_field() -> World {
     WorldBuilder::grass(10, 6)
         .starters(&[at(2, 2), at(6, 3), at(4, 4)])
-        .seed(5)
+        .seed(20)
         .build()
 }
 

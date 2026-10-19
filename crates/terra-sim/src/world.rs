@@ -543,6 +543,26 @@ impl<'a> SpriteView<'a> {
         Some(pos)
     }
 
+    /// What it attends to (design §5.3), while that's still in the world:
+    /// the thing `attending_to` gives the tile of.
+    pub fn attended(&self) -> Option<Target> {
+        self.attending_to()?;
+        self.sprite.brain.snapshot.as_ref()?.target
+    }
+
+    /// Whether it stands with nothing to do (M2 design §19.2): it has no
+    /// action, or its last ended before the latest tick, which still shows
+    /// how it ended. One the Cursor leads or a shove slides isn't standing.
+    pub fn is_standing(&self) -> bool {
+        if self.sprite.lead.is_some() || self.sprite.slide.is_some() {
+            return false;
+        }
+        let latest = self.world.state.tick.saturating_sub(1);
+        self.sprite.action.as_ref().is_none_or(|action| {
+            action.ended.is_some() && action.ended_at.is_none_or(|t| t < latest)
+        })
+    }
+
     /// The traits its body has: its genes', clamped to physiology's ranges.
     pub fn traits(&self) -> Traits {
         self.sprite.program.traits
@@ -1742,6 +1762,7 @@ impl World {
                     nearby_sprites: (others as f32 / f32::from(nearby.full)).min(1.0),
                     steps: sprite.did.steps,
                     resting: sprite.did.rested,
+                    standing: !action::is_acting(sprite),
                     stage: sprite.stage(),
                     sooner: sprite.sooner(data),
                     fertile: breeding::fertile(state, sprite, data),

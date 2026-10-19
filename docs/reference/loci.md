@@ -21,7 +21,7 @@ A new pulse, `splashed`, added to the list. A verb can then send it, such as `Pl
 
 <!-- example: loci -->
 ```ron
-(id: 49, name: "splashed", kind: Pulse),
+(id: 50, name: "splashed", kind: Pulse),
 ```
 
 The built-in list in `data/loci.ron` is the full working example.

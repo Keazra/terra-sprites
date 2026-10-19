@@ -415,7 +415,8 @@ pub fn changed(text: &str, from: &str, to: &str) -> String {
 
 /// Changes that make generations quick: eggs copied exactly, hatching 20
 /// ticks after they're laid, the young grown up as soon as their genes
-/// say, and a mother free to lay again 30 ticks after her last egg.
+/// say and thirsting as grown sprites do, and a mother free to lay again 30
+/// ticks after her last egg.
 pub const QUICK: [Changes; 2] = [
     (
         "physiology.ron",
@@ -423,6 +424,7 @@ pub const QUICK: [Changes; 2] = [
             ("mutation: (chance: 0.01,", "mutation: (chance: 0.0,"),
             ("flaws: (arise: 0.004,", "flaws: (arise: 0.0,"),
             ("grows_up: (1500.0, 13500.0)", "grows_up: (10.0, 13500.0)"),
+            ("thirst_childhood: 4500.0,", ""),
             ("rest: 1500,", "rest: 30,"),
             ("cost: 0.3,", "cost: 0.0,"),
         ],

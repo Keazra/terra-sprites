@@ -181,10 +181,19 @@ fn eating_and_drinking_relieve_hunger_and_thirst_the_next_tick() {
     let mut world = world(&rows, &[(at(4, 1), "berry_bush")], at(3, 1), needy, 1);
     let id = world.sprites().next().expect("the sprite").id();
     let mut relieved = Vec::new();
+    // Each drive relieved last tick, with its level before that tick. A
+    // sprite may drink the tick after it eats.
+    let mut due: Vec<(&str, f32)> = Vec::new();
     for _ in 0..200 {
         let before = world.sprite(id).expect("the sprite");
         let (hunger, thirst) = (before.chemical("hunger"), before.chemical("thirst"));
         let events = world.step();
+        let now = world.sprite(id).expect("the sprite");
+        for (drive, level) in due.drain(..) {
+            let after = now.chemical(drive).expect("a drive");
+            // The pulse knocks the drive down by .5 at the next tick's step 3.
+            assert!(after < level - 0.4, "{drive}: {level} to {after}");
+        }
         for (verb, outcome) in ended(&events, id) {
             if outcome != Outcome::Applied || !matches!(verb, Verb::Eat | Verb::Drink) {
                 continue;
@@ -193,15 +202,10 @@ fn eating_and_drinking_relieve_hunger_and_thirst_the_next_tick() {
                 Verb::Eat => ("hunger", hunger),
                 _ => ("thirst", thirst),
             };
-            let level = level.expect("a drive");
-            world.step();
-            let after = world.sprite(id).expect("the sprite").chemical(drive);
-            let after = after.expect("a drive");
-            // The pulse knocks the drive down by .5 at the next tick's step 3.
-            assert!(after < level - 0.4, "{drive}: {level} to {after}");
+            due.push((drive, level.expect("a drive")));
             relieved.push(verb);
         }
-        if relieved.contains(&Verb::Eat) && relieved.contains(&Verb::Drink) {
+        if due.is_empty() && relieved.contains(&Verb::Eat) && relieved.contains(&Verb::Drink) {
             return;
         }
     }

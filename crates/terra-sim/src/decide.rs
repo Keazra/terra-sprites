@@ -474,7 +474,7 @@ pub(crate) fn decide(
         let chosen = match current {
             _ if no_way.is_some() => None,
             Some(verb) => brain.switch(verb, &scores, &offered),
-            None => Some(brain.choose(&scores, &offered, exploration, rng)),
+            None => brain.choose(&scores, &offered, exploration, rng),
         };
         let verb = chosen.or(current);
         let snapshot = Snapshot {

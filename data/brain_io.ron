@@ -106,6 +106,8 @@ inputs: [
     (id: 94, name: "target_family", reads: Family),
     // A pulse on finding family it was missing.
     (id: 95, name: "found_family",  reads: Locus("found_family")),
+    // How full its gut feels (M2 design §19.4).
+    (id: 96, name: "fullness",      reads: Chem("fullness")),
 ],
 
 // The needs (design v16 §5.2, §5.6): the drives whose relief teaches a

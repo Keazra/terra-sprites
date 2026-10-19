@@ -149,9 +149,9 @@ fn a_sprite_takes_on_a_thing_s_worth_only_for_the_need_the_one_it_watches_used_i
 /// that can weaken, each instinct included, weakens a little every tick (M2
 /// design §9.4).
 fn old_every_tick() -> DataPack {
-    let [old, up] = AGES_AT_ONCE;
+    let [old, up, unpaced] = AGES_AT_ONCE;
     let tiny_hits = ("hit: 0.01, gives_out", "hit: 0.0001, gives_out");
-    builtin_changing("physiology.ron", &[old, up, tiny_hits])
+    builtin_changing("physiology.ron", &[old, up, unpaced, tiny_hits])
 }
 
 /// What the sprite watching takes on of water's worth for thirst, and what

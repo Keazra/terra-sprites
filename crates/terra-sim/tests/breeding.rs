@@ -6,7 +6,7 @@
 
 mod common;
 use common::{
-    AGES_AT_ONCE, ALONE, FEMALE, KEEN, LONE, Laying, NO_COPYING_ERRORS, OLD, RECEPTIVE,
+    AGES_AT_ONCE, ALONE, FEMALE, KEEN, LONE, Laying, NO_COPYING_ERRORS, OLD, RECEPTIVE, UNPACED,
     WorldBuilder, at, builtin, builtin_changing, builtin_changing_files, close, endings, family,
     family_in, genome, id_at, laid, lone, pulse_in_h1, starting_with, until, value_of, world_in,
 };
@@ -1149,7 +1149,8 @@ fn random_genes() -> impl Strategy<Value = String> {
 }
 
 /// The built-in pack, but with sprites that may grow up and old within a
-/// few hundred ticks and eggs that hatch in 100.
+/// few hundred ticks, thirsting as grown sprites do, and eggs that hatch in
+/// 100.
 fn quick() -> DataPack {
     builtin_changing_files(&[
         (
@@ -1160,6 +1161,7 @@ fn quick() -> DataPack {
                     "grows_old: (100.0, 60000.0),",
                 ),
                 ("grows_up: (1500.0, 13500.0),", "grows_up: (10.0, 13500.0),"),
+                UNPACED,
             ],
         ),
         (

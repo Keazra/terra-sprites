@@ -229,16 +229,57 @@ fn body_tab(sprite: &SpriteView, app: &App, world: &World) -> Vec<Line<'static>>
 }
 
 /// What `sprite` is doing, as the Body tab's first line says it (design
-/// §6.1): sliding from a shove, being led, or its action; nothing if it has
-/// no action. The sprite list's Doing column says the same.
+/// §6.1): sliding from a shove, being led, standing with nothing to do, or
+/// its action. The sprite list's Doing column says the same.
 pub(crate) fn doing_line(sprite: &SpriteView, app: &App, world: &World) -> Option<String> {
     slide_line(sprite, app.detail())
         .or_else(|| led_line(sprite, app.detail(), world))
+        .or_else(|| standing_line(sprite, app.detail(), &app.words(world), world))
         .or_else(|| {
             sprite
                 .action()
                 .map(|action| action_line(&action, app.detail(), &app.words(world)))
         })
+}
+
+/// While `sprite` stands with nothing to do, what the Body tab says in
+/// place of an action (M2 design §19.2): what it's watching, "Watching Bo
+/// #7", or "Standing" if nothing; in the detail view `STAND → sprite #7`.
+fn standing_line(sprite: &SpriteView, detail: bool, data: &Words, world: &World) -> Option<String> {
+    if !sprite.is_standing() {
+        return None;
+    }
+    let attended = sprite.attended().zip(sprite.attending_to());
+    Some(match (detail, attended) {
+        (false, None) => "Standing".into(),
+        (false, Some((target, at))) => format!("Watching {}", thing_words(target, at, data, world)),
+        (true, None) => "STAND".into(),
+        (true, Some((Target::Sprite(id), _))) => format!("STAND → sprite #{}", id.0),
+        (true, Some((Target::Object(id), at))) => {
+            format!("STAND → {} #{}", object_type(id, at, world), id.0)
+        }
+        (true, Some((Target::Water(at), _))) => format!("STAND → water ({},{})", at.x, at.y),
+        (true, Some((Target::Cursor, _))) => "STAND → cursor".into(),
+    })
+}
+
+/// A thing a sprite can attend to, on tile `at`, in words: "Bo #7", "the
+/// berry bush", "the water".
+fn thing_words(target: Target, at: Pos, data: &Words, world: &World) -> String {
+    match target {
+        Target::Sprite(id) => data.label(id),
+        Target::Water(_) => "the water".into(),
+        Target::Cursor => CURSOR.into(),
+        Target::Object(id) => format!("the {}", display_name(object_type(id, at, world))),
+    }
+}
+
+/// The type of object `id`, on tile `at` or held there.
+fn object_type<'w>(id: EntityId, at: Pos, world: &'w World) -> &'w str {
+    let on_tile = world.object_at(at).filter(|object| object.id() == id);
+    on_tile
+        .or_else(|| world.objects().find(|object| object.id() == id))
+        .map_or("?", |object| object.type_name())
 }
 
 /// A sprite's sex and fertility, its parents, or where it came from
@@ -499,6 +540,11 @@ fn aimed_line(action: &ActionView, data: &Words) -> Option<String> {
         Progress::Ended(Outcome::Blocked) if action.verb == Verb::Retreat => {
             "Backed into a corner".into()
         }
+        // Its gut had no room (M2 design §19.4).
+        Progress::Ended(Outcome::TooFull) => match action.verb {
+            Verb::Eat => format!("Too full to eat {what}"),
+            _ => "Too full to drink".into(),
+        },
         Progress::Ended(outcome) => return ended_line(outcome),
     })
 }
@@ -552,6 +598,7 @@ pub(crate) fn observed_line(action: &ActionView, data: &Words) -> String {
         },
         Outcome::Interrupted => "changed its mind".into(),
         Outcome::PulledAway => "was pulled away".into(),
+        Outcome::TooFull => "was too full".into(),
         outcome => {
             let reason = ended_line(outcome).expect("an outcome that isn't applied");
             reason.replacen("Gave up", "gave up", 1)
@@ -682,6 +729,7 @@ fn ended_line(outcome: Outcome) -> Option<String> {
             Outcome::Failed => "Gave up: it couldn't get there",
             Outcome::Interrupted => "Changed its mind",
             Outcome::PulledAway => "Pulled away",
+            Outcome::TooFull => "Too full",
         }
         .into(),
     )
@@ -805,6 +853,7 @@ fn outcome_name(outcome: Outcome) -> &'static str {
         Outcome::Interrupted => "interrupted",
         Outcome::TimedOut => "timed_out",
         Outcome::PulledAway => "pulled_away",
+        Outcome::TooFull => "too_full",
     }
 }
 

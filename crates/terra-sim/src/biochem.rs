@@ -517,6 +517,8 @@ pub(crate) struct Senses {
     pub(crate) steps: u32,
     /// Whether it rested during the previous tick.
     pub(crate) resting: bool,
+    /// Whether it has no action, standing where it is (M2 design §19.2).
+    pub(crate) standing: bool,
     /// Its life stage (M2 design §9.1).
     pub(crate) stage: LifeStage,
     /// The share of the age its genes say that wear and broken genes have
@@ -613,8 +615,14 @@ fn physiology(program: &Program, body: &mut Body, senses: &Senses, data: &DataPa
     let steps = senses.steps as f32;
     let pace = traits.speed / 8.0;
     let metabolism = physiology.metabolism;
-    chems[indices.energy] -= metabolism.basal
-        + metabolism.per_sense_tile * traits.sense_radius
+    // A rest costs less than standing awake (M2 design §19.2).
+    let idle = if senses.resting {
+        metabolism.resting
+    } else {
+        1.0
+    };
+    chems[indices.energy] -= idle
+        * (metabolism.basal + metabolism.per_sense_tile * traits.sense_radius)
         + steps * metabolism.per_step * pace * pace;
     // Growing up takes the same energy however long it takes, and a later
     // old age costs a little all life (M2 design §9.3).
@@ -623,15 +631,27 @@ fn physiology(program: &Program, body: &mut Body, senses: &Senses, data: &DataPa
         chems[indices.energy] -= ageing.growth / traits.grows_up;
     }
     chems[indices.energy] -= ageing.upkeep * traits.grows_old / 10_000.0;
-    for (gut, into, rate) in [
+    // Each thing in the gut moves into the body at its own pace, one that
+    // waits only as the body has room for it (M2 design §19.4).
+    for (gut, into, content) in [
         (indices.food, indices.energy, physiology.digestion.food),
         (indices.water, indices.hydration, physiology.digestion.water),
     ] {
-        let digested = chems[gut].min(rate);
+        let mut digested = chems[gut].min(content.pace);
+        if content.waits {
+            digested = digested.min((1.0 - chems[into]).max(0.0));
+        }
         chems[gut] -= digested;
         chems[into] += digested;
     }
-    chems[indices.hydration] -= physiology.hydration_loss;
+    // A young sprite's thirst, and its dying once it has dried out, are
+    // paced to its childhood, so one that grows up sooner needs as much
+    // water (M2 design §19.5).
+    let paced = match ageing.thirst_childhood {
+        Some(childhood) if senses.stage == LifeStage::Young => childhood / traits.grows_up,
+        _ => 1.0,
+    };
+    chems[indices.hydration] -= physiology.hydration_loss * paced;
     chems[indices.stamina] += if senses.steps > 0 {
         -steps * physiology.stamina.per_step
     } else if senses.resting {
@@ -654,7 +674,7 @@ fn physiology(program: &Program, body: &mut Body, senses: &Senses, data: &DataPa
         (
             DeathCause::Dehydration,
             chems[indices.hydration] <= 0.0,
-            injury.dehydration,
+            injury.dehydration * paced,
         ),
         // Once an old sprite's genes have weakened to where its body
         // gives out (M2 design §9.4).
@@ -695,6 +715,9 @@ fn physiology(program: &Program, body: &mut Body, senses: &Senses, data: &DataPa
     loci[indices.nearby_sprites] = senses.nearby_sprites;
     loci[indices.moving] = if senses.steps > 0 { 1.0 } else { 0.0 };
     loci[indices.resting] = if senses.resting { 1.0 } else { 0.0 };
+    if let Some(standing) = indices.standing {
+        loci[standing] = if senses.standing { 1.0 } else { 0.0 };
+    }
     if let Some(breeding) = indices.breeding {
         let level = |sensed: bool| if sensed { 1.0 } else { 0.0 };
         loci[breeding.fertile] = level(senses.fertile);
@@ -737,8 +760,7 @@ mod tests {
             "basal",
             "per_sense_tile",
             "per_step",
-            "food",
-            "water",
+            "pace",
             "hydration_loss",
             "idle",
             "resting",

@@ -39,6 +39,9 @@ pub enum Outcome {
     TimedOut,
     /// The Cursor took hold of the sprite (design v23 §6.5).
     PulledAway,
+    /// Its gut had no room for the bite or the drink, which stays where it
+    /// was (M2 design §19.4). Unlike a failed try, it teaches nothing.
+    TooFull,
 }
 
 /// An action to start a sprite on in a hand-made world, instead of what it
@@ -150,6 +153,11 @@ pub(crate) struct Action {
     pub(crate) retreat_steps: u32,
     /// How it ended, once it has.
     pub(crate) ended: Option<Outcome>,
+    /// The tick it ended on, once it has: before it, a sprite still shows
+    /// how it ended, and after, stands (M2 design §19.2). `None` in a save
+    /// from before Slice 29.
+    #[serde(default)]
+    pub(crate) ended_at: Option<u64>,
     /// A hand-made world started it: the brain leaves it be until it ends.
     pub(crate) scripted: bool,
     /// A trip to a remembered place, until the place is in reach (M2
@@ -226,6 +234,7 @@ impl Action {
             ticks: 0,
             retreat_steps: 0,
             ended: None,
+            ended_at: None,
             scripted,
             remembered: false,
             extra_ticks: 0,
@@ -614,6 +623,7 @@ pub(crate) fn end(
     events: &mut Vec<Event>,
 ) {
     action.ended = Some(outcome);
+    action.ended_at = Some(tick);
     let view = ActionView {
         verb: action.verb,
         destination: action.walk.destination,

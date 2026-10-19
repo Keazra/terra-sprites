@@ -28,23 +28,35 @@
         Trait(trait: "grows_up", value: 4500.0),
         Trait(trait: "grows_old", value: 22500.0),
 
-        // Hunger rises as energy falls below half, and drops at once on eating.
-        Emitter(locus: Chem("energy"), mode: Level, invert: true, threshold: 0.5, gain: 0.004, chem: "hunger"),
+        // Hunger rises as energy falls below 0.7, and drops at once on eating
+        // (M2 design §19.3).
+        Emitter(locus: Chem("energy"), mode: Level, invert: true, threshold: 0.3, gain: 0.004, chem: "hunger"),
         Emitter(locus: Locus("ate"), mode: Level, gain: -0.5, chem: "hunger"),
         HalfLife(chem: "hunger", ticks: 2000),
 
         // Thirst, the same way with hydration and drinking.
-        Emitter(locus: Chem("hydration"), mode: Level, invert: true, threshold: 0.5, gain: 0.004, chem: "thirst"),
+        Emitter(locus: Chem("hydration"), mode: Level, invert: true, threshold: 0.3, gain: 0.004, chem: "thirst"),
         Emitter(locus: Locus("drank"), mode: Level, gain: -0.5, chem: "thirst"),
         HalfLife(chem: "thirst", ticks: 2000),
+
+        // Fullness follows what's in the gut within about 20 ticks, reaching
+        // 1 as it fills, and jumps when a bite or a drink finds no room. It
+        // drains hunger but not thirst (M2 design §19.4).
+        Emitter(locus: Chem("food"), mode: Level, gain: 0.0682, chem: "fullness"),
+        Emitter(locus: Chem("water"), mode: Level, gain: 0.0682, chem: "fullness"),
+        Emitter(locus: Locus("too_full"), mode: Level, gain: 1.0, chem: "fullness"),
+        HalfLife(chem: "fullness", ticks: 20),
+        Emitter(locus: Chem("fullness"), mode: Level, threshold: 0.3, gain: -0.01, chem: "hunger"),
 
         // Tiredness rises as stamina falls below half, and eases as rest restores it.
         Emitter(locus: Chem("stamina"), mode: Level, invert: true, threshold: 0.5, gain: 0.004, chem: "tiredness"),
         Emitter(locus: Chem("stamina"), mode: Level, threshold: 0.6, gain: -0.1, chem: "tiredness"),
 
-        // Boredom creeps up always; play relieves it at once, playing with
-        // another sprite much less than kicking a ball.
+        // Boredom creeps up always, and faster standing about (M2 design
+        // §19.2); play relieves it at once, playing with another sprite much
+        // less than kicking a ball.
         Emitter(locus: Locus("always"), mode: Level, gain: 0.0002, chem: "boredom"),
+        Emitter(locus: Locus("standing"), mode: Level, gain: 0.0005, chem: "boredom"),
         Emitter(locus: Locus("played"), mode: Level, gain: -0.5, chem: "boredom"),
         Emitter(locus: Locus("played_social"), mode: Level, gain: -0.15, chem: "boredom"),
 
@@ -148,12 +160,15 @@
         HalfLife(chem: "h0", ticks: 300),
         Receptor(chem: "h0", gain: -2.0, target: "curiosity_mod"),
 
-        // How the brain works. Choices are fairly sure of themselves: with
-        // no drive pressing a sprite wanders, and a drive of .5 wins most
+        // How the brain works. Choices are fairly sure of themselves: a
+        // sprite acts only on a pull of 0.25 or more, and with nothing
+        // pulling that hard stands where it is (M2 design §19.2); a grown
+        // sprite with no drive pressing wanders, and a drive of .5 wins most
         // choices. Habits are credited over a short trace, so a hurt is
         // blamed on what it did just before it (design v15 change 10). How
         // fast it learns worth and habits, and how curious it is, are
         // physiology's defaults (design v16, Appendix B).
+        BrainParam(param: "act_threshold", value: 0.25),
         BrainParam(param: "trace_decay", value: 0.5),
         BrainParam(param: "tau_base", value: 0.1),
         BrainParam(param: "tau_att_base", value: 0.2),
@@ -203,6 +218,10 @@
         // eating, thirst to drinking. Trying it on the wrong thing does nothing.
         Instinct(inputs: [("hunger", false)], verb: Eat, weight: 1.0),
         Instinct(inputs: [("thirst", false)], verb: Drink, weight: 1.0),
+        // Fullness leans it away from eating and drinking alike, though
+        // strong thirst can outweigh it (M2 design §19.4).
+        Instinct(inputs: [("fullness", false)], verb: Eat, weight: -2.0),
+        Instinct(inputs: [("fullness", false)], verb: Drink, weight: -2.0),
         Instinct(inputs: [("tiredness", false)], verb: Rest, weight: 1.0),
         // Boredom leads to play; loneliness to going over to others, or
         // playing with them.
@@ -268,7 +287,10 @@
         Instinct(inputs: [("female", false), ("receptivity", true)], verb: Mate, weight: -1.0),
         Instinct(inputs: [("target_kin", false)], verb: Mate, weight: -1.0),
         Instinct(inputs: [("arousal", false), ("female", false), ("longing", false)], verb: BreedAlone, weight: 1.0),
-        // A mild habit of wandering, which any drive that has grown outweighs.
-        Instinct(inputs: [("always", false)], verb: Wander, weight: 0.3),
+        // A mild habit of wandering, which any drive that has grown
+        // outweighs. The young's is too weak to act on, so they stay put
+        // unless something moves them (M2 design §19.2).
+        Instinct(inputs: [("always", false)], verb: Wander, weight: 0.15, until: Adult),
+        Instinct(inputs: [("always", false)], verb: Wander, weight: 0.3, from: Adult),
     ],
 )

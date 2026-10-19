@@ -2923,7 +2923,10 @@ fn selecting_the_selected_sprite_from_a_scrolled_world_tab_opens_body_at_the_top
     app.apply(Action::left_click(pointer_on(&world, 2, 3)), &world);
     let rows = right_part(&render(&app, &world, 100, 12), 46);
     assert!(rows[1].contains("[Body]"), "{:?}", rows[1]);
-    assert!(inside(&rows[2]).starts_with("age "), "{:?}", rows[2]);
+    // Its first line is what it's doing: nothing has moved it to act yet
+    // (M2 design §19.2).
+    assert!(inside(&rows[2]).starts_with("Standing"), "{:?}", rows[2]);
+    assert!(inside(&rows[3]).starts_with("age "), "{:?}", rows[3]);
 }
 
 #[test]
@@ -2943,7 +2946,7 @@ fn chemical_names_show_with_spaces_for_underscores() {
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
     app.apply(Action::SelectNext, &world);
     let (_, body) = inspector(&app, &world);
-    assert!(body[9].starts_with("bored ness  "), "{:?}", body[9]);
+    assert!(body[10].starts_with("bored ness  "), "{:?}", body[10]);
     open(&mut app, &world, Tab::Chem);
     let (_, chem) = inspector(&app, &world);
     assert!(chem[11].starts_with("bored ness  "), "{:?}", chem[11]);
