@@ -346,9 +346,9 @@ fn same() -> f32 {
 #[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Digestion {
-    /// How much the one gut holds, food and water together: a bite or a
-    /// drink that doesn't fit is Too full. `None`, for a pack from before
-    /// Slice 29, is two guts with no limit.
+    /// How much the one gut holds, food and water together, at most 1: a
+    /// bite or a drink that doesn't fit is Too full. `None`, for a pack
+    /// from before Slice 29, is two guts with no limit.
     #[serde(default)]
     pub(crate) gut: Option<f32>,
     /// Food, into energy.
@@ -839,6 +839,15 @@ impl PhysiologyEntry {
             {
                 return Err(format!("`{name}` is {size}, but must be a number above 0"));
             }
+        }
+        // Each thing in the gut stops at 1, so a bite that fitted a bigger
+        // gut could still be lost (M2 design §19.4).
+        if let Some(gut) = digestion.gut
+            && gut > 1.0
+        {
+            return Err(format!(
+                "`digestion.gut` is {gut}, but can't be above 1: each thing in the gut stops at 1"
+            ));
         }
         let ageing = self.ageing;
         let (wear, decay, scar) = (ageing.wear, ageing.decay, ageing.scar);
@@ -1456,7 +1465,7 @@ impl Indices {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::data::DataPack;
+    use crate::data::{DataError, DataPack};
     use crate::test_util::builtin_changing;
 
     #[test]
@@ -1490,6 +1499,26 @@ mod tests {
         assert_eq!(Breeding::default(), physiology.breeding);
         assert_eq!(Calls::default(), physiology.calls);
         assert_eq!(grows_up_range(), physiology.traits.grows_up);
+    }
+
+    #[test]
+    fn the_gut_holds_at_most_1_as_each_thing_in_it_stops_at_1() {
+        // M2 design §19.4: in a bigger gut, a bite could fit and still be
+        // lost, as its food stopped at 1.
+        let sources: Vec<(&str, String)> = DataPack::builtin_sources()
+            .iter()
+            .map(|&(path, text)| (path, text.replace("gut: 0.5,", "gut: 1.5,")))
+            .collect();
+        let sources: Vec<(&str, &str)> = sources.iter().map(|(p, t)| (*p, t.as_str())).collect();
+        match DataPack::from_sources(&sources).err() {
+            Some(DataError::Invalid { file, message }) => {
+                assert_eq!(file, "physiology.ron");
+                assert!(message.contains("digestion.gut"), "{message}");
+            }
+            other => panic!("a gut of 1.5 should be refused, not {other:?}"),
+        }
+        let full = builtin_changing("physiology.ron", &[("gut: 0.5,", "gut: 1.0,")]);
+        assert_eq!(full.physiology().digestion.gut, Some(1.0));
     }
 
     #[test]
