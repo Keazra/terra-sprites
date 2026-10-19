@@ -1,26 +1,32 @@
 //! Whether the default world keeps going, generation after generation (M2
 //! design §10, Slice 23's bar): runs it from seeds 1–10, left alone, and
 //! reports for each seed the sprites alive at the end, the most at once,
-//! the eggs laid with a partner and alone, the hatchings, the sprites that
-//! turned female, the deepest generation reached and how many hatchlings
-//! grew up; then how long its sprites lived and what they died of; then the
-//! hidden flaws its sprites carried (M2 design §12), and how long young
-//! from lone eggs lived against young from pairs; then how far the species'
-//! genes moved from the starter genome's (§12, G4); then the genes the
-//! starter lacks that the living carry, and in how many each works, and
-//! the genes they lost and doubled (§13); then courtship (§15.9): the
-//! share of eggs laid alone, of eggs from pairs that danced for each other
-//! first, partners, and the sexes of the adults; then families (§15.9): how
-//! much of the time partners, eggs and the young had family in sight. The
-//! bars: sprites alive at the end in at least 8 of 10 seeds, and never
-//! more than the world's limit; at least 3 gene numbers moved by a tenth
-//! the same way in every seed (§12.7); in at least 5 of 10 seeds, a gene
-//! the starter lacks carried by at least a tenth of the living (§13); at
-//! most 1 egg in 50 laid alone over all seeds, and none above 1 in 20; at
-//! least 9 in 10 of pairs' eggs after a dance each way; and, as the median
-//! over all of them, partners in each other's sight at least half the
-//! time, an egg with a parent in sight three quarters of its time, and a
-//! young sprite with a living parent seeing one half its childhood
+//! the fewest sprites at a count of its population record, whether its
+//! sprites held over the last 50 hours (#222), the eggs laid with a partner
+//! and alone, the hatchings, the sprites that turned female, the deepest
+//! generation reached and how many hatchlings grew up; then how long its
+//! sprites lived and what they died of; then the hidden flaws its sprites
+//! carried (M2 design §12), and how long young from lone eggs lived against
+//! young from pairs; then how far the species' genes moved from the starter
+//! genome's (§12, G4); then the genes the starter lacks that the living
+//! carry, and in how many each works, and the genes they lost and doubled
+//! (§13); then courtship (§15.9): the share of eggs laid alone, of eggs
+//! from pairs that danced for each other first, partners, and the sexes of
+//! the adults; then families (§15.9): how much of the time partners, eggs
+//! and the young had family in sight. The bars: sprites alive at the end in
+//! at least 8 of 10 seeds, and never more than the world's limit; G1's
+//! (#222), that the world lasts in at least 9 of 10 seeds, a seed lasting
+//! when it has sprites or eggs at the end, never had fewer than 10 sprites
+//! at a count of its population record, and its sprites over the last 50
+//! hours averaged at least half of hours 50–100, which only a run of 150
+//! hours (675,000 ticks) or more judges; at least 3 gene numbers moved by a
+//! tenth the same way in every seed (§12.7); in at least 5 of 10 seeds, a
+//! gene the starter lacks carried by at least a tenth of the living (§13);
+//! at most 1 egg in 50 laid alone over all seeds, and none above 1 in 20;
+//! at least 9 in 10 of pairs' eggs after a dance each way; and, as the
+//! median over all of them, partners in each other's sight at least half
+//! the time, an egg with a parent in sight three quarters of its time, and
+//! a young sprite with a living parent seeing one half its childhood
 //! (§15.9).
 //!
 //! `cargo run --release -p terra-sim --example generations`
@@ -31,14 +37,20 @@
 
 #[path = "common/args.rs"]
 mod args;
+#[path = "common/genes.rs"]
+mod genes;
+#[path = "common/lasting.rs"]
+mod lasting;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::process::ExitCode;
 use std::sync::Mutex;
 
+use genes::{counted, counted_where};
+use lasting::Census;
 use terra_sim::{
-    DataPack, DeathCause, Drift, EntityId, EventKind, Expression, GeneView, Genome, LifeStage,
-    Outcome, Sex, Switch, Target, Verb, World, WorldConfig, drift, gene_values, middle_values,
+    DataPack, DeathCause, Drift, EntityId, EventKind, Expression, GeneView, Genome, Outcome, Sex,
+    Target, Verb, World, WorldConfig, drift, gene_values, middle_values,
 };
 
 /// Ticks in an hour at 1×, 1.25 ticks a second (design §6.6).
@@ -71,6 +83,9 @@ struct Run {
     generation: u32,
     /// The tick the last sprite died, if they all did.
     died_out: Option<u64>,
+    /// The sprites, eggs not counted: the fewest at a count of the
+    /// population record, and at the end of each hour (#222).
+    census: Census,
     /// The ages at which hatchlings and the first sprites died of old age.
     lives: Vec<u64>,
     first_lives: Vec<u64>,
@@ -197,11 +212,13 @@ fn main() -> ExitCode {
         options.ticks
     );
     println!(
-        "\n{:>5} {:>6} {:>5} {:>5} {:>6} {:>9} {:>6} {:>7} {:>7} {:>7} {:>5} {:>9}",
+        "\n{:>5} {:>6} {:>5} {:>5} {:>6} {:>4} {:>6} {:>9} {:>6} {:>7} {:>7} {:>7} {:>5} {:>9}",
         "Seed",
         "Alive",
         "Eggs",
         "Most",
+        "Fewest",
+        "Held",
         "Mated",
         "Fruitless",
         "Alone",
@@ -212,6 +229,7 @@ fn main() -> ExitCode {
         "Died out"
     );
     let (mut going, mut over) = (0, 0);
+    let hours = options.ticks / lasting::HOUR;
     let (starter, genes) = (starter(&data), starter_genes(&data));
     let mut runs = Vec::new();
     for (seed, run) in in_parallel(&data, &config, &starter, &genes, &options) {
@@ -220,11 +238,18 @@ fn main() -> ExitCode {
         let died_out = run
             .died_out
             .map_or("-".to_string(), |tick| tick.to_string());
+        let held = match lasting::held(&run.census.hourly, hours) {
+            Some(true) => "yes",
+            Some(false) => "no",
+            None => "-",
+        };
         println!(
-            "{seed:>5} {:>6} {:>5} {:>5} {:>6} {:>9} {:>6} {:>7} {:>7} {:>7} {:>5} {died_out:>9}",
+            "{seed:>5} {:>6} {:>5} {:>5} {:>6} {held:>4} {:>6} {:>9} {:>6} {:>7} {:>7} {:>7} {:>5} \
+             {died_out:>9}",
             run.alive,
             run.eggs,
             run.most,
+            run.census.fewest,
             run.mated,
             run.fruitless,
             run.alone,
@@ -237,6 +262,7 @@ fn main() -> ExitCode {
     }
     let seeds = last - first + 1;
     println!("\nStill going in {going} of {seeds} seeds; over the limit in {over}.");
+    lasted(&runs, hours);
     lives(&runs);
     flaws(&runs);
     evolution(&starter, &runs);
@@ -302,46 +328,6 @@ fn starter(data: &DataPack) -> Vec<(String, f32)> {
 fn starter_genes(data: &DataPack) -> BTreeMap<String, usize> {
     let genome = starter_genome(data);
     counted(&genome.genes(data), &genome.switches())
-}
-
-/// How many of `genes` there are of each, by what each does and when it
-/// works, `switches` saying when: `thirst → Drink`, `always → Wander from
-/// Adult`. Genes this build can't read aren't counted.
-fn counted(genes: &[GeneView], switches: &[Switch]) -> BTreeMap<String, usize> {
-    counted_where(genes, switches, |_| true)
-}
-
-/// How many of `genes` there are of each, as `counted` says, of those at
-/// the indices `keep` keeps.
-fn counted_where(
-    genes: &[GeneView],
-    switches: &[Switch],
-    keep: impl Fn(usize) -> bool,
-) -> BTreeMap<String, usize> {
-    let mut counts = BTreeMap::new();
-    for (index, (gene, switch)) in genes.iter().zip(switches).enumerate() {
-        if !keep(index) {
-            continue;
-        }
-        if let Some((name, _)) = gene.named() {
-            *counts
-                .entry(format!("{name}{}", when(*switch)))
-                .or_insert(0) += 1;
-        }
-    }
-    counts
-}
-
-/// When a gene works, after what it does: nothing for all its life.
-fn when(switch: Switch) -> String {
-    let mut text = String::new();
-    if switch.from != LifeStage::Young {
-        text += &format!(" from {:?}", switch.from);
-    }
-    if let Some(until) = switch.until {
-        text += &format!(" until {until:?}");
-    }
-    text
 }
 
 /// How far the species' genes moved from the starter's (M2 design §12,
@@ -451,6 +437,42 @@ fn distance(ratio: f32) -> f32 {
     } else {
         1.0 / ratio - 1.0
     }
+}
+
+/// Whether each seed's world lasted, by #222's rule (G1, M2 design §6), in
+/// a run `hours` long: at least 9 seeds of 10 must.
+fn lasted(runs: &[(u64, Run)], hours: u64) {
+    let not_lasted: Vec<String> = runs
+        .iter()
+        .filter_map(|(seed, run)| {
+            let why = lasting::not_lasted(run.died_out.is_some(), &run.census, hours);
+            (!why.is_empty()).then(|| format!("seed {seed} ({})", why.join(", ")))
+        })
+        .collect();
+    let met = lasting::pooled_met(not_lasted.len(), runs.len());
+    println!(
+        "Lasted, by #222's rule, in {} of {} seeds: {} (at least 9 of 10).{}{}",
+        runs.len() - not_lasted.len(),
+        runs.len(),
+        if met { "met" } else { "not met" },
+        if not_lasted.is_empty() {
+            String::new()
+        } else {
+            format!(" Didn't: {}.", not_lasted.join("; "))
+        },
+        if hours < lasting::JUDGED_FROM {
+            " The sprites' 50-hour averages weren't judged: they need 150 hours (675,000 ticks) \
+             or more."
+        } else {
+            ""
+        }
+    );
+    println!(
+        "Fewest: sprites at a count of the population record (bar: never under {}). Held: the \
+         sprites over the last {} hours averaging at least half of hours 50-100.",
+        lasting::FLOOR,
+        lasting::LATE_HOURS
+    );
 }
 
 /// How long the sprites lived, in hours at 1×, and what they died of after
@@ -625,6 +647,7 @@ fn run(
     let mut world = World::new(config.clone(), data.clone(), seed);
     let mut run = Run {
         ticks,
+        census: Census::new(&world),
         ..Run::default()
     };
     let mut generation: BTreeMap<EntityId, u32> =
@@ -636,6 +659,7 @@ fn run(
     let mut had_partner: BTreeSet<EntityId> = BTreeSet::new();
     let mut in_sight = InSight::default();
     for _ in 0..ticks {
+        let every = world.population_every();
         for event in world.step() {
             match event.kind {
                 EventKind::Laid { egg, by, with } => {
@@ -726,6 +750,7 @@ fn run(
             }
         }
         in_sight.count(&world);
+        run.census.count(&world, every);
         if world.tick() == ticks / 2 {
             run.flaws_halfway = flaw_load(&world);
         }
