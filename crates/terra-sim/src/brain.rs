@@ -287,8 +287,8 @@ pub(crate) struct Snapshot {
     /// §5.9): its candidate, or the thing a running action is aimed at.
     pub(crate) scored: BTreeMap<CategoryId, Subject>,
     pub(crate) attended: Option<CategoryId>,
-    /// The one thing attention is on: a running action's target, or else the
-    /// attended category's candidate.
+    /// The one thing attention is on: a running action's target while
+    /// attention stays on it, or else the attended category's candidate.
     pub(crate) target: Option<Target>,
     /// What the decision is about is learned about as (design v19 §5.6):
     /// the thing attention is on, but a running action's target when it
