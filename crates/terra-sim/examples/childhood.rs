@@ -326,7 +326,7 @@ fn run(data: &DataPack, starter: &BTreeMap<String, usize>, seed: u64, options: &
             out.late.add(&now);
         }
         let ticks = tick + 1;
-        if ticks % HOUR == 0 {
+        if ticks.is_multiple_of(HOUR) {
             let hour = ticks / HOUR;
             let bushes = bush_count(&world);
             out.bushes.push(bushes);
@@ -334,7 +334,7 @@ fn run(data: &DataPack, starter: &BTreeMap<String, usize>, seed: u64, options: &
                 let sprites = world.sprites().count();
                 out.fewest = Some(out.fewest.map_or(sprites, |fewest| fewest.min(sprites)));
             }
-            if hour % options.every == 0 {
+            if hour.is_multiple_of(options.every) {
                 let lacking = lacking(&world, starter);
                 out.rows.push(Row {
                     hour,
