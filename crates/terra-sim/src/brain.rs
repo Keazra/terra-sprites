@@ -2074,8 +2074,9 @@ impl Brain {
 
     /// A verb sampled from the `available` ones scoring at least
     /// `act_threshold`, by softmax(score / τ), τ being `tau_base` ×
-    /// `exploration` (design §5.5): one draw. With none, it acts on nothing
-    /// and stands where it is, drawing nothing (M2 design §19.2); at a
+    /// `exploration` (design §5.5): one draw. With none it draws nothing,
+    /// and a sprite with nothing to do stands where it is, while one whose
+    /// eye has left its action's target carries on (M2 design §19.2); at a
     /// threshold of 0, every available verb may start, as before.
     pub(crate) fn choose(
         &self,

@@ -460,7 +460,7 @@ How an action went: still walking, applied, blocked, failed, timed out or too fu
 _Avoid_: result, status
 
 **Too full** (M2, Slice 29):
-How an Eat or a Drink ends when the sprite is full. The food or water stays where it was, and unlike a fruitless try it teaches nothing. The Body tab reads "Too full to eat the berry" or "Too full to drink".
+How an Eat or a Drink ends when the sprite is full. The food or water stays where it was, and unlike a fruitless try it teaches nothing. The Body tab reads "Too full to eat the berry", "Too full to eat from the berry bush" or "Too full to drink".
 _Avoid_: refused (the Cursor's word for a click that didn't apply), failed
 
 **Timeout**:
@@ -576,7 +576,7 @@ What a sprite has learned about doing one verb to one object type, or to sprites
 _Avoid_: skill (a later design, #48), reflex
 
 **Taught habit**:
-The part of a habit the Cursor taught: a Reward or Correct for what the sprite just tried. It is kept apart from the habit the sprite learns by itself, so what it learns afterwards doesn't wash it out, and it fades as slowly as a bad lesson, so in effect it lasts a life. A sprite acts on the two together, and the Brain tab shows them together as its habit. Since Slice 28 a habit learned by watching is kept the same way.
+The part of a habit the Cursor taught: a Reward or Correct for what the sprite just tried. It is kept apart from the habit the sprite learns by itself, so what it learns afterwards doesn't wash it out, and it fades as slowly as a bad lesson, so in effect it lasts a life. A sprite acts on the two together, and the Brain tab shows them together as its habit. Since Slice 28 a habit learned by watching is kept apart the same way, and since Slice 29 apart from the taught one too.
 _Avoid_: training (that's what the player does), conditioning
 
 **Watching** (M2, Slice 28):

@@ -73,7 +73,8 @@ pub struct WorldConfig {
     /// times as wide, so the same water lies in fewer, bigger lakes.
     lake_size: u8,
     /// The first sprites start within this many tiles of drinkable water,
-    /// as the crow flies; anywhere, if `None` (M2 design §19.1).
+    /// as the crow flies, while any such tile is free, then anywhere;
+    /// anywhere, if `None` (M2 design §19.1).
     start_near_water: Option<u16>,
 }
 

@@ -21,9 +21,9 @@
         resting: 0.8,
     ),
     // The one gut (M2 design §19.4). It holds `gut` of food and water
-    // together, room for a berry and a drink, and a bite or a drink that
-    // doesn't fit is Too full. Each thing in it moves into the body at its
-    // own `pace` a tick, food into energy and water into hydration: one
+    // together, at most 1: room for a berry and a drink. A bite or a drink
+    // that doesn't fit is Too full. Each thing in it moves into the body at
+    // its own `pace` a tick, food into energy and water into hydration: one
     // that `waits` only as the body has room for it, one that doesn't
     // passing through, the body keeping what it can. Leave out `gut` for two
     // guts with no limit, and give a bare pace for one that passes through.
