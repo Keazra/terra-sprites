@@ -15,7 +15,7 @@ How to play Terra Sprites and how to work on it: everything past what the [READM
 
 ## Where it's at
 
-Milestone 1 is done: every slice is built ([milestone](https://github.com/Keazra/terra-sprites/milestone/1)), and the owner signed it off after playing it through ([M1 acceptance](acceptance/m1.md)). Milestone 2, *Generations*, is nearly done ([milestone](https://github.com/Keazra/terra-sprites/milestone/2)): sprites now hatch from eggs, grow up, court, breed and grow old, and the young are born with a mix of their parents' genes. Two slices are left: a harsher world, where most young die unless another sprite or the player guides them, and the sign-off. Milestone 3 is being planned.
+Milestone 1 is done: every slice is built ([milestone](https://github.com/Keazra/terra-sprites/milestone/1)), and the owner signed it off after playing it through ([M1 acceptance](acceptance/m1.md)). Milestone 2, *Generations*, is nearly done ([milestone](https://github.com/Keazra/terra-sprites/milestone/2)): sprites now hatch from eggs, grow up, court, breed and grow old, and the young are born with a mix of their parents' genes. The world is harsher too: water is scarce, so most young die unless another sprite or the player guides them. One slice is left: the sign-off. Milestone 3 is being planned.
 
 ## What sprites do
 
