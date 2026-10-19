@@ -321,36 +321,40 @@ impl Report {
     fn numbers(&self) -> Vec<(String, String)> {
         let (v, u) = (&self.viability, &self.unattended);
         let (g, guided) = (&v.grown_ups, &v.guided);
-        let mut numbers = vec![
-            (
-                "A4: unattended newborns that grow up, middle seed".to_string(),
-                percent(u.median),
-            ),
-            (
-                "A4: young hatched in the viability run that grew up".into(),
-                format!(
-                    "{} of {}",
-                    guided.grew_up,
-                    guided.grew_up + guided.died_young
+        let mut numbers = vec![(
+            "A4: unattended newborns that grow up, middle seed".to_string(),
+            percent(u.median),
+        )];
+        // A report from before Slice 29 counted something else under these
+        // names, so it has none of them (M2 design §19.6).
+        if v.by_stage {
+            numbers.extend([
+                (
+                    "A4: young hatched in the viability run that grew up".into(),
+                    format!(
+                        "{} of {}",
+                        guided.grew_up,
+                        guided.grew_up + guided.died_young
+                    ),
                 ),
-            ),
-            (
-                "A4: grown-up deaths (adult or old)".into(),
-                g.deaths.to_string(),
-            ),
-            (
-                "A4: adults' deaths of hunger or thirst".into(),
-                g.hunger_and_thirst.to_string(),
-            ),
-            (
-                "A4: old sprites' deaths of hunger or thirst".into(),
-                g.old_hunger_and_thirst.to_string(),
-            ),
-            (
-                "Thorn trap: deaths by thornbush in ticks 0–30,000, median".into(),
-                number(v.thorn_trap.median),
-            ),
-        ];
+                (
+                    "A4: grown-up deaths (adult or old)".into(),
+                    g.deaths.to_string(),
+                ),
+                (
+                    "A4: adults' deaths of hunger or thirst".into(),
+                    g.hunger_and_thirst.to_string(),
+                ),
+                (
+                    "A4: old sprites' deaths of hunger or thirst".into(),
+                    g.old_hunger_and_thirst.to_string(),
+                ),
+            ]);
+        }
+        numbers.push((
+            "Thorn trap: deaths by thornbush in ticks 0–30,000, median".into(),
+            number(v.thorn_trap.median),
+        ));
         for &(seed, grew_up, died_young) in &u.per_seed {
             numbers.push((
                 format!("Unattended: seed {seed} grew up"),
@@ -427,6 +431,12 @@ pub fn moved(previous: &Report, current: &Report) -> Vec<Moved> {
 pub struct Viability {
     /// How many seeds finished; the medians are theirs.
     pub finished: usize,
+    /// Whether A4's counts are by life stage, as from Slice 29 (M2 design
+    /// §19.6). A report from before has none: its grown-up counts were
+    /// every death after tick 10,000, at any life stage, so what moved
+    /// doesn't set them against these.
+    #[serde(default)]
+    pub by_stage: bool,
     /// A4: what became of the young hatched over the run, all the seeds
     /// together (M2 design §19.6). Reports from before Slice 29 have none.
     #[serde(default)]
@@ -657,6 +667,7 @@ pub fn viability(seeds: &SeedRuns, sprites: u64, data: &DataPack) -> Viability {
         .collect();
     Viability {
         finished: finished.len(),
+        by_stage: true,
         seeds: rows,
         guided: Guided {
             grew_up,
@@ -1369,24 +1380,40 @@ mod tests {
     #[test]
     fn a_report_from_before_slice_29_still_reads() {
         // Older reports have A4's share alive at tick 10,000 in place of the
-        // unattended run and the guided young, and no old sprites' count.
+        // unattended run and the guided young, no old sprites' count, and
+        // grown-up counts not by life stage.
         let text = without_field(&sample().to_ron(), "unattended");
         let text = without_field(&text, "guided");
-        let text = text.replacen(
+        let mut text = text.replacen(
             "viability: (",
             "viability: (survival: (median: Some(0.9), verdict: Met), ",
             1,
         );
-        let start = text.find("old_hunger_and_thirst:").expect("the old count");
-        let end = start + text[start..].find(',').expect("its end") + 1;
-        let text = format!("{}{}", &text[..start], &text[end..]);
-        for gone in ["unattended", "guided", "old_hunger_and_thirst"] {
+        for scalar in ["old_hunger_and_thirst:", "by_stage:"] {
+            let start = text.find(scalar).expect("the field");
+            let end = start + text[start..].find(',').expect("its end") + 1;
+            text = format!("{}{}", &text[..start], &text[end..]);
+        }
+        for gone in ["unattended", "guided", "old_hunger_and_thirst", "by_stage"] {
             assert!(!text.contains(gone), "{text}");
         }
         let report = Report::from_ron(&text).expect("an older report reads");
         assert_eq!(report.unattended.verdict, Verdict::NoData);
         assert_eq!(report.viability.guided.verdict, Verdict::NoData);
         assert_eq!(report.viability.grown_ups.old_hunger_and_thirst, 0);
+        // Its grown-up counts were every death after tick 10,000, at any
+        // life stage, so what moved shows today's by-stage counts as new
+        // rather than set against them.
+        let moved = moved(&report, &sample());
+        for name in [
+            "A4: young hatched in the viability run that grew up",
+            "A4: grown-up deaths (adult or old)",
+            "A4: adults' deaths of hunger or thirst",
+            "A4: old sprites' deaths of hunger or thirst",
+        ] {
+            let line = moved.iter().find(|m| m.name == name);
+            assert_eq!(line.map(|m| m.was.as_deref()), Some(None), "{name}");
+        }
     }
 
     /// A window over ticks `from` to `to` that counted these applied actions.
