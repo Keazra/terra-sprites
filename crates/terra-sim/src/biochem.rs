@@ -1125,10 +1125,18 @@ mod tests {
     }
 
     #[test]
-    fn a_resting_sprite_spends_basal_energy_and_the_cost_of_its_sense_radius() {
-        let mut sprite = physical(&[]);
-        sprite.step();
-        assert_close(sprite.level("energy"), 1.0 - (0.0001 + 10.0 * 0.0000067));
+    fn a_sprite_spends_basal_energy_and_the_cost_of_its_sense_radius_a_fifth_less_at_rest() {
+        let cost = 0.0001 + 10.0 * 0.0000067;
+        let mut awake = physical(&[]);
+        awake.step();
+        assert_close(awake.level("energy"), 1.0 - cost);
+        // M2 design §19.2: physiology's `metabolism.resting`, 0.8.
+        let mut resting = physical(&[]);
+        resting.step_with(Senses {
+            resting: true,
+            ..adult()
+        });
+        assert_close(resting.level("energy"), 1.0 - 0.8 * cost);
     }
 
     #[test]
@@ -1253,6 +1261,26 @@ mod tests {
         adult.program.vigour = 0.5;
         adult.step();
         assert_eq!(adult.level("injury"), 0.0, "only an old body gives out");
+    }
+
+    #[test]
+    fn a_young_sprite_s_thirst_and_its_dying_of_it_are_paced_to_its_childhood() {
+        // M2 design §19.5: the grown rates × 4,500 ÷ the 2,000 ticks its
+        // genes take to grow up. Grown, the same genes go at the grown
+        // rates, as the tests above have them.
+        let paced = 4500.0 / 2000.0;
+        let young = Senses {
+            stage: LifeStage::Young,
+            ..Senses::default()
+        };
+        let mut thirsty = physical(&[]);
+        thirsty.set("hydration", 0.5);
+        thirsty.step_with(young);
+        assert_close(thirsty.level("hydration"), 0.5 - 0.00033 * paced);
+        let mut parched = physical(&[]);
+        parched.set("hydration", 0.0);
+        parched.step_with(young);
+        assert_close(parched.level("injury"), 0.0011 * paced - 0.0001);
     }
 
     #[test]
