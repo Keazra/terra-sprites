@@ -8,8 +8,8 @@ use common::{
 };
 
 use terra_sim::{
-    Command, DataPack, EntityId, Event, EventKind, Learned, LifeStage, Pos, ScriptedAction, Thing,
-    Verb, World,
+    Command, DataPack, EntityId, Event, EventKind, Learned, LifeStage, Pos, ScriptedAction, Target,
+    Thing, Verb, World,
 };
 
 /// A room with water along its west wall.
@@ -267,6 +267,80 @@ fn a_sprite_whose_eye_is_elsewhere_or_that_doesn_t_watch_learns_nothing_by_watch
     assert_eq!(watched_drinking(&ball, (at(5, 1), &on_ball)), 0.0);
     let not_watching = looking_on(0.0);
     assert_eq!(watched_drinking(&[], (at(5, 1), &not_watching)), 0.0);
+}
+
+/// Thirsty, a sprite sets off to drink, pulled past its act threshold (.5)
+/// by its thirst (.36) and its eye on the water (.45). Once a ball draws
+/// its eye, nothing pulls it that hard, so it carries on to drink (M2
+/// design §19.2). It takes on half of what it watches.
+const CARRIES_ON: &str = r#"Trait(trait: "sense_radius", value: 12.0),
+    InitialConcentration(chem: "thirst", value: 0.9),
+    Instinct(inputs: [("thirst", false)], verb: Drink, weight: 0.4),
+    Instinct(inputs: [("thirst", false), ("attended_water", false)], verb: Drink, weight: 0.5),
+    AttentionInstinct(input: "thirst", category: "water", weight: 0.3),
+    AttentionInstinct(input: "always", category: "toy", weight: 1.0),
+    BrainParam(param: "act_threshold", value: 0.5),
+    BrainParam(param: "tau_att_base", value: 0.05),
+    BrainParam(param: "salience_gain", value: 0.0),
+    BrainParam(param: "curiosity", value: 0.0),
+    BrainParam(param: "watch_rate", value: 0.5),"#;
+
+/// A bored sprite that plays with a ball its eye is on, for its boredom
+/// (design §5.5), which a play halves, and with none stands.
+const PLAYER: &str = r#"InitialConcentration(chem: "boredom", value: 1.0),
+    Emitter(locus: Locus("played"), mode: Level, gain: -0.5, chem: "boredom"),
+    Instinct(inputs: [("boredom", false)], verb: Play, weight: 0.4),
+    Instinct(inputs: [("boredom", false), ("attended_toy", false)], verb: Play, weight: 0.6),
+    AttentionInstinct(input: "always", category: "toy", weight: 1.0),
+    BrainParam(param: "act_threshold", value: 0.5),
+    BrainParam(param: "curiosity", value: 0.0),
+    BrainParam(param: "tau_att_base", value: 0.05),"#;
+
+#[test]
+fn a_sprite_carrying_on_with_its_eye_moved_watches_what_its_eye_is_on() {
+    // M2 design §18.1, §19.2: carrying on to drink, its eye on a ball put
+    // down beside it, it takes on half of what a sprite playing with the
+    // ball learns of balls, .125 of .25 for boredom, and nothing of a
+    // drink it sees at the water, where its eye isn't.
+    let (me, player, drinker) = (at(8, 1), at(9, 2), at(4, 0));
+    let drinks = drinker_looking_at_water("");
+    let mut world = room(
+        &[(me, CARRIES_ON), (player, PLAYER), (drinker, &drinks)],
+        &[],
+    );
+    let [me, player, drinker] = [me, player, drinker].map(|pos| id_at(&world, pos));
+    world.step();
+    let ball = world.data().object_type_id("ball").expect("balls");
+    world.submit(Command::Place {
+        tile: at(8, 2),
+        object_type: ball,
+    });
+    world.step();
+    let ball = world.object_at(at(8, 2)).expect("the ball").id();
+    let carries_on = |world: &World| {
+        let sprite = world.sprite(me).expect("the sprite carrying on");
+        let action = sprite.action().expect("its drink");
+        assert_eq!(action.verb, Verb::Drink);
+        assert!(!sprite.is_standing(), "it carries on");
+        assert_eq!(sprite.attended(), Some(Target::Object(ball)));
+    };
+    let balls_for_boredom = Learned::Worth {
+        thing: "ball".into(),
+        need: Some("boredom".into()),
+    };
+    while value_of(&world, player, &balls_for_boredom) == 0.0 {
+        assert!(world.tick() < 20, "it never played");
+        carries_on(&world);
+        world.step();
+    }
+    assert_eq!(value_of(&world, player, &balls_for_boredom), 0.25);
+    assert_eq!(value_of(&world, me, &balls_for_boredom), 0.125);
+    while value_of(&world, drinker, &water_for_thirst()) == 0.0 {
+        assert!(world.tick() < 20, "it never drank");
+        carries_on(&world);
+        world.step();
+    }
+    assert_eq!(value_of(&world, me, &water_for_thirst()), 0.0);
 }
 
 #[test]

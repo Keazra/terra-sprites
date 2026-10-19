@@ -696,7 +696,7 @@ mod tests {
     use crate::genome::Genome;
     use crate::map::Map;
     use crate::perception::Target;
-    use crate::registry::Verb;
+    use crate::registry::{BrainParam, Verb};
     use crate::test_util::{at, builtin};
     use crate::world::{Scenario, World};
 
@@ -775,5 +775,14 @@ mod tests {
         let explained = brain.explain(data).expect("a step 5");
         assert_eq!(explained.attended, Some("ball".into()));
         assert_eq!(explained.decision.map(|(verb, _)| verb), Some(Verb::Drink));
+        // What its eye is on grows familiar, not what it carries on to
+        // (design v19 §5.6): its eye on each for one tick, the water at the
+        // first and the ball at this one.
+        let rate = brain.params.get(BrainParam::FamiliarityRate);
+        let balls = state.subject_of(data, Target::Object(ball));
+        assert_eq!(
+            (brain.novelty(balls), brain.novelty(water)),
+            (1.0 - rate, 1.0 - rate)
+        );
     }
 }

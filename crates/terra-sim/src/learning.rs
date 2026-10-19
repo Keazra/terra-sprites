@@ -930,7 +930,7 @@ fn watch(
             let shown: Vec<Knowledge> = moment
                 .iter()
                 .filter(|topic| !topic.about(id))
-                .filter(|topic| on_them || topic.caught(eye.target, eye.subject))
+                .filter(|topic| on_them || topic.caught(eye.target, eye.eye_subject()))
                 .map(|&topic| them.brain.shown(topic, data))
                 .collect();
             if !shown.is_empty() {

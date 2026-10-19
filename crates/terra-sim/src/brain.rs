@@ -292,7 +292,8 @@ pub(crate) struct Snapshot {
     pub(crate) target: Option<Target>,
     /// What the decision is about is learned about as (design v19 §5.6):
     /// the thing attention is on, but a running action's target when it
-    /// carries on with its eye off it (M2 design §19.2).
+    /// carries on with its eye off it (M2 design §19.2). What its eye is
+    /// on is `eye_subject`.
     pub(crate) subject: Option<Subject>,
     /// Each verb's score, in `VERBS` order.
     #[serde(deserialize_with = "per_verb")]
@@ -306,6 +307,20 @@ pub(crate) struct Snapshot {
     pub(crate) sprite_seen: Option<EntityId>,
     /// The sprite the decision was about, and whether fear was quiet (§5.5).
     pub(crate) scoring: SpriteScoring,
+}
+
+impl Snapshot {
+    /// What the thing its eye is on is learned about as: the attended
+    /// category's row of `scored`, which is `subject` but while it carries
+    /// on with its eye off its action's target (M2 design §18.1, §19.2).
+    /// With its eye on nothing, or no row for it, `subject`.
+    pub(crate) fn eye_subject(&self) -> Option<Subject> {
+        let eye = self.target.and(self.attended);
+        match eye.and_then(|category| self.scored.get(&category)) {
+            Some(&seen) => Some(seen),
+            None => self.subject,
+        }
+    }
 }
 
 /// What something learned is about (design v19 §5.9, §6.1).
@@ -1522,9 +1537,11 @@ impl Brain {
     pub(crate) fn commit(&mut self, tick: u64, data: &DataPack) {
         if let Some(snapshot) = self.snapshot.as_ref().filter(|s| s.tick == tick) {
             let motive = snapshot.motive;
-            if let Some(subject) = snapshot.subject {
+            if let Some(subject) = snapshot.eye_subject() {
                 // Attending to an object type makes it familiar (design v19
-                // §5.6).
+                // §5.6): the one its eye is on, not a running action's
+                // target it carries on with, its eye off it (M2 design
+                // §19.2).
                 let rate = self.params.get(BrainParam::FamiliarityRate);
                 let known = self
                     .experience
@@ -1643,13 +1660,12 @@ impl Brain {
         // A stable sort keeps a tie in listed order: concepts, worth, fear,
         // habit.
         contributions.sort_by(|a, b| b.amount.abs().total_cmp(&a.amount.abs()));
-        // What its eye is on, the attended category's row: not what the
-        // decision is about while it carries on with its eye off its
-        // action's target (M2 design §19.2).
-        let eye = snapshot.target.and(snapshot.attended);
+        // What its eye is on: not what the decision is about while it
+        // carries on with its eye off its action's target (M2 design
+        // §19.2).
         Some(Explanation {
             attention,
-            attended: eye.and_then(|c| snapshot.scored.get(&c)).map(|&s| seen(s)),
+            attended: snapshot.eye_subject().map(seen),
             decision,
             contributions,
         })
