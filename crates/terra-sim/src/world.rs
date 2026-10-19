@@ -1089,15 +1089,7 @@ impl World {
     /// A new world, generated from `config` and `seed`, in `mode`, which
     /// it keeps for its whole life (M2 design §16).
     pub fn new_in(config: WorldConfig, data: DataPack, seed: u64, mode: Mode) -> World {
-        let mut rng = ChaCha8Rng::seed_from_u64(seed);
-        let map = generate(&config, &data, &mut rng);
-        let mut world = World::with(map, data, rng, seed);
-        world.state.most_sprites = config.most_sprites() as u16;
-        world.state.mode = mode;
-        place_objects(&config, &world.data, &mut world.state);
-        place_sprites(&config, &world.data, &mut world.state);
-        world.config = Some(config);
-        world
+        World::generated(config, data, seed, mode, place_sprites)
     }
 
     /// The unattended run's world (M2 design §19.6): `config`'s world as
@@ -1105,15 +1097,9 @@ impl World {
     /// newborns, placed as the Cursor places them and spread over the whole
     /// map, and nobody else, so none has anyone to learn from.
     pub fn unattended(config: WorldConfig, data: DataPack, seed: u64) -> World {
-        let mut rng = ChaCha8Rng::seed_from_u64(seed);
-        let map = generate(&config, &data, &mut rng);
-        let mut world = World::with(map, data, rng, seed);
-        world.state.most_sprites = config.most_sprites() as u16;
-        world.state.mode = Mode::Lab;
-        place_objects(&config, &world.data, &mut world.state);
-        place_newborns(&config, &world.data, &mut world.state, &[]);
-        world.config = Some(config);
-        world
+        World::generated(config, data, seed, Mode::Lab, |config, data, state| {
+            place_newborns(config, data, state, &[])
+        })
     }
 
     /// The unattended run's world as `unattended` makes it, but with its
@@ -1139,15 +1125,35 @@ impl World {
         if like.is_empty() {
             return None;
         }
+        Some(World::generated(
+            config,
+            data,
+            seed,
+            Mode::Lab,
+            |config, data, state| place_newborns(config, data, state, &like),
+        ))
+    }
+
+    /// `config`'s world as generated from `seed`, in `mode`, with its
+    /// objects, and its first sprites as `place` puts them: the steps every
+    /// generated world shares, so the unattended run's world is the one
+    /// `new_in` makes but for its sprites (M2 design §19.6).
+    fn generated(
+        config: WorldConfig,
+        data: DataPack,
+        seed: u64,
+        mode: Mode,
+        place: impl FnOnce(&WorldConfig, &DataPack, &mut WorldState),
+    ) -> World {
         let mut rng = ChaCha8Rng::seed_from_u64(seed);
         let map = generate(&config, &data, &mut rng);
         let mut world = World::with(map, data, rng, seed);
         world.state.most_sprites = config.most_sprites() as u16;
-        world.state.mode = Mode::Lab;
+        world.state.mode = mode;
         place_objects(&config, &world.data, &mut world.state);
-        place_newborns(&config, &world.data, &mut world.state, &like);
+        place(&config, &world.data, &mut world.state);
         world.config = Some(config);
-        Some(world)
+        world
     }
 
     /// A world on a hand-drawn map, which must form exactly one region.
