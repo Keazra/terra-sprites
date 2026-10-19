@@ -1081,6 +1081,8 @@ World randomness is separate: plant rules and the order actions resolve in. It c
 
 In this section, *c* is an object type (v19). Sprites are learned about one by one for worth and fear, and as a whole for habits and familiarity.
 
+**By watching, too** (since Slice 28): a sprite also takes on a share of what the one it watches knows of what that one tried or had done to it: of a thing, its worth for the try's motive, its good and its bad; of a sprite that hit it, or of the Cursor, its fear; and the habit of the verb tried, which it keeps as a taught habit (M2 design §18.2).
+
 **A thing's worth now:** `value_c = Σ_n level_n × G_n[c] + quiet × G[c] + B[c]`, over the needs *n*. A berry learned good for hunger counts for a lot when the sprite is starving and nothing when it's full; a thornbush learned bad counts always. For an object type the sprite doesn't know yet, the values are its category's summary (below).
 
 **First-order needs quiet what's merely liked** (v21). `quiet = 1 − quieting × urgency²`, where urgency is the highest level of the sprite's first-order needs (hunger and thirst, §5.2) and `quieting` a brain parameter (0.8 by default). Squared, a little hunger or thirst hardly quiets anything, and a desperate one quiets most. It scales a thing's general good in its worth, and every good habit in the decision (§5.5); worth for a need, bad, fear and bad habits are never quieted. So a starving sprite still likes its ball a little, but its eye turns to what might feed it. It never blocks: at full urgency a fifth of a like is left.
@@ -1117,7 +1119,7 @@ With no attempt within reach, the tick teaches as any other: no worth, and the s
 - **A crash after a shove** by the visible Cursor teaches fear of it the same way, in the tick of the crash only, so a hidden Cursor's zap a moment later teaches nothing about the Cursor. In a tick the Cursor corrects the sprite, the pain is the correction's: it teaches fear of the Cursor only if the Cursor was visible, crash or no crash.
 - What each teaches about the thing touched, and the habit, is as for a hidden Cursor (above): the lesson is about the Cursor **as well as** the thing.
 - **Getting used to it.** Each tick a sprite sees the Cursor near (its flood reaches it, §3.6) and neither corrects it nor is feared anew (a crash's tick), `F[cursor] *= 1 − cursor_calming × nearness`, where `nearness = max(0, 1 − d / fear_reach)` and `d` is the Chebyshev distance in tiles over the reach of the sprite's flood. So a feared Cursor that sits on a sprite and does nothing wears its fear off fastest: the sprite comes to see it can't do anything about it. Fear of sprites has no such rule; habituation in general is [#72](https://github.com/Keazra/terra-sprites/issues/72).
-- **Being led** teaches nothing, visible or not, and onlookers learn nothing from what's done to another sprite ([#106](https://github.com/Keazra/terra-sprites/issues/106)).
+- **Being led** teaches nothing, visible or not. **What's done to another sprite** teaches the one watching it, since Slice 28: a sprite that sees another hit, shocked or petted learns from it by watching (M2 design §18.2, [#106](https://github.com/Keazra/terra-sprites/issues/106)).
 
 **Sprites in general** (v18) are a summary of the *n* sprites a sprite remembers, other than those it knows only by sight, which it judges by the summary as it would a stranger (M2 design §15.2, #186): each value (each `G_n`, `G`, `B` and `F`) is their mean × `clamp((n − 1) / (generalise − 1), 0, 1)`. So a sprite that knows only its bully fears no stranger, and one hurt by three different sprites is wary of every stranger. A sprite it doesn't remember is judged by the summary, and the Brain tab shows the summary as "sprites".
 
@@ -1147,7 +1149,7 @@ With no attempt within reach, the tick teaches as any other: no worth, and the s
 - **Decisions that build up over time,** with body language ([#15](https://github.com/Keazra/terra-sprites/issues/15)).
 - **Places** ([#40](https://github.com/Keazra/terra-sprites/issues/40)). Individual sprites came in v18, and the visible Cursor in v29.
 - **"Not while they're watching"** ([#105](https://github.com/Keazra/terra-sprites/issues/105)): a lesson from a visible Cursor that holds only while it's in sight, the third reading of what its touch teaches. It needs lessons that hold only in a situation.
-- **Chasing the light** ([#104](https://github.com/Keazra/terra-sprites/issues/104)): play with the Cursor easing boredom, as a cat chases a laser dot. Left out so what sprites think of the player comes only from how they're treated; it's one rule in the Cursor's pseudo type.
+- **Chasing the light** ([#104](https://github.com/Keazra/terra-sprites/issues/104)): play with the Cursor easing boredom, as a cat chases a laser dot. Left out so what sprites think of the player comes only from how they, or a sprite they watch (M2 design §18.2), are treated; it's one rule in the Cursor's pseudo type.
 - **Genes that switch on at life stages** (M2, [#49](https://github.com/Keazra/terra-sprites/issues/49)): a new instinct joins the instinct pathway mid-life without touching what was learned.
 
 ### 5.7 Genes for the brain
