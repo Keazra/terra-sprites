@@ -54,7 +54,8 @@ fn a_key_must_name_an_object_type() {
 }
 
 /// What `events` add to a window's counts, counted here by hand, in a world
-/// whose one sprite is a starter: an adult, and not yet old.
+/// whose one sprite is a first sprite and a starter: an adult, and not yet
+/// old.
 fn tally(events: &[Event], window: &mut Window) {
     for event in events {
         match &event.kind {
@@ -75,6 +76,7 @@ fn tally(events: &[Event], window: &mut Window) {
                     .stage_deaths
                     .entry((LifeStage::Adult, *cause))
                     .or_insert(0) += 1;
+                window.first_died += 1;
             }
             EventKind::LearnedMilestone { learned, good, .. } => {
                 *window.lessons.entry((learned.clone(), *good)).or_insert(0) += 1
@@ -110,6 +112,7 @@ fn a_run_counts_applied_actions_and_deaths_in_each_window() {
         first: Childhood::default(),
         later: Childhood::default(),
         stage_deaths: BTreeMap::new(),
+        first_died: 0,
     });
     for _ in 0..3000 {
         let events = world.step();
@@ -156,6 +159,7 @@ fn the_report_lists_each_window_with_a_column_per_seed_and_the_median() {
         first: Childhood::default(),
         later: Childhood::default(),
         stage_deaths: BTreeMap::new(),
+        first_died: 0,
     };
     let runs = [
         (
@@ -208,6 +212,7 @@ fn the_report_lists_the_control_runs_after_the_learning_runs() {
         first: Childhood::default(),
         later: Childhood::default(),
         stage_deaths: BTreeMap::new(),
+        first_died: 0,
     };
     let runs = [
         (
@@ -371,6 +376,7 @@ fn the_report_counts_the_cursor_s_touches_and_lessons_and_names_the_control() {
         first: Childhood::default(),
         later: Childhood::default(),
         stage_deaths: BTreeMap::new(),
+        first_died: 0,
     };
     let runs = [(
         1,
@@ -545,6 +551,7 @@ fn the_report_counts_who_grew_up_and_deaths_by_life_stage() {
         },
         later: Childhood::default(),
         stage_deaths: BTreeMap::from([((LifeStage::Young, DeathCause::Dehydration), died_young)]),
+        first_died: died_young,
     };
     let runs = [
         (

@@ -555,8 +555,8 @@ pub fn unattended(seeds: &SeedRuns, data: &DataPack) -> Unattended {
     }
 }
 
-/// One seed's 50,000 ticks: who survived, what killed the rest, and how
-/// often each verb was applied, each by name.
+/// One seed's 50,000 ticks: how many of its first sprites survived, what
+/// killed whom, and how often each verb was applied, each by name.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SeedRow {
     pub seed: u64,
@@ -645,7 +645,7 @@ pub fn viability(seeds: &SeedRuns, sprites: u64, data: &DataPack) -> Viability {
             }
             SeedRow {
                 seed: *seed,
-                alive: sprites.saturating_sub(all.deaths.values().sum()),
+                alive: sprites.saturating_sub(all.first_died),
                 deaths: all
                     .deaths
                     .iter()
@@ -1043,6 +1043,7 @@ mod tests {
             first: Childhood::default(),
             later: Childhood::default(),
             stage_deaths: BTreeMap::new(),
+            first_died: 0,
         }
     }
 
@@ -1273,8 +1274,11 @@ mod tests {
 
     #[test]
     fn each_seed_has_a_row_of_who_survived_what_killed_the_rest_and_the_verbs() {
-        // Design §7.6: per seed, who survived the 50,000 ticks, what killed
-        // the rest, and how often each verb was applied, whatever its target.
+        // Design §7.6: per seed, how many of the first sprites survived the
+        // 50,000 ticks, what killed whom, and how often each verb was
+        // applied, whatever its target. Of the three deaths, the young
+        // sprite was hatched in the world, so 28 of the 30 first sprites
+        // are left.
         let data = data();
         assert_eq!(data.object_type_name(2), Some("berry"), "objects.ron");
         assert_eq!(data.object_type_name(3), Some("thornbush"), "objects.ron");
@@ -1285,6 +1289,7 @@ mod tests {
                 (LifeStage::Young, DeathCause::HurtBy(3), 1),
             ],
         );
+        run.windows[1].first_died = 2;
         run.windows[1].applied = BTreeMap::from([
             ((Verb::Eat, Some(2)), 10),
             ((Verb::Eat, Some(3)), 2),
@@ -1297,7 +1302,7 @@ mod tests {
             rows,
             vec![SeedRow {
                 seed: 7,
-                alive: 27,
+                alive: 28,
                 deaths: BTreeMap::from([
                     ("dehydration".into(), 2),
                     ("hurt by thornbush".into(), 1)

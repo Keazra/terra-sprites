@@ -252,6 +252,8 @@ pub struct Window {
     /// Deaths, by the life stage each died at and their cause (M2 design
     /// §19.6): a grown-up death is an adult's or an old sprite's.
     pub stage_deaths: BTreeMap<(LifeStage, DeathCause), u64>,
+    /// How many of the world's first sprites died, at any life stage.
+    pub first_died: u64,
 }
 
 /// How many young grew up in a window, and how many died young (M2 design
@@ -320,6 +322,7 @@ impl Window {
                 cause,
             } => {
                 *self.stage_deaths.entry((stage, cause)).or_insert(0) += 1;
+                self.first_died += u64::from(first);
                 if stage == LifeStage::Young {
                     self.childhood(first).died_young += 1;
                 }
@@ -461,6 +464,7 @@ impl LabScenario {
                 first: Childhood::default(),
                 later: Childhood::default(),
                 stage_deaths: BTreeMap::new(),
+                first_died: 0,
             })
             .collect();
         // The world's first sprites, and each sprite's life stage, to count
