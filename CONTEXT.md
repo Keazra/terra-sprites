@@ -154,7 +154,7 @@ _Avoid_: label
 The genome in the data pack that sprites are made from when they have no parents.
 
 **Gene value**:
-A number in a gene that spawn variation or a copying error may change, such as a strength or a threshold. The rest of a gene, such as which chemical it touches, never varies. Followed across a species, each is named for what its gene does and its field, as `hunger → Eat: weight` (M2 design §12.7, §16.4).
+A number in a gene that spawn variation or a copying error may change, such as a strength or a threshold. The rest of a gene, such as which chemical it touches, never varies. Followed across a species, each is named for what its gene does and its field, as `hunger → Eat: weight` (M2 design §12.7, §16.4). A trait's or a brain parameter's is held within a range physiology gives, and a level within 0 to 1; the rest can grow or shrink without end, but never cross 0 (M2 design §16.6).
 
 **Spawn variation**:
 The small random change to the gene values of a sprite made from the starter genome, larger for `grows_old` so that lives differ.
@@ -226,6 +226,10 @@ _Avoid_: want, desire
 **First-order need**:
 A need that comes before a sprite's likes: hunger or thirst. The more it presses, the less what the sprite merely likes pulls on it, though never to nothing. The other needs are second-order.
 _Avoid_: primary need, survival need, blocker (it quiets, never blocks)
+
+**Needs gene** (M2, #237):
+One of the starter genome's genes that keeps a sprite fed, watered and rested: it raises or eases hunger, thirst or tiredness, fades one, or turns one into its action, as `drank → thirst` or `hunger → Eat`. The starter has eleven. They're found from the data, not listed: the needs a starter gene raises from the body's own state are the body's needs, so another species' data pack has its own (M2 design §16.6).
+_Avoid_: vital gene, essential gene, survival gene
 
 **Relief**:
 A need falling, by enough in a tick to count. It teaches that the thing touched is good for that need.
@@ -903,6 +907,10 @@ A baseline run's numbers, for one commit.
 **Broken**:
 What a baseline report calls a seed that panicked or broke an invariant. A criterion that isn't met yet isn't broken.
 _Avoid_: crash (that's a shoved sprite's), failed
+
+**Gene warning** (#274):
+A line in a baseline report, or at the end of a fast-forward, saying the species' genes have gone somewhere worth a look: more than half the hatched sprites alive lack a needs gene, or a gene value's middle has run nearly to the end of its range. It's no verdict: it asks for a look, and the run is judged as before.
+_Avoid_: canary (the idea's name in the owner's notes), alarm, failure, broken (that's a seed's)
 
 **Briefing**:
 The observer's plain-language account of a baseline report: what was tested, what changed since the last one, and what might explain it.

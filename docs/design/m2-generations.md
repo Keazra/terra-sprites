@@ -4,7 +4,7 @@
 - **Date:** 2026-10-12
 - **History:** edited in place since v5; each change is a file in [`changes/`](changes/), whose README says where v1 to v5 are
 - **Builds on:** [M1 design](m1-a-sprite-lives.md), which stays the rulebook for everything M2 doesn't change
-- **Covers:** what milestone 2 contains, its slices and their order, the time scale of a sprite's life, the direction for ageing, what "M2 is done" means, memory of places (Slice 20), the title screen (Slice 21), where places sit on the Brain tab, life stages and ageing (Slice 22), breeding (Slice 23), the view past the wall (Slice 31), mixing and mutating genes (Slice 24), with copy and change (24b), the population graph (Slice 26), courtship and families (Slice 32), fast-forward and the speed cap (Slice 27), the family tree (Slice 25), and learning by watching (Slice 28)
+- **Covers:** what milestone 2 contains, its slices and their order, the time scale of a sprite's life, the direction for ageing, what "M2 is done" means, memory of places (Slice 20), the title screen (Slice 21), where places sit on the Brain tab, life stages and ageing (Slice 22), breeding (Slice 23), the view past the wall (Slice 31), mixing and mutating genes (Slice 24), with copy and change (24b), the population graph (Slice 26), courtship and families (Slice 32), fast-forward and the speed cap (Slice 27), with gene warnings (#274), the family tree (Slice 25), and learning by watching (Slice 28)
 
 ---
 
@@ -1152,7 +1152,7 @@ Moved most from the starter's, as the middle value among the living:
 
   - **A row each tenth of the run,** so always ten. "Sprites" counts the sprites at every life stage, and "Eggs" the eggs beside them, as the population graph does (§14): an egg isn't a sprite until it hatches. "Generation" is how many generations the longest line of descent has run since the run started: the world's sprites then are the 0th, its eggs then the 1st, an egg is one on from the deeper of its parents, and a sprite the Cursor spawns is the 0th. "Died" and the causes after it count since the row before: hunger is starvation, thirst dehydration, and hurt anything an object did.
   - **A last line, redrawn in place between rows,** reads like `► 143 hours · generation 64 · 95 sprites · 3 eggs · 312 ticks a second · about 13 minutes left`. It shows only on a terminal, so a report sent to a file has the rows alone.
-  - **At the end** it says how long the run took and how fast it ran, where it saved, and the gene values that moved most (§16.4).
+  - **At the end** it says how long the run took and how fast it ran, where it saved, the gene values that moved most (§16.4), and its gene warnings (§16.6, #274).
 - **It saves in the saves folder and keeps the world it came from:** `seed-7-200h` for a new world, `mira-200h` for mira, or the name `--save <name>` gives, stored as any save by name is (M1 design §6.7). A name a save already has gets `-2`, `-3` and so on, so nothing is saved over, and the report and the tables give the name it was saved by.
 - **`Ctrl+C` stops it early and saves what has run,** with a last row where it stopped, under the whole hours it reached: `seed-7-143h` for a run stopped at 143.5 hours. A second `Ctrl+C` stops at once, without saving. A long run is never lost by stopping it.
 - **It runs exactly the world the game would:** the same seed fast-forwarded is, tick for tick, the world the game has with `--lab` after running as long. A fast-forward's world is always a Lab world, and the mode is world state, so the game's Story world from the same seed is the same but for its mode.
@@ -1163,8 +1163,8 @@ Moved most from the starter's, as the middle value among the living:
 Both are beside the save, named after it, and open in Excel or Google Sheets. Each starts with the mark that tells a spreadsheet it's UTF-8, for the arrows in the genes' names.
 
 - **The population table,** `seed-7-200h-population.csv`, has a row for each count the world keeps for its graph (§14.1): every 100 ticks at first, further apart as the run grows, never more than 511 rows, and one more for the end when it falls between counts. Its columns are the hours of play, the tick, the eggs and each life stage, then what happened since the row before: eggs laid and hatched, sprites spawned, deaths, and deaths by cause, a column for each cause any sprite has died of, named as the screen names it ("Hurt by thornbush"), physiology's three always.
-- **The genes table,** `seed-7-200h-genes.csv`, has a column for each of the starter genome's gene values, from the save's own data pack, named as the generations run names its gene numbers (§12.7): `always → Wander: weight`. Its first row is the starter's own values; then a row at the start, every hour of play, and where it stopped if that fell between hours, each with how many sprites were alive and each value's middle among them, blank where none carries it. A gene that's doubled lines up, the nth of a name with the starter's nth of it (§13).
-- **The gene values that moved most** end the report: up to five whose middle value at the end moved a tenth or more from the starter's, furthest first, with how far up or down. Halving counts as far as doubling, and crossing 0 furthest of all. With none, it says "No gene value has moved a tenth from the starter's yet", and with no sprite alive, "No sprite is left alive to measure the genes of".
+- **The genes table,** `seed-7-200h-genes.csv`, has a column for each of the starter genome's gene values, from the save's own data pack, named as the generations run names its gene numbers (§12.7): `always → Wander: weight`. Its first row is the starter's own values; then a row at the start, every hour of play, and where it stopped if that fell between hours, each with how many sprites were alive and each value's middle among them, blank where none carries it. A gene that's doubled lines up, the nth of a name with the starter's nth of it (§13). After how many sprites were alive come two columns (#274): the hidden flaws carried and the broken genes, each on average among the hatched sprites alive (§16.6), blank where none is, so a long run shows whether they level off.
+- **The gene values that moved most** end the report: up to five whose middle value at the end moved a tenth or more from the starter's, furthest first, with how far up or down. Halving counts as far as doubling, and crossing 0 furthest of all. With none, it says "No gene value has moved a tenth from the starter's yet", and with no sprite alive, "No sprite is left alive to measure the genes of". The gene warnings follow (§16.6).
 - **The generations run and fast-forward read gene values with the same code,** which moved from the run into the simulation's library for it; the run's report is byte for byte as before (§16.5).
 
 ### 16.5 How we know it worked
@@ -1184,8 +1184,48 @@ Agreed before building (Q7):
 - **The sprites live exactly as before:** the `generations` run, seeds 1–2 for 20,000 ticks, prints the same, byte for byte, on `main` at `27927d7` and on this slice. The state hash differs, as it should, since the mode is world state.
 - **5: to come.** Ten seeds of 990,000 ticks take most of a day in the cloud. The result is posted on [#145](https://github.com/Keazra/terra-sprites/issues/145) when it ends, and joins this section with Slice 29 (§12.7), which measures G4 again.
 
-### 16.6 Later
+### 16.6 Gene warnings (#274)
 
+Designed by an agent on 2026-10-19 from the owner's principles and earlier decisions ([#274](https://github.com/Keazra/terra-sprites/issues/274), with [#237](https://github.com/Keazra/terra-sprites/issues/237)'s), with the warning levels agreed by the owner before anything is measured. The owner's notes asked for a "genetic canary": something that says, without anyone reading the tables, when evolution is heading somewhere bad, such as flaws piling up or `grows_old` running to an extreme. So the end of a fast-forward and the baseline report (M1 design §7.6) give **gene warnings**: lines that ask for a look, never a verdict. Each question settled, and what it rests on, is in [the change file](changes/2026-10-19-gene-warnings.md).
+
+- **What's measured,** at the end of the run, among the hatched sprites alive, eggs aside. The world's first sprites are left out: their genes are the starter's, so they could only water the numbers down.
+  - **The hidden flaws they carry and their broken genes,** each on average (§12.3, §12.4).
+  - **The share of them lacking each of the starter's genes,** by what it does and when it works, as §13.3 counts it: a sprite lacks a gene when it has fewer copies of it than the starter has, through a loss or a change.
+  - **Each gene value held within a range:** a trait's or a brain parameter's, from physiology, or a level held between 0 and 1, such as a reaction's rate. It's taken as its middle among the living, as the genes table counts it (§16.4), with how far it has gone from the starter's value towards the end of its range it moved towards, as a share of the room there was. A value the starter has at one end of its range has no room that way.
+- **The needs genes** are the eleven #237 named: the starter's genes that raise or ease hunger, thirst or tiredness, fade one, or turn one into its action. The data says which they are, not a list in the code. The needs (`brain_io.ron`) that a starter gene raises from the body's own state, a physical chemical, are the body's needs: hunger from energy, thirst from hydration, tiredness from stamina. A needs gene is a starter gene that adds to one of them, is its half-life, or is an instinct with it as an input. So a data pack with another species gets its own needs genes with no new code, and a test pins the built-in pack's eleven.
+- **A gene warning** comes, with at least 10 hatched sprites alive (as A4 judges nothing on fewer than 10 deaths, M1 design §7.4), when:
+  - **more than half of them lack a needs gene,** #237's own line for careful copying (its decision 4);
+  - **or a gene value's middle has gone nine tenths of the way to the end of its range,** where physiology's limit, not selection, is now what holds it. For the starter today that's `GrowsUp` at 1,800 ticks or 12,600, `GrowsOld` at 7,650 or 56,250, `Speed` at 4.3 or 11.5 and `SenseRadius` at 6.4 or 13.6, and the brain parameters the same way: `trace_decay`, which starts at the bottom of its range, only at 0.941.
+- **Reported with no warning:**
+  - **flaws and broken genes,** until long runs show where they level off (§16.7). Die-outs came from gene changes, not flaws ([#221](https://github.com/Keazra/terra-sprites/issues/221));
+  - **the starter's other genes** a tenth or more of the hatched sprites alive lack: a gene the species does better without is evolution (#237's decision 1);
+  - **gene values with no range,** such as an instinct's weight or a half-life: moving is what G4 asks of them, and the gene values that moved most list them (§16.4).
+- **A warning is no verdict.** Every criterion is judged as before, the baseline's launcher files an issue only for a broken run, never for a warning, and a warning lasts only while the genes stay where they are.
+- **The end of a fast-forward** gives, after the gene values that moved most (§16.4), a line on flaws, then its warnings:
+
+```
+The hatched sprites alive carry 6.8 hidden flaws and 1.2 broken genes each, on average.
+Gene warnings:
+  drank Level → thirst: lacked by 62% of the hatched sprites alive, a needs gene (warns past half)
+  GrowsUp: trait: 4500 → 1500, all the way to the end of its range (warns at 1800)
+```
+
+  With none, it says "No gene warnings: no needs gene is lacked by half the hatched sprites alive, and no gene value is near the end of its range." With fewer than 10 hatched sprites alive, "Too few hatched sprites are alive to give gene warnings." With no sprite alive, the line before has already said so, and nothing follows.
+- **The baseline report** (M1 design §7.6) gives the warnings near the top, after what moved and anything broken, or says "No gene warnings." Further down, a Genes section has a row for each seed of the viability run: the hatched sprites alive, the flaws they carry, their broken genes, the needs gene most of them lack and the gene value nearest the end of its range. Under it are the starter's genes a tenth or more of them lack, with the seeds. What moved covers each seed's flaws, broken genes and warnings, so a warning that comes or goes shows at the top.
+
+```
+## Gene warnings (M2 design §16.6)
+
+- Seed 4: 62% of the hatched sprites alive lack `drank Level → thirst`, a needs gene. It warns past half.
+- Seed 3: `GrowsUp: trait` is 1500, all the way from the starter's 4500 to the end of its range, 1500. It warns at 1800.
+```
+
+- **How long a run:** the baseline's viability run as it is, 50,000 ticks on seeds 1–10, about 11 hours of play: it costs no extra run, and catches, on each commit of `main`, a change that makes the species throw something away fast. About a hundred generations is a fast-forward of 220 hours, on the owner's PC (`docs/agents/how-we-work.md`, "Cloud sessions").
+- **One measure, in the simulation's library,** beside the gene values' (§16.4): given a world, it counts all of the above and gives the warnings, reading the ranges and the needs genes from the world's own data pack. The baseline, fast-forward and the generations run all use it. Slice 30's 220-hour report, built first, counts the share of the living lacking each starter gene as §13.3 does; this measure takes that count into the library unchanged, so the warnings, that report and careful copying's trigger (#237's decision 4) count alike, and the generations run's report stays byte for byte as it was. The viability run's result carries the genes of its living at its end, so the baseline runs nothing extra.
+
+### 16.7 Later
+
+- **A warning for flaws,** once the genes tables of the 220-hour runs show where flaws and broken genes level off (§16.6).
 - **A key in a Lab world that blanks the map and runs flat out,** with `Esc` to stop and look (Q3, B), if fast-forward from the command line ever isn't enough. Max already runs at about three quarters of what the computer can do.
 - **Runs measured in generations** (Q4, B), once a generation has a definition worth stopping on.
 - **The uncapped population** ([#205](https://github.com/Keazra/terra-sprites/issues/205)) runs with this: a preset with the limit at 1,000 sprites, fast-forwarded overnight, then its population table read and the world opened.

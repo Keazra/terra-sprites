@@ -1817,6 +1817,7 @@ What's too slow for CI is measured on `main` instead, each time it moves, by a *
     - A4: survival at tick 10,000, as the median of 10 seeds, and the grown-up deaths over all of them, with how many were of starvation or dehydration (v37)
     - the thorn trap's count: deaths by thornbush in ticks 0–30,000, the same worlds as its lab scenario (§7.3)
     - per seed, who survived, what killed the rest, and how often each verb was applied.
+    - the genes of the hatched sprites alive at its end, with **gene warnings** when they've gone somewhere worth a look: more than half of them lacking a needs gene, or a gene value nearly at the end of its range (#274, M2 design §16.6).
   - **A1–A3's numbers:** each scenario's medians, for its runs and their controls, on CI's seeds. CI stays the judge; the report records them so that a change shows.
   - **The soak (A7)** (v37): the default world for a million ticks with a random script of the Cursor's commands, on a new seed each run, from the clock unless one is given. It runs first, as the longest job.
     - **The script plays the player:** pets, hugs, zaps and shocks; taking hold, letting go and shoving; picking up, putting down and throwing; moving the Cursor and showing or hiding it; placing, spawning and naming. It acts on about one tick in ten, and while the Cursor leads a sprite, moves it on half the ticks.
@@ -1826,6 +1827,7 @@ What's too slow for CI is measured on `main` instead, each time it moves, by a *
     - **Its report** gives its seed and its verdict, and, if it finished, the sprites alive at the end and the most at once, the objects, the deaths, and each command given and refused. Only its verdict can count as moved.
 - **The baseline report** names the commit it measured and the one it's compared with, and opens with every number that moved.
   - Each criterion is **met**, **not met yet** or **no data**, against §7.3 and §7.4's pass marks exactly, so a share of no deaths is no data. A criterion that a tuning slice hasn't yet reached names that slice.
+  - **Gene warnings** (#274) come after what moved and anything broken, or it says there are none. A warning is no verdict, and the launcher files no issue for one (M2 design §16.6).
   - **Broken** means only a panic or a broken invariant (a crash is a shoved sprite's, §3.5.4). It's given with the seed, what it said, which names the tick for a broken invariant, and the command that replays it. The seeds that finished are still reported, and a median over fewer seeds than ran says so.
 - **The observer,** an AI agent, reads the report, the code and the commits since the last one, and writes the **briefing**. The briefing gives, in this order: in plain words, what was tested and what changed; the numbers that moved and what might explain them; anything that looks wrong, and how sure it is. The observer changes nothing itself. The launcher does everything that has an effect, and files an issue, or comments on an open one, only for a broken run; the issue carries the observer's guess at the cause, labelled as a guess, which the owner is happy to see on GitHub.
 
