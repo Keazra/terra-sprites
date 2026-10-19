@@ -398,11 +398,15 @@ pub(crate) fn decide(
     // `attended`, from 5a's `attention` and what each score was for. Its
     // running action is weighed while attention stays on its target, and
     // otherwise the attended category's candidate, with what the sprite it
-    // attends to shows (M2 design §10). Carrying on after finding no way to
-    // `no_way`, it decides nothing and weighs that no more (§7.4).
+    // attends to shows (M2 design §10). Carrying on, it decides nothing and
+    // weighs its running action wherever its eye is: after finding no way
+    // to `no_way`, which it weighs no more (§7.4), or once its eye has left
+    // its action's target with nothing pulling hard enough to start
+    // (§19.2).
     let tick = state.tick;
     let decide_on = |sprite: &Sprite,
                      attended: Option<CategoryId>,
+                     carrying_on: bool,
                      no_way: Option<Target>,
                      attention: BTreeMap<CategoryId, f32>,
                      scored: BTreeMap<CategoryId, Subject>,
@@ -411,13 +415,14 @@ pub(crate) fn decide(
         let candidate = attended
             .and_then(|c| candidates.get(&c))
             .filter(|c| Some(c.target) != no_way);
-        // Attention moved off the action's target: it changed its mind. The
-        // action ends once the new one is sure to start, as a trip with no
-        // way there doesn't (M2 design §7.4).
-        let moved = no_way.is_none()
-            && aimed
-                .as_ref()
-                .is_some_and(|aimed| attended != Some(aimed.aim.category));
+        // Attention moved off the action's target: unless it's carrying on,
+        // it changed its mind. The action ends once the new one is sure to
+        // start, which it isn't with no way there (M2 design §7.4) or with
+        // nothing pulling hard enough (§19.2).
+        let eye_moved = aimed
+            .as_ref()
+            .is_some_and(|aimed| attended != Some(aimed.aim.category));
+        let moved = !carrying_on && eye_moved;
         let running = running && !moved;
         // What the decision weighs, and what a verb it chooses is aimed at: a
         // running action's target, which a nearer one of its category doesn't
@@ -472,11 +477,19 @@ pub(crate) fn decide(
         });
         let current = action.map(|a| a.verb);
         let chosen = match current {
-            _ if no_way.is_some() => None,
+            _ if carrying_on => None,
             Some(verb) => brain.switch(verb, &scores, &offered),
             None => brain.choose(&scores, &offered, exploration, rng),
         };
         let verb = chosen.or(current);
+        // Its eye is on what it weighs, but carrying on with its eye off its
+        // action's target, on what drew it there, which is what it watches
+        // (M2 design §18.1, §19.2).
+        let eye = if running && eye_moved {
+            candidate
+        } else {
+            weighed
+        };
         let snapshot = Snapshot {
             tick,
             motive: verb.and_then(|verb| brain.motive(verb, &activations, data)),
@@ -485,7 +498,7 @@ pub(crate) fn decide(
             attention,
             scored,
             attended,
-            target: weighed.map(|c| c.target),
+            target: eye.map(|c| c.target),
             subject: aim.map(|a| a.subject),
             scores,
             verb,
@@ -521,9 +534,21 @@ pub(crate) fn decide(
     // design §7.4).
     let before = sprite.brain.attended;
     let attended = sprite.brain.attend(&attention, running, exploration, rng);
-    let decision = decide_on(sprite, attended, None, attention, scored, rng);
+    let decision = decide_on(sprite, attended, false, None, attention, scored, rng);
     let Some(verb) = decision.chosen else {
-        sprite.brain.snapshot = Some(decision.snapshot);
+        // With its eye off its running action's target and nothing pulling
+        // hard enough to start, it carries on, and its step 5 is that of
+        // carrying on, as a trip with no way there is, but with its eye
+        // where it moved (M2 design §19.2).
+        let snapshot = if decision.moved {
+            let Snapshot {
+                attention, scored, ..
+            } = decision.snapshot;
+            decide_on(sprite, attended, true, None, attention, scored, rng).snapshot
+        } else {
+            decision.snapshot
+        };
+        sprite.brain.snapshot = Some(snapshot);
         return;
     };
     let weighed = decision.weighed.as_ref();
@@ -574,7 +599,8 @@ pub(crate) fn decide(
                     attention, scored, ..
                 } = decision.snapshot;
                 let rng = &mut state.rng;
-                let carried_on = decide_on(sprite, before, Some(target), attention, scored, rng);
+                let carried_on =
+                    decide_on(sprite, before, true, Some(target), attention, scored, rng);
                 sprite.brain.snapshot = Some(carried_on.snapshot);
                 return;
             }
@@ -662,4 +688,92 @@ fn start_scripted(state: &mut WorldState, data: &DataPack, id: EntityId, events:
 /// `cost` over the cost of walking the flood's `reach`, capped at 1.
 fn normalized(cost: u32, reach: f32) -> f32 {
     (cost as f32 / reach).min(1.0)
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::command::Command;
+    use crate::genome::Genome;
+    use crate::map::Map;
+    use crate::perception::Target;
+    use crate::registry::Verb;
+    use crate::test_util::{at, builtin};
+    use crate::world::{Scenario, World};
+
+    #[test]
+    fn a_sprite_whose_eye_leaves_its_action_with_nothing_pulling_hard_enough_carries_on() {
+        // M2 design §19.2, §18.1: thirsty, it sets off to drink, pulled past
+        // the act threshold (.5) by its thirst (.36) and its eye on the
+        // water (.45). A ball put down beside it then draws its eye, and
+        // weighed against the ball nothing pulls that hard. It carries on,
+        // and the tick is recorded as drinking at the water, for the thirst
+        // that chose it, its eye staying on the ball.
+        let data = builtin();
+        let genome = Genome::from_ron(
+            r#"(format: 1, genes: [
+                Trait(trait: "sense_radius", value: 12.0),
+                InitialConcentration(chem: "thirst", value: 0.9),
+                Instinct(inputs: [("thirst", false)], verb: Drink, weight: 0.4),
+                Instinct(inputs: [("thirst", false), ("attended_water", false)], verb: Drink, weight: 0.5),
+                AttentionInstinct(input: "thirst", category: "water", weight: 0.3),
+                AttentionInstinct(input: "always", category: "toy", weight: 1.0),
+                BrainParam(param: "act_threshold", value: 0.5),
+                BrainParam(param: "tau_att_base", value: 0.05),
+                BrainParam(param: "salience_gain", value: 0.0),
+                BrainParam(param: "curiosity", value: 0.0),
+            ])"#,
+            &data,
+        )
+        .expect("a valid genome");
+        let row = format!("~{}", ".".repeat(19));
+        let map = Map::from_ascii(&[row.as_str(); 3], &data).expect("valid drawing");
+        let scenario = Scenario {
+            map,
+            objects: &[],
+            sprites: &[(at(8, 1), Some(genome))],
+            scripted: &[],
+            newborns: &[],
+        };
+        let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
+        let id = world.sprites().next().expect("the sprite").id();
+        world.step();
+        let ball = world.data().object_type_id("ball").expect("balls");
+        world.submit(Command::Place {
+            tile: at(8, 2),
+            object_type: ball,
+        });
+        let tick = world.tick();
+        world.step();
+        let ball = world.object_at(at(8, 2)).expect("the ball").id();
+        let (state, data) = world.parts();
+        let toy = state.category_of(data, Target::Object(ball));
+        let water = state.subject_of(data, Target::Water(at(0, 1)));
+        let thirst = data.needs().position(|need| need == "thirst");
+        let sprite = state.sprites.get(id).expect("the sprite");
+        let action = sprite.action.as_ref().expect("its action");
+        assert_eq!(action.verb, Verb::Drink);
+        assert_eq!(action.ended, None, "it carries on");
+        let brain = &sprite.brain;
+        assert_eq!(brain.attended, Some(toy), "its eye on the ball");
+        let eye = brain.snapshot.as_ref().expect("a step 5");
+        assert_eq!(eye.tick, tick);
+        assert_eq!(
+            (eye.attended, eye.target),
+            (Some(toy), Some(Target::Object(ball)))
+        );
+        assert_eq!(
+            (eye.verb, eye.subject, eye.motive),
+            (Some(Verb::Drink), Some(water), thirst)
+        );
+        let entry = brain.trace.back().expect("a trace entry");
+        assert_eq!(
+            (entry.tick, entry.verb, entry.subject, entry.motive),
+            (tick, Some(Verb::Drink), Some(water), thirst)
+        );
+        // The Brain tab shows the drink it carries on with, and its eye on
+        // the ball.
+        let explained = brain.explain(data).expect("a step 5");
+        assert_eq!(explained.attended, Some("ball".into()));
+        assert_eq!(explained.decision.map(|(verb, _)| verb), Some(Verb::Drink));
+    }
 }

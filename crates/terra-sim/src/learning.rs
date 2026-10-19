@@ -764,8 +764,9 @@ pub(crate) struct TraceEntry {
     pub(crate) tick: u64,
     /// The verb it chose or kept doing, if any.
     pub(crate) verb: Option<Verb>,
-    /// What the thing attention was on, if any, is learned about as (design
-    /// v19 §5.6).
+    /// What the thing its decision was about, if any, is learned about as
+    /// (design v19 §5.6): the one attention was on, or a running action's
+    /// target it carried on with, its eye off it (M2 design §19.2).
     pub(crate) subject: Option<Subject>,
     /// The verb's motive (design §5.5): the need, by its place in the pack's
     /// needs, whose instinct did most to choose it.

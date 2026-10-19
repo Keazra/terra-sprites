@@ -290,7 +290,9 @@ pub(crate) struct Snapshot {
     /// The one thing attention is on: a running action's target, or else the
     /// attended category's candidate.
     pub(crate) target: Option<Target>,
-    /// What that thing is learned about as (design v19 §5.6).
+    /// What the decision is about is learned about as (design v19 §5.6):
+    /// the thing attention is on, but a running action's target when it
+    /// carries on with its eye off it (M2 design §19.2).
     pub(crate) subject: Option<Subject>,
     /// Each verb's score, in `VERBS` order.
     #[serde(deserialize_with = "per_verb")]
@@ -1641,9 +1643,13 @@ impl Brain {
         // A stable sort keeps a tie in listed order: concepts, worth, fear,
         // habit.
         contributions.sort_by(|a, b| b.amount.abs().total_cmp(&a.amount.abs()));
+        // What its eye is on, the attended category's row: not what the
+        // decision is about while it carries on with its eye off its
+        // action's target (M2 design §19.2).
+        let eye = snapshot.target.and(snapshot.attended);
         Some(Explanation {
             attention,
-            attended: snapshot.subject.map(seen),
+            attended: eye.and_then(|c| snapshot.scored.get(&c)).map(|&s| seen(s)),
             decision,
             contributions,
         })

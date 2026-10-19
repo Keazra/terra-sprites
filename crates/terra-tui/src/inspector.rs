@@ -1271,9 +1271,10 @@ fn how_far(from: Pos, to: Pos) -> String {
 }
 
 /// The Brain tab's attention and decision: each category attention could go
-/// to, with its score, the attended one marked; then the verb chosen, with
-/// its score, and the concepts adding most to it, largest first. A snapshot
-/// always has a verb; "none" only guards against one that doesn't.
+/// to, with its score, the attended one marked; then the verb chosen or
+/// kept doing, with its score, and the concepts adding most to it, largest
+/// first, or "none" for a sprite standing with nothing to do (M2 design
+/// §19.2).
 fn explained_lines(explained: &Explanation, data: &Words) -> Vec<String> {
     let mut lines = vec![" ATTENTION".to_string()];
     if explained.attention.is_empty() {
