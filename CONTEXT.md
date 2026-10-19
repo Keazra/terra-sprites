@@ -189,11 +189,11 @@ The eleven genes of the starter genome that make a sprite feel and answer its ne
 _Avoid_: survival genes, core genes
 
 **Falling behind** (M2, Slice 29):
-A species that has become worse at living than the starter's genes in the same world: its lone newborns, given its genes, grow up less often than the starter's do. What a species does better without is evolution; falling behind is the harm.
+A species that has become worse at living than the starter's genes in the same world: its world fails its bars, or it loses the race against the starter's genes (the same fresh worlds run once with the starter's genome and once with genomes from the end of its long run, M2 design §19.6). What a species does better without is evolution; falling behind is the harm.
 _Avoid_: wear and decay for this (those are a sprite's), genetic decline, degeneration
 
 **Careful copying** (M2, held in reserve):
-Copying the needs genes so that they're lost or changed a tenth as often as other genes, as *Creatures*' gene flags do. It's built only if a world in the long run fails a bar while more than half its living lack a needs gene.
+Copying the needs genes so that they're lost or changed a tenth as often as other genes, as *Creatures*' gene flags do. It's built only if a world in the long run fails a bar (or the race is lost overall) while more than half its living lack a needs gene.
 _Avoid_: protected genes, mutation bias (it changes how often, never which way)
 
 **Flagged gene**:
@@ -411,6 +411,9 @@ _Avoid_: sadness, mourning (as a name for the hormone)
 The most sprites a world holds, eggs included: the preset's `most_sprites` (100 in the default world). A full world has no fertile sprite. The Cursor may still place one past it.
 _Avoid_: population cap, carrying capacity (food sets that)
 
+**Die-out** (M2, #222):
+A world dying out: no sprites and no eggs left in it. A fall it recovers from isn't one.
+
 **Population record** (M2):
 The counts the world keeps of its sprites by life stage, and of its eggs, over its whole run, for the population graph: one every 100 ticks from the first tick it runs, each with the oldest and newest generations among its sprites, and the eggs laid and hatched, the sprites spawned and the deaths since the one before. It's world state, so it's saved and replayed. Past 512 counts it keeps every other one and counts half as often, so it always covers the whole run (M2 design §14.1).
 _Avoid_: history, statistics, census
@@ -441,7 +444,7 @@ What a sprite is doing, such as wandering to a spot or resting, from when it sta
 _Avoid_: task, behaviour, activity
 
 **Standing** (M2, Slice 29):
-What a sprite does with no action: since Slice 29 it acts only when something pulls on it at least its `act_threshold`, and otherwise stands where it is, still watching. Standing about builds boredom in the starter genes. Its doing line reads "Watching Bo #7", or "Standing" if its eye is on nothing.
+What a sprite does with no action running: since Slice 29 it acts only when something pulls on it at least its `act_threshold`, and otherwise stands where it is, still watching. One the Cursor leads or a shove slides isn't standing. Standing about builds boredom in the starter genes. Its doing line reads "Watching Bo #7", or "Standing" if its eye is on nothing, though an action that ended on the latest tick still shows how it ended.
 _Avoid_: idle, waiting (that's an action stuck behind another sprite), resting (that's an action)
 
 **Verb**:
@@ -930,12 +933,12 @@ The death of a sprite that had grown up, adult or old, judged by life stage. The
 _Avoid_: adult death (old sprites' count too); a death after tick 10,000 (A4 counted by tick until Slice 29)
 
 **Long run** (M2, Slice 29):
-The default world left alone for 220 hours on seeds 1–10, on the owner's PC: the `childhood` example. It reports Slice 29's bars, the needs genes the living lack, and lone newborns given the end's genes.
+The default world left alone for 220 hours on seeds 1–10, on the owner's PC: the `childhood` example. It reports Slice 29's bars, G1's (whether each seed's world lasts), the starter genes the living lack, and lone newborns given the end's genes.
 _Avoid_: soak (that has the Cursor's commands), viability run (that's 50,000 ticks)
 
 **Soak**:
 A run of a million ticks with a random script of the Cursor's commands, looking only for panics and broken invariants (A7).
-_Avoid_: stress test; a soak for any long run without commands (that's a viability run)
+_Avoid_: stress test; a soak for any long run without commands (that's a viability run, or the long run)
 
 **Baseline run**:
 The measurements taken on one commit of `main`, so that each commit can be compared with the last: the viability run, the soak, and the A1–A3 lessons' numbers.
