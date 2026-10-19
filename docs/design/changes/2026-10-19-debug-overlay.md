@@ -1,6 +1,6 @@
 # A debug overlay
 
-`F3` shows how the game is running on the player's computer, so a slow or sticky feeling can be shown in a screenshot instead of described. An idea from the UI lessons round of 2026-10-19 ([#311](https://github.com/Keazra/terra-sprites/issues/311)). Fauxpaw said it needs nothing from them, so its open questions took the defaults an agent picked: `F3`, which is free and the common key for it; in every build, since the point is a screenshot from a player's computer; and beside the speed example rather than in its place.
+`F3` shows how the game is running on the player's computer, so a slow or sticky feeling can be shown in a screenshot instead of described. An idea from the UI lessons round of 2026-10-19 ([#311](https://github.com/Keazra/terra-sprites/issues/311)), built in [#323](https://github.com/Keazra/terra-sprites/pull/323). Fauxpaw said it needs nothing from them, so its open questions took the defaults an agent picked: `F3`, which is free and the common key for it; in every build, since the point is a screenshot from a player's computer; and beside the speed example rather than in its place.
 
 ## M1 "A Sprite Lives"
 
