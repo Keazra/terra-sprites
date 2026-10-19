@@ -1396,8 +1396,8 @@ The species is dropped into a world it doesn't know and has to learn about it. I
     │ m          event filter         wheel      change mode          INSPECTOR                        │
     │ v          exact detail         C again    the Place menu       [ ]        switch tabs           │
     │ ?          this help            hold E     aim, let go to send  PgUp PgDn  scroll a tab          │
-    │ Esc        let go, back, quit?                                                                   │
-    │ Ctrl+C     quit at once                                                                          │
+    │ Esc        let go, back, quit?                                  DEBUG                            │
+    │ Ctrl+C     quit at once                                         F3         how it's running      │
     │                                                                                                  │
     │ COLOURS: a sprite's strongest drive, once it's above half                                        │
     │ ☺ hunger  ☺ thirst  ☺ pain  ☺ tiredness  ☺ boredom  ☺ loneliness  ☺ crowdedness  ☺ none          │
@@ -1423,6 +1423,23 @@ The species is dropped into a world it doesn't know and has to learn about it. I
     - `Enter`, or a click on a row, selects that sprite, centres the view on it and closes the list. `l` or `Esc` closes it without choosing; other keys do nothing while it's open. With no sprites, it reads "No sprites".
   - **The population graph** (`p`, from Slice 26): the world's population over its whole run, each column split by the share of each life stage and of eggs, with a moment picked and read under it (M2 design §14).
   - **The family tree** (`k`, from Slice 25): the selected sprite's grandparents, parents, young, and brothers and sisters, living or dead, walked with the arrows (M2 design §17).
+- **The debug overlay** (`F3`, in every build, [#311](https://github.com/Keazra/terra-sprites/issues/311)) isn't one of these: it's a small box inside the map view's border, at its top right, over whatever's open, until `F3` hides it again. It says how the game is running on the player's computer, so "it feels slow at Max" becomes numbers in a screenshot:
+
+  ```
+  ┌─ Debug ────────────── F3 ─┐
+  │ ticks/s 19.0 of 20        │
+  │ sim     1.2 of 25 ms      │
+  │ draw    3.4 ms, 25 fps    │
+  │ keys    releases reported │
+  └───────────────────────────┘
+  ```
+
+  - **Ticks a second** run over the last second, against what the speed asks for (`of 1.25` at 1×, `of 20` at 16×); `at Max` at Max, and `paused` while paused.
+  - **The simulation's time** in a frame, on average, against the frame's 25 ms budget (§6.6): the time the budget counts.
+  - **The drawing's time** in a frame, on average, and the frames a second.
+  - **Whether the terminal reports key releases** (§6.6): `releases reported`, `no releases` (a held key is told from taps only by its repeats), or `kitty protocol`.
+  - **The frame loop times each frame** and hands the times to the screen, which reads them once a second's worth is in, so the numbers hold still long enough to read; until then they're `-`. It measures the game as it's played, drawing included. The speed example (A5) stays the measure of the simulation alone.
+  - **It never touches the world:** `F3` answers no prompt, sends no command, and works in a replay.
 
 ### 6.2 Semantic tiles and themes
 
@@ -1608,6 +1625,7 @@ N ═ M
 | `p` | Open or close the population graph (M2 design §14) |
 | `k` | Open or close the family tree of the selected sprite or egg (M2 design §17) |
 | `v` | Switch the detail view on or off: the exact action line (§6.1) |
+| `F3` | Show or hide the debug overlay: how the game is running (§6.1, #311) |
 | `F5` / `F9` | Quicksave / quickload (§6.7, v32) |
 | `Ctrl+S` / `Ctrl+O` | Save by name / load a save from a list (§6.7, v32) |
 | `Ctrl+T` | Pick a theme from the built-in ones and the themes folder (§6.7, v34) |

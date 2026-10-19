@@ -79,6 +79,8 @@ const COLUMNS: [&[Group]; 3] = [
             "INSPECTOR",
             &[("[ ]", "switch tabs"), ("PgUp PgDn", "scroll a tab")],
         ),
+        // The debug overlay (#311).
+        ("DEBUG", &[("F3", "how it's running")]),
     ],
 ];
 

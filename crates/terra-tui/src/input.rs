@@ -126,6 +126,9 @@ pub enum Action {
     /// In a replay, take it over and play on from where it is (`Ctrl+R`,
     /// design v36 §2.7).
     TakeOver,
+    /// Show or hide the debug overlay, how the game is running on this
+    /// computer (`F3`, #311).
+    DebugOverlay,
     /// While naming, a letter typed.
     Type(char),
     /// While naming, the last letter rubbed out (`Backspace`).
@@ -189,6 +192,21 @@ impl Action {
     }
 }
 
+/// What the terminal reports of keys, as far as `Keys` can tell: what the
+/// debug overlay says (#311), so a problem holding a key can be told from a
+/// picture.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KeyReports {
+    /// No release has arrived, so a held key is told from taps only by its
+    /// repeats, where the terminal sends them (design v27 §6.6).
+    NoReleases,
+    /// Releases arrive.
+    Releases,
+    /// The kitty keyboard protocol is on: releases arrive, and a shifted
+    /// key as the character it types.
+    Kitty,
+}
+
 /// How far Shift scrolls the viewport, in tiles (design §6.5).
 const SHIFT_STEP: i32 = 5;
 
@@ -233,6 +251,15 @@ impl Keys {
             releases_reported: true,
             shifted_as_characters: true,
             down: HashSet::new(),
+        }
+    }
+
+    /// What the terminal reports of keys, as far as is known yet.
+    pub fn reports(&self) -> KeyReports {
+        match (self.shifted_as_characters, self.releases_reported) {
+            (true, _) => KeyReports::Kitty,
+            (false, true) => KeyReports::Releases,
+            (false, false) => KeyReports::NoReleases,
         }
     }
 
@@ -365,6 +392,8 @@ impl Keys {
             KeyCode::Char('g') => (!held).then_some(Action::ExportGenome),
             KeyCode::Char(digit @ '1'..='9') => (!held).then(|| Action::Pick(digit as u8 - b'0')),
             KeyCode::Enter => (!held).then_some(Action::Enter),
+            // A held `F3` would flicker the debug overlay on and off.
+            KeyCode::F(3) => (!held).then_some(Action::DebugOverlay),
             KeyCode::F(5) => (!held).then_some(Action::Quicksave),
             KeyCode::F(9) => (!held).then_some(Action::Quickload),
             // Some terminals report Shift+Tab as its own key, others as Tab with Shift.

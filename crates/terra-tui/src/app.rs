@@ -14,9 +14,10 @@ use terra_sim::{
 
 use crate::clock::{Clock, Speed};
 use crate::cp437;
+use crate::debug_overlay::{FrameTimes, Meter};
 use crate::family_tree::{self, Step};
 use crate::graph;
-use crate::input::{Action, Button};
+use crate::input::{Action, Button, KeyReports};
 use crate::inspector;
 use crate::listed::listed_enum;
 use crate::policy::{InfoPolicy, Omniscient, Panel, Subject};
@@ -581,6 +582,12 @@ pub struct App {
     /// Whether the player has just taken over the replay, for the frame
     /// loop to take (`take_taken_over`).
     taken_over: bool,
+    /// Whether the debug overlay is shown (`F3`, #311).
+    debug_overlay: bool,
+    /// The frames' times, as the debug overlay reads them.
+    meter: Meter,
+    /// What the terminal reports of keys, as the debug overlay says.
+    key_reports: KeyReports,
 }
 
 /// A replay as the screen follows it (design §2.7).
@@ -929,6 +936,9 @@ impl App {
             since_autosave: Duration::ZERO,
             replay: None,
             taken_over: false,
+            debug_overlay: false,
+            meter: Meter::default(),
+            key_reports: KeyReports::NoReleases,
         };
         app.centre_on(cursor);
         app
@@ -1649,6 +1659,29 @@ impl App {
         self.detail
     }
 
+    /// Whether the debug overlay is shown (`F3`, #311).
+    pub fn debug_overlay(&self) -> bool {
+        self.debug_overlay
+    }
+
+    /// Takes in what the frame loop measured of a frame, and what the
+    /// terminal reports of keys, for the debug overlay (#311). Noted
+    /// whether it's shown or not, so it has numbers as soon as it is.
+    pub fn note_frame(&mut self, times: FrameTimes, keys: KeyReports) {
+        self.meter.note(times);
+        self.key_reports = keys;
+    }
+
+    /// The frames' times, as the debug overlay reads them.
+    pub(crate) fn meter(&self) -> &Meter {
+        &self.meter
+    }
+
+    /// What the terminal reports of keys, as last noted.
+    pub(crate) fn key_reports(&self) -> KeyReports {
+        self.key_reports
+    }
+
     /// The tile the Cursor is on: its followed sprite's, or else the
     /// pointer's.
     pub fn cursor(&self) -> Pos {
@@ -1806,6 +1839,13 @@ impl App {
 
     /// Carries out an action on `world`, and says whether the game carries on.
     pub fn apply(&mut self, action: Action, world: &World) -> Flow {
+        // `F3` shows or hides the debug overlay over whatever's open, and
+        // does nothing else: it answers no prompt and never touches the
+        // world (#311).
+        if action == Action::DebugOverlay {
+            self.debug_overlay = !self.debug_overlay;
+            return Flow::Continue;
+        }
         match self.screen {
             Screen::PlaceMenu | Screen::GenomeMenu | Screen::LoadMenu | Screen::ThemeMenu => {
                 return self.apply_in_menu(action, world);
@@ -1997,7 +2037,8 @@ impl App {
             | Action::Type(_)
             | Action::Erase
             | Action::AnotherName
-            | Action::HelpReleased => {}
+            | Action::HelpReleased
+            | Action::DebugOverlay => {}
             Action::Enter => {
                 if let Some(at) = self.mouse {
                     self.toggle_lesson(at, world);
