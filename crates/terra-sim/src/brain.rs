@@ -2101,8 +2101,9 @@ impl Brain {
     /// The verb a sprite doing `current` switches to, if any (design §5.5):
     /// the best available verb scoring more than `switch_margin` above it,
     /// ties to the lower verb ID. It draws nothing. It switches by the
-    /// margin alone: `act_threshold` holds back only a sprite with nothing
-    /// to do (M2 design §19.2), so a busy sprite whose action has lost its
+    /// margin alone: `act_threshold` holds back only a sprite choosing
+    /// afresh, one with nothing to do or whose eye has left its action's
+    /// target (M2 design §19.2), so a busy sprite whose action has lost its
     /// pull can switch to a verb under it, a young one to its 0.15 Wander.
     pub(crate) fn switch(
         &self,
@@ -2815,9 +2816,10 @@ mod tests {
 
     #[test]
     fn a_busy_sprite_switches_by_the_margin_alone_even_to_a_verb_under_the_act_threshold() {
-        // M2 design §19.2: the threshold bars only a sprite with nothing to
-        // do. A young sprite's Drink trip that has lost its pull (−.5) gives
-        // way to its .15 Wander, past −.5 + .2, though .15 is under .25.
+        // M2 design §19.2: the threshold bars only a sprite choosing
+        // afresh. A young sprite's Drink trip that has lost its pull (−.5)
+        // gives way to its .15 Wander, past −.5 + .2, though .15 is under
+        // .25.
         let brain = brain(&[
             r#"BrainParam(param: "act_threshold", value: 0.25)"#,
             r#"BrainParam(param: "switch_margin", value: 0.2)"#,
