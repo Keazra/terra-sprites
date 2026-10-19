@@ -32,7 +32,7 @@ cargo install --git https://github.com/Keazra/terra-sprites terra-tui
 terra-sprites
 ```
 
-Run the same `cargo install` again to update. On the title screen, pick **New world**, and then:
+Run the same `cargo install` again to update, or `cargo uninstall terra-tui` to remove it (your saves stay until you delete them; the manual's [Uninstalling](docs/manual.md#uninstalling) says where). On the title screen, pick **New world**, and then:
 
 - Click a sprite (`☺`) to select it, and press `]` for its Brain tab: what it's paying attention to, and why.
 - `space` pauses and `+` speeds up. Lives are long at 1×, so try 4×.
