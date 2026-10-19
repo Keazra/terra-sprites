@@ -18,8 +18,8 @@
 //! The bars for each seed:
 //!
 //! - **Adults dying of hunger or thirst are under 1 in 20 of grown-up
-//!   deaths,** over the run and over its last 50 hours (#226). Old
-//!   sprites' are reported apart.
+//!   deaths,** over the run and over its last 50 hours, in each seed that
+//!   lasts (#226). Old sprites' are reported apart.
 //! - **At most 1 in 10 bites tried by young sprites and adults are by a
 //!   sprite too full to eat,** over the run and over its last 50 hours
 //!   (#224). Old sprites' bites are reported apart (#225 round 1).
@@ -629,8 +629,8 @@ struct Verdicts {
     /// Whether enough seeds' bushes held: met if they weren't judged.
     bushes_met: bool,
     /// Each seed that failed a bar, with the bars it failed: one judged in
-    /// every seed, or one judged across seeds that wasn't met and that it
-    /// missed.
+    /// each seed (the adults' in each seed that lasted), or one judged
+    /// across seeds that wasn't met and that it missed.
     failed: Vec<(u64, Vec<&'static str>)>,
     /// The seeds among them with more than half their living lacking a
     /// needs gene, at the end or the last hour before dying out, for which
@@ -664,13 +664,17 @@ fn judge(runs: &[Run], hours: u64) -> Verdicts {
     let mut failed = Vec::new();
     for run in runs {
         let mut fails = Vec::new();
-        if !lasted_met && let Some((_, why)) = not_lasted.iter().find(|(s, _)| *s == run.seed) {
+        let why = not_lasted.iter().find(|(s, _)| *s == run.seed);
+        if !lasted_met && let Some((_, why)) = why {
             fails.extend(why);
         }
         let (whole, late) = (run.whole, run.late);
-        if ![whole, late]
-            .iter()
-            .all(|c| 20 * c.adult_hunger_thirst < c.grown_deaths.max(1))
+        // A world dying out starves its adults: #226 judges them only in
+        // the seeds that last.
+        if why.is_none()
+            && ![whole, late]
+                .iter()
+                .all(|c| 20 * c.adult_hunger_thirst < c.grown_deaths.max(1))
         {
             fails.push("adults' hunger and thirst");
         }
@@ -1202,6 +1206,23 @@ mod tests {
         runs[0].lacking = lacking_thirst(0.9);
         let judged = judge(&runs, 220);
         assert_eq!((judged.failed, judged.trips), (vec![], vec![]));
+    }
+
+    #[test]
+    fn adults_hunger_and_thirst_are_judged_in_the_seeds_that_last() {
+        // #226: adults dying of hunger or thirst stay under 1 in 20 of
+        // grown-up deaths in every seed that lasts.
+        let mut runs = ten();
+        for run in &mut runs[..2] {
+            run.late.adult_hunger_thirst = 5;
+            run.lacking = lacking_thirst(0.9);
+        }
+        runs[1].died_out = Some(200 * HOUR);
+        runs[1].census.fewest = 0;
+        let judged = judge(&runs, 220);
+        assert!(judged.lasted_met);
+        assert_eq!(judged.failed, [(1, vec!["adults' hunger and thirst"])]);
+        assert_eq!(judged.trips, [1]);
     }
 
     #[test]
