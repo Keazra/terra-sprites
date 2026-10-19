@@ -1,6 +1,6 @@
 # Onlookers learn by watching
 
-The M1 design still said onlookers learn nothing from what's done to another sprite, as slice 11d had left it ([#106](https://github.com/Keazra/terra-sprites/issues/106)), though Slice 28 ([#146](https://github.com/Keazra/terra-sprites/issues/146)) settled and built learning by watching on 2026-10-14, in [the M2 design's §18](../m2-generations.md#18-learning-by-watching-slice-28). The owner closed #106 as settled on 2026-10-19, in round 1 of [#232](https://github.com/Keazra/terra-sprites/issues/232), and this change points the M1 design's sentences about learning only from what happens to the sprite itself there. Nothing in the game changes.
+The M1 design still said onlookers learn nothing from what's done to another sprite, as slice 11d had left it ([#106](https://github.com/Keazra/terra-sprites/issues/106)), though Slice 28 ([#146](https://github.com/Keazra/terra-sprites/issues/146)) settled and built learning by watching on 2026-10-14, in [the M2 design's §18](../m2-generations.md#18-learning-by-watching-slice-28). The owner closed #106 as settled on 2026-10-19, in round 1 of [#232](https://github.com/Keazra/terra-sprites/issues/232), and this change, in PR [#320](https://github.com/Keazra/terra-sprites/pull/320), points the M1 design's sentences about learning only from what happens to the sprite itself there. Nothing in the game changes.
 
 ## M1 "A Sprite Lives"
 
