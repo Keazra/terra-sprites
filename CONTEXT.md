@@ -444,7 +444,7 @@ What a sprite is doing, such as wandering to a spot or resting, from when it sta
 _Avoid_: task, behaviour, activity
 
 **Standing** (M2, Slice 29):
-What a sprite does with no action running: since Slice 29 it acts only when something pulls on it at least its `act_threshold`, and otherwise stands where it is, still watching. One the Cursor leads or a shove slides isn't standing. Standing about builds boredom in the starter genes. Its doing line reads "Watching Bo #7", or "Standing" if its eye is on nothing, though an action that ended on the latest tick still shows how it ended.
+What a sprite does with no action running: since Slice 29 it acts only when something pulls on it at least its `act_threshold`, and otherwise stands where it is, still watching. One the Cursor leads or a shove slides isn't standing. Standing about builds boredom in the starter genes. Its doing line reads "Watching Bo #7", or "Standing" if its eye is on nothing, though an action that ended on the latest tick still shows how it ended. "Watching" there says where its eye is, on anything; learning from another sprite is **Watching**, below.
 _Avoid_: idle, waiting (that's an action stuck behind another sprite), resting (that's an action)
 
 **Verb**:

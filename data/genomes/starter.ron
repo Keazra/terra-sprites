@@ -219,7 +219,9 @@
         Instinct(inputs: [("hunger", false)], verb: Eat, weight: 1.0),
         Instinct(inputs: [("thirst", false)], verb: Drink, weight: 1.0),
         // Fullness leans it away from eating and drinking alike, though
-        // strong thirst can outweigh it (M2 design §19.4).
+        // strong thirst can outweigh it (M2 design §19.4). A link works at
+        // most at -1 (M1 design §5.7), so -2 stays at full strength through
+        // spawn variation and small changes.
         Instinct(inputs: [("fullness", false)], verb: Eat, weight: -2.0),
         Instinct(inputs: [("fullness", false)], verb: Drink, weight: -2.0),
         Instinct(inputs: [("tiredness", false)], verb: Rest, weight: 1.0),
