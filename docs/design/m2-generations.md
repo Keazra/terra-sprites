@@ -1556,7 +1556,13 @@ Agreed before measuring (#222, #223, #224, #225):
 
 `cargo run --release -p terra-sim --example lab -- scenarios/unattended.ron --seeds 10` runs the unattended run, and `scenarios/viability.ron` the viability run, each with its counts by life stage.
 
-**Measured:** in the PR, and on the owner's PC for the long run.
+**Measured** (2026-10-19, in the cloud at 0aedf5b), with `cargo run --profile baseline -p terra-sim --example baseline` on seeds 1–10 and `cargo run --release -p terra-sim --example lab -- scenarios/a3-correct-training.ron --seeds 30`:
+
+- **Unattended:** 20% in the middle seed (9, 13, 7, 2, 8, 3, 11, 4, 0 and 5 of 30 on seeds 1–10), nearly all the rest dying of thirst: met.
+- **Guided:** 1,587 of 1,622, 97.8%: met.
+- **Grown:** adults' deaths of hunger or thirst 47 of 1,132 grown-up deaths, 4.2%: met. Old sprites', apart: 64.
+- **A1–A3:** A1 1 thornbush contact (control 38), A2 8,414 plays (control 169), A3 3.5 hits (control 49.5) on seeds 1–10; A3 over seeds 1–30, 5.5 hits (control 40.5): all met.
+- **The long run and `generations`:** on the owner's PC.
 
 ### 19.9 Later
 
