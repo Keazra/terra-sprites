@@ -153,7 +153,7 @@ The two clips at the top of the README are made the same way, the second at 1× 
 
 ```powershell
 cargo run --release -p terra-tui --example render -- title -o docs/clips/title.gif
-cargo run --release -p terra-tui --example render -- world --seed 7 --from 897 --to 926 --track 533 --tab brain --speed 1x -o docs/clips/thornbush.gif
+cargo run --release -p terra-tui --example render -- world --seed 7 --from 714 --to 744 --track 544 --tab brain --speed 1x -o docs/clips/thornbush.gif
 ```
 
 The file's ending picks the format: `.gif`, `.svg` or `.mp4`. A GIF or an SVG needs nothing else; an MP4 needs [ffmpeg](https://ffmpeg.org/download.html) on the PATH, and the renderer says so if it isn't. The world runs to `--from` unseen, then is drawn frame by frame to `--to`, at `--speed` (`1x`, `4x`, or `max` for 100 ticks a second; past 4× needs `--lab`), each frame showing for `--frame` milliseconds (100 by default). An SVG for a README is best kept under 2 MB, and the renderer says when one isn't: a busy world at a high speed runs past it in a few seconds.
