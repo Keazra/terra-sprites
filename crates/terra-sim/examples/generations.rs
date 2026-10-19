@@ -20,14 +20,15 @@
 //! at a count of its population record, and its sprites over the last 50
 //! hours averaged at least half of hours 50–100, which only a run of 150
 //! hours (675,000 ticks) or more judges; at least 3 gene numbers moved by a
-//! tenth the same way in every seed (§12.7); in at least 5 of 10 seeds, a
-//! gene the starter lacks carried by at least a tenth of the living (§13);
-//! at most 1 egg in 50 laid alone over all seeds, and none above 1 in 20;
-//! at least 9 in 10 of pairs' eggs after a dance each way; and, as the
-//! median over all of them, partners in each other's sight at least half
-//! the time, an egg with a parent in sight three quarters of its time, and
-//! a young sprite with a living parent seeing one half its childhood
-//! (§15.9).
+//! tenth the same way in every seed that lasted (§12.7, G4, which #226
+//! judges on the 220-hour run, `--example childhood`); in at least 5 of 10
+//! seeds, a gene the starter lacks carried by at least a tenth of the
+//! living (§13); at most 1 egg in 50 laid alone over all seeds, and none
+//! above 1 in 20; at least 9 in 10 of pairs' eggs after a dance each way;
+//! and, as the median over all of them, partners in each other's sight at
+//! least half the time, an egg with a parent in sight three quarters of its
+//! time, and a young sprite with a living parent seeing one half its
+//! childhood (§15.9).
 //!
 //! `cargo run --release -p terra-sim --example generations`
 //!
@@ -37,6 +38,8 @@
 
 #[path = "common/args.rs"]
 mod args;
+#[path = "common/evolution.rs"]
+mod evolution;
 #[path = "common/genes.rs"]
 mod genes;
 #[path = "common/lasting.rs"]
@@ -46,11 +49,12 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::process::ExitCode;
 use std::sync::Mutex;
 
+use evolution::{evolution, middles, starter_numbers};
 use genes::{counted, counted_where};
 use lasting::Census;
 use terra_sim::{
-    DataPack, DeathCause, Drift, EntityId, EventKind, Expression, GeneView, Genome, Outcome, Sex,
-    Target, Verb, World, WorldConfig, drift, gene_values, middle_values,
+    DataPack, DeathCause, EntityId, EventKind, Expression, GeneView, Genome, Outcome, Sex, Target,
+    Verb, World, WorldConfig,
 };
 
 /// Ticks in an hour at 1×, 1.25 ticks a second (design §6.6).
@@ -107,7 +111,9 @@ struct Run {
     /// The genes of the hatched sprites alive at the end (M2 design §13).
     genes: Option<GenePool>,
     /// Deaths after tick 10,000, once the first sprites' ages have spread
-    /// out (A4's window starts there): of old age, hunger, thirst, and hurt.
+    /// out, at every life stage: of old age, hunger, thirst, and hurt. G5
+    /// counts adults' deaths by life stage instead, in the baseline report
+    /// (M2 design §19.6).
     old_age: u64,
     hunger: u64,
     thirst: u64,
@@ -230,7 +236,7 @@ fn main() -> ExitCode {
     );
     let (mut going, mut over) = (0, 0);
     let hours = options.ticks / lasting::HOUR;
-    let (starter, genes) = (starter(&data), starter_genes(&data));
+    let (starter, genes) = (starter_numbers(&data), starter_genes(&data));
     let mut runs = Vec::new();
     for (seed, run) in in_parallel(&data, &config, &starter, &genes, &options) {
         going += usize::from(run.alive + run.eggs > 0);
@@ -262,10 +268,18 @@ fn main() -> ExitCode {
     }
     let seeds = last - first + 1;
     println!("\nStill going in {going} of {seeds} seeds; over the limit in {over}.");
-    lasted(&runs, hours);
+    let not_lasted = lasted(&runs, hours);
     lives(&runs);
     flaws(&runs);
-    evolution(&starter, &runs);
+    let (kept, dropped): (Vec<_>, Vec<_>) = runs
+        .iter()
+        .partition(|(seed, run)| !not_lasted.contains(seed) && !run.numbers.is_empty());
+    let kept: Vec<(u64, &[f32])> = kept
+        .iter()
+        .map(|(seed, run)| (*seed, &run.numbers[..]))
+        .collect();
+    let dropped: Vec<u64> = dropped.iter().map(|(seed, _)| *seed).collect();
+    evolution(&starter, &kept, &dropped);
     copy_and_change(&runs);
     courtship(&runs);
     families(&runs);
@@ -318,11 +332,6 @@ fn starter_genome(data: &DataPack) -> Genome {
     Genome::from_ron(text, data).expect("the starter genome is valid")
 }
 
-/// The starter genome's numbers, named, in genome order.
-fn starter(data: &DataPack) -> Vec<(String, f32)> {
-    gene_values(&starter_genome(data).genes(data))
-}
-
 /// The starter's genes, by what each does and when, with how many it has
 /// of each (M2 design §13).
 fn starter_genes(data: &DataPack) -> BTreeMap<String, usize> {
@@ -330,124 +339,21 @@ fn starter_genes(data: &DataPack) -> BTreeMap<String, usize> {
     counted(&genome.genes(data), &genome.switches())
 }
 
-/// How far the species' genes moved from the starter's (M2 design §12,
-/// G4): each number whose middle value among the living moved by at least
-/// a tenth the same way in every seed. Chance moves a number up in some
-/// worlds and down in others, and the same way in all ten about 1 time in
-/// 500. A number at the edge of its range can only move one way, so check
-/// the list for one.
-fn evolution(starter: &[(String, f32)], runs: &[(u64, Run)]) {
-    let measured: Vec<&(u64, Run)> = runs
-        .iter()
-        .filter(|(_, run)| !run.numbers.is_empty())
-        .collect();
-    println!(
-        "\nEvolution: each gene number's middle value among the living at the end, against the \
-         starter's, in {} seeds.",
-        measured.len()
-    );
-    if measured.is_empty() {
-        return;
-    }
-    // Each number's ratio to the starter's, seed by seed.
-    let mut moved = Vec::new();
-    for (index, (name, value)) in starter.iter().enumerate() {
-        if *value == 0.0 {
-            continue;
-        }
-        let ratios: Vec<f32> = measured
-            .iter()
-            .map(|(_, run)| run.numbers[index] / value)
-            .collect();
-        let drifted = |way| ratios.iter().filter(|&&r| drift(r) == Some(way)).count();
-        let (up, down) = (drifted(Drift::Up), drifted(Drift::Down));
-        let mut sorted = ratios.clone();
-        sorted.sort_by(f32::total_cmp);
-        moved.push(Moved {
-            name,
-            starter: *value,
-            least: sorted[0],
-            middle: sorted[sorted.len() / 2],
-            most: sorted[sorted.len() - 1],
-            up,
-            down,
-        });
-    }
-    let seeds = measured.len();
-    let all_way: Vec<_> = moved.iter().filter(|m| m.every_seed(seeds)).collect();
-    // G4 asks for every seed, so a world that died out fails it.
-    let died_out = runs.len() - seeds;
-    let of_all = if died_out == 0 {
-        String::new()
-    } else {
-        format!(
-            " alive at the end, but {died_out} of {} died out",
-            runs.len()
-        )
-    };
-    println!(
-        "\n{} of {} numbers moved by at least a tenth the same way in all {seeds} seeds{of_all}.",
-        all_way.len(),
-        moved.len()
-    );
-    println!(
-        "\n{:<52} {:>10} {:>6} {:>6} {:>6} {:>4} {:>4}",
-        "Number", "Starter", "Least", "Middle", "Most", "Up", "Down"
-    );
-    let mut by_size = moved.clone();
-    by_size.sort_by(|a, b| distance(b.middle).total_cmp(&distance(a.middle)));
-    for m in by_size.iter().take(25) {
-        let mark = if m.every_seed(seeds) { "*" } else { " " };
-        println!(
-            "{mark}{:<51} {:>10.4} {:>6.2} {:>6.2} {:>6.2} {:>4} {:>4}",
-            m.name, m.starter, m.least, m.middle, m.most, m.up, m.down
-        );
-    }
-    println!(
-        "\n* moved the same way in every seed. Least, middle and most are seeds' ratios to the starter."
-    );
-}
-
-/// How far one gene number moved from the starter's, across seeds: its
-/// least, middle and most ratio to the starter's value, and in how many
-/// seeds it moved a tenth up and a tenth down.
-#[derive(Debug, Clone)]
-struct Moved<'a> {
-    name: &'a str,
-    starter: f32,
-    least: f32,
-    middle: f32,
-    most: f32,
-    up: usize,
-    down: usize,
-}
-
-impl Moved<'_> {
-    /// Whether it moved a tenth the same way in every one of `seeds`.
-    fn every_seed(&self, seeds: usize) -> bool {
-        self.up == seeds || self.down == seeds
-    }
-}
-
-/// How far a ratio is from 1, either way: halving and doubling come out
-/// alike.
-fn distance(ratio: f32) -> f32 {
-    if ratio >= 1.0 {
-        ratio - 1.0
-    } else {
-        1.0 / ratio - 1.0
-    }
-}
-
 /// Whether each seed's world lasted, by #222's rule (G1, M2 design §6), in
-/// a run `hours` long: at least 9 seeds of 10 must.
-fn lasted(runs: &[(u64, Run)], hours: u64) {
-    let not_lasted: Vec<String> = runs
+/// a run `hours` long: at least 9 seeds of 10 must. Returns the seeds that
+/// didn't, which G4 leaves out (#226).
+fn lasted(runs: &[(u64, Run)], hours: u64) -> Vec<u64> {
+    let why_not: Vec<(u64, Vec<&str>)> = runs
         .iter()
-        .filter_map(|(seed, run)| {
+        .map(|(seed, run)| {
             let why = lasting::not_lasted(run.died_out.is_some(), &run.census, hours);
-            (!why.is_empty()).then(|| format!("seed {seed} ({})", why.join(", ")))
+            (*seed, why)
         })
+        .filter(|(_, why)| !why.is_empty())
+        .collect();
+    let not_lasted: Vec<String> = why_not
+        .iter()
+        .map(|(seed, why)| format!("seed {seed} ({})", why.join(", ")))
         .collect();
     let met = lasting::pooled_met(not_lasted.len(), runs.len());
     println!(
@@ -473,6 +379,7 @@ fn lasted(runs: &[(u64, Run)], hours: u64) {
         lasting::FLOOR,
         lasting::LATE_HOURS
     );
+    why_not.into_iter().map(|(seed, _)| seed).collect()
 }
 
 /// How long the sprites lived, in hours at 1×, and what they died of after
@@ -951,20 +858,6 @@ fn copy_and_change(runs: &[(u64, Run)]) {
             println!("{gene:<60} {seeds:>5} {:>7.0}%", 100.0 * widest);
         }
     }
-}
-
-/// Each of the starter's numbers' middle value among the sprites alive in
-/// `world`, eggs aside; empty if none is alive, and not a number where none
-/// has it (M2 design §13). By the end of a long run, all were hatched.
-fn middles(world: &World, starter: &[(String, f32)]) -> Vec<f32> {
-    middle_values(world, starter)
-        .map(|middles| {
-            middles
-                .into_iter()
-                .map(|middle| middle.unwrap_or(f32::NAN))
-                .collect()
-        })
-        .unwrap_or_default()
 }
 
 fn parse(args: &[String]) -> Result<Options, String> {

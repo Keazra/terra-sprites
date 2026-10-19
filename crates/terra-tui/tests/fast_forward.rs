@@ -456,7 +456,8 @@ fn the_population_table_names_each_cause_of_death_the_world_has_seen() {
 #[test]
 fn the_genes_table_starts_with_the_starter_then_has_a_row_an_hour() {
     let world = lab_world(7);
-    let starter = gene_values(&world.data().starter().genes(world.data()));
+    let genome = world.data().starter();
+    let starter = gene_values(&genome.genes(world.data()), &genome.switches());
     let at_start = middle_values(&world, &starter).expect("sprites alive");
     let mut run = FastForward::new(world, 2);
     run_through(&mut run);

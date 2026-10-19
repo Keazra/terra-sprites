@@ -17,6 +17,7 @@ Slice 29 ([#147](https://github.com/Keazra/terra-sprites/issues/147)), as settle
 | 9 | **Needs genes, falling behind and careful copying** are named: a species has fallen behind when its world fails its bars or it loses the race against the starter's genes, which Slice 30 runs every time; careful copying is held in reserve, not built, and losing the race can trip it too. Lone newborns given the end's genes are a reading, not the test. | #237 rules 1, 2, 4, 7 and 8, #226 Q7 | §19.6 |
 | 10 | **What's taken on by watching, of a thing's badness and habits, is kept apart,** settles either way towards the other's first-hand view, and is never passed on. | #225 round 2 | §18.2, §19.7 |
 | 11 | **G1's bar:** in the long run, a seed lasts when at the end it still has sprites or eggs, it never had fewer than 10 sprites at any count of its population record, and its sprites over its last 50 hours averaged at least half of hours 50–100; at least 9 of 10 seeds must last. `generations` judges the same rule. | #222 | §6, §19.6, §19.8 |
+| 12 | **G4 is judged on the long run,** over the seeds that last, where Slice 24 asked for 10 seeds of 200,000 ticks; a seed that didn't last drops out of it. Each gene number is named by when its gene works as well as what it does, so each half of a gene split by life stage lines up with its own. Slice 32's family bars still come from `generations -- --ticks 200000`. | #226 | §6, §12.7, §13.3, §16.4, §19.6, §19.8 |
 
 ## M1 "A Sprite Lives"
 

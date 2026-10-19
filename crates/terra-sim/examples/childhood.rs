@@ -38,6 +38,13 @@
 //! says they weren't judged. A seed that misses a bar across seeds has
 //! failed it only if the bar isn't met.
 //!
+//! Then evolution (M2 design §12.7, G4), judged on this run by #226: at
+//! least 3 gene numbers whose middle value among the living at the end
+//! moved by a tenth the same way in every seed that lasted. A seed that
+//! didn't last drops out of it. Each number is named by what its gene does
+//! and when it works, so the young's and grown sprites' Wander weights are
+//! two numbers.
+//!
 //! Reported with no bar: the young hatched that grew up, whose bar is the
 //! viability run's (#226); adults' time on the move over the last 50 hours,
 //! which #318 asks to be a quarter, and the young's (#237 rule 5); what
@@ -71,6 +78,8 @@
 
 #[path = "common/args.rs"]
 mod args;
+#[path = "common/evolution.rs"]
+mod evolution;
 #[path = "common/genes.rs"]
 mod genes;
 #[path = "common/lasting.rs"]
@@ -293,6 +302,9 @@ struct Run {
     census: Census,
     /// The tick the world died out on, if it did.
     died_out: Option<u64>,
+    /// Each of the starter's numbers' middle value among the sprites alive
+    /// at the end, in the starter's order; empty if none is (G4).
+    numbers: Vec<f32>,
     /// Each starter gene, by what it does and when, and the share of the
     /// hatched sprites alive at the end of hour `lacking_hour` that lack
     /// it: the last hour any was alive, so the end for a world that didn't
@@ -326,7 +338,10 @@ fn main() -> ExitCode {
         eprintln!("warning: this is a debug build; add --release, or it will take a long time");
     }
     let data = DataPack::builtin().expect("the built-in data pack is valid");
-    let starter = starter_genes(&data);
+    let starter = Starter {
+        genes: starter_genes(&data),
+        numbers: evolution::starter_numbers(&data),
+    };
     let seeds: Vec<String> = options.seeds.iter().map(u64::to_string).collect();
     println!(
         "The harsher world's long run: the default world, left alone, seeds {}, {} hours each \
@@ -337,12 +352,40 @@ fn main() -> ExitCode {
     );
     let runs = in_parallel(&data, &starter, &options);
     bars(&runs, &options);
+    let (lasted, dropped) = evolution_seeds(&runs, &judge(&runs, options.hours).not_lasted);
+    evolution::evolution(&starter.numbers, &lasted, &dropped);
     ExitCode::SUCCESS
+}
+
+/// The seeds G4 is judged over, on this run (#226): each that lasted
+/// (#222), with sprites alive at the end, and its numbers; then the seeds
+/// that drop out.
+fn evolution_seeds<'a>(
+    runs: &'a [Run],
+    not_lasted: &[(u64, Vec<&str>)],
+) -> (Vec<(u64, &'a [f32])>, Vec<u64>) {
+    let (kept, dropped): (Vec<&Run>, Vec<&Run>) = runs.iter().partition(|run| {
+        !not_lasted.iter().any(|(seed, _)| *seed == run.seed) && !run.numbers.is_empty()
+    });
+    (
+        kept.iter()
+            .map(|run| (run.seed, &run.numbers[..]))
+            .collect(),
+        dropped.iter().map(|run| run.seed).collect(),
+    )
+}
+
+/// The starter genome as the run sets the living against it: its genes by
+/// what each does and when, with how many it has of each, and its numbers,
+/// named the same way (G4).
+struct Starter {
+    genes: BTreeMap<String, usize>,
+    numbers: Vec<(String, f32)>,
 }
 
 /// Runs the seeds' worlds, `options.jobs` at a time, printing each one's
 /// table as it finishes, and returns them in seed order.
-fn in_parallel(data: &DataPack, starter: &BTreeMap<String, usize>, options: &Options) -> Vec<Run> {
+fn in_parallel(data: &DataPack, starter: &Starter, options: &Options) -> Vec<Run> {
     let todo = Mutex::new(options.seeds.clone().into_iter());
     let done = Mutex::new(Vec::new());
     std::thread::scope(|scope| {
@@ -368,7 +411,7 @@ fn in_parallel(data: &DataPack, starter: &BTreeMap<String, usize>, options: &Opt
 
 /// Runs the default world from `seed` for `options.hours`, then the lone
 /// newborns.
-fn run(data: &DataPack, starter: &BTreeMap<String, usize>, seed: u64, options: &Options) -> Run {
+fn run(data: &DataPack, starter: &Starter, seed: u64, options: &Options) -> Run {
     let config = WorldConfig::builtin(data);
     let mut world = World::new(config.clone(), data.clone(), seed);
     let mut tally = Tally::new(&world);
@@ -422,7 +465,7 @@ fn run(data: &DataPack, starter: &BTreeMap<String, usize>, seed: u64, options: &
             out.bushes.push(bushes);
             // Kept each hour, so a world that dies out keeps its living's
             // genes from the last hour before it did.
-            let lacking = lacking(&world, starter);
+            let lacking = lacking(&world, &starter.genes);
             let needs_lacked = needs_lacked(&lacking).len();
             out.measured(lacking, hour);
             if hour.is_multiple_of(options.every) {
@@ -449,6 +492,7 @@ fn run(data: &DataPack, starter: &BTreeMap<String, usize>, seed: u64, options: &
         .map(|(cause, n)| (cause_name(cause, data), n))
         .collect();
     out.by_parent = tally.by_parent;
+    out.numbers = evolution::middles(&world, &starter.numbers);
     if out.died_out.is_none() {
         out.newborns = World::unattended_like(config, data.clone(), seed, &world).map(newborns);
     }
@@ -1175,6 +1219,22 @@ mod tests {
                 (7, vec!["sprites fell by half"])
             ]
         );
+    }
+
+    #[test]
+    fn evolution_is_judged_over_the_seeds_that_last() {
+        // #226: G4 is judged on the long run over the seeds that last, so
+        // one that doesn't drops out of it rather than failing it.
+        let mut runs = ten();
+        for run in &mut runs {
+            run.numbers = vec![1.0];
+        }
+        runs[3].census.fewest = 9;
+        runs[6].numbers.clear();
+        let (lasted, dropped) = evolution_seeds(&runs, &judge(&runs, 220).not_lasted);
+        let seeds: Vec<u64> = lasted.iter().map(|(seed, _)| *seed).collect();
+        assert_eq!(seeds, [1, 2, 3, 5, 6, 8, 9, 10]);
+        assert_eq!(dropped, [4, 7]);
     }
 
     #[test]

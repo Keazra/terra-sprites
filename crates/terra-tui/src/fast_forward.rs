@@ -490,7 +490,7 @@ impl GeneTable {
     pub fn new(world: &World) -> GeneTable {
         let data = world.data();
         GeneTable {
-            starter: gene_values(&data.starter().genes(data)),
+            starter: gene_values(&data.starter().genes(data), &data.starter().switches()),
             rows: Vec::new(),
         }
     }
