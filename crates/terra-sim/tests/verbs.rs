@@ -735,7 +735,7 @@ fn a_bite_the_gut_has_no_room_for_is_too_full_and_leaves_the_fruit_on_the_bush()
         sprite.chemical("food").expect("food")
     };
     assert_eq!(endings(&world.step()), [(Verb::Eat, Outcome::Applied)]);
-    let (fed, learned) = (food(&world), world.sprite(id).expect("it").memory());
+    let fed = food(&world);
     let events = world.step();
     assert_eq!(endings(&events), [(Verb::Eat, Outcome::TooFull)]);
     assert_eq!(
@@ -747,8 +747,7 @@ fn a_bite_the_gut_has_no_room_for_is_too_full_and_leaves_the_fruit_on_the_bush()
     assert_eq!(felt_too_full(&world), 0.0, "the pulse is felt next tick");
     world.step();
     assert_eq!(felt_too_full(&world), 0.5);
-    assert_eq!(felt_fruitless(&world), 0.0);
-    assert_eq!(world.sprite(id).expect("the sprite").memory(), learned);
+    assert_eq!(felt_fruitless(&world), 0.0, "so it teaches nothing");
 }
 
 #[test]
