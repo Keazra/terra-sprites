@@ -1,8 +1,9 @@
 //! The harsher world's long run (M2 design §19.6): runs the default world,
 //! left alone, from the given seeds for 220 hours of play each, and
 //! reports every 10 hours how its sprites stand, then each seed against
-//! Slice 29's bars and the bars judged across seeds, then lone newborns
-//! given the genes of the sprites alive at the end.
+//! Slice 29's bars and the bars judged across seeds, lone newborns given
+//! the genes of the sprites alive at the end and evolution (G4), and last
+//! whether every bar was met.
 //!
 //! Each row: the hour; sprites, the young among them, and eggs; berry
 //! bushes; and since the last row, the hatched young that grew up and that
@@ -41,9 +42,11 @@
 //! Then evolution (M2 design §12.7, G4), judged on this run by #226: at
 //! least 3 gene numbers whose middle value among the living at the end
 //! moved by a tenth the same way in every seed that lasted. A seed that
-//! didn't last drops out of it. Each number is named by what its gene does
-//! and when it works, so the young's and grown sprites' Wander weights are
-//! two numbers.
+//! didn't last, or had no sprite alive at the end, drops out of it. Each
+//! number is named by what its gene does and when it works, so the young's
+//! and grown sprites' Wander weights are two numbers. It's G4's first test:
+//! if it isn't met, Slice 30's race against the starter's genes is its
+//! second (#226), so it fails no seed.
 //!
 //! Reported with no bar: the young hatched that grew up, whose bar is the
 //! viability run's (#226); adults' time on the move over the last 50 hours,
@@ -74,7 +77,7 @@
 //! `--every N` reports every N hours (10 by default), and `--jobs N` runs N
 //! worlds at a time (4 by default). Each world is its own, so the results
 //! don't depend on it. Each seed's table is printed as it finishes, and the
-//! bars at the end.
+//! bars, evolution and the verdict at the end.
 
 #[path = "common/args.rs"]
 mod args;
@@ -351,15 +354,13 @@ fn main() -> ExitCode {
         options.hours * HOUR
     );
     let runs = in_parallel(&data, &starter, &options);
-    bars(&runs, &options);
-    let (lasted, dropped) = evolution_seeds(&runs, &judge(&runs, options.hours).not_lasted);
-    evolution::evolution(&starter.numbers, &lasted, &dropped);
+    bars(&runs, &starter.numbers, &options);
     ExitCode::SUCCESS
 }
 
 /// The seeds G4 is judged over, on this run (#226): each that lasted
 /// (#222), with sprites alive at the end, and its numbers; then the seeds
-/// that drop out.
+/// that drop out, as they didn't last or had no sprite alive to measure.
 fn evolution_seeds<'a>(
     runs: &'a [Run],
     not_lasted: &[(u64, Vec<&str>)],
@@ -753,9 +754,10 @@ fn judge(runs: &[Run], hours: u64) -> Verdicts {
     }
 }
 
-/// Each seed against the bars, all the seeds together, and the starter
-/// genes lacked at the end.
-fn bars(runs: &[Run], options: &Options) {
+/// Each seed against the bars, all the seeds together, the starter genes
+/// lacked at the end, evolution (G4, over the seeds that lasted, as
+/// `starter`'s numbers moved) and the verdict.
+fn bars(runs: &[Run], starter: &[(String, f32)], options: &Options) {
     let hours = options.hours;
     let verdicts = judge(runs, hours);
     println!("\nEach seed against the bars");
@@ -916,20 +918,36 @@ fn bars(runs: &[Run], options: &Options) {
         without.grew_up + without.died_young,
     );
     genes_lacked(runs, hours);
+    let (lasted, dropped) = evolution_seeds(runs, &verdicts.not_lasted);
+    let evolved = evolution::evolution(starter, &lasted, &dropped);
+    // G4 unmet here fails no seed: the race is its second test (#226).
+    let g4 = "G4 wasn't met by the numbers, its first test: Slice 30's race against the \
+              starter's genes is its second (#226).";
     if verdicts.failed.is_empty() {
-        if short {
-            println!("\nEvery bar judged was met.");
+        let every = if short {
+            "Every bar judged"
         } else {
-            println!("\nEvery bar was met.");
+            "Every bar"
+        };
+        let but = if evolved { "" } else { " but G4's" };
+        println!("\n{every}{but} was met.");
+        if !evolved {
+            println!("{g4}");
         }
         return;
     }
-    let lines: Vec<String> = verdicts
+    let mut lines: Vec<String> = verdicts
         .failed
         .iter()
         .map(|(seed, fails)| format!("seed {seed}: {}", fails.join(", ")))
         .collect();
+    if !evolved {
+        lines.push("G4, across seeds".into());
+    }
     println!("\nBars failed: {}.", lines.join("; "));
+    if !evolved {
+        println!("{g4}");
+    }
     if !verdicts.trips.is_empty() {
         let seeds: Vec<String> = verdicts.trips.iter().map(u64::to_string).collect();
         let before: Vec<String> = runs
@@ -1235,6 +1253,29 @@ mod tests {
         let seeds: Vec<u64> = lasted.iter().map(|(seed, _)| *seed).collect();
         assert_eq!(seeds, [1, 2, 3, 5, 6, 8, 9, 10]);
         assert_eq!(dropped, [4, 7]);
+    }
+
+    #[test]
+    fn evolution_is_met_by_three_numbers_moved_the_same_way_in_every_seed() {
+        // M2 design §12.7: at least 3 numbers moved a tenth the same way in
+        // every seed that lasted, and none lasting meets nothing.
+        let starter: Vec<(String, f32)> = ["a", "b", "c", "d"]
+            .iter()
+            .map(|name| (name.to_string(), 1.0))
+            .collect();
+        let three = [1.2, 0.8, 1.5, 1.0];
+        assert!(evolution::evolution(
+            &starter,
+            &[(1, &three), (2, &three)],
+            &[3]
+        ));
+        let two = [1.2, 0.8, 1.05, 1.0];
+        assert!(!evolution::evolution(
+            &starter,
+            &[(1, &three), (2, &two)],
+            &[]
+        ));
+        assert!(!evolution::evolution(&starter, &[], &[1, 2]));
     }
 
     #[test]

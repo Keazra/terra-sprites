@@ -542,7 +542,7 @@ fn the_report_ends_with_the_values_that_moved_most() {
             now: 1.0,
         },
         Moved {
-            name: "always → Wander: weight".into(),
+            name: "always → Wander from Adult: weight".into(),
             starter: 0.3,
             now: 0.2498,
         },
@@ -551,8 +551,8 @@ fn the_report_ends_with_the_values_that_moved_most() {
         fast_forward::moved_lines(&moved),
         [
             "Moved most from the starter's, as the middle value among the living:",
-            "  b                               2 → 1         down 50%",
-            "  always → Wander: weight       0.3 → 0.2498    down 17%",
+            "  b                                          2 → 1         down 50%",
+            "  always → Wander from Adult: weight       0.3 → 0.2498    down 17%",
         ]
     );
 }

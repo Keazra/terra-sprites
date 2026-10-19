@@ -2,8 +2,8 @@
 //! when it works and the field it fills, as `hunger → Eat: weight` or
 //! `always → Wander until Adult: weight`. Following each one's
 //! middle value among the living is how a species is seen to drift from
-//! the starter genome, in the generations example (G4, which calls them
-//! gene numbers) and in fast-forward's genes table.
+//! the starter genome, in the long run and the generations example (G4,
+//! which calls them gene numbers) and in fast-forward's genes table.
 
 use std::collections::BTreeMap;
 

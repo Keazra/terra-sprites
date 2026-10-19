@@ -31,17 +31,21 @@ pub fn middles(world: &World, starter: &[(String, f32)]) -> Vec<f32> {
 /// Prints how far the species' genes moved from the starter's (M2 design
 /// §12.7, G4): each number whose middle value among the living at the end
 /// moved by at least a tenth the same way in every seed that lasted, each
-/// of `lasted` a seed and its numbers. A seed that didn't last, each of
-/// `dropped`, drops out of G4's count (#222, #226). Chance moves a number up
-/// in some worlds and down in others, and the same way in all ten about 1
-/// time in 500. A number at the edge of its range can only move one way, so
-/// check the list for one.
-pub fn evolution(starter: &[(String, f32)], lasted: &[(u64, &[f32])], dropped: &[u64]) {
+/// of `lasted` a seed and its numbers. A seed that didn't last, or had no
+/// sprite alive at the end to measure, each of `dropped`, drops out of G4's
+/// count (#222, #226). Returns whether G4's bar of at least 3 numbers is
+/// met. Chance moves a number up in some worlds and down in others, and the
+/// same way in all ten about 1 time in 500. A number at the edge of its
+/// range can only move one way, so check the list for one.
+pub fn evolution(starter: &[(String, f32)], lasted: &[(u64, &[f32])], dropped: &[u64]) -> bool {
     let left_out = if dropped.is_empty() {
         String::new()
     } else {
         let seeds: Vec<String> = dropped.iter().map(u64::to_string).collect();
-        format!("; seeds {} didn't last and drop out", seeds.join(", "))
+        format!(
+            "; seeds {} drop out, as they didn't last or had no sprite alive at the end",
+            seeds.join(", ")
+        )
     };
     println!(
         "\nEvolution (G4): each gene number's middle value among the living at the end, against \
@@ -49,7 +53,8 @@ pub fn evolution(starter: &[(String, f32)], lasted: &[(u64, &[f32])], dropped: &
         lasted.len()
     );
     if lasted.is_empty() {
-        return;
+        println!("\nG4 isn't met: no seed lasted with sprites alive at the end.");
+        return false;
     }
     // Each number's ratio to the starter's, seed by seed.
     let mut moved = Vec::new();
@@ -77,10 +82,12 @@ pub fn evolution(starter: &[(String, f32)], lasted: &[(u64, &[f32])], dropped: &
     }
     let seeds = lasted.len();
     let all_way = moved.iter().filter(|m| m.every_seed(seeds)).count();
+    let met = all_way >= 3;
     println!(
         "\n{all_way} of {} numbers moved by at least a tenth the same way in all {seeds} seeds \
-         (bar: at least 3).",
-        moved.len()
+         (bar: at least 3): {}.",
+        moved.len(),
+        if met { "met" } else { "not met" }
     );
     let mut by_size = moved.clone();
     by_size.sort_by(|a, b| distance(b.middle).total_cmp(&distance(a.middle)));
@@ -101,6 +108,7 @@ pub fn evolution(starter: &[(String, f32)], lasted: &[(u64, &[f32])], dropped: &
     println!(
         "\n* moved the same way in every seed. Least, middle and most are seeds' ratios to the starter."
     );
+    met
 }
 
 /// How far one gene number moved from the starter's, across seeds: its

@@ -154,7 +154,7 @@ _Avoid_: label
 The genome in the data pack that sprites are made from when they have no parents.
 
 **Gene value**:
-A number in a gene that spawn variation or a copying error may change, such as a strength or a threshold. The rest of a gene, such as which chemical it touches, never varies. Followed across a species, each is named for what its gene does and its field, as `hunger → Eat: weight` (M2 design §12.7, §16.4).
+A number in a gene that spawn variation or a copying error may change, such as a strength or a threshold. The rest of a gene, such as which chemical it touches, never varies. Followed across a species, each is named for what its gene does, when it works and its field, as `hunger → Eat: weight` or `always → Wander until Adult: weight` (M2 design §12.7, §16.4).
 
 **Spawn variation**:
 The small random change to the gene values of a sprite made from the starter genome, larger for `grows_old` so that lives differ.
@@ -933,7 +933,7 @@ The death of a sprite that had grown up, adult or old, judged by life stage. The
 _Avoid_: adult death (old sprites' count too); a death after tick 10,000 (A4 counted by tick until Slice 29)
 
 **Long run** (M2, Slice 29):
-The default world left alone for 220 hours on seeds 1–10, on the owner's PC: the `childhood` example. It reports Slice 29's bars, G1's (whether each seed's world lasts), the starter genes the living lack, and lone newborns given the end's genes.
+The default world left alone for 220 hours on seeds 1–10, on the owner's PC: the `childhood` example. It reports Slice 29's bars, G1's (whether each seed's world lasts), the starter genes the living lack, lone newborns given the end's genes, and G4 (gene values moved, over the seeds that last).
 _Avoid_: soak (that has the Cursor's commands), viability run (that's 50,000 ticks)
 
 **Soak**:
