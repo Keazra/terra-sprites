@@ -2,7 +2,7 @@
 //! happened in each window counted.
 
 mod common;
-use common::{WorldBuilder, at, barren, builtin};
+use common::{ALONE, FEMALE, LONE, WorldBuilder, at, barren, builtin, builtin_changing, family_in};
 
 use std::collections::BTreeMap;
 
@@ -589,30 +589,50 @@ ticks 0 to 6,000              seed 1    seed 2    median
 }
 
 #[test]
-fn lone_newborns_can_take_after_the_hatched_sprites_of_another_world() {
-    // M2 design §19.6: the long run's lone newborns, given the genes of the
-    // hatched sprites alive at its end. A world with none gives none.
-    let data = builtin();
+fn lone_newborns_take_after_the_hatched_sprites_of_another_world_in_turn() {
+    // M2 design §19.6: the long run's lone newborns, given the genomes and
+    // hidden flaws of the hatched sprites alive at its end, spread through
+    // them in turn: with two, the first half take after the first and the
+    // rest after the second. A world with none gives none. Here two
+    // mothers each lay an egg alone, copied with many flaws.
+    let data = builtin_changing(
+        "physiology.ron",
+        &[LONE, ("flaws: (arise: 0.004,", "flaws: (arise: 0.1,")],
+    );
+    let female = format!("{ALONE}{FEMALE}");
+    let mut world = family_in(
+        data.clone(),
+        &[(at(2, 1), &female), (at(5, 2), &female)],
+        &[],
+        1,
+    );
     let config = WorldConfig::builtin(&data);
-    let mut world = World::new(config.clone(), data.clone(), 1);
     assert!(World::unattended_like(config.clone(), data.clone(), 1, &world).is_none());
-    while !world.sprites().any(|s| !s.parents().is_empty()) {
-        assert!(world.tick() < 10_000, "an egg hatches");
+    let hatched = |world: &World| -> Vec<_> {
+        world
+            .sprites()
+            .filter(|s| !s.parents().is_empty())
+            .map(|s| (s.genome().clone(), s.flaws()))
+            .collect()
+    };
+    while hatched(&world).len() < 2 {
+        assert!(world.tick() < 2_000, "two eggs hatch");
         world.step();
     }
-    let hatched: Vec<_> = world
-        .sprites()
-        .filter(|s| !s.parents().is_empty())
-        .map(|s| s.genome().clone())
-        .collect();
+    let hatched = hatched(&world);
+    assert_eq!(hatched.len(), 2);
+    assert_ne!(hatched[0], hatched[1], "two different young");
+    assert!(
+        hatched.iter().all(|(_, flaws)| flaws.contains(&1)),
+        "each carrying a flaw"
+    );
     let lone = World::unattended_like(config.clone(), data, 1, &world).expect("hatched sprites");
     let newborns: Vec<_> = lone.sprites().collect();
     assert_eq!(newborns.len(), config.sprites());
-    for newborn in &newborns {
+    for (n, newborn) in newborns.iter().enumerate() {
         assert_eq!(newborn.life_stage(), LifeStage::Young);
-        assert!(
-            hatched.contains(newborn.genome()),
-            "takes after one of them"
-        );
+        let (genome, flaws) = &hatched[usize::from(n >= newborns.len() / 2)];
+        assert_eq!(newborn.genome(), genome, "newborn {n}'s genome");
+        assert_eq!(&newborn.flaws(), flaws, "newborn {n}'s flaws");
     }
 }
