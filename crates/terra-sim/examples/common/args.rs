@@ -1,4 +1,5 @@
-//! Shared argument parsing for the terra-sim examples.
+//! Shared argument parsing for the terra-sim examples, and their warning
+//! in a debug build.
 //!
 //! Examples include this module via `#[path]`, so each example is its own
 //! crate and may not call every helper. Unused ones are not dead code of the
@@ -71,4 +72,12 @@ fn range(value: &str) -> Option<(u64, u64)> {
     let (a, b) = value.split_once('-')?;
     let (a, b) = (a.parse().ok()?, b.parse().ok()?);
     (a <= b).then_some((a, b))
+}
+
+/// Warns, in a debug build, that the example wants `--release`: "add
+/// --release" and then `why`, such as ", or it will take a long time".
+pub fn warn_if_debug(why: &str) {
+    if cfg!(debug_assertions) {
+        eprintln!("warning: this is a debug build; add --release{why}");
+    }
 }

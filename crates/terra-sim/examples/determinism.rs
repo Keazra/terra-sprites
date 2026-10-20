@@ -10,7 +10,7 @@
 //! each printed: any difference fails the check. Its lines name nothing
 //! about the machine, so the same simulation prints the same text anywhere.
 
-use terra_sim::{DataPack, Soak, World, WorldConfig};
+use terra_sim::{CHECKPOINT_EVERY, DataPack, Soak, World, WorldConfig};
 
 /// The seed the default world is made from.
 const SEED: u64 = 7;
@@ -21,29 +21,29 @@ const TICKS: u64 = 20_000;
 /// How many ticks the world runs with the soak's script.
 const SOAK_TICKS: u64 = 10_000;
 
-/// How often a hash is printed, as for a replay's checkpoints (design §2.7):
-/// a mismatch then names the stretch of ticks it began in.
-const CHECKPOINT_EVERY: u64 = 1_000;
-
 fn main() {
     let data = DataPack::builtin().expect("the built-in data pack is valid");
-    let mut world = World::new(WorldConfig::builtin(&data), data.clone(), SEED);
+    let world = World::new(WorldConfig::builtin(&data), data.clone(), SEED);
     println!("default world, seed {SEED}, {TICKS} ticks");
-    checkpoint(&world);
-    while world.tick() < TICKS {
-        world.step();
-        if world.tick().is_multiple_of(CHECKPOINT_EVERY) {
-            checkpoint(&world);
-        }
-    }
+    run(world, None, TICKS);
 
-    let mut world = World::new(WorldConfig::builtin(&data), data, SEED);
-    let mut script = Soak::new(&world, SEED);
+    let world = World::new(WorldConfig::builtin(&data), data, SEED);
+    let script = Soak::new(&world, SEED);
     println!("default world with the soak's commands, seed {SEED}, {SOAK_TICKS} ticks");
+    run(world, Some(script), SOAK_TICKS);
+}
+
+/// Runs `world` until its tick is `ticks`, with the Cursor's commands from
+/// `script` if there is one. It prints a checkpoint first and then every
+/// `CHECKPOINT_EVERY` ticks, as a replay checks them (design §2.7), so a
+/// mismatch names the stretch of ticks it began in.
+fn run(mut world: World, mut script: Option<Soak>, ticks: u64) {
     checkpoint(&world);
-    while world.tick() < SOAK_TICKS {
-        for command in script.commands(&world) {
-            world.submit(command);
+    while world.tick() < ticks {
+        if let Some(script) = &mut script {
+            for command in script.commands(&world) {
+                world.submit(command);
+            }
         }
         world.step();
         if world.tick().is_multiple_of(CHECKPOINT_EVERY) {
