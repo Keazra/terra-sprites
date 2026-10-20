@@ -326,12 +326,20 @@ pub fn lone() -> DataPack {
     builtin_changing("physiology.ron", &[LONE])
 }
 
+/// The change to `physiology.ron` that leaves a young sprite's thirst at
+/// the grown rate rather than paced to its childhood (M2 design §19.5), for
+/// a test of a young sprite with no water that must live to grow up, or one
+/// whose childhood is shorter than any the built-in ranges allow.
+pub const UNPACED: (&str, &str) = ("thirst_childhood: 4500.0,", "");
+
 /// The changes to `physiology.ron` that let a sprite grow up and grow old
 /// as soon as 1 tick old (M2 design §9.3), so a test of a young or old
-/// sprite needn't wait the thousands of ticks the built-in ranges take.
-pub const AGES_AT_ONCE: [(&str, &str); 2] = [
+/// sprite needn't wait the thousands of ticks the built-in ranges take. A
+/// childhood that short leaves thirst unpaced.
+pub const AGES_AT_ONCE: [(&str, &str); 3] = [
     ("grows_old: (6000.0,", "grows_old: (1.0,"),
     ("grows_up: (1500.0,", "grows_up: (1.0,"),
+    UNPACED,
 ];
 
 /// Genes that have a sprite grow up and grow old at 1 tick old, in a pack

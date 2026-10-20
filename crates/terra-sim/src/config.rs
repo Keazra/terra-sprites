@@ -28,6 +28,28 @@ pub(crate) fn most_sprites() -> u16 {
 /// The allowed range for `most_sprites` (M2 design §10).
 const MOST: std::ops::RangeInclusive<u16> = 1..=1000;
 
+/// The share of a map's tiles under water, as a percentage, with no `water`
+/// in its preset: the watery world of the game before Slice 29, which a
+/// save or preset from before it was made in (M2 design §19.1).
+pub(crate) const WATER: u8 = 32;
+
+/// The allowed range for `water`: some water, and room above it for the
+/// beaches and the land (design §3.2).
+const WATERS: std::ops::RangeInclusive<u8> = 1..=60;
+
+/// The allowed range for `lake_size` (M2 design §19.1).
+const LAKE_SIZES: std::ops::RangeInclusive<u8> = 1..=5;
+
+/// `WATER`, for a save from before Slice 29.
+pub(crate) fn water() -> u8 {
+    WATER
+}
+
+/// A lake size of 1, for a save from before Slice 29.
+pub(crate) fn lake_size() -> u8 {
+    1
+}
+
 /// The settings a new world is made from. A preset file holds one.
 ///
 /// A config is checked against the data pack it was parsed with, and must be
@@ -44,6 +66,30 @@ pub struct WorldConfig {
     /// The most sprites the world holds, eggs included: past it, breeding
     /// is a fruitless try (M2 design §10).
     most_sprites: u16,
+    /// The share of the map's tiles under water, as a percentage (M2 design
+    /// §19.1).
+    water: u8,
+    /// How big its lakes are: the map's hills and hollows are this many
+    /// times as wide, so the same water lies in fewer, bigger lakes.
+    lake_size: u8,
+    /// The first sprites start within this many tiles of drinkable water,
+    /// as the crow flies, while any such tile is free, then anywhere;
+    /// anywhere, if `None` (M2 design §19.1).
+    start_near_water: Option<u16>,
+}
+
+/// A config's fields, as a save or replay keeps them (design §2.7, §2.8).
+#[derive(Debug, Clone)]
+pub(crate) struct Parts {
+    pub(crate) width: u16,
+    pub(crate) height: u16,
+    pub(crate) objects: BTreeMap<String, u32>,
+    pub(crate) per_tiles: u32,
+    pub(crate) sprites: u16,
+    pub(crate) most_sprites: u16,
+    pub(crate) water: u8,
+    pub(crate) lake_size: u8,
+    pub(crate) start_near_water: Option<u16>,
 }
 
 /// Why a preset could not be read.
@@ -77,6 +123,12 @@ struct Preset {
     sprites: Option<u16>,
     #[serde(default)]
     most_sprites: Option<u16>,
+    #[serde(default)]
+    water: Option<u8>,
+    #[serde(default)]
+    lake_size: Option<u8>,
+    #[serde(default)]
+    start_near_water: Option<u16>,
 }
 
 impl WorldConfig {
@@ -146,6 +198,22 @@ impl WorldConfig {
                 MOST.end()
             )));
         }
+        let water = preset.water.unwrap_or(WATER);
+        if !WATERS.contains(&water) {
+            return Err(ConfigError::Invalid(format!(
+                "`water` is {water}, but must be from {} to {}",
+                WATERS.start(),
+                WATERS.end()
+            )));
+        }
+        let lake_size = preset.lake_size.unwrap_or(1);
+        if !LAKE_SIZES.contains(&lake_size) {
+            return Err(ConfigError::Invalid(format!(
+                "`lake_size` is {lake_size}, but must be from {} to {}",
+                LAKE_SIZES.start(),
+                LAKE_SIZES.end()
+            )));
+        }
         Ok(WorldConfig {
             width: preset.width,
             height: preset.height,
@@ -153,41 +221,42 @@ impl WorldConfig {
             per_tiles,
             sprites,
             most_sprites,
+            water,
+            lake_size,
+            start_near_water: preset.start_near_water,
         })
     }
 
     /// The fields, for a save to keep (design §2.8).
-    pub(crate) fn parts(&self) -> (u16, u16, &BTreeMap<String, u32>, u32, u16, u16) {
-        (
-            self.width,
-            self.height,
-            &self.objects,
-            self.per_tiles,
-            self.sprites,
-            self.most_sprites,
-        )
+    pub(crate) fn parts(&self) -> Parts {
+        Parts {
+            width: self.width,
+            height: self.height,
+            objects: self.objects.clone(),
+            per_tiles: self.per_tiles,
+            sprites: self.sprites,
+            most_sprites: self.most_sprites,
+            water: self.water,
+            lake_size: self.lake_size,
+            start_near_water: self.start_near_water,
+        }
     }
 
     /// A config from the fields a save or replay kept, checked again as a
     /// preset is (design §2.7, §2.8): a damaged file could hold any values,
     /// and a replay generates its world from them again.
-    pub(crate) fn from_parts(
-        width: u16,
-        height: u16,
-        objects: BTreeMap<String, u32>,
-        per_tiles: u32,
-        sprites: u16,
-        most_sprites: u16,
-        data: &DataPack,
-    ) -> Result<WorldConfig, ConfigError> {
+    pub(crate) fn from_parts(parts: Parts, data: &DataPack) -> Result<WorldConfig, ConfigError> {
         let preset = Preset {
-            width,
-            height,
-            objects,
-            per_tiles: Some(per_tiles),
+            width: parts.width,
+            height: parts.height,
+            objects: parts.objects,
+            per_tiles: Some(parts.per_tiles),
             // A config with no sprites came from a preset that left them out.
-            sprites: (sprites > 0).then_some(sprites),
-            most_sprites: Some(most_sprites),
+            sprites: (parts.sprites > 0).then_some(parts.sprites),
+            most_sprites: Some(parts.most_sprites),
+            water: Some(parts.water),
+            lake_size: Some(parts.lake_size),
+            start_near_water: parts.start_near_water,
         };
         WorldConfig::checked(preset, data)
     }
@@ -210,6 +279,24 @@ impl WorldConfig {
     /// The most sprites the world holds, eggs included (M2 design §10).
     pub fn most_sprites(&self) -> usize {
         usize::from(self.most_sprites)
+    }
+
+    /// The share of the map's tiles under water, as a percentage (M2 design
+    /// §19.1).
+    pub fn water(&self) -> u8 {
+        self.water
+    }
+
+    /// How big its lakes are: 1 for the ponds of the game before Slice 29,
+    /// more for the same water in fewer, bigger lakes (M2 design §19.1).
+    pub fn lake_size(&self) -> u8 {
+        self.lake_size
+    }
+
+    /// How near drinkable water the first sprites start, in tiles as the
+    /// crow flies; `None` for anywhere (M2 design §19.1).
+    pub fn start_near_water(&self) -> Option<u16> {
+        self.start_near_water
     }
 
     /// The same preset on a map `width` by `height`, each side kept within

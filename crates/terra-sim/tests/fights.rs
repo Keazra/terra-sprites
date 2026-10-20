@@ -126,14 +126,14 @@ fn a_sprite_pricked_by_a_thornbush_backs_away_from_it() {
     assert!(backed_away >= 8, "backed away in {backed_away} of 10");
 }
 
-/// Of 40 starter sprites, each with spawn variation, each hit once by a
+/// Of 100 starter sprites, each with spawn variation, each hit once by a
 /// sprite beside it, how many back away from it and how many hit back as
 /// their next choice: newborns if `young`, else just grown up.
 fn hit_once(young: bool) -> (u32, u32) {
     let (me, attacker) = (at(3, 3), at(4, 3));
     let rows = ["........"; 8];
     let (mut backed_away, mut hit_back) = (0, 0);
-    for seed in 0..40 {
+    for seed in 0..100 {
         // The attacker hits once, as the sprite it hits sets off on its
         // first action, and rests.
         let script = [
@@ -175,10 +175,11 @@ fn a_hit_sprite_mostly_backs_away_from_its_attacker_and_sometimes_hits_back() {
     // About one sprite in three hits back. The instincts alone make it one
     // in four, but learning punishes the wander the hit interrupted, so
     // hitting back clears the switch margin a little more often (design
-    // v15 change 10).
+    // v15 change 10). Of 400, 282 backed away and 117 hit back (measured);
+    // 40 sprites were too few to say so every time.
     assert!(
         2 * backed_away >= 3 * hit_back && hit_back >= 3,
-        "backed away {backed_away}, hit back {hit_back}, of 40"
+        "backed away {backed_away}, hit back {hit_back}, of 100"
     );
 }
 
@@ -236,10 +237,13 @@ fn a_young_sprite_never_fights_for_room_but_still_hits_back() {
     let (backed_away, hit) = crowded(true);
     assert_eq!(hit, 0, "backed away {backed_away}, hit {hit}, of 100");
     assert!(backed_away > 50, "backed away {backed_away} of 100");
+    // A young sprite standing still when it's hit chooses afresh rather
+    // than switching from what it was doing, so it hits back about as often
+    // as it backs away (200 of 400 each, measured; M2 design §19.2).
     let (backed_away, hit_back) = hit_once(true);
     assert!(
         hit_back >= 3,
-        "backed away {backed_away}, hit back {hit_back}, of 40"
+        "backed away {backed_away}, hit back {hit_back}, of 100"
     );
 }
 

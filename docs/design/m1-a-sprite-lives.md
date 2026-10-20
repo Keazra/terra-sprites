@@ -157,7 +157,7 @@ world.check_invariants();                                // debug/test builds
 | 1 | **Commands** | Apply the commands stamped for this tick, in the order they were submitted. The Cursor's direct chemical injections happen here, and its pulses go into the target's `incoming` buffer. Invalid commands are rejected with a `CommandRejected` event. |
 | 2 | **Environment** | Object rules run (stages, counters, spawning, spreading, expiry). This covers the objects that exist **when step 2 begins**, in ascending ID order, with rules in the order listed (§3.5). Objects created during step 2 first run next tick. Then rolling items move one tile each, in ascending ID order (§3.5.4), and then sliding sprites, likewise (v25). |
 | 3 | **Biochemistry** | For every sprite, **led or not**: (a) pulse latch: `live ← incoming` and `incoming` is emptied; (b) physiology; (c) reactions; (d) half-life decay; (e1) Level emitters; (e2) Rise/Fall emitters; (f) receptors. No level leaves [0, 1] at any point (§4.4). Then **death check #1**: if `injury ≥ 1.0` the sprite is marked **dying**. So is a sprite whose injury a crash took to 1 at step 2, whatever (b)'s healing does (v25). |
-| 4 | **Learning** | For every sprite not marked dying: read each need's relief, `reward` and `punishment`, then **reset reward and punishment to 0** (learning consumes them). Credit worth to the thing touched and habits along the trace ring buffer (the freshest entry is from the previous tick), then let learned values fade (§5.6). |
+| 4 | **Learning** | For every sprite not marked dying: read each need's relief, `reward` and `punishment`, then **reset reward and punishment to 0** (learning consumes them). Credit worth to the thing touched and habits along the trace ring buffer (the freshest entry is from the previous tick), then let learned values fade (§5.6). Since Slice 28, once every sprite has learned, each then takes on a share of what the sprites it watched know (M2 design §18.1, #146). |
 | 5 | **Sense and decide** | For every sprite not marked dying: refresh the perception flood if needed (§3.6); then, unless the sprite is led (§6.5) or sliding (§3.5.4), **5.0** check the current action, **5a** attention, **5b** decision (§5.5). The activations are snapshotted. |
 | 6 | **Resolve actions** | In an order shuffled each tick by the world RNG: movement steps (including head-on swaps, §3.7) and verb effects. A led sprite's steps take it towards the Cursor (§6.5); a sliding one takes none (v25). Effects inject physical chemicals and write `incoming` pulses. Then each deciding sprite **commits one trace entry**: its snapshot (§5.6). This happens every tick, whether the action just started or is continuing. A led sprite decides nothing, so it commits none. |
 | 7 | **Deaths and events** | **Death check #2** catches injury from step 6. Sprites marked dying are removed; a led sprite that dies empties the Cursor. Events are emitted, and the tick counter goes up. |
@@ -346,7 +346,7 @@ A replay file contains (v35):
 
 ### 3.2 World generation and connectivity
 
-1. **Terrain:** seeded value noise produces height and moisture fields. It is built in-house from + − × ÷ alone (so it needs no `libm`), and its random lattice values come from the world RNG. Terrain bands are set **by percentile**, so every seed gets about the same mix: the lowest 20% of heights are deep water, then 12% shallow water, 8% sand, 50% land, and the highest 10% rock. The driest 40% of the land is dirt; the rest is grass.
+1. **Terrain:** seeded value noise produces height and moisture fields. It is built in-house from + − × ÷ alone (so it needs no `libm`), and its random lattice values come from the world RNG. Terrain bands are set **by percentile**, so every seed gets about the same mix: the lowest 20% of heights are deep water, then 12% shallow water, 8% sand, 50% land, and the highest 10% rock. The driest 40% of the land is dirt; the rest is grass. From Slice 29, the world config sets the water's share and the lakes' size, and the other bands follow the water (M2 design §19.1): these are the gentle world's bands, and the default world has 4% water and 78% land.
 2. **Regions:** a flood fill using exactly the movement rules above (**shallow water counts as walkable**) finds the walkable regions. The largest one is the **mainland**.
 3. **Joining regions:**
    - Every other region of **≥64 tiles** is joined to the mainland, largest first, along the route that **carves the fewest tiles, then takes the fewest steps**. The route uses orthogonal steps only, so it never depends on a diagonal, and the connection it carves is one tile wide. Deep water becomes shallow water; any other unwalkable terrain becomes dirt. A route that crosses another region joins that region too.
@@ -355,7 +355,7 @@ A replay file contains (v35):
    - **Objects:** each object type's count comes from the preset's densities (§3.9). Solid objects are placed first, then items, each type in ID order. Each object goes on a tile drawn uniformly from the type's remaining candidates: mainland tiles where it may go. A tile found unusable is set aside for the rest of that type (one that would cut a path might become usable once a neighbour fills in, but checking again would slow generation). If the map runs out of room, generation places what fits and carries on.
    - **Generation always keeps paths open:** a solid object goes only where `KeepsPathsOpen` (§3.3) holds, so no world starts out split.
    - **Objects start partway through their lives.** For an object with stages, generation draws every stage's duration, then an age uniformly within their total, and starts the object at that point: in the stage the age falls in, with that stage's remaining time. Its counters start at 0, and no `OnStageEnter` fires for the stage it starts in. Without this, every bush would start as a seedling (no fruit for 1,500 ticks or more) and they'd all expire in the same few thousand ticks.
-   - **Sprites** are placed after the objects: the preset's count (§3.9), each on a tile drawn uniformly from the walkable mainland tiles that hold no object and no sprite. Each is made from the starter genome with spawn variation (§4.9).
+   - **Sprites** are placed after the objects: the preset's count (§3.9), each on a tile drawn uniformly from the walkable mainland tiles that hold no object and no sprite. Each is made from the starter genome with spawn variation (§4.9). From Slice 29, a world config's `start_near_water` has them take the tiles near drinkable water first, while any is free (M2 design §19.1).
    - **The first population doesn't all run dry at once.** Each sprite world generation places starts with its energy and its hydration each drawn uniformly between 60% and 100% of the newborn level (§4.7). Without this, sprites that all start full would all get hungry, get thirsty, and die of neglect on the same tick.
 
 Property tests check full connectivity across many seeds.
@@ -931,7 +931,7 @@ A sprite spawned from the starter genome (`SpawnSprite { genome: None }`, or the
 The brain works the way a fruit fly's does, not the way its parts are laid out (v16). Two pathways compete for every choice:
 
 - **Instinct**, which the genome builds and which never changes in a sprite's life. The starter genome's instincts are very basic: they connect needs to actions and know the sprite's own kind, but know nothing about food, water or toys (§5.8).
-- **Learning**, which starts blank. It learns what each object type is **worth**, and a smaller set of **habits** (an object type × a verb). Learning can outvote an instinct but never erase it.
+- **Learning**, which starts blank. It learns what each object type is **worth**, and a smaller set of **habits** (an object type × a verb), from what happens to the sprite and, since Slice 28, by watching others (M2 design §18, #146). Learning can outvote an instinct but never erase it.
 
 ```
  STATE inputs (stable InputIds)       ATTENTION                              DECISION
@@ -1062,7 +1062,7 @@ World randomness is separate: plant rules and the order actions resolve in. It c
 - **Every** action that hasn't ended otherwise ends at the **action timeout** of 60 ticks, with outcome `timed_out`.
 - **A led or sliding sprite has no action** (v23, v25). Taking hold of it ends its action `pulled_away`; a shove lets go of it, and it slides with none. Let go and not sliding, it chooses afresh at its next step 5.
 - Bout lengths and the timeout are set in `physiology.ron`.
-- **Outcomes:** `applied` / `walking` / `blocked` / `failed` / `interrupted` / `timed_out` / `pulled_away`. `walking` and `blocked` can also be per-tick outcomes of an action that's still running. `interrupted` ends an action the sprite changed its mind about: attention switched away from its target (§5.3), or another verb beat it by more than `switch_margin` (5b). `pulled_away` (v23) ends the action of a sprite the Cursor takes hold of (§6.5).
+- **Outcomes:** `applied` / `walking` / `blocked` / `failed` / `interrupted` / `timed_out` / `pulled_away` / `too_full` (M2 design §19.4). `walking` and `blocked` can also be per-tick outcomes of an action that's still running. `interrupted` ends an action the sprite changed its mind about: attention switched away from its target (§5.3), since M2's Slice 29 only when a verb then pulls at least its `act_threshold` (M2 design §19.2), or another verb beat it by more than `switch_margin` (5b). `too_full` (M2) ends a bite or a drink its gut has no room for. `pulled_away` (v23) ends the action of a sprite the Cursor takes hold of (§6.5).
 
 ### 5.6 Learning (step 4)
 
@@ -1080,6 +1080,8 @@ World randomness is separate: plant rules and the order actions resolve in. It c
 | **Familiarity**, `familiarity_c` (0 to 1) | object type; sprites as a whole | attending to it | — |
 
 In this section, *c* is an object type (v19). Sprites are learned about one by one for worth and fear, and as a whole for habits and familiarity.
+
+**By watching, too** (since Slice 28): a sprite also takes on a share of what the one it watches knows about what that one tried, or had done to it. Of a thing, that's its worth for the try's motive, its good and its bad; of a sprite, or the Cursor, that the other tried something on or was hurt by, its fear, never a liking; and the habit of the verb tried, which the one watching keeps as a taught habit (M2 design §18.2, #146). Since Slice 29, what it takes on of a thing's bad and of habits is kept apart from what it found out itself and what the Cursor taught it, settles either way towards the other's first-hand view, and is never passed on (M2 design §19.7).
 
 **A thing's worth now:** `value_c = Σ_n level_n × G_n[c] + quiet × G[c] + B[c]`, over the needs *n*. A berry learned good for hunger counts for a lot when the sprite is starving and nothing when it's full; a thornbush learned bad counts always. For an object type the sprite doesn't know yet, the values are its category's summary (below).
 
@@ -1117,11 +1119,11 @@ With no attempt within reach, the tick teaches as any other: no worth, and the s
 - **A crash after a shove** by the visible Cursor teaches fear of it the same way, in the tick of the crash only, so a hidden Cursor's zap a moment later teaches nothing about the Cursor. In a tick the Cursor corrects the sprite, the pain is the correction's: it teaches fear of the Cursor only if the Cursor was visible, crash or no crash.
 - What each teaches about the thing touched, and the habit, is as for a hidden Cursor (above): the lesson is about the Cursor **as well as** the thing.
 - **Getting used to it.** Each tick a sprite sees the Cursor near (its flood reaches it, §3.6) and neither corrects it nor is feared anew (a crash's tick), `F[cursor] *= 1 − cursor_calming × nearness`, where `nearness = max(0, 1 − d / fear_reach)` and `d` is the Chebyshev distance in tiles over the reach of the sprite's flood. So a feared Cursor that sits on a sprite and does nothing wears its fear off fastest: the sprite comes to see it can't do anything about it. Fear of sprites has no such rule; habituation in general is [#72](https://github.com/Keazra/terra-sprites/issues/72).
-- **Being led** teaches nothing, visible or not, and onlookers learn nothing from what's done to another sprite ([#106](https://github.com/Keazra/terra-sprites/issues/106)).
+- **Being led** teaches nothing, visible or not. **What's done to another sprite** teaches the one watching it, since Slice 28: a sprite that sees another being hit, shocked or petted learns from it by watching (M2 design §18.2, #146 and [#106](https://github.com/Keazra/terra-sprites/issues/106)).
 
 **Sprites in general** (v18) are a summary of the *n* sprites a sprite remembers, other than those it knows only by sight, which it judges by the summary as it would a stranger (M2 design §15.2, #186): each value (each `G_n`, `G`, `B` and `F`) is their mean × `clamp((n − 1) / (generalise − 1), 0, 1)`. So a sprite that knows only its bully fears no stranger, and one hurt by three different sprites is wary of every stranger. A sprite it doesn't remember is judged by the summary, and the Brain tab shows the summary as "sprites".
 
-**Category summaries** (v19) work the same way for object types. A sprite **knows** an object type once it has touched one. A category's summary is, for each value (each `G_n`, `G` and `B`), the mean over the *n* object types in the category the sprite knows × `clamp((n − 1) / (generalise_types − 1), 0, 1)`. An object type the sprite doesn't know is judged by its category's summary, which counts for nothing until the sprite knows two types in the category. So one thornbush doesn't make every bush bad: slice 9 measured that failure when pricks leaked onto berry bushes (above). Nothing is learned about a category directly; habits and familiarity have no summary, so an unknown type's start at 0. Object types are never forgotten. Sprites in general is the sprite category's summary, over the sprites it remembers.
+**Category summaries** (v19) work the same way for object types. A sprite **knows** an object type once it has touched one, or, since Slice 28, taken on something of its worth, its good or its bad by watching (M2 design §18.2, #146). A category's summary is, for each value (each `G_n`, `G` and `B`), the mean over the *n* object types in the category the sprite knows × `clamp((n − 1) / (generalise_types − 1), 0, 1)`. An object type the sprite doesn't know is judged by its category's summary, which counts for nothing until the sprite knows two types in the category. So one thornbush doesn't make every bush bad: slice 9 measured that failure when pricks leaked onto berry bushes (above). Nothing is learned about a category directly; habits and familiarity have no summary, so an unknown type's start at 0. Object types are never forgotten. Sprites in general is the sprite category's summary, over the sprites it remembers.
 
 **Habits,** along the trace:
 - **The trace:** every tick, each deciding sprite commits one entry at the end of step 6: that tick's snapshot (its verb, the object type it attended (v19), the verb's motive, and how new that type was). Entries are kept while `λ^age ≥ 0.01`, up to a cap of 512. For each entry *j*, `weight_j = λ^(t − t_j)`; at tick *t* the freshest entry is from *t−1*.
@@ -1147,7 +1149,7 @@ With no attempt within reach, the tick teaches as any other: no worth, and the s
 - **Decisions that build up over time,** with body language ([#15](https://github.com/Keazra/terra-sprites/issues/15)).
 - **Places** ([#40](https://github.com/Keazra/terra-sprites/issues/40)). Individual sprites came in v18, and the visible Cursor in v29.
 - **"Not while they're watching"** ([#105](https://github.com/Keazra/terra-sprites/issues/105)): a lesson from a visible Cursor that holds only while it's in sight, the third reading of what its touch teaches. It needs lessons that hold only in a situation.
-- **Chasing the light** ([#104](https://github.com/Keazra/terra-sprites/issues/104)): play with the Cursor easing boredom, as a cat chases a laser dot. Left out so what sprites think of the player comes only from how they're treated; it's one rule in the Cursor's pseudo type.
+- **Chasing the light** ([#104](https://github.com/Keazra/terra-sprites/issues/104)): play with the Cursor easing boredom, as a cat chases a laser dot. Left out so what sprites think of the player comes only from how they, or a sprite they watch, are treated (M2 design §18.2, #146); it's one rule in the Cursor's pseudo type.
 - **Genes that switch on at life stages** (M2, [#49](https://github.com/Keazra/terra-sprites/issues/49)): a new instinct joins the instinct pathway mid-life without touching what was learned.
 
 ### 5.7 Genes for the brain
@@ -1289,13 +1291,39 @@ The species is dropped into a world it doesn't know and has to learn about it. I
 
 | Tab | Shows |
 |---|---|
-| **Body** | What the sprite is doing, in plain words (below); age and lifespan; speed and sense radius as expressed; a bar for each drive, with its level and an arrow for its change over the last tick (`▲` rising, `▼` falling, none when steady); the physical levels; the observed list (below). In M2 it gives the sex and parents after the traits (M2 design §10.7), and from Slice 25 where the sprite came from and its generation (M2 design §17.5) |
+| **Body** | What the sprite is doing, in plain words (below); age and lifespan; speed and sense radius as expressed; a bar for each drive, with its level, an arrow for its change over the last tick (`▲` rising, `▼` falling, none when steady) and, from #328, its sparkline (below); the physical levels; the observed list (below). In M2 it gives the sex and parents after the traits (M2 design §10.7), and from Slice 25 where the sprite came from and its generation (M2 design §17.5) |
 | **Brain** | What it attended to and decided, then its memory grouped under each thing (v40), then its places |
-| **Chem** | One list: each chemical on its own line with its level and its change per tick (`-.0002`, blank when it rounds to 0), the physical chemicals, then a blank line and the signal chemicals. From slice 8 the reward line also shows `last_r` as "felt": `reward  .00  felt -.42`. The 16 hormones sit in a 4×4 grid of levels below, so all of it fits at 100×30. Reward and punishment are consumed every tick, so their levels always read 0 between ticks. |
+| **Chem** | One list: each chemical on its own line with its level, its change per tick (`-.0002`, blank when it rounds to 0) and, from #328, its sparkline (below; none for reward and punishment), the physical chemicals, then a blank line and the signal chemicals. From slice 8 the reward line also shows `last_r` as "felt": `reward  .00  felt -.42`. The 16 hormones sit in a 4×4 grid of levels below, so all of it fits at 100×30. Reward and punishment are consumed every tick, so their levels always read 0 between ticks. |
 | **Genome** | Genes grouped under headings: traits first, on one line (`speed 7.21 · sense 9.87 · lifespan 61,204`), then half-lives, reactions, emitters, receptors, starting levels, brain settings (`tau base .2`), instincts (`thirst & not target adjacent → drink -.5`) and attention instincts (`hunger → attends to bush +.8`, naming the category as the gene does, v19), and unknown genes last, each group in genome order. Each gene is a plain line with 3 significant figures, so spawn variation shows: `low energy → hunger +.00428 past .515`, `hunger falls → reward +1.02 past .0198`, `hunger halves every 2,041 ticks`. A line too long for the tab wraps, indented. A flagged, unexpressed, unknown or unmatched (v19) gene is dimmed, with its reason on the line below (§4.3); an unmatched gene written by number shows as its number, as an unknown gene does. `g` exports to RON. |
 | **World** | The data pack's identity; population and deaths by cause (counted by the sim, so they're saved); each object type in ID order with its count, the count in each stage (left out for a type with only one stage), and the total of each counter (such as the fruit on all bushes). It's drawn from the data, so a pack's new object types appear with no new code. From Slice 26 it starts with a small population graph (M2 design §14.4), and from Slice 25 says the generations alive (M2 design §17.5). |
 
-- **The Body tab's action line** describes what the sprite is doing, in the present tense, naming its target, with no coordinates. It never speaks as the sprite: the Brain tab shows *why*, and a line in the sprite's own voice could contradict it. When an action ends, its ending stays until the next one starts.
+- **Sparklines** (#272): from #328, eight shades at the end of each drive's line on the Body tab and of each chemical's line on the Chem tab, showing how its level moved over about the last 50 ticks, oldest on the left. So the player sees at once whether hunger is climbing or easing after a meal, which the arrow, a single tick's change, can't show. A sprite that ate 14 ticks ago, was hurt a little before that, and is getting thirsty again:
+
+  ```
+  │ hunger      █░░░░░░░░░ .09 ▲   ████▓░░░    │
+  │ thirst      █░░░░░░░░░ .07 ▲   ░░░░▒▒▒▒    │
+  │ pain        █░░░░░░░░░ .12 ▼   █████▓░░    │
+  │ tiredness   ░░░░░░░░░░ .05 ▲   ░░░░░░░░    │
+  ```
+
+  and on its Chem tab, the water in its gut being taken in, so hydration climbs, beside stamina easing by under .02, which stays one shade:
+
+  ```
+  │ hydration     .32  +.0017      ░░▒▒▒▓▓█    │
+  │ water         .26  -.0020      █▓▓▒▒▒░░    │
+  │ stamina       .37  -.0020      ▒▒▒▒▒▒▒▒    │
+  ```
+
+  - **Each shade is the average of a stretch of six ticks,** the stretches going by the tick count the status line shows once each tick has run (counts 6 to 11 make one, 12 to 17 the next, and so on), so the eight cover the last 43 to 48 ticks. The rightmost is the stretch still running, so a meal shows in it at once, and the row steps one place left as each stretch begins: every 4.8 seconds at 1×, 1.2 at 4×. An average shows a level climbing or easing without flicker, and a meal's drop as a step.
+  - **A row shows its own ups and downs:** its lowest average is drawn `░` and its highest `█`, with `▒` and `▓` between, so a climb or a fall fills the row whatever the level, as `░▒▒▒▓▓██` for hunger climbing from .62 to .70 in a sprite out of energy, as fast as the starter genes make it climb, or `███▓░░░░` for thirst after a drink. The bar and the number beside it say how high the level is; the sparkline says how it got there.
+  - **But a row is never stretched past a tenth,** one cell of the bar: averages that lie within a tenth of each other are drawn as if they spanned a tenth, placed as the level sits between 0 and 1. So a row that hardly moves keeps the shade of its level, `░` under a quarter, `▒` under a half, `▓` under three quarters and `█` above, as stamina's does, and a small drift stays a step or two. In numbers: with the averages' lowest `lo` and highest `hi`, `span` the greater of `hi − lo` and 0.1, and `low = lo − (span − (hi − lo)) × (lo + hi) / 2`, an average `a` is shade `⌊4 × (a − low) / span⌋`, at most 3, where 0 is `░` and 3 is `█`.
+  - **A stretch not yet seen is blank,** so a row fills from the right: a hatchling's, and every sprite's once a world is made or loaded.
+  - **Every chemical on a line of its own has one:** on the Chem tab the physical chemicals, the drives and the named hormones, such as the feminiser. Reward and punishment don't, since they're used up every tick and always read 0 between ticks, nor do the hormone grid and the Body tab's physical levels, three to a line, which have no room. It's drawn from the data, so a pack's new drive or chemical gets one with no new code.
+  - **It starts in the 33rd column inside the inspector on both tabs,** two after the longest drive line, so the rows line up and nothing already on a line moves: a line is then 40 of the inspector's 44 columns. A name too long for its column, from a data pack, pushes it right.
+  - **It's `░▒▓█` in every theme,** as the bar is (§6.2: text stays CP437), and a drive's is drawn in its bar's colour on both tabs, any other in its line's.
+  - **The screen keeps it, not the world** (§6.8): after every tick the game runs, for every living sprite, so selecting a sprite shows its past at once. A replay's ticks count; fast-forward's don't, since it has no screen. It's never saved and isn't part of `state_hash`, and the open tab's policy shows or hides it with the rest of the tab (§6.4). Past 4×, in Lab mode, it turns over faster than it can be read, as the numbers beside it do.
+
+- **The Body tab's action line** describes what the sprite is doing, in the present tense, naming its target, with no coordinates. It never speaks as the sprite: the Brain tab shows *why*, and a line in the sprite's own voice could contradict it. When an action ends, its ending stays until the next one starts, or since M2's Slice 29, a sprite with nothing to do shows it for a tick and then what it's watching (M2 design §19.2).
 
   | Moment | Line | Detail view (`v`) |
   |---|---|---|
@@ -1381,7 +1409,7 @@ The species is dropped into a world it doesn't know and has to learn about it. I
   - The tile names its terrain and any object on it, with the object's stage if it has stages: `(61,40) grass · berry bush (mature)`.
   - **Display names** are the data's names with `_` shown as a space (`berry_bush` → "berry bush"), so `objects.ron` needs no separate display name. Its `plural` is the one other form the screen needs (§3.5.1).
 - **Overlays** (v30) fill the screen between the top bar and the status line, inside a single-lined border with their name at the left of its top edge and ` esc close ` at the right. The status line stays.
-  - **The help screen** (`?`): every key in three columns of groups (time and view; the Cursor; sprites and the inspector), then the colour legend, a sprite glyph in each of the data pack's drives' colours and "none", the emote legend, from Slice 25 the lineage colours (M2 design §17.4), and the game's folder for its files (§6.7). It fits at 100×30, so it doesn't scroll. `?` or `Esc` closes it; other keys do nothing while it's open.
+  - **The help screen** (`?`): every key in three columns of groups (time and view; the Cursor; sprites and the inspector), then the colour legend, a sprite glyph in each of the data pack's drives' colours and "none", the emote legend, from Slice 25 the lineage colours (M2 design §17.4), and the game's folder for its files (§6.7). It fits at 100×30, so it doesn't scroll. `?` or `Esc` closes it; other keys do nothing while it's open, but `F3` (below).
 
     ```
     ┌─ Help ─────────────────────────────────────────────────────────────────────────────── esc close ─┐
@@ -1396,8 +1424,8 @@ The species is dropped into a world it doesn't know and has to learn about it. I
     │ m          event filter         wheel      change mode          INSPECTOR                        │
     │ v          exact detail         C again    the Place menu       [ ]        switch tabs           │
     │ ?          this help            hold E     aim, let go to send  PgUp PgDn  scroll a tab          │
-    │ Esc        let go, back, quit?                                                                   │
-    │ Ctrl+C     quit at once                                                                          │
+    │ Esc        let go, back, quit?                                  DEBUG                            │
+    │ Ctrl+C     quit at once                                         F3         how it's running      │
     │                                                                                                  │
     │ COLOURS: a sprite's strongest drive, once it's above half                                        │
     │ ☺ hunger  ☺ thirst  ☺ pain  ☺ tiredness  ☺ boredom  ☺ loneliness  ☺ crowdedness  ☺ none          │
@@ -1420,9 +1448,26 @@ The species is dropped into a world it doesn't know and has to learn about it. I
 
     - It opens sorted as it was last, starting by number, with the selected sprite highlighted, or else the first. `Tab` sorts by number, name (named sprites first, by name, then the rest by number), age (oldest first) or drive (in the data pack's order, strongest first within each, those with none last); `Shift+Tab` goes back. The title says the order.
     - The arrows, `W` and `S`, or the wheel move the highlight (v38: the scroll keys too), a row in reverse video, which stays on its sprite when the list is re-sorted. A list too long for the screen scrolls to keep it in view.
-    - `Enter`, or a click on a row, selects that sprite, centres the view on it and closes the list. `l` or `Esc` closes it without choosing; other keys do nothing while it's open. With no sprites, it reads "No sprites".
+    - `Enter`, or a click on a row, selects that sprite, centres the view on it and closes the list. `l` or `Esc` closes it without choosing; other keys do nothing while it's open, but `F3` (below). With no sprites, it reads "No sprites".
   - **The population graph** (`p`, from Slice 26): the world's population over its whole run, each column split by the share of each life stage and of eggs, with a moment picked and read under it (M2 design §14).
   - **The family tree** (`k`, from Slice 25): the selected sprite's grandparents, parents, young, and brothers and sisters, living or dead, walked with the arrows (M2 design §17).
+- **The debug overlay** (`F3`, in every build, [#311](https://github.com/Keazra/terra-sprites/issues/311)) isn't one of these: it's a small box inside the map view's border, at its top right, until `F3` hides it again. In a world it's drawn over any menu or overlay, at 100×30 and up; `F3` works whatever's open, a name being typed included, even where other keys do nothing. It says how the game is running on the player's computer, so "it feels slow at Max" becomes numbers in a screenshot:
+
+  ```
+  ┌─ Debug ────────────── F3 ─┐
+  │ ticks/s 19.0 of 20        │
+  │ sim     1.2 of 25 ms      │
+  │ draw    3.4 ms, 25 fps    │
+  │ keys    releases reported │
+  └───────────────────────────┘
+  ```
+
+  - **Ticks a second** run over the last second, against what the speed asks for (`of 1.25` at 1×, `of 20` at 16×); `at Max` at Max, and `paused` while paused.
+  - **The simulation's time** in a frame, on average, against the frame's 25 ms budget (§6.6): the time the budget counts.
+  - **The drawing's time** in a frame, on average, and the frames a second.
+  - **Whether the terminal reports key releases** (§6.6): `releases reported`, `no releases` (a held key is told from taps only by its repeats), or `kitty protocol`.
+  - **The frame loop times each frame** and hands the times to the screen, which reads them once a second's worth is in, so the numbers hold still long enough to read; until then they're `-`. It measures the game as it's played, drawing included. The speed example (A5) stays the measure of the simulation alone.
+  - **It never touches the world:** `F3` answers no prompt (a question such as "Quit?" still waits, §6.6), sends no command, and works in a replay.
 
 ### 6.2 Semantic tiles and themes
 
@@ -1502,7 +1547,7 @@ The species is dropped into a world it doesn't know and has to learn about it. I
 ### 6.5 The Cursor
 
 **What it is** (v21): the Cursor is the player's hard-light projection into the terrarium (§0), and the 3×3 grid on the map is its form.
-- **Visible or hidden** (v21; built in v29): each cursor mode has its own switch, and every mode starts hidden. `H` turns the current mode's on or off; held, it acts once. Hidden, the Cursor's touch is a feeling from nowhere (§4.6, §5.6). Visible, sprites see it as a thing of its own, the Cursor (§3.5.5, §3.6): they can go to it or back away from it, and learn to like or fear it from how it treats them (§5.6). While it's visible it draws as a frame of light, `═` above and below and `║` at the sides, in place of the arrows, following or not (below), and the status line says `· seen` after the mode (§6.1).
+- **Visible or hidden** (v21; built in v29): each cursor mode has its own switch, and every mode starts hidden. `H` turns the current mode's on or off; held, it acts once. Hidden, the Cursor's touch is a feeling from nowhere (§4.6, §5.6). Visible, sprites see it as a thing of its own, the Cursor (§3.5.5, §3.6): they can go to it or back away from it, and learn to like or fear it from how it treats them, and since Slice 28 to fear it from how it treats a sprite they watch (§5.6; M2 design §18.2, #146). While it's visible it draws as a frame of light, `═` above and below and `║` at the sides, in place of the arrows, following or not (below), and the status line says `· seen` after the mode (§6.1).
 - **Following a sprite while visible** (v29), the Cursor sits on it and the sprite sees it there like anything else. A sprite that fears it backs away from a Cursor that keeps following, and gets used to it if it stays and does nothing (§5.6).
 
 - **Scrolling:** `W` `A` `S` `D` or the arrow keys scroll the viewport one tile, and Shift makes it 5. Holding a key keeps scrolling. The viewport stops at the wall (from Slice 31, a quarter of the map view past it: M2 design §11.1). There is **no keyboard cursor**.
@@ -1608,6 +1653,7 @@ N ═ M
 | `p` | Open or close the population graph (M2 design §14) |
 | `k` | Open or close the family tree of the selected sprite or egg (M2 design §17) |
 | `v` | Switch the detail view on or off: the exact action line (§6.1) |
+| `F3` | Show or hide the debug overlay: how the game is running (§6.1, #311) |
 | `F5` / `F9` | Quicksave / quickload (§6.7, v32) |
 | `Ctrl+S` / `Ctrl+O` | Save by name / load a save from a list (§6.7, v32) |
 | `Ctrl+T` | Pick a theme from the built-in ones and the themes folder (§6.7, v34) |
@@ -1625,7 +1671,7 @@ N ═ M
 
 - **Keys:** `space` pauses and resumes; `.` steps while paused (below); `+` and `-` step through ⅛×, ¼×, ½×, 1× (1.25 ticks per second), 2×, 4×, 8×, 16× (20 ticks per second) and **Max**. Each press halves or doubles the rate. The game starts at 1×; `-` stops at ⅛× (5/32 of a tick a second) and `+` at Max, or at 4× in a Story world, saying "4x is Story mode's fastest" (M2 design §16.2). The top bar labels the slow speeds `1/2x`, `1/4x` and `1/8x`, and shows the speed while paused too, as `|| paused 4x` (v27).
 - **A step** (v27) runs one real second's worth of ticks at the speed, rounded down, at least 1 and at most 20: 1 at 1× and slower, 2 at 2×, 5 at 4×, 10 at 8×, 20 at 16× and Max. It runs within the frame's budget like any other ticks, and what the budget cuts short runs on the next frames. A press before a step has finished starts a whole step afresh, at the speed then, rather than adding another. Resuming drops what's left of it.
-- **Quitting:** `Esc` (from Select, with no menu open and nothing in the Cursor's grip) asks "Quit? y quit the game  t title screen  any other key stays" ([M2 design v3 §8.4](archive/m2-generations-v3.md); it asked "Quit? (y/n)" until then). Only `y` quits, and `t` goes back to the title screen; any other key, `Esc` included, cancels (v33), so `Esc` never quits on its own. `Ctrl+C` quits at once.
+- **Quitting:** `Esc` (from Select, with no menu open and nothing in the Cursor's grip) asks "Quit? y quit the game  t title screen  any other key stays" ([M2 design v3 §8.4](archive/m2-generations-v3.md); it asked "Quit? (y/n)" until then). Only `y` quits, and `t` goes back to the title screen; any other key, `Esc` included, cancels (v33), so `Esc` never quits on its own. `F3` alone answers nothing: it shows or hides the debug overlay (§6.1, #311) and the question waits. `Ctrl+C` quits at once.
 - **Exact pacing:** the UI clock counts owed ticks in integer maths, with rates in 32nds of a tick per second, so every speed (including ⅛×) runs at exactly its nominal rate with no drift.
 - **Held keys:**
   - **1× is a stop for held keys.** A held `+` or `-` stops at 1×; a fresh press is needed to go past it, in either direction.
@@ -1640,6 +1686,7 @@ N ═ M
   2. run as many ticks as the speed allows, within a **~25 ms** budget
   3. render, at about 30 fps
 - At Max, the sim uses whatever time rendering leaves.
+- **Each frame is timed** (#311): its ticks and the time they took, as the budget counts it, and the time drawing took. The debug overlay reads them (§6.1).
 
 ### 6.7 Files
 
@@ -1647,7 +1694,7 @@ N ═ M
 - **Replays** (v35, §2.7): the session log is written at each autosave, on quitting and on a panic. `--replay <file>` plays one back, paused at first, saying "Replaying last_session.replay: from a new world to tick 48,210" (or "from a save at tick 300"). Whatever would change the world is refused, saying "It's a replay: only time, the view and the inspector work, until Ctrl+R takes it over" (v36): the Train and Grab modes, the wheel over the map, naming, showing the Cursor (`H`) and loading. Saving and exporting a genome still work. At the end it pauses once, saying "The replay ends here, at tick 48,210: time can run on, with nothing more done"; at a divergence it pauses, saying "The replay parted from its recording between ticks 1,000 and 2,000". The recorded player's Cursor isn't drawn. `Ctrl+R` takes a replay over (v36): "You took over the replay at tick 4,210: it's your world now", and the top bar's save status returns.
 - **Saving and loading:** `F5` quicksaves, `F9` quickloads, and `Ctrl+S` / `Ctrl+O` save or load by name.
   - **By name** (v32): `Ctrl+S` opens a prompt on the status line, `Save as: seed 7 tick 48210_   enter save  esc cancel`, offering the seed and the tick. Typing replaces the name offered, up to 40 characters, `Backspace` rubs out, `Enter` saves and `Esc` gives up; the same name saves over. `Ctrl+O` opens a menu, `Load`, of every save, newest first, the quicksave and autosaves included, picked as the Place menu's items are. `F9` with no quicksave says "There's no quicksave yet: F5 makes one".
-  - **Asking first** (v32): loading over a world that has run since it was last saved asks "Load quicksave? The world has run 4m since it was last saved (y/n)", or "This world has never been saved". `y` loads, as does `F9` again when it's the quicksave asked about; any other key keeps the world.
+  - **Asking first** (v32): loading over a world that has run since it was last saved asks "Load quicksave? The world has run 4m since it was last saved (y/n)", or "This world has never been saved". `y` loads, as does `F9` again when it's the quicksave asked about; any other key keeps the world, but `F3`, which only shows or hides the debug overlay (§6.1, #311).
   - **After a load** (v32) the game is paused. The screen starts afresh on the loaded world, as for a new one, with the view centred where it was when the world was saved, the Cursor where the save left it, in Grab mode if it holds or leads something, and seen if it was. The speed, the theme, the colours, the open tab, the event log's filter and the sprite list's order carry over.
   - **Errors** go on the status line, as a refusal: "Couldn't save: …", "Couldn't load quicksave: a newer Terra Sprites (0.2.0) saved it, …".
 - **Autosave:** every 10 real-time minutes, keeping the last 3. Only time that runs, unpaused, counts (v32), and quitting autosaves too, unless the world hasn't run since its last save.
@@ -1659,7 +1706,7 @@ N ═ M
 
 ### 6.8 UI architecture
 
-- **`App`** holds the UI state: where the Cursor is, cursor mode (and each mode's reserve), Follow (v21 as the lock), viewport, selection, screen state (Normal / Menu / Prompt / Help / Sprite list), colour mode, emote and feedback timers, and the active `InfoPolicy`.
+- **`App`** holds the UI state: where the Cursor is, cursor mode (and each mode's reserve), Follow (v21 as the lock), viewport, selection, screen state (Normal / Menu / Prompt / Help / Sprite list), colour mode, emote and feedback timers, from #328 the levels the sparklines draw (§6.1), and the active `InfoPolicy`.
 - **Input:** a keybinding table maps keys to UI `Action`s. Each `Action` either changes `App` or produces a `Command`.
 - **Rendering** is a pure function, `render(frame, &App, &World)`.
 - **Panic hook:** it restores the terminal; the replay is written as the panic carries on (v35, §2.9).
@@ -1762,7 +1809,7 @@ Implementation is **test-first, one vertical slice at a time.** Everything in `t
 |---|---|---|---|
 | A1 | 1 sprite; berry bushes, thornbushes, water. The world may be shaped to meet the baseline: a small walled arena where thornbushes outnumber berry bushes | none | Applied thornbush contacts (Eat, Play and Hit on a thornbush) over ticks 0–20,000 ≤ 50% of the control's, where the control is the same seed with learning switched off (v16, §7.1). The control needs ≥20 such contacts; below that the test fails as badly calibrated. The learning sprite must live through the run. |
 | A2 | 1 sprite; balls, food, water | Each applied Play on a Ball at tick *t* < 9,900 → a pet, `Reward(actor)`, stamped *t+1* | Applied Play-on-Ball count ≥ 1.5× control |
-| A3 | 4 sprites in a small arena; food, water | Each applied Hit on a Sprite at tick *t* < 9,900 → a shock, `Correct(actor, amplified)`, meaning **the hitter**, stamped *t+1* | Applied Hit-on-Sprite count, all sprites combined, ≤ 0.5× control |
+| A3 | 4 sprites in a small walled arena, 7 by 5 inside; food, water. Since sprites act only when moved (M2 design §19.2), sprites with room to roam seldom meet to hit each other, so the arena keeps them close | Each applied Hit on a Sprite at tick *t* < 9,900 → a shock, `Correct(actor, amplified)`, meaning **the hitter**, stamped *t+1* | Applied Hit-on-Sprite count, all sprites combined, ≤ 0.5× control |
 
 **Measured with slice 10's PR** (v21), not CI tests:
 - **The strength sweep:** A2's and A3's trained runs with the pet or zap at a few strengths (¼, ½ and full), to see how many a lesson takes and what they do to the result.
@@ -1781,7 +1828,7 @@ M1 is **done** when all of the following hold:
 | A1 | The thornbush lesson (§7.3) | Scenario test |
 | A2 | Reward training (§7.3) | Scenario test |
 | A3 | Correct training (§7.3) | Scenario test |
-| A4 | **Viability,** a safety floor (v37). In the default world, ≥80% of sprites survive the first 10,000 ticks (median of 10 seeds), and starvation plus dehydration cause <25% of the grown-up deaths, those in ticks 10,000–50,000, over all 10 seeds together; with fewer than 10 such deaths it's met | Baseline run's viability run (§7.6) |
+| A4 | **Viability,** a safety floor (v37), and since Slice 29 M2's G5 too (M2 design §19.6). Of the unattended run's newborns, 10% to 30% grow up (median of 10 seeds); of the young hatched in the viability run, at least 60% grow up, over all 10 seeds together, those still growing at the end not counted; and adults dying of starvation or dehydration are under 1 in 20 of the grown-up deaths, those of sprites grown up, adult or old, over all 10 seeds together, with old sprites' reported apart; with fewer than 10 such deaths it's met. Until Slice 29 it asked that ≥80% of sprites survive the first 10,000 ticks, and counted grown-up deaths as those in ticks 10,000–50,000, under 25% | Baseline run's viability and unattended runs (§7.6) |
 | A5 | **Performance.** 100 sprites at ≥200 ticks per second in a release build on the development machine | Benchmark |
 | A6 | **Determinism and persistence.** Test layers 3 and 4 pass | Tests |
 | A7 | **Robustness.** A headless soak of 1,000,000 ticks at Max speed with a random script of the Cursor's commands produces no panics and no invariant violations | Baseline run's soak (§7.6) |
@@ -1814,9 +1861,11 @@ What's too slow for CI is measured on `main` instead, each time it moves, by a *
 
 - **What it measures:**
   - **The viability run:** the default world on seeds 1–10, 50,000 ticks each, with no player. It gives:
-    - A4: survival at tick 10,000, as the median of 10 seeds, and the grown-up deaths over all of them, with how many were of starvation or dehydration (v37)
+    - A4: the young hatched that grew up, over all 10 seeds, and the grown-up deaths over all of them, adult or old, with how many were of starvation or dehydration (v37; by life stage since Slice 29, M2 design §19.6)
     - the thorn trap's count: deaths by thornbush in ticks 0–30,000, the same worlds as its lab scenario (§7.3)
     - per seed, who survived, what killed the rest, and how often each verb was applied.
+    - the genes of the hatched sprites alive at its end, with **gene warnings** when they've gone somewhere worth a look: more than half of them lacking a needs gene, or a gene value nearly at the end of its range (#274, M2 design §16.6).
+  - **The unattended run** (Slice 29, M2 design §19.6): the default world on seeds 1–10 with its first sprites newborns and nobody else, until each has grown up or died. It gives A4's share of newborns that grew up, as the median of 10 seeds, with each seed's and what killed the rest.
   - **A1–A3's numbers:** each scenario's medians, for its runs and their controls, on CI's seeds. CI stays the judge; the report records them so that a change shows.
   - **The soak (A7)** (v37): the default world for a million ticks with a random script of the Cursor's commands, on a new seed each run, from the clock unless one is given. It runs first, as the longest job.
     - **The script plays the player:** pets, hugs, zaps and shocks; taking hold, letting go and shoving; picking up, putting down and throwing; moving the Cursor and showing or hiding it; placing, spawning and naming. It acts on about one tick in ten, and while the Cursor leads a sprite, moves it on half the ticks.
@@ -1824,8 +1873,9 @@ What's too slow for CI is measured on `main` instead, each time it moves, by a *
     - **It spawns only while there are fewer than twice the sprites the world started with.**
     - **One seed makes it:** the world is generated from it, and the script draws from its own RNG, seeded from it on a stream of its own, never from the world's (§2.3). `cargo run --profile baseline -p terra-sim --example soak -- --seed N --ticks T` runs one again.
     - **Its report** gives its seed and its verdict, and, if it finished, the sprites alive at the end and the most at once, the objects, the deaths, and each command given and refused. Only its verdict can count as moved.
-- **The baseline report** names the commit it measured and the one it's compared with, and opens with every number that moved.
+- **The baseline report** names the commit it measured and the one it's compared with, and opens with every number that moved. A report from before Slice 29 counted A4's grown-up deaths by tick, so its A4 counts aren't set beside the counts by life stage, which show as new (M2 design §19.6).
   - Each criterion is **met**, **not met yet** or **no data**, against §7.3 and §7.4's pass marks exactly, so a share of no deaths is no data. A criterion that a tuning slice hasn't yet reached names that slice.
+  - **Gene warnings** (#274) come after what moved and anything broken, or it says there are none. A warning is no verdict, and the launcher files no issue for one (M2 design §16.6).
   - **Broken** means only a panic or a broken invariant (a crash is a shoved sprite's, §3.5.4). It's given with the seed, what it said, which names the tick for a broken invariant, and the command that replays it. The seeds that finished are still reported, and a median over fewer seeds than ran says so.
 - **The observer,** an AI agent, reads the report, the code and the commits since the last one, and writes the **briefing**. The briefing gives, in this order: in plain words, what was tested and what changed; the numbers that moved and what might explain them; anything that looks wrong, and how sure it is. The observer changes nothing itself. The launcher does everything that has an effect, and files an issue, or comments on an open one, only for a broken run; the issue carries the observer's guess at the cause, labelled as a guess, which the owner is happy to see on GitHub.
 

@@ -517,6 +517,9 @@ pub(crate) struct Senses {
     pub(crate) steps: u32,
     /// Whether it rested during the previous tick.
     pub(crate) resting: bool,
+    /// Whether it stands where it is (M2 design §19.2): no action running,
+    /// and neither led by the Cursor nor sliding from a shove.
+    pub(crate) standing: bool,
     /// Its life stage (M2 design §9.1).
     pub(crate) stage: LifeStage,
     /// The share of the age its genes say that wear and broken genes have
@@ -613,8 +616,14 @@ fn physiology(program: &Program, body: &mut Body, senses: &Senses, data: &DataPa
     let steps = senses.steps as f32;
     let pace = traits.speed / 8.0;
     let metabolism = physiology.metabolism;
-    chems[indices.energy] -= metabolism.basal
-        + metabolism.per_sense_tile * traits.sense_radius
+    // A rest costs less than standing awake (M2 design §19.2).
+    let rest = if senses.resting {
+        metabolism.resting
+    } else {
+        1.0
+    };
+    chems[indices.energy] -= rest
+        * (metabolism.basal + metabolism.per_sense_tile * traits.sense_radius)
         + steps * metabolism.per_step * pace * pace;
     // Growing up takes the same energy however long it takes, and a later
     // old age costs a little all life (M2 design §9.3).
@@ -623,15 +632,27 @@ fn physiology(program: &Program, body: &mut Body, senses: &Senses, data: &DataPa
         chems[indices.energy] -= ageing.growth / traits.grows_up;
     }
     chems[indices.energy] -= ageing.upkeep * traits.grows_old / 10_000.0;
-    for (gut, into, rate) in [
+    // Each thing in the gut moves into the body at its own pace, one that
+    // waits only as the body has room for it (M2 design §19.4).
+    for (gut, into, content) in [
         (indices.food, indices.energy, physiology.digestion.food),
         (indices.water, indices.hydration, physiology.digestion.water),
     ] {
-        let digested = chems[gut].min(rate);
+        let mut digested = chems[gut].min(content.pace);
+        if content.waits {
+            digested = digested.min((1.0 - chems[into]).max(0.0));
+        }
         chems[gut] -= digested;
         chems[into] += digested;
     }
-    chems[indices.hydration] -= physiology.hydration_loss;
+    // A young sprite's thirst, and its dying once it has dried out, are
+    // paced to its childhood, so one that grows up sooner needs as much
+    // water (M2 design §19.5).
+    let paced = match ageing.thirst_childhood {
+        Some(childhood) if senses.stage == LifeStage::Young => childhood / traits.grows_up,
+        _ => 1.0,
+    };
+    chems[indices.hydration] -= physiology.hydration_loss * paced;
     chems[indices.stamina] += if senses.steps > 0 {
         -steps * physiology.stamina.per_step
     } else if senses.resting {
@@ -654,7 +675,7 @@ fn physiology(program: &Program, body: &mut Body, senses: &Senses, data: &DataPa
         (
             DeathCause::Dehydration,
             chems[indices.hydration] <= 0.0,
-            injury.dehydration,
+            injury.dehydration * paced,
         ),
         // Once an old sprite's genes have weakened to where its body
         // gives out (M2 design §9.4).
@@ -695,6 +716,9 @@ fn physiology(program: &Program, body: &mut Body, senses: &Senses, data: &DataPa
     loci[indices.nearby_sprites] = senses.nearby_sprites;
     loci[indices.moving] = if senses.steps > 0 { 1.0 } else { 0.0 };
     loci[indices.resting] = if senses.resting { 1.0 } else { 0.0 };
+    if let Some(standing) = indices.standing {
+        loci[standing] = if senses.standing { 1.0 } else { 0.0 };
+    }
     if let Some(breeding) = indices.breeding {
         let level = |sensed: bool| if sensed { 1.0 } else { 0.0 };
         loci[breeding.fertile] = level(senses.fertile);
@@ -737,8 +761,7 @@ mod tests {
             "basal",
             "per_sense_tile",
             "per_step",
-            "food",
-            "water",
+            "pace",
             "hydration_loss",
             "idle",
             "resting",
@@ -1052,6 +1075,11 @@ mod tests {
     /// 10, growing up at 2,000 ticks and old at 20,000, whose genome also
     /// holds `genes`.
     fn physical(genes: &[&str]) -> Subject {
+        physical_in(builtin(), genes)
+    }
+
+    /// The same, with the physiology of `data`.
+    fn physical_in(data: DataPack, genes: &[&str]) -> Subject {
         let mut all = vec![
             r#"Trait(trait: "speed", value: 8.0)"#,
             r#"Trait(trait: "sense_radius", value: 10.0)"#,
@@ -1059,7 +1087,7 @@ mod tests {
             r#"Trait(trait: "grows_old", value: 20000.0)"#,
         ];
         all.extend_from_slice(genes);
-        Subject::new(builtin(), &all)
+        Subject::new(data, &all)
     }
 
     #[test]
@@ -1097,10 +1125,18 @@ mod tests {
     }
 
     #[test]
-    fn a_resting_sprite_spends_basal_energy_and_the_cost_of_its_sense_radius() {
-        let mut sprite = physical(&[]);
-        sprite.step();
-        assert_close(sprite.level("energy"), 1.0 - (0.0001 + 10.0 * 0.0000067));
+    fn a_sprite_spends_basal_energy_and_the_cost_of_its_sense_radius_a_fifth_less_at_rest() {
+        let cost = 0.0001 + 10.0 * 0.0000067;
+        let mut awake = physical(&[]);
+        awake.step();
+        assert_close(awake.level("energy"), 1.0 - cost);
+        // M2 design §19.2: physiology's `metabolism.resting`, 0.8.
+        let mut resting = physical(&[]);
+        resting.step_with(Senses {
+            resting: true,
+            ..adult()
+        });
+        assert_close(resting.level("energy"), 1.0 - 0.8 * cost);
     }
 
     #[test]
@@ -1163,6 +1199,35 @@ mod tests {
     }
 
     #[test]
+    fn food_waits_for_room_in_a_full_body_so_none_is_lost_while_water_passes_through() {
+        // M2 design §19.4 (#224): nothing a sprite eats is lost to a full
+        // body, while water the body can't hold is.
+        let spent = 0.0001 + 10.0 * 0.0000067;
+        let mut sprite = physical(&[]);
+        sprite.set("food", 0.3);
+        sprite.set("water", 0.2);
+        sprite.step();
+        // Full, its body has room only for what the tick spent.
+        assert_close(sprite.level("energy"), 1.0);
+        assert_close(sprite.level("food"), 0.3 - spent);
+        assert_close(sprite.level("water"), 0.198);
+        assert_eq!(sprite.level("hydration"), 1.0);
+    }
+
+    #[test]
+    fn a_bare_pace_passes_food_through_a_full_body() {
+        // M2 design §19.4: a pack from before Slice 29 gives each thing in
+        // the gut only its pace, and its food passed through, the body
+        // keeping what it could.
+        let bare = ("food: (pace: 0.001, waits: true)", "food: 0.001");
+        let mut sprite = physical_in(builtin_changing("physiology.ron", &[bare]), &[]);
+        sprite.set("food", 0.3);
+        sprite.step();
+        assert_eq!(sprite.level("energy"), 1.0);
+        assert_close(sprite.level("food"), 0.299);
+    }
+
+    #[test]
     fn injury_heals_slowly() {
         let mut sprite = physical(&[]);
         sprite.set("injury", 0.5);
@@ -1199,6 +1264,26 @@ mod tests {
     }
 
     #[test]
+    fn a_young_sprite_s_thirst_and_its_dying_of_it_are_paced_to_its_childhood() {
+        // M2 design §19.5: the grown rates × 4,500 ÷ the 2,000 ticks its
+        // genes take to grow up. Grown, the same genes go at the grown
+        // rates, as the tests above have them.
+        let paced = 4500.0 / 2000.0;
+        let young = Senses {
+            stage: LifeStage::Young,
+            ..Senses::default()
+        };
+        let mut thirsty = physical(&[]);
+        thirsty.set("hydration", 0.5);
+        thirsty.step_with(young);
+        assert_close(thirsty.level("hydration"), 0.5 - 0.00033 * paced);
+        let mut parched = physical(&[]);
+        parched.set("hydration", 0.0);
+        parched.step_with(young);
+        assert_close(parched.level("injury"), 0.0011 * paced - 0.0001);
+    }
+
+    #[test]
     fn body_sensors_report_the_sprite_s_state() {
         let mut sprite = physical(&[]);
         sprite.step_with(Senses {
@@ -1218,6 +1303,7 @@ mod tests {
         assert_eq!(sprite.locus("nearby_sprites"), 0.5);
         assert_eq!(sprite.locus("moving"), 1.0);
         assert_eq!(sprite.locus("resting"), 0.0);
+        assert_eq!(sprite.locus("standing"), 0.0);
         sprite.step_with(Senses {
             age: 40_000,
             resting: true,
@@ -1226,6 +1312,14 @@ mod tests {
         assert_eq!(sprite.locus("age"), 1.0, "capped at 1 once old");
         assert_eq!(sprite.locus("moving"), 0.0);
         assert_eq!(sprite.locus("resting"), 1.0);
+        assert_eq!(sprite.locus("standing"), 0.0);
+        // M2 design §19.2: with no action, it stands where it is.
+        sprite.step_with(Senses {
+            standing: true,
+            ..adult()
+        });
+        assert_eq!(sprite.locus("resting"), 0.0);
+        assert_eq!(sprite.locus("standing"), 1.0);
     }
 
     #[test]

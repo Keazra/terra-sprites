@@ -146,8 +146,8 @@ fn what_age_did_to_a_mother_s_genes_isn_t_passed_on() {
     // M2 design §12.2: her egg's genes are whole but for any broken, however
     // her own have weakened with age (§9.4).
     let female = format!("{ALONE}{FEMALE}{OLD}");
-    let [old, up] = AGES_AT_ONCE;
-    let data = builtin_changing("physiology.ron", &[old, up, LONE]);
+    let [old, up, unpaced] = AGES_AT_ONCE;
+    let data = builtin_changing("physiology.ron", &[old, up, unpaced, LONE]);
     let mut world = family_in(data, &[(at(2, 1), &female)], &[], 1);
     let Laying { egg, by, .. } = laid(&mut world, 50).expect("she laid an egg");
     hatch(&mut world, egg);

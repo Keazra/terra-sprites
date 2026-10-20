@@ -364,6 +364,20 @@ fn after_taking_over_the_world_is_the_player_s() {
 }
 
 #[test]
+fn f3_shows_the_debug_overlay_in_a_replay_too() {
+    let session = played(ball_world(), 10);
+    let playback = replay_of(&session, "debug-overlay");
+    let mut app = replaying(&playback);
+    let flow = app.apply(Action::DebugOverlay, playback.world());
+    assert_eq!(flow, Flow::Continue);
+    assert!(
+        app.debug_overlay(),
+        "it only reads how the game runs (#311)"
+    );
+    assert_eq!(app.refusal(), None);
+}
+
+#[test]
 fn ctrl_r_outside_a_replay_does_nothing() {
     let world = ball_world();
     let mut app = app_for(&world);

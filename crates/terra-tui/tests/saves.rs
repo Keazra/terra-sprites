@@ -114,6 +114,22 @@ fn f9_answers_its_own_question() {
 }
 
 #[test]
+fn f3_leaves_the_question_before_loading_waiting() {
+    let folder = scratch_folder("f9-f3");
+    let mut world = ball_world();
+    let mut app = app_for(&world, &folder);
+    apply(&mut app, &world, Action::Quicksave);
+    run(&mut world, 3);
+    apply(&mut app, &world, Action::Quickload);
+    // It shows or hides the debug overlay alone (design §6.1, #311).
+    apply(&mut app, &world, Action::DebugOverlay);
+    assert!(app.debug_overlay());
+    assert_eq!(app.screen(), Screen::LoadPrompt);
+    apply(&mut app, &world, Action::Confirm);
+    assert_eq!(app.take_loaded().expect("the quicksave loaded").tick(), 0);
+}
+
+#[test]
 fn f9_doesnt_answer_for_another_save() {
     let folder = scratch_folder("f9-other");
     let mut world = ball_world();

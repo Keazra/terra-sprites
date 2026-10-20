@@ -11,8 +11,8 @@
 │ m          event filter         wheel      change mode          INSPECTOR                        │
 │ v          exact detail         C again    the Place menu       [ ]        switch tabs           │
 │ ?          this help            hold E     aim, let go to send  PgUp PgDn  scroll a tab          │
-│ Esc        let go, back, quit?                                                                   │
-│ Ctrl+C     quit at once                                                                          │
+│ Esc        let go, back, quit?                                  DEBUG                            │
+│ Ctrl+C     quit at once                                         F3         how it's running      │
 │ FILES                                                                                            │
 │ F5 F9      quicksave / load                                                                      │
 │ Ctrl+S     save as...                                                                            │

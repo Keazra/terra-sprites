@@ -1,21 +1,24 @@
 // A3, correct training (design v21 §7.3): four starter sprites in a small
-// arena with food and water. During training the trainer shocks the hitter
-// the tick after each applied Hit on a sprite (a zap's lesson fell short,
-// v21 change 15); it stops at 9,900, and a washout follows. Over ticks 10,000 to 20,000, with no trainer, their
-// applied Hits on sprites, all four combined, must be at most half those of
-// the same seed never trained (median of 10 seeds), with at least 20 in the
-// control.
+// arena with food and water. The walls keep them close enough to crowd one
+// another, so a grown sprite sometimes hits a neighbour, the mistake
+// correcting cures: since sprites act only when moved (M2 design §19.2),
+// none hits another with nothing moving it, and in the open arena before
+// it the four seldom crowded. During training the trainer shocks the hitter the tick after
+// each applied Hit on a sprite (a zap's lesson fell short, v21 change 15);
+// it stops at 9,900, and a washout follows. Over ticks 10,000 to 20,000,
+// with no trainer, their applied Hits on sprites, all four combined, must
+// be at most half those of the same seed never trained (median of 10
+// seeds), with at least 20 in the control.
 (
     world: Drawn(
         rows: [
-            "............",
-            "..B......B..",
-            "....S..S....",
-            ".....~~.....",
-            ".....~~.....",
-            "....S..S....",
-            "..B......B..",
-            "............",
+            "#########",
+            "#B.....B#",
+            "#..S.S..#",
+            "#...~...#",
+            "#..S.S..#",
+            "#B.....B#",
+            "#########",
         ],
         key: {'S': Sprite, 'B': Object("berry_bush")},
     ),

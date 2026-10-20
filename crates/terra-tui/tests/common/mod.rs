@@ -11,6 +11,7 @@
 use std::path::PathBuf;
 
 use ratatui::buffer::Buffer;
+use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::layout::{Position, Rect, Size};
 use ratatui::{Terminal, backend::TestBackend};
 use terra_sim::{
@@ -262,6 +263,12 @@ pub fn lines(screen: &Buffer) -> Vec<String> {
     (0..screen.area.height).map(|y| row(screen, y)).collect()
 }
 
+/// A key event of `kind` with no modifiers: a press, a repeat or a
+/// release.
+pub fn key(code: KeyCode, kind: KeyEventKind) -> KeyEvent {
+    KeyEvent::new_with_kind(code, KeyModifiers::NONE, kind)
+}
+
 /// Carries out `action`, which leaves the game running.
 pub fn apply(app: &mut App, world: &World, action: Action) {
     assert_eq!(app.apply(action, world), Flow::Continue);
@@ -415,7 +422,8 @@ pub fn changed(text: &str, from: &str, to: &str) -> String {
 
 /// Changes that make generations quick: eggs copied exactly, hatching 20
 /// ticks after they're laid, the young grown up as soon as their genes
-/// say, and a mother free to lay again 30 ticks after her last egg.
+/// say and thirsting as grown sprites do, and a mother free to lay again 30
+/// ticks after her last egg.
 pub const QUICK: [Changes; 2] = [
     (
         "physiology.ron",
@@ -423,6 +431,7 @@ pub const QUICK: [Changes; 2] = [
             ("mutation: (chance: 0.01,", "mutation: (chance: 0.0,"),
             ("flaws: (arise: 0.004,", "flaws: (arise: 0.0,"),
             ("grows_up: (1500.0, 13500.0)", "grows_up: (10.0, 13500.0)"),
+            ("thirst_childhood: 4500.0,", ""),
             ("rest: 1500,", "rest: 30,"),
             ("cost: 0.3,", "cost: 0.0,"),
         ],

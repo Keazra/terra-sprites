@@ -21,7 +21,7 @@ use std::collections::BTreeMap;
 
 use xxhash_rust::xxh3::xxh3_64;
 
-use crate::config::WorldConfig;
+use crate::config::{Parts, WorldConfig};
 use crate::data::{DataError, DataPack};
 use crate::map::{MAX_SIDE, Pos};
 use crate::world::WorldState;
@@ -156,18 +156,29 @@ pub(crate) struct Preset {
     /// design §10).
     #[serde(default = "crate::config::most_sprites")]
     pub(crate) most_sprites: u16,
+    /// A save from before Slice 29 was made in its watery world, of small
+    /// lakes, with the first sprites anywhere (M2 design §19.1).
+    #[serde(default = "crate::config::water")]
+    pub(crate) water: u8,
+    #[serde(default = "crate::config::lake_size")]
+    pub(crate) lake_size: u8,
+    #[serde(default)]
+    pub(crate) start_near_water: Option<u16>,
 }
 
 impl From<&WorldConfig> for Preset {
     fn from(config: &WorldConfig) -> Preset {
-        let (width, height, objects, per_tiles, sprites, most_sprites) = config.parts();
+        let parts = config.parts();
         Preset {
-            width,
-            height,
-            objects: objects.clone(),
-            per_tiles,
-            sprites,
-            most_sprites,
+            width: parts.width,
+            height: parts.height,
+            objects: parts.objects,
+            per_tiles: parts.per_tiles,
+            sprites: parts.sprites,
+            most_sprites: parts.most_sprites,
+            water: parts.water,
+            lake_size: parts.lake_size,
+            start_near_water: parts.start_near_water,
         }
     }
 }
@@ -176,16 +187,19 @@ impl Preset {
     /// The config it holds, checked against `data` as a preset file is, or
     /// what's wrong with it, as a damaged file might have it.
     pub(crate) fn config(self, data: &DataPack) -> Result<WorldConfig, String> {
-        WorldConfig::from_parts(
-            self.width,
-            self.height,
-            self.objects,
-            self.per_tiles,
-            self.sprites,
-            self.most_sprites,
-            data,
-        )
-        .map_err(|err| format!("its preset breaks a rule: {err}"))
+        let parts = Parts {
+            width: self.width,
+            height: self.height,
+            objects: self.objects,
+            per_tiles: self.per_tiles,
+            sprites: self.sprites,
+            most_sprites: self.most_sprites,
+            water: self.water,
+            lake_size: self.lake_size,
+            start_near_water: self.start_near_water,
+        };
+        WorldConfig::from_parts(parts, data)
+            .map_err(|err| format!("its preset breaks a rule: {err}"))
     }
 }
 
@@ -272,6 +286,7 @@ impl<'de> Visitor<'de> for BytesVisitor {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde::Serialize;
     use serde::de::{DeserializeSeed, IntoDeserializer, value};
 
     /// Bytes as a save keeps them, for `read_bytes`.
@@ -319,6 +334,45 @@ mod tests {
             .expect("two bytes");
         assert_eq!(bytes, [1, 2]);
         assert!(bytes.capacity() <= MOST_RESERVED);
+    }
+
+    /// The preset a save or replay from before Slice 29 kept, with no
+    /// water settings.
+    #[derive(Serialize)]
+    struct PresetBeforeSlice29 {
+        width: u16,
+        height: u16,
+        objects: BTreeMap<String, u32>,
+        per_tiles: u32,
+        sprites: u16,
+        most_sprites: u16,
+    }
+
+    /// A save or replay from before Slice 29 was made in the watery world
+    /// of small lakes, with its first sprites anywhere, so a replay
+    /// generates its world again as it was (M2 design §19.1).
+    #[test]
+    fn a_preset_kept_before_slice_29_is_the_watery_world() {
+        let data = crate::test_util::builtin();
+        let old = PresetBeforeSlice29 {
+            width: 64,
+            height: 40,
+            objects: BTreeMap::new(),
+            per_tiles: 1,
+            sprites: 20,
+            most_sprites: 100,
+        };
+        let bytes = rmp_serde::to_vec_named(&old).expect("it serializes");
+        let preset: Preset = rmp_serde::from_slice(&bytes).expect("it reads");
+        let config = preset.config(&data).expect("it keeps the rules");
+        assert_eq!(
+            (
+                config.water(),
+                config.lake_size(),
+                config.start_near_water()
+            ),
+            (32, 1, None)
+        );
     }
 
     /// A list that claims to hold four billion bytes but holds two is

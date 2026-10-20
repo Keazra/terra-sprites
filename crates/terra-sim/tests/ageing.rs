@@ -3,7 +3,7 @@
 
 mod common;
 use common::{
-    AGES_AT_ONCE, BARREN, WorldBuilder, at, builtin, builtin_changing, close, starting_with,
+    AGES_AT_ONCE, BARREN, UNPACED, WorldBuilder, at, builtin_changing, close, starting_with,
 };
 
 use terra_sim::{
@@ -11,9 +11,15 @@ use terra_sim::{
 };
 
 /// A newborn sprite of `genes` alone in a small field with `objects`,
-/// doing `script` first.
+/// doing `script` first. With no water, it lives to grow up only if its
+/// thirst isn't paced to its childhood (M2 design §19.5).
 fn world(genes: &str, objects: &[(Pos, &str)], script: &[ScriptedAction]) -> World {
-    world_in(builtin(), genes, objects, script)
+    world_in(
+        builtin_changing("physiology.ron", &[UNPACED]),
+        genes,
+        objects,
+        script,
+    )
 }
 
 /// The same, in `data`.

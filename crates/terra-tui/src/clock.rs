@@ -11,6 +11,10 @@ use crate::listed::listed_enum;
 const PARTS: u128 = 32;
 const NANOS_PER_SECOND: u128 = 1_000_000_000;
 
+/// The most simulation time a frame may spend, so the UI stays responsive
+/// at any speed (design §6.6).
+pub const SIM_BUDGET: Duration = Duration::from_millis(25);
+
 /// How far back a Reward looks, in the player's time (design v21 §6.5):
 /// about how long a player takes to react. Tuned in play.
 const REACH_BACK_SECONDS: u32 = 2;
@@ -47,6 +51,12 @@ impl Speed {
             Mode::Story => Speed::X4,
             Mode::Lab => Speed::Max,
         }
+    }
+
+    /// The ticks a second it asks for, or `None` for Max: 1.25 at 1×.
+    pub fn ticks_per_second(self) -> Option<f64> {
+        self.parts_per_second()
+            .map(|parts| f64::from(parts) / PARTS as f64)
     }
 
     /// 32nds of a tick per second, or `None` for Max.

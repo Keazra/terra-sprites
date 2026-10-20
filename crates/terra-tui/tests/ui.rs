@@ -1586,6 +1586,35 @@ fn the_body_tab_starts_with_what_the_sprite_is_doing_in_plain_words() {
 }
 
 #[test]
+fn a_sprite_with_nothing_to_do_shows_how_its_action_ended_then_what_it_watches() {
+    // M2 design §19.2: the ending shows on the tick the action ended. From
+    // the next, with nothing pulling as hard as the act threshold, it
+    // stands, its eye on the bush beside its way.
+    let genome = r#"(format: 1, genes: [
+        Trait(trait: "speed", value: 10.0),
+        BrainParam(param: "act_threshold", value: 0.25),
+    ])"#;
+    let wander = ScriptedAction::Wander {
+        destination: Pos { x: 7, y: 3 },
+    };
+    let bush = Pos { x: 5, y: 1 };
+    let (mut world, mut app) = one_sprite_among(genome, &[(bush, "berry_bush")], &[wander], 5);
+    assert_eq!(inspector(&app, &world).1[0], "Arrived");
+    world.step();
+    assert_eq!(inspector(&app, &world).1[0], "Watching the berry bush");
+    open(&mut app, &world, Tab::Brain);
+    let (_, text) = inspector(&app, &world);
+    assert!(text.iter().any(|row| row == "DECISION: none"), "{text:?}");
+    open(&mut app, &world, Tab::Body);
+    app.apply(Action::ToggleDetail, &world);
+    let id = world.object_at(bush).expect("the bush").id();
+    assert_eq!(
+        inspector(&app, &world).1[0],
+        format!("STAND → berry_bush #{}", id.0)
+    );
+}
+
+#[test]
 fn the_body_tab_says_a_led_sprite_is_being_led_and_how_far_behind() {
     // Design v23 §6.1. It walks a grass step a tick, from (2, 3).
     let (mut world, mut app) = one_sprite_doing(SPEED_10, &[], 0);
@@ -2923,7 +2952,10 @@ fn selecting_the_selected_sprite_from_a_scrolled_world_tab_opens_body_at_the_top
     app.apply(Action::left_click(pointer_on(&world, 2, 3)), &world);
     let rows = right_part(&render(&app, &world, 100, 12), 46);
     assert!(rows[1].contains("[Body]"), "{:?}", rows[1]);
-    assert!(inside(&rows[2]).starts_with("age "), "{:?}", rows[2]);
+    // Its first line is what it's doing: nothing has moved it to act yet
+    // (M2 design §19.2).
+    assert!(inside(&rows[2]).starts_with("Standing"), "{:?}", rows[2]);
+    assert!(inside(&rows[3]).starts_with("age "), "{:?}", rows[3]);
 }
 
 #[test]
@@ -2943,7 +2975,7 @@ fn chemical_names_show_with_spaces_for_underscores() {
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
     app.apply(Action::SelectNext, &world);
     let (_, body) = inspector(&app, &world);
-    assert!(body[9].starts_with("bored ness  "), "{:?}", body[9]);
+    assert!(body[10].starts_with("bored ness  "), "{:?}", body[10]);
     open(&mut app, &world, Tab::Chem);
     let (_, chem) = inspector(&app, &world);
     assert!(chem[11].starts_with("bored ness  "), "{:?}", chem[11]);

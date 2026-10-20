@@ -71,6 +71,19 @@ impl Switch {
         self.until.is_none_or(|until| self.from < until)
     }
 
+    /// When the gene works, in words to follow what it does: ` from Adult`,
+    /// ` until Adult`, or nothing for one that works all its life.
+    pub fn when(self) -> String {
+        let mut text = String::new();
+        if self.from != LifeStage::Young {
+            text += &format!(" from {:?}", self.from);
+        }
+        if let Some(until) = self.until {
+            text += &format!(" until {until:?}");
+        }
+        text
+    }
+
     /// The switch as a genome file writes it after a gene's own fields:
     /// nothing for one that's always on.
     pub(crate) fn to_ron(self) -> String {

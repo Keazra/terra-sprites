@@ -19,6 +19,7 @@ Every comment or issue posted to the issue tracker during triage **must** start 
 
 - [AGENT-BRIEF.md](AGENT-BRIEF.md): how to write durable agent briefs
 - [OUT-OF-SCOPE.md](OUT-OF-SCOPE.md): how the `.out-of-scope/` knowledge base works
+- [AUTONOMOUS-DESIGN.md](AUTONOMOUS-DESIGN.md): which design issues an agent can settle alone, how to rank them, and the design brief
 
 ## Roles
 
@@ -27,12 +28,13 @@ Two **category** roles:
 - `bug`: something is broken
 - `enhancement`: new feature or improvement
 
-Five **state** roles:
+Six **state** roles:
 
 - `needs-triage`: maintainer needs to evaluate
 - `needs-info`: waiting on reporter for more information
 - `ready-for-agent`: fully specified, ready for an AFK agent
 - `ready-for-human`: needs human implementation
+- `ready-for-agent-design`: a design question small enough for an agent to settle alone, with the maintainer checking the result (this project's own; [AUTONOMOUS-DESIGN.md](AUTONOMOUS-DESIGN.md))
 - `wontfix`: will not be actioned
 
 For a PR, the same states read against the attached code: `ready-for-agent` means a brief is attached and an agent should take the next step on the diff; `ready-for-human` means it's ready for a human to merge.
@@ -41,7 +43,7 @@ Every triaged issue should carry exactly one category role and one state role. I
 
 These are canonical role names. The actual label strings used in the issue tracker differ: the mapping is in `docs/agents/triage-labels.md`.
 
-State transitions: an unlabeled issue normally goes to `needs-triage` first; from there it moves to `needs-info`, `ready-for-agent`, `ready-for-human`, or `wontfix`. `needs-info` returns to `needs-triage` once the reporter replies. The maintainer can override at any time; flag transitions that look unusual and ask before proceeding.
+State transitions: an unlabeled issue normally goes to `needs-triage` first; from there it moves to `needs-info`, `ready-for-agent`, `ready-for-human`, or `wontfix`. `needs-info` returns to `needs-triage` once the reporter replies. `ready-for-agent-design` usually comes from `ready-for-human`; once its design is accepted it moves to `ready-for-agent` for the build, or closes with the PR that designed and built it. The maintainer can override at any time; flag transitions that look unusual and ask before proceeding.
 
 ## Invocation
 
@@ -51,6 +53,7 @@ The maintainer invokes `/triage` and describes what they want in natural languag
 - "Let's look at #42" (issue or PR)
 - "Move #42 to ready-for-agent"
 - "What's ready for agents to pick up?"
+- "What could be designed without me?"
 
 ## Show what needs attention
 
@@ -64,11 +67,15 @@ When PRs are in scope, include external PRs in these buckets and tag each line `
 
 Show counts and a one-line summary per item. Let the maintainer pick.
 
+## Rank design candidates
+
+When the maintainer asks what could be designed without them, run the tests in [AUTONOMOUS-DESIGN.md](AUTONOMOUS-DESIGN.md) on every `ready-for-human` issue and present the ranked candidates as it describes. Let the maintainer pick, and move only the issues they accept to `ready-for-agent-design`, each with a design brief.
+
 ## Triage a specific issue or PR
 
 1. **Gather context.** Read the full issue or PR (body, comments, labels, author, dates; for a PR, the diff too). Parse any prior triage notes so you don't re-ask resolved questions. Explore the codebase using the project's domain glossary, respecting ADRs in the area. Run two checks against the codebase: (a) **redundancy**: search for an existing implementation of the requested behavior by domain concept (not just the request's wording), and report where you looked. If found, it's an already-implemented `wontfix` (step 5). (b) **prior rejection**: read `.out-of-scope/*.md` and surface any that resembles this request.
 
-2. **Recommend.** Tell the maintainer your category and state recommendation with reasoning, plus a brief codebase summary relevant to the request (including whether it's already implemented). Wait for direction.
+2. **Recommend.** Tell the maintainer your category and state recommendation with reasoning (for a design question, whether it passes the tests in [AUTONOMOUS-DESIGN.md](AUTONOMOUS-DESIGN.md)), plus a brief codebase summary relevant to the request (including whether it's already implemented). Wait for direction.
 
 3. **Verify the claim.** Before any grilling, check that the claim holds up. For a bug, reproduce it from the reporter's steps. For a PR, confirm the diff does what it claims: check it out, run the relevant tests or commands. Report what happened: confirmed (with code path), failed, or insufficient detail (a strong `needs-info` signal). A confirmed verification makes a much stronger agent brief.
 
@@ -77,6 +84,7 @@ Show counts and a one-line summary per item. Let the maintainer pick.
 5. **Apply the outcome:**
    - `ready-for-agent`: post an agent brief comment ([AGENT-BRIEF.md](AGENT-BRIEF.md)).
    - `ready-for-human`: same structure as an agent brief, but note why it can't be delegated (judgment calls, external access, design decisions, manual testing).
+   - `ready-for-agent-design`: post a design brief ([AUTONOMOUS-DESIGN.md](AUTONOMOUS-DESIGN.md)).
    - `needs-info`: post triage notes (template below).
    - For `wontfix`, close the issue, with the comment depending on *why*:
      - **Already implemented**: the change already exists in the codebase. Point to where it lives; do **not** write to `.out-of-scope/` (that KB is for *rejected* requests, not built ones).

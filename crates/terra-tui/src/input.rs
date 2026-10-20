@@ -9,6 +9,7 @@ use ratatui::crossterm::event::{
 use ratatui::layout::Position;
 
 use crate::app::CursorMode;
+use crate::listed::listed_enum;
 
 /// Something the player asked the UI to do.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -126,6 +127,9 @@ pub enum Action {
     /// In a replay, take it over and play on from where it is (`Ctrl+R`,
     /// design v36 §2.7).
     TakeOver,
+    /// Show or hide the debug overlay, how the game is running on this
+    /// computer (`F3`, design §6.1, #311).
+    DebugOverlay,
     /// While naming, a letter typed.
     Type(char),
     /// While naming, the last letter rubbed out (`Backspace`).
@@ -189,6 +193,30 @@ impl Action {
     }
 }
 
+listed_enum! {
+    /// What the terminal reports of keys, as far as `Keys` can tell (design
+    /// §6.6): what the debug overlay says (design §6.1, #311), so a problem
+    /// holding a key can be told from a picture.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+    pub enum KeyReports {
+        /// No release has arrived, so a held key is told from taps only by
+        /// its repeats, where the terminal sends them.
+        #[default]
+        NoReleases => "no releases",
+        /// Releases arrive.
+        Releases => "releases reported",
+        /// The kitty keyboard protocol is on: releases arrive, and a
+        /// shifted key as the character it types.
+        Kitty => "kitty protocol",
+    }
+
+    /// Each, the least reported first.
+    pub const ALL;
+
+    /// What the debug overlay says.
+    pub fn label(self) -> &'static str;
+}
+
 /// How far Shift scrolls the viewport, in tiles (design §6.5).
 const SHIFT_STEP: i32 = 5;
 
@@ -236,10 +264,20 @@ impl Keys {
         }
     }
 
+    /// What the terminal reports of keys, as far as is known yet.
+    pub fn reports(&self) -> KeyReports {
+        match (self.shifted_as_characters, self.releases_reported) {
+            (true, _) => KeyReports::Kitty,
+            (false, true) => KeyReports::Releases,
+            (false, false) => KeyReports::NoReleases,
+        }
+    }
+
     /// The action for a key event while the player types a name (design v28
     /// §6.5): letters are typed rather than acting, `Backspace` rubs one out,
     /// `Tab` offers another random name, `Enter` takes it and `Esc` gives up;
     /// the arrows pick from a list or a row beside it.
+    /// `F3` still shows or hides the debug overlay (design §6.1).
     /// Only presses count, and `Ctrl+C` still quits, but letting go of `?`
     /// says so, as New world explains a mode while it's held (M2 design
     /// §16). Releases are still tracked, so the `r` that opened the prompt
@@ -265,6 +303,13 @@ impl Keys {
             KeyCode::Tab => Some(Action::AnotherName),
             KeyCode::Enter => Some(Action::Enter),
             KeyCode::Esc => Some(Action::Back),
+            // `F3` types nothing, so it shows or hides the debug overlay
+            // while typing too (design §6.1, #311), once a press: noted as
+            // down, it does nothing pressed again with no release between.
+            KeyCode::F(3) => {
+                self.down.insert(physical);
+                (key.kind != KeyEventKind::Repeat).then_some(Action::DebugOverlay)
+            }
             // New world's presets and modes are picked while its seed is
             // typed (M2 design §8.3, §16); naming does nothing with them.
             KeyCode::Up => Some(Action::Scroll { dx: 0, dy: -1 }),
@@ -365,6 +410,8 @@ impl Keys {
             KeyCode::Char('g') => (!held).then_some(Action::ExportGenome),
             KeyCode::Char(digit @ '1'..='9') => (!held).then(|| Action::Pick(digit as u8 - b'0')),
             KeyCode::Enter => (!held).then_some(Action::Enter),
+            // A held `F3` would flicker the debug overlay on and off.
+            KeyCode::F(3) => (!held).then_some(Action::DebugOverlay),
             KeyCode::F(5) => (!held).then_some(Action::Quicksave),
             KeyCode::F(9) => (!held).then_some(Action::Quickload),
             // Some terminals report Shift+Tab as its own key, others as Tab with Shift.
