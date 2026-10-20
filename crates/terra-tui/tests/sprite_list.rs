@@ -1,8 +1,9 @@
-//! The sprite list (`l`, design §6.1): every sprite, its age, its strongest
-//! drive and what it's doing, sorted as the player chooses.
+//! The sprite list (`l`, design §6.1): every sprite, its age, life stage,
+//! strongest drive, generation and what it's doing, sorted as the player
+//! chooses and filtered by what they type after `/` (#313).
 
 mod common;
-use common::{WorldBuilder, app_on, at, pack, render, row};
+use common::{WorldBuilder, app_on, at, pack, pairs, render, row, status_line};
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Size};
@@ -25,6 +26,11 @@ fn starting(chem: &str, value: f32, pack: &DataPack) -> Genome {
 /// drive, wandering to (8, 3); #2 at (110, 55), very hungry; #3 at (6, 1),
 /// thirsty; #4 at (4, 4), a little hungry. #1 is named Zed, and #3 Abel.
 fn field() -> World {
+    field_doing(&[])
+}
+
+/// The field, with these scripted actions as well as #1's.
+fn field_doing(scripts: &[(Pos, ScriptedAction)]) -> World {
     let pack = pack();
     let sprites = vec![
         (at(2, 3), None),
@@ -38,6 +44,7 @@ fn field() -> World {
     WorldBuilder::grass(120, 60)
         .sprites_with(sprites)
         .scripts(&[(at(2, 3), wander)])
+        .scripts(scripts)
         .newborns(&[at(2, 3), at(110, 55), at(6, 1), at(4, 4)])
         .data(pack)
         .seed(7)
@@ -358,4 +365,318 @@ fn the_list_is_ignored_by_other_keys_and_quit_still_quits() {
     }
     assert!(!app.clock.is_paused());
     assert_eq!(app.apply(Action::Quit, &world), Flow::Quit);
+}
+
+/// Types `text` into the list's filter, a character at a time.
+fn type_in(app: &mut App, world: &World, text: &str) {
+    for c in text.chars() {
+        app.apply(Action::Type(c), world);
+    }
+}
+
+#[test]
+fn slash_starts_a_filter_that_typing_narrows_and_the_title_counts_what_matches() {
+    // #313: `/` as kdash has it, since `l` itself closes the list and names
+    // can hold an `l`.
+    let mut world = field();
+    let mut app = named(&mut world);
+    app.apply(Action::SpriteList, &world);
+    assert!(!app.typing());
+    app.apply(Action::FilterList, &world);
+    assert!(app.typing(), "keys type into the filter");
+    let screen = render(&app, &world);
+    let title = row(&screen, 1);
+    assert!(
+        title.starts_with("┌─ Sprites ── sorted by number ── filter: _ ── 4 of 4 ─"),
+        "{title}"
+    );
+    assert!(title.ends_with(" esc clear ─┐"), "{title}");
+    type_in(&mut app, &world, "aBe");
+    let screen = render(&app, &world);
+    assert_eq!(listed(&screen), ["Abel #3"], "case aside");
+    let title = row(&screen, 1);
+    assert!(
+        title.starts_with("┌─ Sprites ── sorted by number ── filter: aBe_ ── 1 of 4 ─"),
+        "{title}"
+    );
+    assert!(
+        row(&screen, 3).starts_with("│ Abel #3      1  young"),
+        "the columns as wide as for every sprite: {}",
+        row(&screen, 3)
+    );
+    type_in(&mut app, &world, "l");
+    assert_eq!(app.screen(), Screen::SpriteList, "`l` types, not closes");
+    assert_eq!(app.list_filter(), Some("aBel"));
+    assert_eq!(listed(&render(&app, &world)), ["Abel #3"]);
+}
+
+#[test]
+fn the_filter_matches_any_column_the_row_shows() {
+    // Each sprite is given what it's doing, so its row doesn't hang on its
+    // brain's choice.
+    let mut world = field_doing(&[
+        (at(110, 55), ScriptedAction::Rest),
+        (
+            at(6, 1),
+            ScriptedAction::Wander {
+                destination: at(12, 1),
+            },
+        ),
+        (at(4, 4), ScriptedAction::Play { at: at(2, 3) }),
+    ]);
+    let mut app = named(&mut world);
+    app.apply(Action::SpriteList, &world);
+    app.apply(Action::FilterList, &world);
+    let mut shown = |filter: &str| {
+        while app.list_filter().is_some_and(|typed| !typed.is_empty()) {
+            app.apply(Action::Erase, &world);
+        }
+        type_in(&mut app, &world, filter);
+        listed(&render(&app, &world))
+    };
+    assert_eq!(shown("abel"), ["Abel #3"], "a name");
+    assert_eq!(shown("#4"), ["Sprite #4"], "an ID");
+    assert_eq!(
+        shown("young"),
+        ["Zed #1", "Sprite #2", "Abel #3", "Sprite #4"],
+        "a life stage"
+    );
+    assert!(shown("adult").is_empty(), "none is grown");
+    assert_eq!(shown("HUNGER"), ["Sprite #2", "Sprite #4"], "a drive");
+    assert_eq!(shown("thirst"), ["Abel #3"]);
+    assert_eq!(shown("resting"), ["Sprite #2"], "what it's doing");
+    assert!(shown("ing").is_empty(), "words are found from their start");
+    assert_eq!(
+        shown("zed"),
+        ["Zed #1", "Sprite #4"],
+        "Sprite #4 is going to play with Zed #1"
+    );
+    assert_eq!(
+        shown("gen 1"),
+        ["Zed #1", "Sprite #2", "Abel #3", "Sprite #4"],
+        "a generation, as its column heads it"
+    );
+    assert_eq!(
+        shown("generation 1").len(),
+        4,
+        "or in full, as the Body tab says it"
+    );
+    assert_eq!(shown("  thirst "), ["Abel #3"], "spaces at the ends aside");
+}
+
+#[test]
+fn the_list_shows_each_sprite_s_generation_and_gen_finds_one() {
+    // M2 design §17.1, and #313's "by generation". By tick 230 the pairs
+    // have young, and young of their young.
+    let world = pairs(230);
+    let mut app = app_on(&world);
+    app.apply(Action::SpriteList, &world);
+    let heading = row(&render(&app, &world), 2);
+    let column = |name: &str| heading.find(name).unwrap_or_else(|| panic!("{heading}"));
+    assert!(
+        column("Drive") < column("Generation") && column("Generation") < column("Doing"),
+        "after the drive: {heading}"
+    );
+    let total = world.sprites().count();
+    for generation in [2, 3] {
+        while app.list_filter().is_some_and(|typed| !typed.is_empty()) {
+            app.apply(Action::Erase, &world);
+        }
+        if app.list_filter().is_none() {
+            app.apply(Action::FilterList, &world);
+        }
+        type_in(&mut app, &world, &format!("gen {generation}"));
+        let screen = render(&app, &world);
+        let listed: Vec<u32> = (3..28)
+            .map(|y| row(&screen, y))
+            .take_while(|line| line.starts_with("│ ") && !line.starts_with("│  "))
+            .map(|line| {
+                let label = line.split("  ").next().unwrap();
+                let id = label.split('#').nth(1).unwrap().trim().parse().unwrap();
+                world.sprite(EntityId(id)).unwrap().generation()
+            })
+            .collect();
+        let wanted = world
+            .sprites()
+            .filter(|sprite| sprite.generation() == generation)
+            .count();
+        assert!(wanted > 0, "the world has generation {generation}");
+        assert_eq!(listed, vec![generation; wanted]);
+        let title = row(&screen, 1);
+        assert!(title.contains(&format!(" {wanted} of {total} ")), "{title}");
+    }
+}
+
+#[test]
+fn backspace_rubs_out_and_esc_clears_the_filter_then_closes_the_list() {
+    let mut world = field();
+    let mut app = named(&mut world);
+    app.apply(Action::SpriteList, &world);
+    app.apply(Action::FilterList, &world);
+    type_in(&mut app, &world, "abelx");
+    let screen = render(&app, &world);
+    assert!(listed(&screen).is_empty());
+    assert_eq!(
+        row(&screen, 2),
+        format!("│ No sprite matches{}│", " ".repeat(80))
+    );
+    assert!(row(&screen, 1).contains(" 0 of 4 "));
+    app.apply(Action::Erase, &world);
+    assert_eq!(listed(&render(&app, &world)), ["Abel #3"]);
+    assert_eq!(app.apply(Action::Back, &world), Flow::Continue);
+    assert_eq!(app.screen(), Screen::SpriteList, "Esc clears the filter");
+    assert_eq!(app.list_filter(), None);
+    assert!(!app.typing());
+    let screen = render(&app, &world);
+    assert_eq!(listed(&screen).len(), 4, "every sprite again");
+    let title = row(&screen, 1);
+    assert!(
+        title.starts_with("┌─ Sprites ── sorted by number ──────"),
+        "{title}"
+    );
+    assert!(title.ends_with(" esc close ─┐"), "{title}");
+    app.apply(Action::Back, &world);
+    assert_eq!(app.screen(), Screen::Normal, "and a second Esc closes it");
+}
+
+#[test]
+fn while_filtering_the_arrows_tab_and_enter_work_as_before() {
+    let mut world = field();
+    let mut app = named(&mut world);
+    app.apply(Action::SpriteList, &world);
+    app.apply(Action::FilterList, &world);
+    type_in(&mut app, &world, "hunger");
+    assert_eq!(app.list_row(&world), 0);
+    app.apply(Action::Scroll { dx: 0, dy: 1 }, &world);
+    app.apply(Action::Scroll { dx: 0, dy: 1 }, &world);
+    assert_eq!(app.list_row(&world), 1, "no further than the last match");
+    // Tab, typed, changes the order, and Shift+Tab goes back.
+    app.apply(Action::AnotherName, &world);
+    assert_eq!(app.list_sort(), SortBy::Name);
+    app.apply(Action::SelectPrevious, &world);
+    assert_eq!(app.list_sort(), SortBy::Number);
+    assert_eq!(app.list_filter(), Some("hunger"), "neither types");
+    app.apply(Action::Enter, &world);
+    assert_eq!(app.screen(), Screen::Normal);
+    assert!(!app.typing());
+    assert_eq!(app.selection().map(|s| s.id()), Some(ids(&world)[3]));
+    app.apply(Action::SpriteList, &world);
+    assert_eq!(app.list_filter(), None, "the list opens unfiltered");
+    assert_eq!(listed(&render(&app, &world)).len(), 4);
+}
+
+#[test]
+fn a_click_on_a_match_goes_to_it() {
+    let mut world = field();
+    let mut app = named(&mut world);
+    app.apply(Action::SpriteList, &world);
+    app.apply(Action::FilterList, &world);
+    type_in(&mut app, &world, "thirst");
+    let screen = render(&app, &world);
+    let abel = row_of(&screen, "Abel #3");
+    assert_eq!(abel, 3, "the first row");
+    app.apply(Action::left_click(Position::new(40, abel)), &world);
+    assert_eq!(app.screen(), Screen::Normal);
+    assert_eq!(app.selection().map(|s| s.id()), Some(ids(&world)[2]));
+    assert!(!app.typing());
+}
+
+#[test]
+fn the_highlight_keeps_to_its_sprite_while_it_matches_or_else_takes_the_first_match() {
+    let mut world = field();
+    let mut app = named(&mut world);
+    app.apply(Action::SpriteList, &world);
+    app.apply(Action::Scroll { dx: 0, dy: 1 }, &world);
+    app.apply(Action::FilterList, &world);
+    type_in(&mut app, &world, "hunger");
+    assert_eq!(app.list_row(&world), 0, "Sprite #2 still matches");
+    app.apply(Action::Scroll { dx: 0, dy: 1 }, &world);
+    for _ in 0.."hunger".len() {
+        app.apply(Action::Erase, &world);
+    }
+    type_in(&mut app, &world, "abel");
+    assert_eq!(app.list_row(&world), 0, "Sprite #4 doesn't, so Abel #3");
+    app.apply(Action::Back, &world);
+    assert_eq!(
+        app.list_row(&world),
+        2,
+        "with the filter gone, the highlight stays on Abel #3"
+    );
+}
+
+#[test]
+fn the_status_line_says_how_to_filter_and_while_filtering_how_to_clear_it() {
+    let mut world = field();
+    let mut app = named(&mut world);
+    app.apply(Action::SpriteList, &world);
+    let status = status_line(&app, &world);
+    assert!(
+        status.ends_with("/ filter  ↑↓ choose  enter go to it  tab sort  esc close"),
+        "{status}"
+    );
+    app.apply(Action::FilterList, &world);
+    let status = status_line(&app, &world);
+    assert!(
+        status.ends_with("↑↓ choose  enter go to it  tab sort  esc clear"),
+        "{status}"
+    );
+}
+
+#[test]
+fn short_of_room_the_hints_leave_out_slash_filter_first() {
+    // Following Zed #1, the status line's left part is long enough that the
+    // hints with `/ filter` don't fit at 100 columns, and the rest still do.
+    let mut world = field();
+    let mut app = named(&mut world);
+    app.apply(Action::SelectNext, &world);
+    app.apply(Action::Follow { at: None }, &world);
+    app.apply(Action::SpriteList, &world);
+    let status = status_line(&app, &world);
+    assert!(status.contains("following Zed #1"), "{status}");
+    assert!(
+        status.ends_with("  ↑↓ choose  enter go to it  tab sort  esc close"),
+        "{status}"
+    );
+    assert!(!status.contains("/ filter"), "{status}");
+}
+
+#[test]
+fn the_filter_takes_what_cp437_can_show_up_to_24_characters() {
+    let mut world = field();
+    let mut app = named(&mut world);
+    app.apply(Action::SpriteList, &world);
+    app.apply(Action::FilterList, &world);
+    type_in(&mut app, &world, "a\u{1F600}/b·");
+    assert_eq!(app.list_filter(), Some("a/b·"), "no emoji");
+    type_in(&mut app, &world, &"z".repeat(30));
+    assert_eq!(app.list_filter().map(|f| f.chars().count()), Some(24));
+}
+
+#[test]
+fn the_count_is_of_the_sprites_the_policy_lists() {
+    // Design §6.4.
+    let mut world = field();
+    let mut app = named(&mut world);
+    app.set_policy(Unlisted(ids(&world)[0]));
+    app.apply(Action::SpriteList, &world);
+    app.apply(Action::FilterList, &world);
+    type_in(&mut app, &world, "young");
+    let title = row(&render(&app, &world), 1);
+    assert!(title.contains(" 3 of 3 "), "{title}");
+}
+
+#[test]
+fn slash_does_nothing_outside_the_list() {
+    let mut world = field();
+    let mut app = named(&mut world);
+    app.apply(Action::FilterList, &world);
+    assert_eq!(app.screen(), Screen::Normal);
+    assert!(!app.typing());
+    app.apply(Action::Back, &world);
+    app.apply(Action::FilterList, &world);
+    assert_eq!(
+        app.screen(),
+        Screen::Normal,
+        "it answers the quit prompt as any key does"
+    );
 }

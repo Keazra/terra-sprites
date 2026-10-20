@@ -742,7 +742,7 @@ The overlay `?` opens: every key, grouped, the colour and emote legends, and the
 _Avoid_: manual, cheat sheet
 
 **Sprite list**:
-The overlay `l` opens: every sprite, one to a row, with its age, its strongest drive and what it's doing, sorted by number, name, age or drive. Choosing one selects it and centres the viewport on it.
+The overlay `l` opens: every sprite, one to a row, with its age, life stage, strongest drive, generation and what it's doing, sorted by number, name, age or drive. `/` filters it to the rows with a column that has the words typed, from their start. Choosing one selects it and centres the viewport on it.
 _Avoid_: roster, census
 
 **Population graph** (M2):
