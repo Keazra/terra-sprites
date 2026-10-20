@@ -95,6 +95,8 @@ pub enum Action {
     Help,
     /// Open or close the sprite list (`l`, design §6.1).
     SpriteList,
+    /// In the sprite list, start filtering it (`/`, design §6.1, #313).
+    FilterList,
     /// Open or close the population graph (`p`, M2 design §14).
     Population,
     /// Open or close the family tree (`k`, M2 design §17.2).
@@ -134,7 +136,8 @@ pub enum Action {
     Type(char),
     /// While naming, the last letter rubbed out (`Backspace`).
     Erase,
-    /// While naming, another random name to start from (`Tab`).
+    /// While naming, another random name to start from (`Tab`); while
+    /// filtering the sprite list, the next order.
     AnotherName,
     /// While typing, `?` let go of, where the terminal says so: in the New
     /// world box, the mode's explanation goes (M2 design §16).
@@ -276,7 +279,8 @@ impl Keys {
     /// The action for a key event while the player types a name (design v28
     /// §6.5): letters are typed rather than acting, `Backspace` rubs one out,
     /// `Tab` offers another random name, `Enter` takes it and `Esc` gives up;
-    /// the arrows pick from a list or a row beside it.
+    /// the arrows pick from a list or a row beside it, and `Shift+Tab` goes
+    /// back through the sprite list's orders while it's filtered (#313).
     /// `F3` still shows or hides the debug overlay (design §6.1).
     /// Only presses count, and `Ctrl+C` still quits, but letting go of `?`
     /// says so, as New world explains a mode while it's held (M2 design
@@ -300,6 +304,11 @@ impl Keys {
         match key.code {
             KeyCode::Char(c) => Some(Action::Type(c)),
             KeyCode::Backspace => Some(Action::Erase),
+            // Shift+Tab as `action_for` reads it, either way it's reported.
+            KeyCode::BackTab => Some(Action::SelectPrevious),
+            KeyCode::Tab if key.modifiers.contains(KeyModifiers::SHIFT) => {
+                Some(Action::SelectPrevious)
+            }
             KeyCode::Tab => Some(Action::AnotherName),
             KeyCode::Enter => Some(Action::Enter),
             KeyCode::Esc => Some(Action::Back),
@@ -405,6 +414,7 @@ impl Keys {
             KeyCode::Char('m') => (!held).then_some(Action::CycleEventFilter),
             KeyCode::Char('?') => (!held).then_some(Action::Help),
             KeyCode::Char('l') => (!held).then_some(Action::SpriteList),
+            KeyCode::Char('/') => (!held).then_some(Action::FilterList),
             KeyCode::Char('p') => (!held).then_some(Action::Population),
             KeyCode::Char('k') => (!held).then_some(Action::FamilyTree),
             KeyCode::Char('g') => (!held).then_some(Action::ExportGenome),

@@ -1239,6 +1239,7 @@ Settled with the owner on 2026-10-14 ([#143](https://github.com/Keazra/terra-spr
 ### 17.1 Generations and the record of the dead
 
 - **Each sprite and egg has a generation** (Q6, A). The world's first sprites, and any the Cursor places, are **generation 1**; a hatchling is one more than its parents', or than the newer parent's when theirs differ. An egg has its generation from when it's laid.
+  - **The sprite list shows it** in a Generation column after the drive, which its filter finds with `gen 3` or `generation 3` (M1 design §6.1, #313).
 - **And where it came from:** one the world began with, one the Cursor placed, or one that hatched. A sprite with no parents says which.
 - **The world keeps a record of each sprite that dies** (Q4): its name, its parents, its generation, whether the Cursor placed it, when it was born and died, and how, at what life stage and as which sex. A record is about 100 bytes in a save.
 - **It keeps the newest 10,000** (Q4, B): past that, the longest dead are forgotten first, but never a sprite the player named. About 3 sprites die every 1,000 ticks once the default world is full, so in play nothing is forgotten, and a long fast-forward (Slice 27) can't make a save grow without end.

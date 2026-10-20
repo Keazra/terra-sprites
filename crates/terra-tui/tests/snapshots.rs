@@ -143,6 +143,24 @@ fn the_sprite_list_matches_its_snapshot() {
 }
 
 #[test]
+fn the_filtered_sprite_list_matches_its_snapshot() {
+    // #313.
+    let world = field();
+    for (theme_name, theme) in themes() {
+        let mut app = app_for(&world, theme);
+        app.apply(Action::SpriteList, &world);
+        app.apply(Action::FilterList, &world);
+        for c in "#6".chars() {
+            app.apply(Action::Type(c), &world);
+        }
+        check(
+            &format!("{theme_name}-sprite-list-filtered"),
+            &screen(&app, &world),
+        );
+    }
+}
+
+#[test]
 fn the_population_graph_matches_its_snapshot() {
     // Run on to tick 3,000 so the graph has 30 columns, with the moment at
     // tick 1,500 picked.
