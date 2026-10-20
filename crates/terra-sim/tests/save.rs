@@ -3,7 +3,9 @@
 //! build, or a damaged one, is refused rather than crashing.
 
 mod common;
-use common::{WorldBuilder, at, builtin, builtin_changing, builtin_source, pet, run_for};
+use common::{
+    WorldBuilder, at, builtin, builtin_changing, builtin_source, default_world, pet, run_for,
+};
 
 use terra_sim::{
     Command, EntityId, EventKind, Genome, LoadError, SCHEMA_VERSION, World, WorldConfig,
@@ -12,8 +14,7 @@ use terra_sim::{
 /// The default world, with the Cursor busy: it leads a sprite for a while,
 /// lets go, then picks up a ball and holds it.
 fn busy_world(seed: u64, ticks: u64) -> World {
-    let data = builtin();
-    let mut world = World::new(WorldConfig::builtin(&data), data, seed);
+    let mut world = default_world(seed);
     for _ in 0..ticks {
         match world.tick() {
             40 => {

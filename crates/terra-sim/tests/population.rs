@@ -6,13 +6,14 @@
 //! small.
 
 mod common;
-use common::{ALONE, FEMALE, WorldBuilder, at, builtin, family_in, laid, lone, run_for, until};
+use common::{
+    ALONE, FEMALE, WorldBuilder, at, default_world, family_in, laid, lone, replayed, run_for, until,
+};
 
 use std::collections::BTreeMap;
 
 use terra_sim::{
-    Command, EventKind, Generations, LifeStage, Playback, PopulationChanges, PopulationCount,
-    World, WorldConfig,
+    Command, EventKind, Generations, LifeStage, PopulationChanges, PopulationCount, World,
 };
 
 /// The eggs and sprites in `world` now, by life stage, in the order a count
@@ -71,8 +72,7 @@ fn doomed_sprite() -> World {
 
 #[test]
 fn a_new_world_counts_its_first_sprites_then_every_100_ticks() {
-    let data = builtin();
-    let mut world = World::new(WorldConfig::builtin(&data), data, 7);
+    let mut world = default_world(7);
     assert!(
         world.population().is_empty(),
         "nothing counted before it steps"
@@ -225,11 +225,7 @@ fn a_replay_plays_the_record_back_with_its_generations() {
             .any(|count| count.generations == generations(1, 2)),
         "her hatchling was counted"
     );
-    let mut playback = Playback::new(&world.replay().unwrap()).expect("the replay plays");
-    while playback.world().tick() < playback.end() {
-        playback.step();
-    }
-    assert_eq!(playback.divergence(), None);
+    let playback = replayed(&world);
     assert_eq!(playback.world().population(), world.population());
 }
 
@@ -248,8 +244,7 @@ fn a_sprite_the_cursor_spawned_is_counted_as_spawned() {
 
 #[test]
 fn a_save_keeps_the_record() {
-    let data = builtin();
-    let mut world = World::new(WorldConfig::builtin(&data), data, 3);
+    let mut world = default_world(3);
     run_for(&mut world, 350);
     let mut loaded = World::load(&world.save()).expect("the save loads");
     assert_eq!(loaded.population(), world.population());

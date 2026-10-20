@@ -3,7 +3,7 @@
 //! with scripted kicks.
 
 mod common;
-use common::{at, builtin_source, builtin_with, run_for, walkers, walkers_in};
+use common::{at, builtin_source, builtin_with, run_for, walkers, walkers_in, wander_to};
 
 use terra_sim::{DataPack, EventKind, Outcome, Pos, Removal, ScriptedAction, Verb, World};
 
@@ -57,7 +57,7 @@ fn all_rolls(world: &mut World, ticks: usize) -> Vec<Vec<Pos>> {
 fn kick_and_leave(pos: Pos, away: Pos) -> [ScriptedAction; 3] {
     [
         ScriptedAction::Play { at: pos },
-        ScriptedAction::Wander { destination: away },
+        wander_to(away),
         ScriptedAction::Rest,
     ]
 }
@@ -72,7 +72,7 @@ fn rolls(world: &mut World, ticks: usize) -> Vec<Pos> {
         .collect()
 }
 
-const LANE: [&str; 3] = ["...........", "...........", "..........."];
+const LANE: [&str; 3] = ["..........."; 3];
 
 #[test]
 fn a_kicked_ball_rolls_four_tiles_away_from_the_kicker_one_a_tick() {
@@ -83,15 +83,7 @@ fn a_kicked_ball_rolls_four_tiles_away_from_the_kicker_one_a_tick() {
     assert_eq!(path, expected.map(|(x, y)| at(x, y)));
 }
 
-const FIELD: [&str; 7] = [
-    "...........",
-    "...........",
-    "...........",
-    "...........",
-    "...........",
-    "...........",
-    "...........",
-];
+const FIELD: [&str; 7] = ["..........."; 7];
 
 #[test]
 fn a_ball_kicked_from_its_own_tile_rolls_the_way_the_kicker_last_stepped() {
@@ -101,9 +93,7 @@ fn a_ball_kicked_from_its_own_tile_rolls_the_way_the_kicker_last_stepped() {
         &[(
             at(1, 3),
             &[
-                ScriptedAction::Wander {
-                    destination: at(3, 3),
-                },
+                wander_to(at(3, 3)),
                 ScriptedAction::Play { at: at(3, 3) },
                 ScriptedAction::Rest,
                 ScriptedAction::Rest,
@@ -220,9 +210,7 @@ fn a_ball_with_no_way_back_stops_for_good() {
             at(1, 1),
             &[
                 ScriptedAction::Play { at: at(2, 1) },
-                ScriptedAction::Wander {
-                    destination: at(8, 2),
-                },
+                wander_to(at(8, 2)),
                 ScriptedAction::Rest,
             ],
         )],

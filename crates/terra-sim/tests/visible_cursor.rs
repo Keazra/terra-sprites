@@ -21,13 +21,7 @@ fn world(rows: &[&str], sprite: Pos, genes: &str) -> World {
     WorldBuilder::new(rows).sprites(&[(sprite, genes)]).build()
 }
 
-const OPEN: [&str; 5] = [
-    "...........",
-    "...........",
-    "...........",
-    "...........",
-    "...........",
-];
+const OPEN: [&str; 5] = ["..........."; 5];
 
 /// Shows the Cursor to sprites, on `tile`.
 fn show_cursor(world: &mut World, tile: Pos) {

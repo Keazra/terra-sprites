@@ -7,12 +7,10 @@
 mod common;
 use common::{
     ALONE, FEMALE, LONE, NO_COPYING_ERRORS, at, builtin_changing, family, family_in, hatch, laid,
-    until,
+    replayed, until,
 };
 
-use terra_sim::{
-    Command, DeathCause, EntityId, EventKind, LifeStage, Origin, Playback, Sex, World,
-};
+use terra_sim::{Command, DeathCause, EntityId, EventKind, LifeStage, Origin, Sex, World};
 
 /// The changes to `physiology.ron` that make thirst kill within a few
 /// dozen ticks, so a sprite with no water dies soon after it hatches.
@@ -189,12 +187,7 @@ fn the_dead_replay_exactly() {
             .count();
     }
     assert!(deaths >= 1, "a hatchling died");
-    let mut playback = Playback::new(&world.replay().unwrap()).expect("the replay plays");
-    while playback.world().tick() < playback.end() {
-        playback.step();
-    }
-    assert_eq!(playback.divergence(), None);
-    assert_eq!(playback.world().state_hash(), world.state_hash());
+    let playback = replayed(&world);
     let remembered = |world: &World| world.dead_sprites().map(|d| d.id()).collect::<Vec<_>>();
     assert_eq!(remembered(playback.world()), remembered(&world));
 }

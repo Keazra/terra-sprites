@@ -2,7 +2,9 @@
 //! and holds items, one thing at a time.
 
 mod common;
-use common::{WorldBuilder, at, builtin_changing, id_at, pet, refusal, run_for, starters};
+use common::{
+    WorldBuilder, at, builtin_changing, id_at, pet, refusal, run_for, starters, wander_to,
+};
 
 use terra_sim::{
     Blocker, Command, DataPack, Emptied, EntityId, EventKind, Grip, Outcome, Pos, Rejection,
@@ -36,12 +38,7 @@ fn taking_hold_of_a_sprite_pulls_it_away_from_what_it_was_doing() {
         &["........"],
         &[],
         &[at(0, 0)],
-        &[(
-            at(0, 0),
-            ScriptedAction::Wander {
-                destination: at(7, 0),
-            },
-        )],
+        &[(at(0, 0), wander_to(at(7, 0)))],
     );
     let id = id_at(&world, at(0, 0));
     world.step();

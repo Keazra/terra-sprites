@@ -6,8 +6,8 @@
 #![allow(dead_code)]
 
 use terra_sim::{
-    Command, DataPack, EntityId, Event, EventKind, Genome, Learned, Map, Outcome, Pos, Rejection,
-    Scenario, ScenarioError, ScriptedAction, Verb, World,
+    Command, DataPack, EntityId, Event, EventKind, Genome, Learned, Map, Outcome, Playback, Pos,
+    Rejection, Scenario, ScenarioError, ScriptedAction, Verb, World, WorldConfig,
 };
 
 /// The built-in data pack.
@@ -546,4 +546,58 @@ pub fn builtin_source(file: &str) -> &'static str {
         .find(|&&(path, _)| path == file)
         .unwrap_or_else(|| panic!("the built-in pack has no {file}"))
         .1
+}
+
+/// A scripted walk to `destination`.
+pub fn wander_to(destination: Pos) -> ScriptedAction {
+    ScriptedAction::Wander { destination }
+}
+
+/// The default world, from the built-in preset and pack, made from `seed`.
+pub fn default_world(seed: u64) -> World {
+    let data = builtin();
+    World::new(WorldConfig::builtin(&data), data, seed)
+}
+
+/// A field of grass `width` by `height` tiles, as a drawing's rows, at most
+/// 64 tiles wide.
+pub fn grass(width: usize, height: usize) -> Vec<&'static str> {
+    const ROW: &str = "................................................................";
+    assert!(width <= ROW.len(), "{width} tiles is too wide a field");
+    vec![&ROW[..width]; height]
+}
+
+/// A world drawn from `rows`, with `objects`, and `sprites` with genomes
+/// made as given, each starting on the scripted actions given for its tile.
+pub fn scene(
+    rows: &[&str],
+    objects: &[(Pos, &str)],
+    sprites: &[(Pos, MakeGenome)],
+    scripted: &[(Pos, ScriptedAction)],
+) -> World {
+    WorldBuilder::new(rows)
+        .objects(objects)
+        .sprites_made(sprites)
+        .scripts(scripted)
+        .build()
+}
+
+/// Rests all the time, and does nothing else.
+pub const RESTER: &str = r#"
+    Instinct(inputs: [("always", false)], verb: Rest, weight: 1.0),
+    BrainParam(param: "tau_base", value: 0.02),
+"#;
+
+/// Plays the recording of `world` back to its end, checking that it never
+/// parted from the world and ends in the world's state, and gives the
+/// playback (design §2.7).
+pub fn replayed(world: &World) -> Playback {
+    let replay = world.replay().expect("the world records");
+    let mut playback = Playback::new(&replay).expect("the replay plays");
+    while playback.world().tick() < playback.end() {
+        playback.step();
+    }
+    assert_eq!(playback.divergence(), None);
+    assert_eq!(playback.world().state_hash(), world.state_hash());
+    playback
 }

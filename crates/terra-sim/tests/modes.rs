@@ -4,9 +4,9 @@
 //! changes nothing in how a world runs.
 
 mod common;
-use common::{builtin, run_for};
+use common::{builtin, default_world, replayed, run_for};
 
-use terra_sim::{Mode, Playback, World, WorldConfig};
+use terra_sim::{Mode, World, WorldConfig};
 
 /// The default world from `seed`, made in `mode`.
 fn world_in(mode: Mode, seed: u64) -> World {
@@ -16,8 +16,7 @@ fn world_in(mode: Mode, seed: u64) -> World {
 
 #[test]
 fn a_new_world_is_a_story_world_unless_made_in_lab_mode() {
-    let data = builtin();
-    let world = World::new(WorldConfig::builtin(&data), data, 7);
+    let world = default_world(7);
     assert_eq!(world.mode(), Mode::Story);
     assert_eq!(world_in(Mode::Lab, 7).mode(), Mode::Lab);
 }
@@ -58,13 +57,7 @@ fn a_lab_worlds_replay_starts_afresh_in_lab_mode() {
     let mut world = world_in(Mode::Lab, 7);
     world.start_recording();
     run_for(&mut world, 1_100);
-    let bytes = world.replay().expect("the world records");
-    let mut playback = Playback::new(&bytes).expect("the replay plays");
+    let playback = replayed(&world);
     assert!(playback.started_fresh(), "from its seed, not from a save");
     assert_eq!(playback.world().mode(), Mode::Lab);
-    while playback.world().tick() < playback.end() {
-        playback.step();
-    }
-    assert_eq!(playback.divergence(), None);
-    assert_eq!(playback.world().state_hash(), world.state_hash());
 }
