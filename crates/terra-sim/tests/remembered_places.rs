@@ -207,7 +207,7 @@ fn resting(data: &DataPack) -> Genome {
 /// A thirsty sprite in `rows` that has drunk at the west wall and is
 /// wandering off along row 2, as in `drank_and_wandered_off`, and with
 /// nothing pressing does `idle`. Its eye isn't caught by a sprite in its
-/// way, so its mind stays on the water.
+/// way, so it keeps heading for the water.
 fn drank_in(rows: &[String], idle: Verb) -> World {
     let data = builtin();
     let thirsty = genome(
