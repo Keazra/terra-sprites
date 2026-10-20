@@ -431,7 +431,10 @@ fn a_thing_s_tags_run_in_the_order_its_type_lists_them() {
         let data = builtin_changing_files(&[
             ("tags.ron", &[(r#"(name: "Thorny","#, tags)]),
             ("objects.ron", &[("tags: [Solid, Fixture, Thorny]", listed)]),
-            ("physiology.ron", &[("water: 0.002)", "water: 0.0)")]),
+            (
+                "physiology.ron",
+                &[("water: (pace: 0.002,", "water: (pace: 0.0,")],
+            ),
         ]);
         let (world, sprite, events) = shoved_into_a_thornbush(data);
         let thornbush = Thing::ObjectType("thornbush".into());

@@ -17,7 +17,7 @@ The chemicals in a sprite's body (design §4.1, Appendix A). Each has a level fr
 
 **Breeding** (M2 design §10) reads two hormones: `feminiser`, as a male adult turns female once it's above physiology's `breeding.turns_female`, and `longing`, which in a pack from before courtship a female must have reached `breeding.breeds_alone` to breed alone (the built-in pack's starter genes still lead a female to breed alone by it, but her body allows it only after `breeding.alone_after`). The built-in list also has the drive `arousal`, which only genes use. A pack without both hormones (or without breeding's [loci](loci.md)) has no breeding.
 
-**Courtship** (M2 design §15) reads one more: `receptivity`, as a pair can mate only once the female's is at least physiology's `breeding.receptive`. The built-in list also has `grief`, which only genes use: in the starter genome losing a partner raises it, and it holds arousal down. A pack without `receptivity` (or without courtship's [loci](loci.md)) breeds with no calls or courtship.
+**Courtship** (M2 design §15) reads one more: `receptivity`, as a pair can mate only once the female's is at least physiology's `breeding.receptive`. The built-in list also has `grief`, which only genes use: in the starter genome losing a partner raises it, and it holds arousal down. And `fullness`, a hormone only genes use too (M2 design §19.4): in the starter genome what's in the gut raises it, and it leans a sprite away from eating and drinking. A pack without `receptivity` (or without courtship's [loci](loci.md)) breeds with no calls or courtship.
 
 **Families** (M2 design §15.6) read no chemical. The built-in list has the drive `anxiety`, which only genes use: in the starter genome it rises while a sprite's family is out of sight.
 

@@ -20,7 +20,7 @@ use crate::ecology::{self, holds_without_drawing, new_object, square};
 use crate::events::{DeathCause, Emptied, Event, EventKind};
 use crate::expression::{Expression, expressions};
 use crate::family;
-use crate::generate::{generate, place_objects, place_sprites};
+use crate::generate::{generate, place_newborns, place_objects, place_sprites};
 use crate::genome::{GeneView, Genome};
 use crate::inheritance;
 use crate::learning::{self, Subject};
@@ -541,6 +541,27 @@ impl<'a> SpriteView<'a> {
         let target = self.sprite.brain.snapshot.as_ref()?.target?;
         let (pos, _) = self.world.state.whereabouts(&self.world.data, target)?;
         Some(pos)
+    }
+
+    /// What it attends to (design §5.3), while that's still in the world:
+    /// the thing `attending_to` gives the tile of.
+    pub fn attended(&self) -> Option<Target> {
+        self.attending_to()?;
+        self.sprite.brain.snapshot.as_ref()?.target
+    }
+
+    /// Whether it stands with nothing to do (M2 design §19.2), as its
+    /// `standing` sensor reads it: no action running, and neither led by the
+    /// Cursor nor sliding from a shove. An action that ended on the latest
+    /// tick still shows how it ended, so the sprite isn't standing yet.
+    pub fn is_standing(&self) -> bool {
+        let latest = self.world.state.tick.saturating_sub(1);
+        action::is_standing(self.sprite)
+            && self
+                .sprite
+                .action
+                .as_ref()
+                .is_none_or(|action| action.ended_at.is_none_or(|t| t < latest))
     }
 
     /// The traits its body has: its genes', clamped to physiology's ranges.
@@ -1068,13 +1089,69 @@ impl World {
     /// A new world, generated from `config` and `seed`, in `mode`, which
     /// it keeps for its whole life (M2 design §16).
     pub fn new_in(config: WorldConfig, data: DataPack, seed: u64, mode: Mode) -> World {
+        World::generated(config, data, seed, mode, place_sprites)
+    }
+
+    /// The unattended run's world (M2 design §19.6): `config`'s world as
+    /// generated from `seed`, in Lab mode, but with its first sprites
+    /// newborns, placed as the Cursor places them and spread over the whole
+    /// map, and nobody else, so none has anyone to learn from.
+    pub fn unattended(config: WorldConfig, data: DataPack, seed: u64) -> World {
+        World::generated(config, data, seed, Mode::Lab, |config, data, state| {
+            place_newborns(config, data, state, &[])
+        })
+    }
+
+    /// The unattended run's world as `unattended` makes it, but with its
+    /// newborns taking after the hatched sprites alive in `from`, in turn,
+    /// rather than wild: each one's genome and hidden flaws (M2 design
+    /// §19.6). It's how a species' genes fare with nobody to look after
+    /// their young. None if no hatched sprite is alive in `from`, whose
+    /// data pack must be `data`.
+    pub fn unattended_like(
+        config: WorldConfig,
+        data: DataPack,
+        seed: u64,
+        from: &World,
+    ) -> Option<World> {
+        let like: Vec<(Genome, Vec<u8>)> = from
+            .state
+            .sprites
+            .iter()
+            .map(|(_, sprite)| sprite)
+            .filter(|sprite| !sprite.parents.is_empty())
+            .map(|sprite| (sprite.genome.clone(), sprite.flaws.clone()))
+            .collect();
+        if like.is_empty() {
+            return None;
+        }
+        Some(World::generated(
+            config,
+            data,
+            seed,
+            Mode::Lab,
+            |config, data, state| place_newborns(config, data, state, &like),
+        ))
+    }
+
+    /// `config`'s world as generated from `seed`, in `mode`, with its
+    /// objects, and its first sprites as `place` puts them: the steps every
+    /// generated world shares, so the unattended run's world is the one
+    /// `new_in` makes but for its sprites (M2 design §19.6).
+    fn generated(
+        config: WorldConfig,
+        data: DataPack,
+        seed: u64,
+        mode: Mode,
+        place: impl FnOnce(&WorldConfig, &DataPack, &mut WorldState),
+    ) -> World {
         let mut rng = ChaCha8Rng::seed_from_u64(seed);
         let map = generate(&config, &data, &mut rng);
         let mut world = World::with(map, data, rng, seed);
         world.state.most_sprites = config.most_sprites() as u16;
         world.state.mode = mode;
         place_objects(&config, &world.data, &mut world.state);
-        place_sprites(&config, &world.data, &mut world.state);
+        place(&config, &world.data, &mut world.state);
         world.config = Some(config);
         world
     }
@@ -1742,6 +1819,7 @@ impl World {
                     nearby_sprites: (others as f32 / f32::from(nearby.full)).min(1.0),
                     steps: sprite.did.steps,
                     resting: sprite.did.rested,
+                    standing: action::is_standing(sprite),
                     stage: sprite.stage(),
                     sooner: sprite.sooner(data),
                     fertile: breeding::fertile(state, sprite, data),
@@ -3987,12 +4065,15 @@ mod tests {
         fn known(brain: &mut Brain) -> &mut TypeMemory {
             brain.experience.learn_about(Subject::ObjectType(1), 1)
         }
-        let breaks: [fn(&mut Brain); 6] = [
+        let breaks: [fn(&mut Brain); 8] = [
             |brain| known(brain).worth[0] = -0.1,
             |brain| known(brain).good = 1.5,
             |brain| known(brain).bad = 0.2,
             |brain| known(brain).habits[0] = f32::NAN,
             |brain| known(brain).taught_habits[0] = 1.5,
+            // What it took on by watching (M2 design §19.7).
+            |brain| known(brain).watched_bad = 0.2,
+            |brain| known(brain).watched_habits[0] = 1.5,
             |brain| known(brain).familiarity = 2.0,
         ];
         for (i, broken) in breaks.into_iter().enumerate() {

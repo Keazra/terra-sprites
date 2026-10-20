@@ -346,7 +346,7 @@ A replay file contains (v35):
 
 ### 3.2 World generation and connectivity
 
-1. **Terrain:** seeded value noise produces height and moisture fields. It is built in-house from + − × ÷ alone (so it needs no `libm`), and its random lattice values come from the world RNG. Terrain bands are set **by percentile**, so every seed gets about the same mix: the lowest 20% of heights are deep water, then 12% shallow water, 8% sand, 50% land, and the highest 10% rock. The driest 40% of the land is dirt; the rest is grass.
+1. **Terrain:** seeded value noise produces height and moisture fields. It is built in-house from + − × ÷ alone (so it needs no `libm`), and its random lattice values come from the world RNG. Terrain bands are set **by percentile**, so every seed gets about the same mix: the lowest 20% of heights are deep water, then 12% shallow water, 8% sand, 50% land, and the highest 10% rock. The driest 40% of the land is dirt; the rest is grass. From Slice 29, the world config sets the water's share and the lakes' size, and the other bands follow the water (M2 design §19.1): these are the gentle world's bands, and the default world has 4% water and 78% land.
 2. **Regions:** a flood fill using exactly the movement rules above (**shallow water counts as walkable**) finds the walkable regions. The largest one is the **mainland**.
 3. **Joining regions:**
    - Every other region of **≥64 tiles** is joined to the mainland, largest first, along the route that **carves the fewest tiles, then takes the fewest steps**. The route uses orthogonal steps only, so it never depends on a diagonal, and the connection it carves is one tile wide. Deep water becomes shallow water; any other unwalkable terrain becomes dirt. A route that crosses another region joins that region too.
@@ -355,7 +355,7 @@ A replay file contains (v35):
    - **Objects:** each object type's count comes from the preset's densities (§3.9). Solid objects are placed first, then items, each type in ID order. Each object goes on a tile drawn uniformly from the type's remaining candidates: mainland tiles where it may go. A tile found unusable is set aside for the rest of that type (one that would cut a path might become usable once a neighbour fills in, but checking again would slow generation). If the map runs out of room, generation places what fits and carries on.
    - **Generation always keeps paths open:** a solid object goes only where `KeepsPathsOpen` (§3.3) holds, so no world starts out split.
    - **Objects start partway through their lives.** For an object with stages, generation draws every stage's duration, then an age uniformly within their total, and starts the object at that point: in the stage the age falls in, with that stage's remaining time. Its counters start at 0, and no `OnStageEnter` fires for the stage it starts in. Without this, every bush would start as a seedling (no fruit for 1,500 ticks or more) and they'd all expire in the same few thousand ticks.
-   - **Sprites** are placed after the objects: the preset's count (§3.9), each on a tile drawn uniformly from the walkable mainland tiles that hold no object and no sprite. Each is made from the starter genome with spawn variation (§4.9).
+   - **Sprites** are placed after the objects: the preset's count (§3.9), each on a tile drawn uniformly from the walkable mainland tiles that hold no object and no sprite. Each is made from the starter genome with spawn variation (§4.9). From Slice 29, a world config's `start_near_water` has them take the tiles near drinkable water first, while any is free (M2 design §19.1).
    - **The first population doesn't all run dry at once.** Each sprite world generation places starts with its energy and its hydration each drawn uniformly between 60% and 100% of the newborn level (§4.7). Without this, sprites that all start full would all get hungry, get thirsty, and die of neglect on the same tick.
 
 Property tests check full connectivity across many seeds.
@@ -1062,7 +1062,7 @@ World randomness is separate: plant rules and the order actions resolve in. It c
 - **Every** action that hasn't ended otherwise ends at the **action timeout** of 60 ticks, with outcome `timed_out`.
 - **A led or sliding sprite has no action** (v23, v25). Taking hold of it ends its action `pulled_away`; a shove lets go of it, and it slides with none. Let go and not sliding, it chooses afresh at its next step 5.
 - Bout lengths and the timeout are set in `physiology.ron`.
-- **Outcomes:** `applied` / `walking` / `blocked` / `failed` / `interrupted` / `timed_out` / `pulled_away`. `walking` and `blocked` can also be per-tick outcomes of an action that's still running. `interrupted` ends an action the sprite changed its mind about: attention switched away from its target (§5.3), or another verb beat it by more than `switch_margin` (5b). `pulled_away` (v23) ends the action of a sprite the Cursor takes hold of (§6.5).
+- **Outcomes:** `applied` / `walking` / `blocked` / `failed` / `interrupted` / `timed_out` / `pulled_away` / `too_full` (M2 design §19.4). `walking` and `blocked` can also be per-tick outcomes of an action that's still running. `interrupted` ends an action the sprite changed its mind about: attention switched away from its target (§5.3), since M2's Slice 29 only when a verb then pulls at least its `act_threshold` (M2 design §19.2), or another verb beat it by more than `switch_margin` (5b). `too_full` (M2) ends a bite or a drink its gut has no room for. `pulled_away` (v23) ends the action of a sprite the Cursor takes hold of (§6.5).
 
 ### 5.6 Learning (step 4)
 
@@ -1081,7 +1081,7 @@ World randomness is separate: plant rules and the order actions resolve in. It c
 
 In this section, *c* is an object type (v19). Sprites are learned about one by one for worth and fear, and as a whole for habits and familiarity.
 
-**By watching, too** (since Slice 28): a sprite also takes on a share of what the one it watches knows about what that one tried, or had done to it. Of a thing, that's its worth for the try's motive, its good and its bad; of a sprite, or the Cursor, that the other tried something on or was hurt by, its fear, never a liking; and the habit of the verb tried, which the one watching keeps as a taught habit (M2 design §18.2, #146).
+**By watching, too** (since Slice 28): a sprite also takes on a share of what the one it watches knows about what that one tried, or had done to it. Of a thing, that's its worth for the try's motive, its good and its bad; of a sprite, or the Cursor, that the other tried something on or was hurt by, its fear, never a liking; and the habit of the verb tried, which the one watching keeps as a taught habit (M2 design §18.2, #146). Since Slice 29, what it takes on of a thing's bad and of habits is kept apart from what it found out itself and what the Cursor taught it, settles either way towards the other's first-hand view, and is never passed on (M2 design §19.7).
 
 **A thing's worth now:** `value_c = Σ_n level_n × G_n[c] + quiet × G[c] + B[c]`, over the needs *n*. A berry learned good for hunger counts for a lot when the sprite is starving and nothing when it's full; a thornbush learned bad counts always. For an object type the sprite doesn't know yet, the values are its category's summary (below).
 
@@ -1323,7 +1323,7 @@ The species is dropped into a world it doesn't know and has to learn about it. I
   - **It's `░▒▓█` in every theme,** as the bar is (§6.2: text stays CP437), and a drive's is drawn in its bar's colour on both tabs, any other in its line's.
   - **The screen keeps it, not the world** (§6.8): after every tick the game runs, for every living sprite, so selecting a sprite shows its past at once. A replay's ticks count; fast-forward's don't, since it has no screen. It's never saved and isn't part of `state_hash`, and the open tab's policy shows or hides it with the rest of the tab (§6.4). Past 4×, in Lab mode, it turns over faster than it can be read, as the numbers beside it do.
 
-- **The Body tab's action line** describes what the sprite is doing, in the present tense, naming its target, with no coordinates. It never speaks as the sprite: the Brain tab shows *why*, and a line in the sprite's own voice could contradict it. When an action ends, its ending stays until the next one starts.
+- **The Body tab's action line** describes what the sprite is doing, in the present tense, naming its target, with no coordinates. It never speaks as the sprite: the Brain tab shows *why*, and a line in the sprite's own voice could contradict it. When an action ends, its ending stays until the next one starts, or since M2's Slice 29, a sprite with nothing to do shows it for a tick and then what it's watching (M2 design §19.2).
 
   | Moment | Line | Detail view (`v`) |
   |---|---|---|
@@ -1809,7 +1809,7 @@ Implementation is **test-first, one vertical slice at a time.** Everything in `t
 |---|---|---|---|
 | A1 | 1 sprite; berry bushes, thornbushes, water. The world may be shaped to meet the baseline: a small walled arena where thornbushes outnumber berry bushes | none | Applied thornbush contacts (Eat, Play and Hit on a thornbush) over ticks 0–20,000 ≤ 50% of the control's, where the control is the same seed with learning switched off (v16, §7.1). The control needs ≥20 such contacts; below that the test fails as badly calibrated. The learning sprite must live through the run. |
 | A2 | 1 sprite; balls, food, water | Each applied Play on a Ball at tick *t* < 9,900 → a pet, `Reward(actor)`, stamped *t+1* | Applied Play-on-Ball count ≥ 1.5× control |
-| A3 | 4 sprites in a small arena; food, water | Each applied Hit on a Sprite at tick *t* < 9,900 → a shock, `Correct(actor, amplified)`, meaning **the hitter**, stamped *t+1* | Applied Hit-on-Sprite count, all sprites combined, ≤ 0.5× control |
+| A3 | 4 sprites in a small walled arena, 7 by 5 inside; food, water. Since sprites act only when moved (M2 design §19.2), sprites with room to roam seldom meet to hit each other, so the arena keeps them close | Each applied Hit on a Sprite at tick *t* < 9,900 → a shock, `Correct(actor, amplified)`, meaning **the hitter**, stamped *t+1* | Applied Hit-on-Sprite count, all sprites combined, ≤ 0.5× control |
 
 **Measured with slice 10's PR** (v21), not CI tests:
 - **The strength sweep:** A2's and A3's trained runs with the pet or zap at a few strengths (¼, ½ and full), to see how many a lesson takes and what they do to the result.
@@ -1828,7 +1828,7 @@ M1 is **done** when all of the following hold:
 | A1 | The thornbush lesson (§7.3) | Scenario test |
 | A2 | Reward training (§7.3) | Scenario test |
 | A3 | Correct training (§7.3) | Scenario test |
-| A4 | **Viability,** a safety floor (v37). In the default world, ≥80% of sprites survive the first 10,000 ticks (median of 10 seeds), and starvation plus dehydration cause <25% of the grown-up deaths, those in ticks 10,000–50,000, over all 10 seeds together; with fewer than 10 such deaths it's met | Baseline run's viability run (§7.6) |
+| A4 | **Viability,** a safety floor (v37), and since Slice 29 M2's G5 too (M2 design §19.6). Of the unattended run's newborns, 10% to 30% grow up (median of 10 seeds); of the young hatched in the viability run, at least 60% grow up, over all 10 seeds together, those still growing at the end not counted; and adults dying of starvation or dehydration are under 1 in 20 of the grown-up deaths, those of sprites grown up, adult or old, over all 10 seeds together, with old sprites' reported apart; with fewer than 10 such deaths it's met. Until Slice 29 it asked that ≥80% of sprites survive the first 10,000 ticks, and counted grown-up deaths as those in ticks 10,000–50,000, under 25% | Baseline run's viability and unattended runs (§7.6) |
 | A5 | **Performance.** 100 sprites at ≥200 ticks per second in a release build on the development machine | Benchmark |
 | A6 | **Determinism and persistence.** Test layers 3 and 4 pass | Tests |
 | A7 | **Robustness.** A headless soak of 1,000,000 ticks at Max speed with a random script of the Cursor's commands produces no panics and no invariant violations | Baseline run's soak (§7.6) |
@@ -1861,10 +1861,11 @@ What's too slow for CI is measured on `main` instead, each time it moves, by a *
 
 - **What it measures:**
   - **The viability run:** the default world on seeds 1–10, 50,000 ticks each, with no player. It gives:
-    - A4: survival at tick 10,000, as the median of 10 seeds, and the grown-up deaths over all of them, with how many were of starvation or dehydration (v37)
+    - A4: the young hatched that grew up, over all 10 seeds, and the grown-up deaths over all of them, adult or old, with how many were of starvation or dehydration (v37; by life stage since Slice 29, M2 design §19.6)
     - the thorn trap's count: deaths by thornbush in ticks 0–30,000, the same worlds as its lab scenario (§7.3)
     - per seed, who survived, what killed the rest, and how often each verb was applied.
     - the genes of the hatched sprites alive at its end, with **gene warnings** when they've gone somewhere worth a look: more than half of them lacking a needs gene, or a gene value nearly at the end of its range (#274, M2 design §16.6).
+  - **The unattended run** (Slice 29, M2 design §19.6): the default world on seeds 1–10 with its first sprites newborns and nobody else, until each has grown up or died. It gives A4's share of newborns that grew up, as the median of 10 seeds, with each seed's and what killed the rest.
   - **A1–A3's numbers:** each scenario's medians, for its runs and their controls, on CI's seeds. CI stays the judge; the report records them so that a change shows.
   - **The soak (A7)** (v37): the default world for a million ticks with a random script of the Cursor's commands, on a new seed each run, from the clock unless one is given. It runs first, as the longest job.
     - **The script plays the player:** pets, hugs, zaps and shocks; taking hold, letting go and shoving; picking up, putting down and throwing; moving the Cursor and showing or hiding it; placing, spawning and naming. It acts on about one tick in ten, and while the Cursor leads a sprite, moves it on half the ticks.
@@ -1872,7 +1873,7 @@ What's too slow for CI is measured on `main` instead, each time it moves, by a *
     - **It spawns only while there are fewer than twice the sprites the world started with.**
     - **One seed makes it:** the world is generated from it, and the script draws from its own RNG, seeded from it on a stream of its own, never from the world's (§2.3). `cargo run --profile baseline -p terra-sim --example soak -- --seed N --ticks T` runs one again.
     - **Its report** gives its seed and its verdict, and, if it finished, the sprites alive at the end and the most at once, the objects, the deaths, and each command given and refused. Only its verdict can count as moved.
-- **The baseline report** names the commit it measured and the one it's compared with, and opens with every number that moved.
+- **The baseline report** names the commit it measured and the one it's compared with, and opens with every number that moved. A report from before Slice 29 counted A4's grown-up deaths by tick, so its A4 counts aren't set beside the counts by life stage, which show as new (M2 design §19.6).
   - Each criterion is **met**, **not met yet** or **no data**, against §7.3 and §7.4's pass marks exactly, so a share of no deaths is no data. A criterion that a tuning slice hasn't yet reached names that slice.
   - **Gene warnings** (#274) come after what moved and anything broken, or it says there are none. A warning is no verdict, and the launcher files no issue for one (M2 design §16.6).
   - **Broken** means only a panic or a broken invariant (a crash is a shoved sprite's, §3.5.4). It's given with the seed, what it said, which names the tick for a broken invariant, and the command that replays it. The seeds that finished are still reported, and a median over fewer seeds than ran says so.

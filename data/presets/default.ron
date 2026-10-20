@@ -13,6 +13,22 @@
     // Leave it out for 100.
     most_sprites: 100,
 
+    // The share of the map's tiles under water, as a percentage, from 1 to
+    // 60. Leave it out for 32, the watery world of the game before Slice 29
+    // (the "gentle" preset).
+    water: 4,
+
+    // How big the lakes are, from 1 to 5: the hills and hollows are this
+    // many times as broad, so the same water lies in fewer, bigger lakes.
+    // Leave it out for 1, the scattered ponds of the gentle world.
+    lake_size: 3,
+
+    // The first sprites start within this many tiles of drinkable water, as
+    // the crow flies (a diagonal step counts as one), while any such tile is
+    // free, and then anywhere on the map. Leave it out for anywhere on the
+    // map.
+    start_near_water: 10,
+
     // Plants and toys, by density: how many of each object type go in every
     // `per_tiles` tiles, so a bigger map gets proportionally more. A type not
     // named here gets none. Names are object types from the data pack's

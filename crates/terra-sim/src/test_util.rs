@@ -81,7 +81,7 @@ pub fn id_at(world: &World, pos: Pos) -> EntityId {
 /// `config` as a save or replay keeps it, broken in each way a damaged file
 /// might hold it: every rule a preset file must keep, broken once.
 pub fn broken_presets(config: &WorldConfig) -> Vec<Preset> {
-    let breaks: [fn(&mut Preset); 9] = [
+    let breaks: [fn(&mut Preset); 13] = [
         |preset| preset.width = 0,
         |preset| preset.height = 31,
         |preset| preset.width = 1025,
@@ -96,6 +96,10 @@ pub fn broken_presets(config: &WorldConfig) -> Vec<Preset> {
             preset.sprites = 50;
             preset.most_sprites = 49;
         },
+        |preset| preset.water = 0,
+        |preset| preset.water = 61,
+        |preset| preset.lake_size = 0,
+        |preset| preset.lake_size = 6,
     ];
     breaks
         .into_iter()

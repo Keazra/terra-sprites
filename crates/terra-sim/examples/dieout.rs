@@ -368,7 +368,7 @@ fn in_parallel(options: &Options) -> Vec<Run> {
 fn run(way: &'static Way, seed: u64, options: &Options) -> Run {
     let data = way.data();
     let config = WorldConfig::builtin(&data);
-    let values = gene_values(&data.starter().genes(&data));
+    let values = gene_values(&data.starter().genes(&data), &data.starter().switches());
     let starter = Starter {
         ate_gain: values.iter().position(|(name, _)| name == ATE_HUNGER_GAIN),
         values,

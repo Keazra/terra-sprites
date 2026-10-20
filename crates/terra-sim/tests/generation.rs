@@ -289,3 +289,176 @@ fn builtin_with<'a>(file: &str, text: &'a str) -> Vec<(&'static str, &'a str)> {
         .map(|&(path, builtin)| (path, if path == file { text } else { builtin }))
         .collect()
 }
+
+/// A world from the built-in pack with `preset`'s text as its preset.
+fn world_of(preset: &str, seed: u64) -> World {
+    let data = DataPack::builtin().expect("valid pack");
+    let config = WorldConfig::from_ron(preset, &data).expect("valid preset");
+    World::new(config, data, seed)
+}
+
+/// The share of `map`'s tiles under water, deep or shallow.
+fn water_share(map: &Map) -> f64 {
+    let wet = positions(map)
+        .filter(|&pos| matches!(map.terrain(pos), Terrain::DeepWater | Terrain::ShallowWater))
+        .count();
+    wet as f64 / (usize::from(map.width()) * usize::from(map.height())) as f64
+}
+
+/// How many separate bodies of water `map` has: tiles of deep or shallow
+/// water touching, diagonals too.
+fn lakes(map: &Map) -> usize {
+    let wet = |pos: Pos| matches!(map.terrain(pos), Terrain::DeepWater | Terrain::ShallowWater);
+    let width = usize::from(map.width());
+    let mut seen = vec![false; width * usize::from(map.height())];
+    let index = |pos: Pos| usize::from(pos.y) * width + usize::from(pos.x);
+    let mut lakes = 0;
+    for start in positions(map).filter(|&pos| wet(pos)) {
+        if seen[index(start)] {
+            continue;
+        }
+        lakes += 1;
+        seen[index(start)] = true;
+        let mut stack = vec![start];
+        while let Some(pos) = stack.pop() {
+            for dir in Dir::ALL {
+                if let Some(next) = map.neighbour(pos, dir)
+                    && wet(next)
+                    && !seen[index(next)]
+                {
+                    seen[index(next)] = true;
+                    stack.push(next);
+                }
+            }
+        }
+    }
+    lakes
+}
+
+/// How far `pos` is from the nearest drinkable tile, as the crow flies: in
+/// tiles, diagonals counting one.
+fn from_drinkable(map: &Map, pos: Pos, data: &DataPack) -> u16 {
+    positions(map)
+        .filter(|&there| data.terrain(map.terrain(there)).is_drinkable())
+        .map(|there| pos.x.abs_diff(there.x).max(pos.y.abs_diff(there.y)))
+        .min()
+        .expect("the map has drinkable water")
+}
+
+#[test]
+fn a_preset_sets_the_share_of_the_map_under_water() {
+    // M2 design §19.1: the default world has 4% of its tiles under water,
+    // and a preset that leaves it out the 32% of the world before it.
+    for seed in [1, 2, 3] {
+        let watery = world_of("(width: 256, height: 160)", seed);
+        let dry = world_of("(width: 256, height: 160, water: 4)", seed);
+        let (watery, dry) = (water_share(watery.map()), water_share(dry.map()));
+        assert!((0.30..=0.33).contains(&watery), "seed {seed}: {watery}");
+        assert!((0.035..=0.042).contains(&dry), "seed {seed}: {dry}");
+    }
+}
+
+#[test]
+fn bigger_lakes_hold_the_same_water_in_fewer_lakes() {
+    // M2 design §19.1: lake size 3 makes the map's hills and hollows three
+    // times as wide, so the same 4% of water lies in a few big lakes:
+    // under half as many on each map, and a third as many over four.
+    let (mut all_small, mut all_big) = (0, 0);
+    for seed in [1, 2, 3, 4] {
+        let ponds = world_of("(width: 256, height: 160, water: 4)", seed);
+        let lakes_3 = world_of("(width: 256, height: 160, water: 4, lake_size: 3)", seed);
+        let (small, big) = (lakes(ponds.map()), lakes(lakes_3.map()));
+        assert!(
+            big * 2 < small,
+            "seed {seed}: {big} big lakes, {small} ponds"
+        );
+        let share = water_share(lakes_3.map());
+        assert!((0.035..=0.042).contains(&share), "seed {seed}: {share}");
+        (all_small, all_big) = (all_small + small, all_big + big);
+    }
+    assert!(
+        all_big * 3 <= all_small,
+        "{all_big} big lakes, {all_small} ponds"
+    );
+}
+
+#[test]
+fn the_first_sprites_start_near_drinkable_water_when_the_preset_says() {
+    // M2 design §19.1: the default world's first sprites start within 10
+    // tiles of drinkable water; a preset that leaves it out puts them
+    // anywhere, and in a dry world some start far from it.
+    let data = DataPack::builtin().expect("valid pack");
+    let mut anywhere_far = 0;
+    for seed in [1, 2, 3, 4] {
+        let near = World::new(WorldConfig::builtin(&data), data.clone(), seed);
+        assert_eq!(near.sprites().count(), 30, "seed {seed}");
+        for sprite in near.sprites() {
+            let far = from_drinkable(near.map(), sprite.pos(), &data);
+            assert!(
+                far <= 10,
+                "seed {seed}: a first sprite {far} tiles from water"
+            );
+        }
+        let preset = "(width: 256, height: 160, sprites: 30, water: 4, lake_size: 3)";
+        let anywhere = world_of(preset, seed);
+        anywhere_far += anywhere
+            .sprites()
+            .filter(|sprite| from_drinkable(anywhere.map(), sprite.pos(), &data) > 10)
+            .count();
+    }
+    assert!(
+        anywhere_far > 30,
+        "{anywhere_far} of 120 started far from water"
+    );
+}
+
+#[test]
+fn once_the_tiles_near_water_are_taken_the_other_first_sprites_start_anywhere() {
+    // M2 design §19.1: a small, dry world has fewer free tiles within 1 of
+    // drinkable water than first sprites. Each of those tiles gets one,
+    // and the rest start farther out, so the world starts with all 40.
+    let data = DataPack::builtin().expect("valid pack");
+    let preset = "(width: 32, height: 32, sprites: 40, water: 1, start_near_water: 1)";
+    for seed in [1, 2, 3, 4] {
+        let world = world_of(preset, seed);
+        let map = world.map();
+        let near: Vec<Pos> = positions(map)
+            .filter(|&pos| {
+                from_drinkable(map, pos, &data) <= 1
+                    && data.terrain(map.terrain(pos)).step_cost().is_some()
+                    && world.object_at(pos).is_none()
+            })
+            .collect();
+        assert!(
+            (1..40).contains(&near.len()),
+            "seed {seed}: {} free tiles near water",
+            near.len()
+        );
+        assert_eq!(world.sprites().count(), 40, "seed {seed}");
+        for pos in near {
+            assert!(
+                world.sprite_at(pos).is_some(),
+                "seed {seed}: nobody started on {pos:?}, near water"
+            );
+        }
+    }
+}
+
+#[test]
+fn the_unattended_run_s_newborns_start_anywhere_near_water_or_not() {
+    // M2 design §19.1, §19.6: the default preset starts its first sprites
+    // within 10 tiles of drinkable water, but the unattended run spreads
+    // its newborns over the whole map. Over the same seeds, the same world
+    // settings with no `start_near_water` start more than 30 far from it
+    // (`the_first_sprites_start_near_drinkable_water_when_the_preset_says`).
+    let data = DataPack::builtin().expect("valid pack");
+    let mut far = 0;
+    for seed in [1, 2, 3, 4] {
+        let world = World::unattended(WorldConfig::builtin(&data), data.clone(), seed);
+        far += world
+            .sprites()
+            .filter(|sprite| from_drinkable(world.map(), sprite.pos(), &data) > 10)
+            .count();
+    }
+    assert!(far > 30, "{far} of 120 newborns started far from water");
+}

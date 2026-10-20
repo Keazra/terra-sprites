@@ -170,11 +170,11 @@ fn the_progress_line_says_how_far_it_has_got() {
 
 /// Three sprites on a field with no food or water: one is hurt to death by
 /// another, and the other two die of thirst, each at a different time,
-/// within the hour, as they do with seed 5.
+/// within the hour, as they do with seed 20.
 fn a_deadly_field() -> World {
     WorldBuilder::grass(10, 6)
         .starters(&[at(2, 2), at(6, 3), at(4, 4)])
-        .seed(5)
+        .seed(20)
         .build()
 }
 
@@ -456,7 +456,8 @@ fn the_population_table_names_each_cause_of_death_the_world_has_seen() {
 #[test]
 fn the_genes_table_starts_with_the_starter_then_has_a_row_an_hour() {
     let world = lab_world(7);
-    let starter = gene_values(&world.data().starter().genes(world.data()));
+    let genome = world.data().starter();
+    let starter = gene_values(&genome.genes(world.data()), &genome.switches());
     let at_start = middle_values(&world, &starter).expect("sprites alive");
     let mut run = FastForward::new(world, 2);
     run_through(&mut run);
@@ -541,7 +542,7 @@ fn the_report_ends_with_the_values_that_moved_most() {
             now: 1.0,
         },
         Moved {
-            name: "always → Wander: weight".into(),
+            name: "always → Wander from Adult: weight".into(),
             starter: 0.3,
             now: 0.2498,
         },
@@ -550,8 +551,8 @@ fn the_report_ends_with_the_values_that_moved_most() {
         fast_forward::moved_lines(&moved),
         [
             "Moved most from the starter's, as the middle value among the living:",
-            "  b                               2 → 1         down 50%",
-            "  always → Wander: weight       0.3 → 0.2498    down 17%",
+            "  b                                          2 → 1         down 50%",
+            "  always → Wander from Adult: weight       0.3 → 0.2498    down 17%",
         ]
     );
 }

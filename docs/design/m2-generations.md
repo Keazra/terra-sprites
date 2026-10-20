@@ -4,7 +4,7 @@
 - **Date:** 2026-10-12
 - **History:** edited in place since v5; each change is a file in [`changes/`](changes/), whose README says where v1 to v5 are
 - **Builds on:** [M1 design](m1-a-sprite-lives.md), which stays the rulebook for everything M2 doesn't change
-- **Covers:** what milestone 2 contains, its slices and their order, the time scale of a sprite's life, the direction for ageing, what "M2 is done" means, memory of places (Slice 20), the title screen (Slice 21), where places sit on the Brain tab, life stages and ageing (Slice 22), breeding (Slice 23), the view past the wall (Slice 31), mixing and mutating genes (Slice 24), with copy and change (24b), the population graph (Slice 26), courtship and families (Slice 32), fast-forward and the speed cap (Slice 27), with gene warnings (#274), the family tree (Slice 25), and learning by watching (Slice 28)
+- **Covers:** what milestone 2 contains, its slices and their order, the time scale of a sprite's life, the direction for ageing, what "M2 is done" means, memory of places (Slice 20), the title screen (Slice 21), where places sit on the Brain tab, life stages and ageing (Slice 22), breeding (Slice 23), the view past the wall (Slice 31), mixing and mutating genes (Slice 24), with copy and change (24b), the population graph (Slice 26), courtship and families (Slice 32), fast-forward and the speed cap (Slice 27), with gene warnings (#274), the family tree (Slice 25), learning by watching (Slice 28), and a harsher world (Slice 29)
 
 ---
 
@@ -68,7 +68,7 @@ The owner's times, as playtime at 1× (1.25 ticks a second, M1 design §6.6):
 - **Growing old is where M1's lifespan went** (#140). The `grows_old` gene sets when a sprite grows old, and its genes then weaken until its body gives out and old age kills it (§9.4). How long that takes depends on the life it has had, not on a second gene. A save or genome that says `lifespan` reads it as `grows_old`, whose range is about **6,000–60,000**.
 - **A generation takes about 15–20 minutes at 4×,** Story mode's top speed (§16.2), so an evening sees several. Long runs of evolution belong to fast-forward (§16.3).
 - **Lives got shorter in Slice 23, with breeding.** Until sprites had young, nothing replaced the dead: with 4-hour lives, the default world would have been empty after about 4 hours of play. So in Slice 22 sprites grew up and grew old at 1 and 3 hours, but old age lasted about 10 hours, and Slice 23 shortened it to about 1 (§9.4), for lives of about 4 hours. Later in Slice 23 the owner set them at 4 to 8 (2026-10-12), by growing old later.
-- **Childhood ends at growing up.** M1's viability run counts ticks 0–10,000 as childhood because sprites had no stages (M1 design §7.4, A4). From Slice 22, childhood is a stage, and the harsher world's goal (§6, G5) is counted at growing up.
+- **Childhood ends at growing up.** M1's viability run counts ticks 0–10,000 as childhood because sprites had no stages (M1 design §7.4, A4). From Slice 22, childhood is a stage, and the harsher world's goal (§6, G5) is counted at growing up: from Slice 29, A4 counts who grows up and the deaths by life stage, and "alive at tick 10,000" is gone (§19.6).
 
 ---
 
@@ -108,7 +108,7 @@ Each slice is a GitHub issue and its own PR, worked as in `docs/agents/how-we-wo
 | **26. Population graph** | The population over time | 23 |
 | **27. Fast-forward and the speed cap** | A world run for many generations with no screen; 4× in Story mode, faster in Lab mode (§16) | 21, 23 |
 | **28. Learning by watching** | The young copy what adults do, their parents most | 22, 25 |
-| **29. A harsher world** | About 20% of unattended newborns grow up | 20, 28 |
+| **29. A harsher world** | 10% to 30% of unattended newborns grow up, and most young raised among sprites do (§19) | 20, 28 |
 | **30. M2 acceptance** | The criteria of §6, measured and played | all |
 | **31. The view past the wall** | The view scrolls past the glass into space, with stars going by (§11) | — |
 | **32. Courtship and families** | Sprites call for a mate, court before mating, and stay together as partners; parents keep near their eggs and young; lone eggs are very rare (§15) | 23, 24 |
@@ -138,11 +138,11 @@ M2 is done when these hold, as well as M1's A1–A9. Each slice sets its criteri
 
 | # | Criterion | Slice |
 |---|---|---|
-| G1 | **Generations.** Left alone, the sprites keep their population going for several generations in most seeds: it doesn't die out, and it doesn't grow past the world's limit. | 23 |
+| G1 | **Generations.** Left alone, the sprites keep their population going for several generations: it doesn't die out, and it doesn't grow past the world's limit. Measured by the long run (§19.6), the default world left alone for 220 hours (990,000 ticks) on seeds 1–10 (#222): a seed lasts when at the end it still has sprites or eggs, it never had fewer than 10 sprites (eggs not counted) at any count of its population record, and its sprites over its last 50 hours averaged at least half of what they averaged over hours 50–100. At least 9 of 10 seeds must last. Slice 23's 22-hour check (§10.8) stays a quick check while a slice is built. | 23; its bar #222's, measured from 29 |
 | G2 | **Family.** Any sprite's parents, grandparents and children can be seen, living or dead, on the family tree (§17). | 25 |
 | G3 | **Population.** A graph shows the population rising and falling over time (§14). | 26 |
-| G4 | **Evolution.** After enough generations, the species has measurably changed from the starter genome, beyond what noise explains: at least 3 gene numbers moved a tenth the same way in 10 seeds of 200,000 ticks (§12.7). | 24; not met there, so measured again with 27 and 29 |
-| G5 | **A harsh childhood.** About 20% of unattended newborns grow up, and grown sprites rarely die of hunger or thirst. | 29 |
+| G4 | **Evolution.** After enough generations, the species has measurably changed from the starter genome, beyond what noise explains: at least 3 gene numbers moved a tenth the same way in every seed that lasts the long run (§19.6, #226), where Slice 24 asked for 10 seeds of 200,000 ticks (§12.7). | 24; not met there, so measured again with 27 and 29 |
+| G5 | **A harsh childhood.** 10% to 30% of unattended newborns grow up, in the middle seed of ten; at least 60% of the young hatched among sprites grow up; and adults dying of hunger or thirst are under 1 in 20 of grown-up deaths (§19.6). | 29 |
 | G6 | **Fast-forward.** A world can run for many generations with no screen, and be opened afterwards (§16). | 27 |
 | G7 | **Content safety.** A child is never a mating target, for any genome or data pack (§5). | 23 |
 
@@ -619,7 +619,7 @@ What poor genes do (Q6): they're weaker, and they bring old age sooner.
 
 Agreed before measuring (Q10), without the bar on life length (Q7):
 
-- **The species changes (M2's G4):** in the default world left alone for **200,000 ticks** (about 45 hours at 1×), seeds 1–10, at least **3 gene numbers** whose middle value among the living moved **by at least 10%** from the starter's, **the same way in all 10 worlds**. Chance moves a number the same way in all ten about 1 time in 500, so with 83 numbers, 3 is well past chance.
+- **The species changes (M2's G4):** in the default world left alone for **200,000 ticks** (about 45 hours at 1×), seeds 1–10, at least **3 gene numbers** whose middle value among the living moved **by at least 10%** from the starter's, **the same way in all 10 worlds**. Chance moves a number the same way in all ten about 1 time in 500, so with 83 numbers, 3 is well past chance. Since Slice 29, it's judged on the 220-hour long run, over the seeds that last (§19.6, #226).
 - **Keeps going:** sprites alive at the end in **at least 8 of 10 seeds**, never more than the limit.
 - **Nothing else got worse:** A1–A4 still met (A3 on seeds 1–30), and A5 at the limit, 100 sprites, at least 200 ticks a second.
 - **For information:** how many flaws sprites carry and how many genes are broken, over time; how long lone eggs' young live against pairs' young; which numbers moved most; how long lives were.
@@ -719,7 +719,7 @@ Agreed before measuring (Q4). The setup is §12.7's: the default world left alon
 
 "Born knowing what its ancestors learned", such as "thirst draws the eye to water", needs two changes in a row on one line of descent, so it isn't expected within these 45 hours: it belongs to Slice 27's fast-forward and Slice 29's harsher world, where §12.7's G4 is measured again too.
 
-`cargo run --release -p terra-sim --example generations -- --ticks 200000` runs the first and third and reports the rest. G4's numbers now line up with the starter's by name, the nth of a name with the starter's nth, so a sprite with a gene doubled or lost still counts.
+`cargo run --release -p terra-sim --example generations -- --ticks 200000` runs the first and third and reports the rest. G4's numbers now line up with the starter's by name, the nth of a name with the starter's nth, so a sprite with a gene doubled or lost still counts. Since Slice 29, a name says when its gene works too (`until Adult`, `from Adult`), so each half of a gene split by life stage, as the starter's Wander is, lines up with its own (§19.6).
 
 **Measured (2026-10-13)** in release builds of this part at `d8a33c8`, in the cloud, on seeds 1–10 (A3 on 1–30), with:
 
@@ -1146,8 +1146,8 @@ Saved as seed-7-20h in your saves folder (…): the title screen's Continue open
 The tables are beside it: seed-7-20h-population.csv and seed-7-20h-genes.csv.
 
 Moved most from the starter's, as the middle value among the living:
-  GrowsOld: trait             22500 → 29425     up 31%
-  always → Wander: weight       0.3 → 0.2498    down 17%
+  GrowsOld: trait                        22500 → 29425     up 31%
+  always → Wander from Adult: weight       0.3 → 0.2498    down 17%
 ```
 
   - **A row each tenth of the run,** so always ten. "Sprites" counts the sprites at every life stage, and "Eggs" the eggs beside them, as the population graph does (§14): an egg isn't a sprite until it hatches. "Generation" is how many generations the longest line of descent has run since the run started: the world's sprites then are the 0th, its eggs then the 1st, an egg is one on from the deeper of its parents, and a sprite the Cursor spawns is the 0th. "Died" and the causes after it count since the row before: hunger is starvation, thirst dehydration, and hurt anything an object did.
@@ -1163,7 +1163,7 @@ Moved most from the starter's, as the middle value among the living:
 Both are beside the save, named after it, and open in Excel or Google Sheets. Each starts with the mark that tells a spreadsheet it's UTF-8, for the arrows in the genes' names.
 
 - **The population table,** `seed-7-200h-population.csv`, has a row for each count the world keeps for its graph (§14.1): every 100 ticks at first, further apart as the run grows, never more than 511 rows, and one more for the end when it falls between counts. Its columns are the hours of play, the tick, the eggs and each life stage, then what happened since the row before: eggs laid and hatched, sprites spawned, deaths, and deaths by cause, a column for each cause any sprite has died of, named as the screen names it ("Hurt by thornbush"), physiology's three always.
-- **The genes table,** `seed-7-200h-genes.csv`, has a column for each of the starter genome's gene values, from the save's own data pack, named as the generations run names its gene numbers (§12.7): `always → Wander: weight`. Its first row is the starter's own values; then a row at the start, every hour of play, and where it stopped if that fell between hours, each with how many sprites were alive and each value's middle among them, blank where none carries it. A gene that's doubled lines up, the nth of a name with the starter's nth of it (§13). After how many sprites were alive come two columns (#274): the hidden flaws carried and the broken genes, each on average among the hatched sprites alive (§16.6), blank where none is, so a long run shows whether they level off.
+- **The genes table,** `seed-7-200h-genes.csv`, has a column for each of the starter genome's gene values, from the save's own data pack, named as the generations run names its gene numbers (§12.7): `always → Wander from Adult: weight`, a gene with a life-stage switch named by when it works (§19.6). Its first row is the starter's own values; then a row at the start, every hour of play, and where it stopped if that fell between hours, each with how many sprites were alive and each value's middle among them, blank where none carries it. A gene that's doubled lines up, the nth of a name with the starter's nth of it (§13). After how many sprites were alive come two columns (#274): the hidden flaws carried and the broken genes, each on average among the hatched sprites alive (§16.6), blank where none is, so a long run shows whether they level off.
 - **The gene values that moved most** end the report: up to five whose middle value at the end moved a tenth or more from the starter's, furthest first, with how far up or down. Halving counts as far as doubling, and crossing 0 furthest of all. With none, it says "No gene value has moved a tenth from the starter's yet", and with no sprite alive, "No sprite is left alive to measure the genes of". The gene warnings follow (§16.6).
 - **The generations run and fast-forward read gene values with the same code,** which moved from the run into the simulation's library for it; the run's report is byte for byte as before (§16.5).
 
@@ -1192,10 +1192,10 @@ Designed by an agent on 2026-10-19 from the owner's principles and earlier decis
   - **The hidden flaws they carry and their broken genes,** each on average (§12.3, §12.4).
   - **The share of them lacking each of the starter's genes,** by what it does and when it works, as §13.3 counts it: a sprite lacks a gene when it has fewer copies of it than the starter has, through a loss or a change.
   - **Each gene value held within a range:** a trait's or a brain parameter's, from physiology, or a level held between 0 and 1, such as a reaction's rate. It's taken as its middle among the living, as the genes table counts it (§16.4), with how far it has gone from the starter's value towards the end of its range it moved towards, as a share of the room there was. A value the starter has at one end of its range has no room that way.
-- **The needs genes** are the eleven #237 named: the starter's genes that raise or ease hunger, thirst or tiredness, fade one, or turn one into its action. The data says which they are, not a list in the code. The needs (`brain_io.ron`) that a starter gene raises from the body's own state, a physical chemical, are the body's needs: hunger from energy, thirst from hydration, tiredness from stamina. A needs gene is a starter gene that adds to one of them, is its half-life, or is an instinct with it as an input. So a data pack with another species gets its own needs genes with no new code, and a test pins the built-in pack's eleven.
+- **The needs genes** are twelve: the eleven #237 named, and `fullness Level → hunger`, which Slice 29 added to ease hunger as the gut fills (§19.4). They're the starter's genes that raise or ease hunger, thirst or tiredness, fade one, or turn one into its action. The data says which they are, not a list in the code. The needs (`brain_io.ron`) that a starter gene raises from the body's own state, a physical chemical, are the body's needs: hunger from energy, thirst from hydration, tiredness from stamina. A needs gene is a starter gene that adds to one of them, is its half-life, or is an instinct with it as an input. So a data pack with another species gets its own needs genes with no new code, and a test pins the built-in pack's twelve.
 - **A gene warning** comes, with at least 10 hatched sprites alive (as A4 judges nothing on fewer than 10 deaths, M1 design §7.4), when:
   - **more than half of them lack a needs gene,** #237's own line for careful copying (its decision 4);
-  - **or a gene value's middle has gone nine tenths of the way to the end of its range,** where physiology's limit, not selection, is now what holds it. For the starter today that's `GrowsUp` at 1,800 ticks or 12,600, `GrowsOld` at 7,650 or 56,250, `Speed` at 4.3 or 11.5 and `SenseRadius` at 6.4 or 13.6, and the brain parameters the same way: `trace_decay`, which starts at the bottom of its range, only at 0.941.
+  - **or a gene value's middle has gone nine tenths of the way to the end of its range,** where physiology's limit, not selection, is now what holds it. For the starter today that's `GrowsUp` at 1,800 ticks or 12,600, `GrowsOld` at 7,650 or 56,250, `Speed` at 4.3 or 11.5 and `SenseRadius` at 6.4 or 13.6, and the brain parameters the same way: `act_threshold` (§19.2) at 0.025 or 1.825, and `trace_decay`, which starts at the bottom of its range, only at 0.941.
 - **Reported with no warning:**
   - **flaws and broken genes,** until long runs show where they level off (§16.7). Die-outs came from gene changes, not flaws ([#221](https://github.com/Keazra/terra-sprites/issues/221));
   - **the starter's other genes** a tenth or more of the hatched sprites alive lack: a gene the species does better without is evolution (#237's decision 1);
@@ -1400,11 +1400,11 @@ Nothing here names an object or a species, so a new fruit, or a modded species, 
   - the sprite that hit it, which it learned to fear;
   - the Cursor, when it learned to fear it this tick, from a zap, a shock or a crash after a shove it saw (M1 design §5.6);
   - a place where it was eased (§7).
-- **About a thing, the one watching takes on what the other knows of it** (Q2): its worth for the need the other used it for, its good and its bad, and the habit of the verb tried, which it keeps as a **taught habit** (Q3), apart from what it learns itself, fading as slowly (M1 design §5.6, #187). The habit moves towards the other's as its decisions weigh it, its own and taught together. Once it has taken on something about the thing's worth, good or bad, it knows the thing's object type, as if it had touched one, so its own view of it counts rather than its category's summary (M1 design §5.6). Watching one use a thing it knows nothing of teaches nothing, and leaves the category's summary standing.
+- **About a thing, the one watching takes on what the other knows of it** (Q2): its worth for the need the other used it for, its good and its bad, and the habit of the verb tried, which it kept as a **taught habit** (Q3), apart from what it learns itself, fading as slowly (M1 design §5.6, #187); since Slice 29 it's a **watched habit**, apart from taught ones too (§19.7). That watched habit settles either way towards the other's first-hand habit, its own and taught together, never its watched one (§19.7), and its decisions weigh it together with its own and taught ones. Once it has taken on something about the thing's worth, good or bad, it knows the thing's object type, as if it had touched one, so its own view of it counts rather than its category's summary (M1 design §5.6). Watching one use a thing it knows nothing of teaches nothing new, and leaves the category's summary standing, though what the watcher took on by watching of the thing's badness and habits settles back towards 0 (§19.7).
 - **Of a thing's worth, only that for the need the other used it for:** the try's **motive**, the need whose instinct did most to choose it (M1 design §5.5), as the other chose it at its latest step 5. A try no need chose, such as one out of curiosity, or one the other's brain didn't choose, as in a test's script, shows no worth; good, bad and the habit pass on whatever chose it. So a sprite seen eating for its hunger shows what the food is worth for hunger, and nothing about what else it might be good for. Round 1 had every need's worth pass on. Measured on seed 10 of the default world, by tick 20,000 every sprite held berries worth .83 for anxiety on average, as well as .86 for hunger; with watching off, 19% held .03 for anxiety and 97% held .55 for hunger. A bush drops a berry only when it's full of fruit, and a new bush grows only from a dropped berry left to rot, so with the sprites eating more the bushes dwindled, to about 240 from tick 60,000 on against about 540 with watching off, and breeding fell until §15.9's bar on lone eggs failed (§18.6).
 - **About a sprite or the Cursor, only fear** (Q2, Q4): the one watching takes on the other's fear of that one, and the habit of the verb tried on it, but not what it's worth to the other: whom to like it finds out for itself. So if a sprite hits its mother, the young learns to be wary of that sprite; if it sees the Cursor shock her, to be wary of the Cursor.
 - **About a place, the one watching remembers it** as if it had been eased there itself (Q5), under §7.2's limits.
-- **Only ever up to the other's view.** Each value moves `watch_rate` of the way towards the other's, but only when the other's is further from 0 the same way: never past it, never back towards 0, and never across it. Watching never makes a sprite forget what it found out for itself (Q2). The other's view is read once both have learned from their own step 4, and before anyone takes on anything this tick, so what one sprite takes on can't pass through another in the same tick, whatever order they're in.
+- **Only ever up to the other's view.** Since Slice 29, a thing's badness and habits taken on by watching are kept apart and settle either way, and are never passed on (§19.7); what follows holds for the rest. Each value moves `watch_rate` of the way towards the other's, but only when the other's is further from 0 the same way: never past it, never back towards 0, and never across it. Watching never makes a sprite forget what it found out for itself (Q2). The other's view is read once both have learned from their own step 4, and before anyone takes on anything this tick, so what one sprite takes on can't pass through another in the same tick, whatever order they're in.
 - **Not about itself:** a moment about the one watching, as when the one it watches hit it or was hit by it, teaches it nothing by watching.
 - **What's passed on is the other's knowledge, not the event.** A mother who knows water well teaches it even when she only sips; one that knows little teaches little (Q2). In the arena the grown-ups know water well but food poorly at tick 20,000, since they eat before they're hungry (round 2), so there watching passes on water far more than food; over generations in the default world, food passes on too (§18.6).
 
@@ -1483,3 +1483,142 @@ The default world left alone for 200,000 ticks, in §15.9's terms:
 - **Copying the act itself** (Q2): seeing a sprite do something to a thing makes the young want to do the same, whatever came of it, so quirks run in families like traditions.
 - **Going back to where it last saw its parent** (Q6), if the young lose their parents on trips.
 - **Parents teaching on purpose,** feeding and correcting their young ([#67](https://github.com/Keazra/terra-sprites/issues/67)).
+
+---
+
+## 19. A harsher world (Slice 29)
+
+Settled with the owner over three tickets: [#237](https://github.com/Keazra/terra-sprites/issues/237) (2026-10-17, why the species seemed to wear down), [#224](https://github.com/Keazra/terra-sprites/issues/224) (2026-10-15 and 17, over-eating) and [#225](https://github.com/Keazra/terra-sprites/issues/225) (2026-10-18 and 19, the dials for a hard childhood), with what G5 counts from [#223](https://github.com/Keazra/terra-sprites/issues/223) (2026-10-15) and G1's bar from [#222](https://github.com/Keazra/terra-sprites/issues/222) (2026-10-14). Until this slice nearly every young sprite grew up, with or without anyone to learn from: #223's cloud runs of `main` at `a5fd7ad`, with a scratch build that wasn't committed, found that all 300 newborns of an unattended run did, as §19.6 counts it, and 98.8% of the young hatched in the default world (seeds 1 and 2, 200,000 ticks each). So selection saw only breeding, and the genes the species lost, such as the one that stops a sprite drinking once it has had a sip, spread because a sprite did better without them in an easy world (#237). The fix is a world where needs matter, not a change to how genes are copied.
+
+The owner's principle (§0): **grown sprites fend for themselves; the young survive by luck or guidance.** So:
+
+- the world has **less water**, in fewer, bigger lakes, with the first sprites starting near it (§19.1);
+- a sprite **acts only when something moves it,** and otherwise stands where it is; the young, with no pull to wander, stay put (§19.2);
+- **hunger and thirst start sooner** (§19.3);
+- **one gut** holds food and water, and a full sprite is held back by its body and by a feeling, not by a rule (§19.4);
+- a young sprite's **thirst is paced to its childhood,** so a species can't escape it by growing up sooner (§19.5);
+- **berry bushes put up seedlings,** so they hold out where sprites eat every berry, and three bars say whether childhood is hard enough (§19.6);
+- **what a sprite takes on by watching is kept apart** from what it found out itself (§19.7).
+
+**The world and the genes.**
+
+| The world (the same for every sprite) | The genes (vary from sprite to sprite, and evolve) |
+|---|---|
+| How much water there is and where the first sprites start: the world's settings | How strong a pull it takes to act, and how restless it is |
+| A sprite with nothing to do stands; rest costs less than standing awake | How fast standing about bores it |
+| The gut's room, and how fast each thing in it moves into the body | When hunger and thirst start, and what fullness does |
+| A bite or a drink that doesn't fit isn't taken, and says so | How full it feels when a bite or a drink is Too full |
+| A young sprite's thirst is paced to the childhood its genes give it | How long that childhood is |
+
+Nothing here names a food or a drink: a pack's physiology sets how fast the gut's two contents, food and water, move into the body and whether each waits for room, so it chooses for all its food and all its drink (§19.4).
+
+### 19.1 Less water, nearer the first sprites
+
+- **Two world settings** (#225 round 1): `water`, the share of the map's tiles under water, from 1% to 60%, and `lake_size`, from 1 to 5, how many times broader the map's hills and hollows are, so the same water lies in fewer, bigger lakes. A preset that leaves them out gets 32% and 1, the watery world of the game before this slice.
+- **The other bands follow the water.** This changes M1 design §3.2's fixed bands: deep and shallow water keep its proportion of 20 to 12, sand is an 8% band of heights just above the water, rock the highest 10%, and land the rest, the driest 40% of it dirt as before. So the default world is 2.5% deep water, 1.5% shallow, 8% sand, 78% land and 10% rock, and `water: 32` gives M1's bands.
+- **The default world** has 4% of its tiles under water, in lakes three times the size. The watery world stays as a preset, `data/presets/gentle.ron`, played with `--preset data/presets/gentle.ron`.
+- **The first sprites start within 10 tiles of drinkable water,** as the crow flies, counted in king steps (a diagonal step counts as one): the world setting `start_near_water`. This changes where M1 design §3.2 places them. They take the free tiles that near while any is free, and then the rest of the map's free tiles, so a small, dry map still gets its whole first population. Leave it out for anywhere on the map, as the gentle world does. The unattended run's newborns are spread over the whole map, near water or not (§19.6).
+
+### 19.2 Acting only when moved
+
+- **A sprite acts only when something moves it** (#237 rule 3): a need, an instinct, a habit or what something's worth. With nothing pressing, it stands where it is, where before it picked an act at random. It's how the basal ganglia hold actions back in real brains.
+- **How strong a pull it takes is a brain parameter in the genes,** `act_threshold` (ID 45, from 0 to 2, default 0): a sprite with nothing to do starts only a verb scoring at least this. At 0 it always starts one, as before. The starter's sprites need **0.25** (#225 round 1).
+- **The young stay put** (#225 round 1). `always → Wander` stays, a restless streak evolution can strengthen, weaken or lose, but the starter's splits by life stage: **0.15 until adult**, too weak to start anything on, and **0.3 from adult**.
+- **While its eye stays on its action's target, a busy sprite still switches by `switch_margin` alone,** as before (M1 design §5.5): the threshold holds back a sprite with nothing to do, and one whose eye has left its action's target (below). So a busy sprite whose action has lost its pull can switch to a verb under the threshold, a young one to its 0.15 Wander.
+- **When its eye leaves its running action's target** (M1 design §5.3) and no verb reaches the threshold, it carries on that action, where before it chose again and the action ended. The tick is recorded as carrying it on, as a trip with no way there is (§7.4): its step 5's decision and its trace keep the running verb, its motive and its target. Its eye stays where it moved, so it still watches what drew it (§18.1) and grows familiar with it (M1 design §5.6), and the Brain tab marks the row its eye is on.
+- **Standing about builds boredom faster,** through a gene: a new body sensor, `standing` (locus 18), is 1 while a sprite stands where it is: no action running, and neither led by the Cursor nor sliding from a shove, which would move it whatever it chose. The starter's `standing → boredom` adds **0.0005** a tick, so a still sprite soon goes off to play.
+- **Rests cost a fifth less** than standing awake (#237 rule 6): physiology's `metabolism.resting`, 0.8, multiplies the basal and sense costs while it rests. Rest stays apart from standing about. Real sleep, as a feeling of its own, is M3's ([#288](https://github.com/Keazra/terra-sprites/issues/288)).
+- **What a standing sprite does with its eye** doesn't change: it still attends, and watches (§18.1).
+- **The player sees** a standing sprite's doing line, on the Body tab and in the sprite list, say what it's watching, `Watching Bo #7` or `Watching the berry bush`, or `Standing` if nothing; in the detail view `STAND → sprite #7`. It goes by the `standing` sensor's rule, except that an action that ended on the latest tick still shows how it ended until the next tick. Before this slice a sprite was without an action only before its first decision, and an ending stayed until the next action started (M1 design §6.1). The Brain tab's decision reads `DECISION: none`.
+
+### 19.3 When hunger and thirst start
+
+Hunger and thirst start once energy or hydration falls **below 0.7** (#225 round 1), where they started below half, so a sprite goes looking while it still has the strength to get there. It's the threshold of the starter's `energy → hunger` and `hydration → thirst` genes, 0.3 inverted, so evolution can move it.
+
+### 19.4 One gut
+
+The owner's design (#224): "Anything that's consumed, whether food or water, should go into a single gut. The higher the gut is to full, the less appetising items that slake food and water become. That way, if they overeat on food, they're less likely to continue eating more food - but water may still be appealing enough if they're dehydrated."
+
+- **One gut,** of **0.5**: room for about a berry and a drink together (#225 round 1). Physiology's `digestion.gut` sets it, at most 1, since each thing in the gut stops at 1. A pack that leaves it out keeps two guts with no limit.
+- **A slurry, each thing at its own pace.** What's in the gut is mixed, not queued. Every tick the gut's food and its water each move into the body at their own `pace`, which physiology's `digestion` sets for each: water fast and food slowly (0.002 and 0.001 a tick, as before). Every food shares food's pace, whichever object it came from.
+- **Food waits for room; water passes through.** Food moves into the body only as the body has room for it, so nothing a sprite eats is wasted. Water the body can't hold is lost, as before. Physiology's `digestion` says, for food and for water, whether it `waits`, so a pack chooses for all its food and all its drink.
+- **A full gut takes no more.** A bite or a drink that doesn't fit ends **Too full**: the food or water stays where it was, on the bush or on the ground, and it teaches nothing, unlike a fruitless try. A new pulse, `too_full` (locus 49), fires.
+- **Fullness, by instinct.** A new chemical, `fullness` (ID 52), a **hormone**: the starter's genes make it from everything in the gut, reaching 1 as the gut fills, jump it by 1 on a `too_full` pulse, and let it fade within about 20 ticks. It drains hunger above 0.3 but not thirst, and it leans the sprite away from eating and drinking alike (`fullness → Eat` and `→ Drink`, written −2, which works as −1, the most a link leans, M1 design §5.7), though strong thirst can outweigh it: on instinct alone, thirst of about 0.85 or more drinks past a berry's fullness, and a sprite that knows water is good drinks past it sooner. A brain input, `fullness` (ID 96), reads it. It isn't a need, so its fading teaches nothing. #224 called it a drive; it's a hormone so that a fed sprite isn't coloured by it on the map, as drives are. Only the gut's room is physics: evolution can weaken or lose fullness, and a sprite that does still meets the full gut, so it only wastes its own time.
+- **The player sees** the Body tab's doing line say `Too full to eat the berry`, `Too full to eat from the berry bush` or `Too full to drink`, and the action end `was too full` in its list of what it did.
+
+### 19.5 A childhood's thirst, paced to its length
+
+A young sprite's water drains at the grown rate **× 4,500 ÷ the ticks its genes take to grow up**, and once it has dried out, it dies of thirst at that pace too: dehydration's injury × 4,500 ÷ its childhood (#225 round 2, and the 220-hour check). Physiology's `ageing.thirst_childhood` is the 4,500. The starter's 4,500-tick childhood is unchanged by it. Unpaced, a young sprite that never drinks dries out at about 3,000 ticks and dies of thirst about 1,000 ticks later (#223). With only the drain paced, as #225 round 2 had it, a newborn that never drinks dries out about two thirds of the way through its childhood, so a childhood shorter than about 3,000 ticks ends within the 1,000 ticks or so of dying that follow, and outlasts thirst: in #225's 220-hour check, seeds 3, 7 and 8 had evolved childhoods of 1,500–2,700 ticks, whose last 500–900 ticks were too few to die in, and their newborns grew up alone 87–98% of the time. With dying paced too, lone newborns grow up 18–22% at any childhood length.
+
+### 19.6 The bars, and bushes that seed
+
+**Who's counted** (#223):
+
+| | Who | Counted in | Bar |
+|---|---|---|---|
+| **Unattended** | A young sprite with nobody to learn from: no player and no grown sprite | **The unattended run** (`scenarios/unattended.ron`): the default world on seeds 1–10 as it generates, with its 30 first sprites as newborns, placed as the Cursor places them, spread over the whole map, and nobody else, until each has grown up or died, about 5,000 ticks | **10% to 30%** grow up, in the middle seed of ten |
+| **Guided** | The young hatched in the default world left alone, nearly all with a parent nearby and grown-ups to watch | The viability run (50,000 ticks), all ten seeds together; young still growing at the end aren't counted | **At least 60%** grow up |
+| **Grown** | Sprites that grew up: adult or old, by life stage, not by tick | The viability run, from its first tick: the first sprites start as adults | Of the grown sprites that die, **fewer than 1 in 20** are adults dying of hunger or thirst. Old sprites' are reported apart |
+
+- **Not the player.** The owner (#223): "The player is an X factor to Sprite survival, so this is measuring against the world running without interference."
+- **The guided bar has no upper end in M2** (#225 round 1). #223 set 60% to 90%, so that childhood stays dangerous even in a family; M3's dangers bring it back into that band.
+- **A4 and G5 are one check** in the baseline report (M1 design §7.4, §7.6), which runs the unattended run beside the viability run. "Alive at tick 10,000" is gone.
+- **The lab counts childhoods.** Each window of a lab run counts how many of the world's first sprites that started young, and how many of the young that appeared later, grew up or died young, and every death by the life stage it came at: rows `grew up: first`, `died young: later`, `died, adult: dehydration` and so on.
+- **The long run** (#222, #237, #224, #225): `cargo run --release -p terra-sim --example childhood` runs the default world, left alone, for 220 hours (990,000 ticks) on seeds 1–10, and reports every 10 hours, then the bars. A seed takes about 3 hours on the owner's PC once its world fills, so it runs there, at about half the PC's threads.
+  - **In each seed:** the grown bar above, over the whole run and over its last 50 hours, in every seed that lasts (#226); and #224's, **at most 1 in 10 of the bites young sprites and adults try are by one too full to eat,** over the run and over its last 50 hours. A bite tried is an Eat that reached its food and made its one try (M1 design §5.5), a Too full one too; one that ended on its way isn't. Old sprites' bites, and how many of those were Too full, are reported beside the bar, not in it (#225 round 1).
+  - **Across seeds, each met in at least 9 of 10:** **the world lasts** (G1, #222): at the end it still has sprites or eggs, it never had fewer than 10 sprites, eggs not counted, at any count of its population record, and its sprites over its last 50 hours averaged at least half of what they averaged over hours 50–100; and **the bushes hold** (#224), averaging over the last 50 hours at least half of hours 50–100. A seed that misses one of these has failed it only if the bar isn't met. The 50-hour averages need a run of 150 hours or more, and a shorter one says they weren't judged.
+  - **Evolution (G4), over the seeds that last** (#226): at least 3 gene numbers whose middle value among the living at the end moved a tenth from the starter's, the same way in every one of them. A seed that didn't last, or had no sprite alive at the end to measure, drops out of it rather than failing it. Each number is named by what its gene does and when it works, so the young's and grown sprites' Wander weights are two numbers. This is G4's first test: if it isn't met, the race below is its second, so it fails no seed, and the long run's verdict names it apart.
+  - `generations` judges whether each seed lasts by the same rule, its 50-hour averages only on a run of 150 hours (675,000 ticks) or more, and reports G4 over its own seeds that last, though the long run's is the one that counts.
+- **Reported in the long run, with no bar:** the young hatched that grew up, whose bar is the viability run's (#226); adults' time on the move over the last 50 hours, which #237 asked to be a quarter and [#318](https://github.com/Keazra/terra-sprites/issues/318) now owns, and the young's (#237 rule 5); what kills the hatched young, and how those that saw a parent for most of their childhood fare against those that didn't; and the share of the living lacking each starter gene that a tenth or more of some seed's living lack (#237 rule 4), always with the twelve **needs genes** (§16.6), marked: the starter's for hunger (`energy → hunger`, `ate → hunger`, `fullness → hunger`, hunger's half-life, `hunger → Eat`), for thirst (`hydration → thirst`, `drank → thirst`, thirst's half-life, `thirst → Drink`) and for tiredness (its two emitters and `tiredness → Rest`). A gene with a life-stage switch is listed by its switch, so the young's and grown sprites' Wander genes show apart.
+- **Lone newborns** (#225's 220-hour check): for each seed whose world didn't die out, with hatched sprites alive at the end of the long run, its unattended run again, its newborns taking after the hatched sprites alive then, their genomes and hidden flaws. The share that grow up is a reading, reported beside the unattended band of 10% to 30%; it isn't the test of falling behind, below.
+- **Falling behind** (#237 rules 1 and 8): a species has **fallen behind**, become worse at living than the starter's genes in the same world, when its world fails its bars or it loses **the race** against the starter's genes. The race is #226's second test for G4 (Q7): for each seed that lasted the long run, the same fresh world runs the viability run twice, its first 30 sprites given the starter's genome once and genomes of sprites alive at the end of that seed's long run once. G4 is met by it if the evolved side's young grow up more often in at least 8 of those seeds. Slice 30 runs the race every time, not only when G4's first test fails. A gene the species does better without is evolution, not wear.
+- **Careful copying is held in reserve** (#237 rules 2 and 4). No bias in how genes are copied: selection is the bias. Only if a world in the long run fails a bar (or the race is lost overall) while more than half its living lack a needs gene would those genes be copied carefully, lost or changed a tenth as often, like *Creatures*' gene flags. It isn't built. The long run names the seeds that would trip it, judging one that died out on its living at the last hour any hatched sprite was alive.
+- **Bushes that seed** (#225 round 2). Bushes renewed only from berries left uneaten, so the more sprites ate, the fewer bushes there were (§18.2). Now a grown berry bush puts up a seedling now and then: every 2,000 ticks, 1 in 10, within 4 tiles, on fertile land with fewer than 3 bushes within 4 tiles, where a bush wouldn't cut a path. It's a rule in the bush's data (`SpreadTo`), not code.
+
+### 19.7 What's taken on by watching, kept apart
+
+This changes §18.2 for a thing's badness and habits (#225 round 2).
+
+- **Kept apart.** What a sprite takes on by watching, of how bad a thing is and of each habit about it, is kept apart from what it found out itself and what the Cursor taught it, as taught habits are (M1 design §5.6). A decision weighs them together.
+- **It settles either way.** Each time it watches, that part moves `watch_rate` of the way towards the other's first-hand view, up or down, rather than only further from 0 the same way. So a young sprite that watched its mother avoid a bush she has since found harmless comes round when it sees her eat from it. What it found out itself is never moved by watching.
+- **Never passed on.** Of a thing's badness and habits, what a sprite shows another is only what it found out itself and was taught, never what it took on by watching, so a thing can't come to seem bad from sprite to sprite with nobody having been hurt by it.
+- **It fades** as its first-hand kind does: the watched badness as badness, the watched habits as taught ones.
+- **Unchanged:** worth and good still only move further from 0, as §18.2 says, and fear of a sprite or the Cursor too. They aren't kept apart, so what a sprite takes on of them by watching is passed on, as §18.2 has it: fear of a sprite or the Cursor still spreads from sprite to sprite.
+
+### 19.8 How we know it worked
+
+Agreed before measuring (#222, #223, #224, #225):
+
+- **Unattended:** 10% to 30% grow up, in the middle seed of ten. #225's pick gave about 20–22%.
+- **Guided:** at least 60% of the young hatched in the viability run grow up.
+- **Grown:** adults dying of hunger or thirst under 1 in 20 of grown-up deaths in the viability run. #226's acceptance asks for it in every seed of the long run that lasts: on seed 4, where water is furthest away, it was 6.4% over #225's 220-hour check (2.7% over all seeds), so the long run watches it.
+- **The long run's bars,** above, on the owner's PC: G1's among them (#222), and G4, deferred to this slice from Slice 24 (§12.7) and judged over the seeds that last (#226).
+- **Nothing else got worse:** A1–A3 still met (A3 on seeds 1–30) and every test passes. Slice 32's family bars (§15.9), which #226 counts over the first 200,000 ticks of the long run, come from `cargo run --release -p terra-sim --example generations -- --ticks 200000`, on the owner's PC.
+
+`cargo run --release -p terra-sim --example lab -- scenarios/unattended.ron --seeds 10` runs the unattended run, and `scenarios/viability.ron` the viability run, each with its counts by life stage.
+
+**Measured** (2026-10-19, in the cloud at 0aedf5b), with `cargo run --profile baseline -p terra-sim --example baseline` on seeds 1–10 and `cargo run --release -p terra-sim --example lab -- scenarios/a3-correct-training.ron --seeds 30`:
+
+- **Unattended:** 20% in the middle seed (9, 13, 7, 2, 8, 3, 11, 4, 0 and 5 of 30 on seeds 1–10), nearly all the rest dying of thirst: met.
+- **Guided:** 1,587 of 1,622, 97.8%: met.
+- **Grown:** adults' deaths of hunger or thirst 47 of 1,132 grown-up deaths, 4.2%: met. Old sprites', apart: 64.
+- **A1–A3:** A1 1 thornbush contact (control 38), A2 8,414 plays (control 169), A3 3.5 hits (control 49.5) on seeds 1–10; A3 over seeds 1–30, 5.5 hits (control 40.5): all met.
+
+**Measured on the owner's PC** (2026-10-20, at 9bc50de), with `cargo run --release -p terra-sim --example childhood` and `cargo run --release -p terra-sim --example generations -- --ticks 200000`, seeds 1–10:
+
+- **The world lasts (G1, #222):** in 10 of 10 seeds, none under 29 sprites at a count: met, so #212 is too. **The bushes hold:** in 10 of 10: met.
+- **Grown, in every seed that lasts:** not met. Adults' deaths of hunger or thirst were 2.2% of grown-up deaths over all seeds (560 of 25,384), but seed 8 had 5.2% over the run and 9.2% over its last 50 hours, and seed 10 had 8.2% over its last 50 hours. Old sprites', apart: 750.
+- **Too full, at most 1 in 10 bites:** not met. 3.0% over all seeds, but 13.2% over seed 10's last 50 hours (seed 4 8.6%). In most seeds the share climbs over the hours, from about 1% at hour 10.
+- **Slice 32's families:** partners had each other in sight for a median 46% of the time: not met (54% before this slice). Eggs laid alone 0.0%, 91.8% of pairs' eggs after a dance each way, an egg with a parent in sight 93% of its time and a young sprite seeing a living parent 93% of its childhood: met.
+- **G4:** 2 of 148 numbers moved a tenth the same way in all 10 seeds (`grows_old`, and the grown sprites' gain of `low female_near → feminiser`), short of 3, so the race decides it in Slice 30 (#226).
+- **For information:** the young hatched grew up 98.0% of the time, those that saw a parent for most of their childhood 99.0% and the rest 77.9%. Lone newborns given the end's genes grew up 32% in the middle seed. No seed tripped careful copying. Adults were on the move 15.9% of the time over the last 50 hours ([#331](https://github.com/Keazra/terra-sprites/issues/331)). At 200,000 ticks, hunger and thirst killed 5.8% of all sprites that died after tick 10,000, and the adults at the end were 561 males to 267 females.
+
+The grown bar's and the too-full bar's misses came late in the run and grew over the generations. **The owner's call (2026-10-20):** "Lets merge and revisit harshness at a later time, when more features are in." The misses wait in [#332](https://github.com/Keazra/terra-sprites/issues/332).
+
+### 19.9 Later
+
+- **Roaming that pays** ([#318](https://github.com/Keazra/terra-sprites/issues/318)): adults on the move a quarter of the time. #225's check failed it in every seed (7–25%), with the world sitting full. Slice 29b builds room nearby for it ([#331](https://github.com/Keazra/terra-sprites/issues/331)).
+- **Harshness, revisited once more features are in** ([#332](https://github.com/Keazra/terra-sprites/issues/332)): the grown bar on seeds 8 and 10, too-full bites on seed 10 and partners in sight (§19.8).
+- **Careful copying,** if a long run trips its trigger (§19.6).
+- **Parents that look after their young.** As genes change, parents stop looking for their young, because nothing threatens the young yet. M3's dangers would give that care a use.
+- **The gentle world on the title screen,** as a choice when making a world.

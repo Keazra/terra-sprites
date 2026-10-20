@@ -57,4 +57,8 @@
     // Grief: in the starter genome losing a partner raises it, and it holds
     // arousal down (M2 design §15.4).
     (id: 51, name: "grief",      class: Hormone),
+    // Fullness: in the starter genome everything in the gut raises it, and
+    // it leans a sprite away from eating and drinking (M2 design §19.4). A
+    // feeling but not a drive, so a fed sprite isn't coloured by it.
+    (id: 52, name: "fullness",   class: Hormone),
 ]

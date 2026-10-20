@@ -40,7 +40,7 @@ fn field(young: u16, adults: u16) -> World {
 }
 
 /// A single tile of grass with one newborn starter sprite, which dies of
-/// thirst at about tick 4,000.
+/// thirst at about tick 4,450.
 fn doomed() -> World {
     let tile = at(0, 0);
     WorldBuilder::grass(1, 1)
@@ -460,7 +460,7 @@ fn the_small_graph_reaches_past_most_sprites_when_the_cursor_spawned_past_it() {
 #[test]
 fn a_death_is_read_in_the_moment_it_happened() {
     let mut world = doomed();
-    run(&mut world, 4_500);
+    run(&mut world, 5_000);
     assert_eq!(world.sprites().count(), 0, "it died of thirst");
     let died = world
         .population()

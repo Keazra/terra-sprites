@@ -53,6 +53,11 @@
          // Overripe fruit drops beside the bush.
          (trigger: Every(50), if: [Counter("fruit", Ge, 6), Chance(0.2)],
           do: [AddCounter("fruit", -1), SpawnNearby("berry", 1)]),
+         // Now and then a grown bush puts up a seedling nearby, on fertile
+         // land that isn't crowded, where a bush wouldn't cut a path, so
+         // bushes hold out where sprites eat every berry (M2 design §19.6).
+         (trigger: Every(2000), if: [InStage("mature"), Chance(0.1)],
+          do: [SpreadTo("berry_bush", 4, [Fertility(Ge, 0.5), DensityBelow("berry_bush", 4, 3), KeepsPathsOpen])]),
      ],
      verbs: {
          Eat: [RequireCounter("fruit", 1), AddCounter("fruit", -1),
