@@ -8,7 +8,8 @@ mod common;
 use common::{
     AGES_AT_ONCE, ALONE, FEMALE, KEEN, LONE, Laying, NO_COPYING_ERRORS, OLD, RECEPTIVE, UNPACED,
     WorldBuilder, at, builtin, builtin_changing, builtin_changing_files, close, endings, family,
-    family_in, genome, id_at, laid, lone, pulse_in_h1, starting_with, until, value_of, world_in,
+    family_in, genome, id_at, laid, lone, pet, pulse_in_h1, run_for, shock, starting_with, until,
+    value_of, world_in,
 };
 
 use proptest::prelude::*;
@@ -392,18 +393,7 @@ fn the_cursor_picks_up_and_puts_down_an_egg_but_never_throws_pets_or_zaps_it() {
             })
             .collect()
     };
-    let touches = [
-        Command::Reward {
-            sprite: egg,
-            amplified: false,
-            reach_back: 10,
-        },
-        Command::Correct {
-            sprite: egg,
-            amplified: true,
-        },
-        Command::TakeHold { sprite: egg },
-    ];
+    let touches = [pet(egg, 10), shock(egg), Command::TakeHold { sprite: egg }];
     let expected: Vec<_> = touches
         .iter()
         .map(|c| (c.clone(), Rejection::Gone))
@@ -594,9 +584,7 @@ fn a_female_longs_for_a_male_only_while_she_sees_no_male_adult() {
     let longing = |young: &[Pos]| {
         let mut world = family(&[(at(1, 1), &female), (at(6, 2), REST)], young, 1);
         let her = world.sprite_at(at(1, 1)).unwrap().id();
-        for _ in 0..2_000 {
-            world.step();
-        }
+        run_for(&mut world, 2_000);
         let her = world.sprite(her).unwrap();
         assert_eq!(her.sex(), Sex::Female);
         her.chemical("longing").unwrap()

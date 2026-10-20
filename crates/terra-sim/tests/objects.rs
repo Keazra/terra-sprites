@@ -2,7 +2,7 @@
 //! (design §3.5).
 
 mod common;
-use common::{WorldBuilder, at, builtin, builtin_changing, builtin_with};
+use common::{WorldBuilder, at, builtin, builtin_changing, builtin_with, run_for};
 
 use terra_sim::{DataPack, EntityId, Event, EventKind, Pos, Removal, ScenarioError, World};
 
@@ -217,13 +217,6 @@ fn add_counter_stays_between_zero_and_the_maximum() {
     assert_eq!(n_at(&world, at(3, 2)), 0);
 }
 
-/// Steps `world` `ticks` times.
-fn run(world: &mut World, ticks: u64) {
-    for _ in 0..ticks {
-        world.step();
-    }
-}
-
 /// A rule that counts, in `n`, the ticks on which `condition` holds.
 fn count_when(condition: &str) -> String {
     format!(r#"rules: [(trigger: Every(1), if: [{condition}], do: [AddCounter("n", 1)])]"#)
@@ -233,7 +226,7 @@ fn count_when(condition: &str) -> String {
 fn in_stage_holds_while_the_object_is_in_that_stage() {
     let pack = pack_with(&[&sprout(&count_when(r#"InStage("b")"#))]);
     let mut world = scenario(&pack, &FIELD, &[(3, 2, "sprout")]);
-    run(&mut world, 5);
+    run_for(&mut world, 5);
     assert_eq!(n_at(&world, at(3, 2)), 2, "stage b lasts ticks 3 and 4");
 }
 
@@ -255,7 +248,7 @@ fn counter_compares_a_counter_with_a_value() {
                         (trigger: Every(1), if: [Counter("n", {cmp}, 3)], do: [AddCounter("m", 1)])])"#
         );
         let mut world = scenario(&pack_with(&[&counter]), &FIELD, &[(3, 2, "ticker")]);
-        run(&mut world, 5);
+        run_for(&mut world, 5);
         let m = world.object_at(at(3, 2)).and_then(|o| o.counter("m"));
         assert_eq!(m, Some(ticks), "Counter(n, {cmp}, 3) as n goes 1 to 5");
     }
@@ -325,7 +318,7 @@ fn chance_of_zero_never_holds_and_chance_of_one_always_does() {
     for (p, expected) in [("0.0", 0), ("1.0", 10)] {
         let pack = pack_with(&[&ticker(100, &count_when(&format!("Chance({p})")))]);
         let mut world = scenario(&pack, &FIELD, &[(3, 2, "ticker")]);
-        run(&mut world, 10);
+        run_for(&mut world, 10);
         assert_eq!(n_at(&world, at(3, 2)), expected, "Chance({p})");
     }
 }
@@ -334,7 +327,7 @@ fn chance_of_zero_never_holds_and_chance_of_one_always_does() {
 fn ticker_world(rows: &[&str], pos: (u16, u16), rules: &str, ticks: u64) -> World {
     let pack = pack_with(&[&ticker(100, rules), PEBBLE]);
     let mut world = scenario(&pack, rows, &[(pos.0, pos.1, "ticker")]);
-    run(&mut world, ticks);
+    run_for(&mut world, ticks);
     world
 }
 
@@ -521,7 +514,7 @@ fn replace_with_puts_a_new_object_at_its_first_stage_on_the_same_tile() {
     let counting = count_when(r#"InStage("shoot")"#);
     let pack = pack_with(&[&seed(r#"ReplaceWith("shrub")"#), &shrub(&counting)]);
     let mut world = scenario(&pack, &FIELD, &[(3, 2, "seed")]);
-    run(&mut world, 2);
+    run_for(&mut world, 2);
     let events = world.step();
     assert_eq!(
         events,
@@ -556,7 +549,7 @@ fn a_replacement_that_cant_go_there_leaves_the_object_as_it_was() {
     // Shallow water doesn't allow fixtures, so a seed there can't become a shrub.
     let pack = pack_with(&[&seed(r#"ReplaceWith("shrub")"#), &shrub("")]);
     let mut world = scenario(&pack, &POOL_AND_ROCK, &[(1, 1, "seed")]);
-    run(&mut world, 2);
+    run_for(&mut world, 2);
     let events = world.step();
     assert!(
         matches!(
@@ -617,14 +610,14 @@ fn on_stage_enter_fires_when_a_stage_begins_including_the_first() {
         r#"rules: [(trigger: OnStageEnter("a"), do: [AddCounter("n", 1)])]"#,
     )]);
     let mut world = scenario(&first, &FIELD, &[(3, 2, "sprout")]);
-    run(&mut world, 4);
+    run_for(&mut world, 4);
     assert_eq!(n_at(&world, at(3, 2)), 1, "once, on its first turn");
 
     let second = pack_with(&[&sprout(
         r#"rules: [(trigger: OnStageEnter("b"), do: [AddCounter("n", 1)])]"#,
     )]);
     let mut world = scenario(&second, &FIELD, &[(3, 2, "sprout")]);
-    run(&mut world, 3);
+    run_for(&mut world, 3);
     assert_eq!(n_at(&world, at(3, 2)), 0, "stage b hasn't begun");
     world.step();
     assert_eq!(n_at(&world, at(3, 2)), 1, "stage b begins on tick 3");
@@ -638,7 +631,7 @@ fn an_expiring_object_runs_only_its_on_expire_rules() {
                            (trigger: OnExpire, if: [Counter("n", Eq, 5)], do: [SpawnNearby("pebble", 1)])]"#;
     let pack = pack_with(&[&sprout(rules), PEBBLE]);
     let mut world = scenario(&pack, &FIELD, &[(3, 2, "sprout")]);
-    run(&mut world, 6);
+    run_for(&mut world, 6);
     assert!(world.object_at(at(3, 2)).is_none(), "the sprout expired");
     assert_eq!(pebbles(&world).len(), 1);
 }

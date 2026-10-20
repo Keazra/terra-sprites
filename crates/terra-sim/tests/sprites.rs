@@ -2,7 +2,7 @@
 //! death without food or water, and standing about with nothing to do.
 
 mod common;
-use common::{WorldBuilder, at, builtin, builtin_changing, builtin_with, close, id_at};
+use common::{WorldBuilder, at, builtin, builtin_changing, builtin_with, close, id_at, run_for};
 
 use std::collections::BTreeSet;
 
@@ -124,9 +124,7 @@ fn first_death(world: &mut World, limit: u64) -> Death {
 fn a_motionless_sprite_gets_hungry_and_thirsty_then_dies_of_dehydration() {
     let mut world = lone_sprite(builtin(), None);
     let id = world.sprites().next().expect("the sprite").id();
-    for _ in 0..3_900 {
-        world.step();
-    }
+    run_for(&mut world, 3_900);
     let sprite = world.sprites().next().expect("alive at tick 3,900");
     assert!(sprite.chemical("thirst").expect("thirst") > 0.9, "parched");
     assert!(
@@ -229,9 +227,7 @@ fn sprites_see_water_and_each_other_in_a_pack_with_no_object_types_for_them() {
         .starters(&[at(0, 1), at(4, 1)])
         .build();
     let ids: Vec<EntityId> = world.sprites().map(|sprite| sprite.id()).collect();
-    for _ in 0..2_000 {
-        world.step();
-    }
+    run_for(&mut world, 2_000);
     let living = ids.iter().filter(|&&id| world.sprite(id).is_some()).count();
     assert_eq!(living, 2, "both still living");
 }
@@ -273,9 +269,7 @@ fn solid_objects_never_spread_or_spawn_onto_a_sprite() {
     for spreader in ["creeper", "spawner"] {
         let beside = Pos { x: 3, y: 2 };
         let mut world = field(&[(MIDDLE, spreader)], &[beside]).expect("valid");
-        for _ in 0..200 {
-            world.step();
-        }
+        run_for(&mut world, 200);
         assert_eq!(type_at(&world, beside), None, "{spreader}");
         let around = (1..=3)
             .flat_map(|y| (1..=3).map(move |x| Pos { x, y }))
@@ -314,9 +308,7 @@ fn a_sprite_shows_its_age_and_its_traits_as_its_body_has_them() {
     ])"#;
     let mut world = lone_sprite(builtin(), Some(genome));
     assert_eq!(world.sprites().next().expect("the sprite").age(), 0);
-    for _ in 0..12 {
-        world.step();
-    }
+    run_for(&mut world, 12);
     let sprite = world.sprites().next().expect("the sprite");
     assert_eq!(sprite.age(), 12);
     assert_eq!(
@@ -380,9 +372,7 @@ fn each_chemical_s_change_is_its_level_now_less_its_level_one_tick_ago() {
         newborn.chemicals().all(|c| c.change == 0.0),
         "nothing has changed at birth"
     );
-    for _ in 0..50 {
-        world.step();
-    }
+    run_for(&mut world, 50);
     let levels = |world: &World| -> Vec<f32> {
         let sprite = world.sprites().next().expect("the sprite");
         sprite.chemicals().map(|c| c.level).collect()

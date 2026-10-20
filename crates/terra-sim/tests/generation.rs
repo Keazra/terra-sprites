@@ -1,3 +1,6 @@
+mod common;
+use common::run_for;
+
 use proptest::prelude::*;
 use terra_sim::{DataPack, Dir, EventKind, Map, Pos, Removal, Terrain, World, WorldConfig};
 
@@ -166,9 +169,7 @@ fn generated_objects_start_partway_through_their_lives() {
     );
 
     // Mature bushes gain fruit every 200 ticks, so the world has food at once.
-    for _ in 0..200 {
-        world.step();
-    }
+    run_for(&mut world, 200);
     let fruiting = world
         .objects()
         .filter(|o| o.counter("fruit").is_some_and(|fruit| fruit > 0))

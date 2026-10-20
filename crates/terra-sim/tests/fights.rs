@@ -3,7 +3,7 @@
 //! away, and some hits are hit back. Driven through hand-made worlds.
 
 mod common;
-use common::{MakeGenome, WorldBuilder, at, builtin, id_at, walker};
+use common::{MakeGenome, WorldBuilder, at, builtin, id_at, run_for, walker};
 
 use terra_sim::{
     DataPack, EntityId, EventKind, Genome, Outcome, Pos, ScriptedAction, Target, Verb, World,
@@ -328,9 +328,7 @@ fn a_feared_sprite_catches_the_eye_over_a_nearer_stranger() {
     ];
     let mut world = scene(&["......."], &sprites, &script);
     let (me, bully) = (id_at(&world, me), id_at(&world, bully));
-    for _ in 0..12 {
-        world.step();
-    }
+    run_for(&mut world, 12);
     let bully_at = world.sprite(bully).expect("the bully").pos();
     assert_eq!(bully_at, at(4, 0), "the bully has walked off");
     assert_eq!(attends(&world, me), Some(bully_at));
@@ -394,9 +392,7 @@ fn a_sprite_does_not_back_away_from_one_it_fears_that_is_far_off() {
     let sprites = [(me, skittish as MakeGenome), (bully, walker)];
     let mut world = scene(&[".........."], &sprites, &script);
     let me = id_at(&world, me);
-    for _ in 0..12 {
-        world.step();
-    }
+    run_for(&mut world, 12);
     assert_eq!(world.sprite(me).expect("me").pos(), at(1, 0), "still there");
     let choice = next_choice(&mut world, me, 20).map(|(verb, _)| verb);
     assert_eq!(choice, Some(Verb::Rest));
@@ -472,9 +468,7 @@ fn hurt_by(bullies: usize) -> (Option<(Verb, Option<Target>)>, EntityId) {
     }
     let mut world = scene(&[".............."; 3], &sprites, &script);
     let (me, stranger) = (id_at(&world, me), id_at(&world, stranger));
-    for _ in 0..59 {
-        world.step();
-    }
+    run_for(&mut world, 59);
     (next_choice(&mut world, me, 5), stranger)
 }
 
