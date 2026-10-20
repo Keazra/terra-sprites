@@ -154,7 +154,7 @@ _Avoid_: label
 The genome in the data pack that sprites are made from when they have no parents.
 
 **Gene value**:
-A number in a gene that spawn variation or a copying error may change, such as a strength or a threshold. The rest of a gene, such as which chemical it touches, never varies. Followed across a species, each is named for what its gene does, when it works and its field, as `hunger → Eat: weight` or `always → Wander until Adult: weight` (M2 design §12.7, §16.4).
+A number in a gene that spawn variation or a copying error may change, such as a strength or a threshold. The rest of a gene, such as which chemical it touches, never varies. Followed across a species, each is named for what its gene does, when it works and its field, as `hunger → Eat: weight` or `always → Wander until Adult: weight` (M2 design §12.7, §16.4). A trait's or a brain parameter's is held within a range physiology gives, and a level within 0 to 1; the rest can grow or shrink without end, but never cross 0 (M2 design §16.6).
 
 **Spawn variation**:
 The small random change to the gene values of a sprite made from the starter genome, larger for `grows_old` so that lives differ.
@@ -183,10 +183,6 @@ _Avoid_: heterozygote
 **Broken gene** (M2):
 A gene with both copies flawed: born at half health, it works at half strength, and it brings old age sooner and speeds decay as wear does. A lone egg breaks each flaw its mother carries about half the time, and close kin share flaws.
 _Avoid_: dead gene, failed gene, knockout
-
-**Needs genes** (M2, Slice 29):
-The eleven genes of the starter genome that make a sprite feel and answer its needs: for hunger, `energy → hunger`, `ate → hunger`, hunger's half-life and `hunger → Eat`; the same four for thirst; and for tiredness, its two emitters and `tiredness → Rest`. A species that lost one spread it because it did better without it, which is evolution, not wear.
-_Avoid_: survival genes, core genes
 
 **Falling behind** (M2, Slice 29):
 A species that has become worse at living than the starter's genes in the same world: its world fails its bars, or it loses the race against the starter's genes (the same fresh worlds run once with the starter's genome and once with genomes from the end of its long run, M2 design §19.6). What a species does better without is evolution; falling behind is the harm.
@@ -238,6 +234,10 @@ _Avoid_: want, desire
 **First-order need**:
 A need that comes before a sprite's likes: hunger or thirst. The more it presses, the less what the sprite merely likes pulls on it, though never to nothing. The other needs are second-order.
 _Avoid_: primary need, survival need, blocker (it quiets, never blocks)
+
+**Needs gene** (M2, #237):
+One of the starter genome's genes that keeps a sprite fed, watered and rested: it raises or eases hunger, thirst or tiredness, fades one, or turns one into its action, as `drank → thirst` or `hunger → Eat`. The starter has twelve: for hunger, `energy → hunger`, `ate → hunger`, `fullness → hunger`, hunger's half-life and `hunger → Eat`; for thirst, `hydration → thirst`, `drank → thirst`, thirst's half-life and `thirst → Drink`; and for tiredness, its two emitters and `tiredness → Rest`. #237 named eleven, before Slice 29 added `fullness → hunger`. They're found from the data, not listed: the needs a starter gene raises from the body's own state are the body's needs, so another species' data pack has its own (M2 design §16.6). A species that lost one spread it because it did better without it, which is evolution, not wear.
+_Avoid_: vital gene, essential gene, survival gene, core gene
 
 **Relief**:
 A need falling, by enough in a tick to count. It teaches that the thing touched is good for that need.
@@ -705,6 +705,10 @@ _Avoid_: sidebar, details
 What the player has watched the selected sprite finish since selecting it, at the end of the Body tab. It only grows while the sprite is selected.
 _Avoid_: history, log (the event log is different)
 
+**Sparkline** (#272):
+The eight shades at the end of a drive's line on the Body tab, or of a chemical's on the Chem tab, showing how its level moved over about the last 50 ticks, oldest on the left. Planned: #328 builds them, kept by the screen for every sprite and never saved.
+_Avoid_: history graph, graph (that's the population graph), trend (the arrow beside it is one tick's change)
+
 **Detail view**:
 A view the player switches on and off that shows the exact workings behind what the screen describes in words, such as a sprite's exact verb and destination.
 _Avoid_: debug mode (it's in every build)
@@ -950,6 +954,10 @@ A baseline run's numbers, for one commit.
 **Broken**:
 What a baseline report calls a seed that panicked or broke an invariant. A criterion that isn't met yet isn't broken.
 _Avoid_: crash (that's a shoved sprite's), failed
+
+**Gene warning** (#274):
+A line in a baseline report, or at the end of a fast-forward, saying the species' genes have gone somewhere worth a look: more than half the hatched sprites alive lack a needs gene, or a gene value's middle has run nearly to the end of its range. It's no verdict: it asks for a look, and the run is judged as before.
+_Avoid_: canary (the idea's name in the owner's notes), alarm, failure, broken (that's a seed's)
 
 **Briefing**:
 The observer's plain-language account of a baseline report: what was tested, what changed since the last one, and what might explain it.

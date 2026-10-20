@@ -11,7 +11,7 @@
 //! of hunger or thirst, the share of bites tried by a young sprite or an
 //! adult too full to eat and the same share of old sprites' bites, the
 //! share of adults' time on the move and of the young's, and how many of
-//! the eleven needs genes (M2 design §19.6) more than half of the hatched
+//! the twelve needs genes (M2 design §16.6) more than half of the hatched
 //! sprites alive lack. A bite tried is an Eat that got to its food and made
 //! its try (design §5.5), a Too full one too; an Eat that ended on its way
 //! isn't one.
@@ -102,11 +102,12 @@ use terra_sim::{
 /// longer than this to grow up is counted as neither.
 const NEWBORN_TICKS: u64 = 20_000;
 
-/// The eleven needs genes (M2 design §19.6), by what each does, as the
-/// starter genome has them: hunger's, thirst's and tiredness's.
-const NEEDS: [&str; 11] = [
+/// The twelve needs genes (M2 design §16.6, §19.6), by what each does, as
+/// the starter genome has them: hunger's, thirst's and tiredness's.
+const NEEDS: [&str; 12] = [
     "low energy Level → hunger",
     "ate Level → hunger",
+    "fullness Level → hunger",
     "hunger",
     "hunger → Eat",
     "low hydration Level → thirst",
