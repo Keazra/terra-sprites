@@ -2,7 +2,7 @@
 //! learns what things are worth and its habits.
 
 mod common;
-use common::{WorldBuilder, at, builtin, builtin_changing, builtin_with, close};
+use common::{WorldBuilder, at, builtin, builtin_changing, builtin_with, close, pet, run_for, zap};
 
 use terra_sim::{
     Command, DataPack, Dir, EntityId, Event, EventKind, Learned, Part, Pos, ScriptedAction, Thing,
@@ -164,9 +164,7 @@ fn a_prick_makes_only_the_thornbush_touched_bad_not_what_was_looked_at_before() 
             ScriptedAction::Rest,
         ],
     );
-    for _ in 0..6 {
-        world.step();
-    }
+    run_for(&mut world, 6);
     let thorns_bad = Learned::Bad {
         thing: "thornbush".into(),
     };
@@ -202,9 +200,7 @@ fn a_prick_makes_thornbushes_bad_and_leaves_berry_bushes_as_they_were_though_bot
             ScriptedAction::Rest,
         ],
     );
-    for _ in 0..6 {
-        world.step();
-    }
+    run_for(&mut world, 6);
     let thorns_bad = Learned::Bad {
         thing: "thornbush".into(),
     };
@@ -250,9 +246,7 @@ fn what_a_sprite_thinks_of_bushes_counts_for_nothing_with_one_type_known_half_wi
             PRICKS_HURT,
             &script,
         );
-        for _ in 0..6 {
-            world.step();
-        }
+        run_for(&mut world, 6);
         assert!(
             close(value_of(&world, &bushes_bad), expected),
             "{n} known: {:?}",
@@ -450,9 +444,7 @@ fn a_reward_after_eating_from_a_thornbush_teaches_the_habit_for_thornbushes_not_
            Emitter(locus: Locus("pricked"), mode: Level, gain: 0.5, chem: "reward"),"#,
         &[],
     );
-    for _ in 0..20 {
-        world.step();
-    }
+    run_for(&mut world, 20);
     let habit = |thing: &str| {
         value_of(
             &world,
@@ -644,9 +636,7 @@ fn sprites_in_general_are_feared_only_once_several_have_hurt_it() {
         }
         let mut world = scene(&["....."; 5], &sprites, &script);
         let me = world.sprite_at(me).expect("me").id();
-        for _ in 0..25 {
-            world.step();
-        }
+        run_for(&mut world, 25);
         let memory = memory_of(&world, me);
         let in_general = Learned::Fear {
             thing: Thing::Category("sprite".into()),
@@ -696,9 +686,7 @@ fn a_sprite_whose_fear_has_faded_to_almost_nothing_is_forgotten() {
     world.step();
     world.step();
     assert!(remembers(&world, me, attacker), "hit, and remembered");
-    for _ in 0..500 {
-        world.step();
-    }
+    run_for(&mut world, 500);
     assert!(
         !remembers(&world, me, attacker),
         "{:?}",
@@ -823,9 +811,7 @@ fn shove_the_sprite(world: &mut World, toward: Dir) {
     world.submit(Command::TakeHold { sprite });
     world.step();
     world.submit(Command::Shove { toward, tiles: 3 });
-    for _ in 0..4 {
-        world.step();
-    }
+    run_for(world, 4);
 }
 
 #[test]
@@ -870,11 +856,7 @@ fn a_crash_teaches_no_habit_not_even_along_the_trace_and_nor_does_a_pet_that_rea
     world.step();
     shove_the_sprite(&mut world, Dir::S);
     let sprite = world.sprites().next().expect("the sprite").id();
-    world.submit(Command::Reward {
-        sprite,
-        amplified: false,
-        reach_back: 40,
-    });
+    world.submit(pet(sprite, 40));
     world.step();
     let no_habits = memory(&world)
         .iter()
@@ -904,10 +886,7 @@ fn a_shock_just_after_a_crash_teaches_badness_and_no_habit() {
     world.step();
     shove_the_sprite(&mut world, Dir::S);
     let sprite = world.sprites().next().expect("the sprite").id();
-    world.submit(Command::Correct {
-        sprite,
-        amplified: false,
-    });
+    world.submit(zap(sprite));
     world.step();
     let thorns_bad = Learned::Bad {
         thing: "thornbush".into(),
@@ -945,11 +924,7 @@ fn a_pet_long_after_a_crash_that_reaches_back_to_it_teaches_worth_and_no_habit()
     shove_the_sprite(&mut world, Dir::S);
     world.step();
     let sprite = world.sprites().next().expect("the sprite").id();
-    world.submit(Command::Reward {
-        sprite,
-        amplified: false,
-        reach_back: 40,
-    });
+    world.submit(pet(sprite, 40));
     world.step();
     let thorns_good = Learned::Worth {
         thing: "thornbush".into(),
