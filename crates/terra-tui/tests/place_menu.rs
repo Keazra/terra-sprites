@@ -4,13 +4,13 @@
 
 mod common;
 use common::{
-    WorldBuilder, app, apply, at, click, field, grab_app, lines, pointing_at, render,
+    WorldBuilder, app, apply, at, click, field, grab_app, key, lines, pointing_at, render,
     scratch_folder, status_line, tick,
 };
 
 use std::path::PathBuf;
 
-use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers};
+use ratatui::crossterm::event::{KeyCode, KeyEventKind};
 use ratatui::layout::{Position, Size};
 use terra_sim::{Command, EntityId, Event, EventKind, Genome, World};
 use terra_tui::app::{App, CursorMode, Screen, StatusMark};
@@ -339,15 +339,6 @@ fn r_with_no_sprite_selected_says_so() {
     apply(&mut app, &world, Action::Rename);
     assert_eq!(app.screen(), Screen::Normal);
     assert_eq!(app.refusal(), Some("Select a sprite to name it"));
-}
-
-fn key(code: KeyCode, kind: KeyEventKind) -> KeyEvent {
-    KeyEvent {
-        code,
-        modifiers: KeyModifiers::NONE,
-        kind,
-        state: KeyEventState::NONE,
-    }
 }
 
 #[test]

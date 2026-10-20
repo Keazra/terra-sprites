@@ -14,9 +14,10 @@ use terra_sim::{
 
 use crate::clock::{Clock, Speed};
 use crate::cp437;
+use crate::debug_overlay::{DebugOverlay, FrameTimes};
 use crate::family_tree::{self, Step};
 use crate::graph;
-use crate::input::{Action, Button};
+use crate::input::{Action, Button, KeyReports};
 use crate::inspector;
 use crate::listed::listed_enum;
 use crate::policy::{InfoPolicy, Omniscient, Panel, Subject};
@@ -581,6 +582,8 @@ pub struct App {
     /// Whether the player has just taken over the replay, for the frame
     /// loop to take (`take_taken_over`).
     taken_over: bool,
+    /// The debug overlay (`F3`, design §6.1, #311).
+    debug: DebugOverlay,
 }
 
 /// A replay as the screen follows it (design §2.7).
@@ -929,6 +932,7 @@ impl App {
             since_autosave: Duration::ZERO,
             replay: None,
             taken_over: false,
+            debug: DebugOverlay::default(),
         };
         app.centre_on(cursor);
         app
@@ -1649,6 +1653,23 @@ impl App {
         self.detail
     }
 
+    /// Whether the debug overlay is shown (`F3`, design §6.1, #311).
+    pub fn debug_overlay(&self) -> bool {
+        self.debug.shown()
+    }
+
+    /// Takes in what the frame loop measured of a frame, and what the
+    /// terminal reports of keys, for the debug overlay (design §6.1, §6.6).
+    /// Noted whether it's shown or not, so it has numbers as soon as it is.
+    pub fn note_frame(&mut self, times: FrameTimes, keys: KeyReports) {
+        self.debug.note(times, keys);
+    }
+
+    /// The debug overlay's lines, inside its border.
+    pub(crate) fn debug_lines(&self) -> Vec<String> {
+        self.debug.lines(&self.clock)
+    }
+
     /// The tile the Cursor is on: its followed sprite's, or else the
     /// pointer's.
     pub fn cursor(&self) -> Pos {
@@ -1806,6 +1827,13 @@ impl App {
 
     /// Carries out an action on `world`, and says whether the game carries on.
     pub fn apply(&mut self, action: Action, world: &World) -> Flow {
+        // `F3` shows or hides the debug overlay over whatever's open, and
+        // does nothing else: it answers no prompt and never touches the
+        // world (design §6.1, #311).
+        if action == Action::DebugOverlay {
+            self.debug.toggle();
+            return Flow::Continue;
+        }
         match self.screen {
             Screen::PlaceMenu | Screen::GenomeMenu | Screen::LoadMenu | Screen::ThemeMenu => {
                 return self.apply_in_menu(action, world);
@@ -1835,7 +1863,8 @@ impl App {
                 // nor does letting go of a button, or of `E`, which isn't a
                 // key pressed.
                 _ if action.is_pointer() => {}
-                // Any other key cancels the prompt, and does nothing else.
+                // Any other key cancels the prompt, and does nothing else;
+                // `F3` never reaches it (above).
                 _ => {
                     self.screen = Screen::Normal;
                     return Flow::Continue;
@@ -1997,7 +2026,8 @@ impl App {
             | Action::Type(_)
             | Action::Erase
             | Action::AnotherName
-            | Action::HelpReleased => {}
+            | Action::HelpReleased
+            | Action::DebugOverlay => {}
             Action::Enter => {
                 if let Some(at) = self.mouse {
                     self.toggle_lesson(at, world);
@@ -3437,7 +3467,8 @@ impl App {
 
     /// What an action does while the question before loading waits: `y`
     /// loads, as does `F9` when the question is the quicksave's; the mouse
-    /// carries on as usual; any other key cancels.
+    /// carries on as usual; any other key cancels, but `F3`, which never
+    /// reaches it (`apply`).
     fn apply_load_prompt(&mut self, action: Action) -> Flow {
         let quicksave = self
             .to_load
