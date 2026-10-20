@@ -2,7 +2,7 @@
 //! or major ones only, switched with `m` or a click on its label.
 
 mod common;
-use common::{WorldBuilder, app_on, at, render, row};
+use common::{WorldBuilder, app_on, at, died, render, row};
 
 use ratatui::layout::Position;
 use terra_sim::{
@@ -96,15 +96,7 @@ fn logged(world: &World) -> App {
             },
         },
         hit(5, 3, 4),
-        Event {
-            tick: 6,
-            kind: EventKind::Died {
-                id: EntityId(3),
-                name: None,
-                cause: DeathCause::OldAge,
-                age: 900,
-            },
-        },
+        died(6, EntityId(3), DeathCause::OldAge, 900),
     ];
     // The log shows three lines, so the filters are checked in turn.
     app.record(&events, world);

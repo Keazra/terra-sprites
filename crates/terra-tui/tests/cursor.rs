@@ -2,12 +2,15 @@
 //! and Follow.
 
 mod common;
-use common::{E, Q, WorldBuilder, app, apply, at, click, field, pointing_at, sprite_on, touched};
+use common::{
+    E, Q, WorldBuilder, app, apply, at, click, died, field, follow as middle_click, pointing_at,
+    sprite_on, touched,
+};
 
 use std::time::Duration;
 
 use ratatui::layout::Position;
-use terra_sim::{Command, DeathCause, EntityId, Event, EventKind, Pos, ScriptedAction, World};
+use terra_sim::{Command, DeathCause, EntityId, Pos, ScriptedAction, World};
 use terra_tui::app::{App, CursorMode, Screen, StatusMark};
 use terra_tui::input::{Action, Button};
 
@@ -171,13 +174,6 @@ fn a_pet_reaches_back_two_seconds_of_the_player_s_time() {
 
 /// `F`: Follow, where the Cursor is (design v26 §6.5).
 const F: Action = Action::Follow { at: None };
-
-/// A middle click on `tile`: what `F` does, where it points (design v26
-/// §6.5).
-fn middle_click(app: &mut App, world: &World, tile: Pos) {
-    let at = pointing_at(tile);
-    apply(app, world, Action::middle_click(at));
-}
 
 /// Has the Cursor follow the sprite on `tile`: points there, then `F`.
 fn follow(app: &mut App, world: &World, tile: Pos) {
@@ -349,18 +345,10 @@ fn the_followed_sprite_s_death_ends_follow_and_no_other_does() {
     let mut app = app(&world);
     click(&mut app, &world, at(7, 2), Button::Left);
     follow(&mut app, &world, at(4, 2));
-    let died = |id| Event {
-        tick: 0,
-        kind: EventKind::Died {
-            id,
-            name: None,
-            cause: DeathCause::Starvation,
-            age: 5,
-        },
-    };
-    app.record(&[died(other)], &world);
+    let starved = |id| died(0, id, DeathCause::Starvation, 5);
+    app.record(&[starved(other)], &world);
     assert_eq!(app.followed(), Some(id), "the selected sprite died");
-    app.record(&[died(id)], &world);
+    app.record(&[starved(id)], &world);
     assert_eq!(app.followed(), None);
     apply(&mut app, &world, Action::Point(pointing_at(at(8, 5))));
     assert_eq!(app.cursor(), at(8, 5), "it follows the pointer again");

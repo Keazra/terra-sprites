@@ -698,3 +698,34 @@ impl WorldBuilder<'_> {
         self.sprites_with(sprites)
     }
 }
+
+/// Sprite `id`, unnamed, died of `cause` at `age`, on `tick`.
+pub fn died(tick: u64, id: EntityId, cause: terra_sim::DeathCause, age: u64) -> Event {
+    Event {
+        tick,
+        kind: EventKind::Died {
+            id,
+            name: None,
+            cause,
+            age,
+        },
+    }
+}
+
+/// Each drive of the built-in pack, in its order, with the colour a sprite
+/// takes on the map in both built-in themes when it's the strongest
+/// (design §6.3, arousal M2 design §10, and anxiety §15.8).
+pub const DRIVE_COLOURS: [(&str, ratatui::style::Color); 9] = {
+    use ratatui::style::Color;
+    [
+        ("hunger", Color::Yellow),
+        ("thirst", Color::Cyan),
+        ("pain", Color::Red),
+        ("tiredness", Color::Blue),
+        ("boredom", Color::DarkGray),
+        ("loneliness", Color::Magenta),
+        ("crowdedness", Color::LightRed),
+        ("arousal", Color::LightMagenta),
+        ("anxiety", Color::LightGreen),
+    ]
+};

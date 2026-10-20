@@ -1,5 +1,5 @@
 mod common;
-use common::pack;
+use common::{DRIVE_COLOURS, pack};
 
 use ratatui::style::Color;
 use terra_sim::Terrain;
@@ -275,22 +275,11 @@ fn the_aim_line_is_yellow_dots_ending_in_a_small_circle_or_semicolons_and_an_o()
 #[test]
 fn each_theme_colours_every_drive_of_the_built_in_pack_as_the_design_table_says() {
     // Design §6.3, arousal M2 design §10, and anxiety §15.8.
-    let expected = [
-        ("hunger", Color::Yellow),
-        ("thirst", Color::Cyan),
-        ("pain", Color::Red),
-        ("tiredness", Color::Blue),
-        ("boredom", Color::DarkGray),
-        ("loneliness", Color::Magenta),
-        ("crowdedness", Color::LightRed),
-        ("arousal", Color::LightMagenta),
-        ("anxiety", Color::LightGreen),
-    ];
     let pack = pack();
     let drives: Vec<&str> = pack.drives().collect();
-    assert_eq!(drives, expected.map(|(drive, _)| drive));
+    assert_eq!(drives, DRIVE_COLOURS.map(|(drive, _)| drive));
     for (name, theme) in [("cp437", Theme::cp437()), ("ascii", Theme::ascii())] {
-        for (drive, colour) in expected {
+        for (drive, colour) in DRIVE_COLOURS {
             assert_eq!(theme.drive_colour(drive), Some(colour), "{name} {drive}");
         }
         assert_eq!(theme.drive_colour("wanderlust"), None);
@@ -303,6 +292,19 @@ const ASCII_THEME: &str = include_str!("../../../themes/ascii.ron");
 fn ascii_with(from: &str, to: &str) -> String {
     assert!(ASCII_THEME.contains(from), "the ascii theme has {from:?}");
     ASCII_THEME.replacen(from, to, 1)
+}
+
+/// The ascii theme as one from before the part from `start` on was written,
+/// loaded: cut from `start`, which must be in it, to its closing bracket,
+/// so `key` is no longer in it.
+fn ascii_from_before(start: &str, key: &str) -> Theme {
+    let from = ASCII_THEME
+        .find(start)
+        .unwrap_or_else(|| panic!("the ascii theme has {start:?}"));
+    let end = ASCII_THEME.rfind(')').expect("the theme's end");
+    let edited = format!("{}{}", &ASCII_THEME[..from], &ASCII_THEME[end..]);
+    assert!(!edited.contains(key), "{edited}");
+    Theme::from_ron(&edited, &pack()).expect("loads")
 }
 
 #[test]
@@ -509,12 +511,7 @@ fn the_themes_draw_the_glass_and_the_stars_as_the_design_tables_say() {
 #[test]
 fn a_theme_from_before_space_draws_the_default_theme_s_glass_and_stars() {
     // M2 design §11.5.
-    let pack = pack();
-    let start = ASCII_THEME.find("    space: (").expect("a space section");
-    let end = ASCII_THEME.rfind(')').expect("the theme's end");
-    let edited = format!("{}{}", &ASCII_THEME[..start], &ASCII_THEME[end..]);
-    assert!(!edited.contains("space:"), "{edited}");
-    let theme = Theme::from_ron(&edited, &pack).expect("loads");
+    let theme = ascii_from_before("    space: (", "space:");
     assert_eq!(space(&theme), space(&Theme::cp437()));
 }
 
@@ -573,14 +570,7 @@ fn the_themes_draw_the_population_graph_as_the_design_table_says() {
 #[test]
 fn a_theme_from_before_the_population_graph_draws_the_default_theme_s() {
     // M2 design §14.
-    let pack = pack();
-    let start = ASCII_THEME
-        .find("    // The population graph")
-        .expect("a population section");
-    let end = ASCII_THEME.rfind(')').expect("the theme's end");
-    let edited = format!("{}{}", &ASCII_THEME[..start], &ASCII_THEME[end..]);
-    assert!(!edited.contains("population:"), "{edited}");
-    let theme = Theme::from_ron(&edited, &pack).expect("loads");
+    let theme = ascii_from_before("    // The population graph", "population:");
     assert_eq!(theme.population(), Theme::cp437().population());
 }
 
@@ -625,14 +615,7 @@ fn the_themes_draw_the_lineage_colours_as_the_design_table_says() {
 #[test]
 fn a_theme_from_before_the_lineage_colours_draws_the_default_theme_s() {
     // M2 design §17.4.
-    let pack = pack();
-    let start = ASCII_THEME
-        .find("    // The lineage colours")
-        .expect("a lineage section");
-    let end = ASCII_THEME.rfind(')').expect("the theme's end");
-    let edited = format!("{}{}", &ASCII_THEME[..start], &ASCII_THEME[end..]);
-    assert!(!edited.contains("lineage:"), "{edited}");
-    let theme = Theme::from_ron(&edited, &pack).expect("loads");
+    let theme = ascii_from_before("    // The lineage colours", "lineage:");
     assert_eq!(lineage(&theme), lineage(&Theme::cp437()));
 }
 

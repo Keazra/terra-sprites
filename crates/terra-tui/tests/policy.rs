@@ -2,7 +2,7 @@
 //! `InfoPolicy` first.
 
 mod common;
-use common::{SCREEN, WorldBuilder, app_on, at, pack, pointer_on, render, status_line};
+use common::{SCREEN, WorldBuilder, app_on, at, died, pack, pointer_on, render, status_line};
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::Position;
@@ -83,7 +83,7 @@ fn cell(tile: Pos) -> Position {
 
 /// Row `y` of a 10×5 field's tiles, as drawn.
 fn map_row(buffer: &Buffer, y: u16) -> String {
-    let start = cell(Pos { x: 0, y });
+    let start = cell(at(0, y));
     row(buffer, start.y, start.x..start.x + 10)
 }
 
@@ -94,7 +94,7 @@ const WANDERER: Pos = Pos { x: 2, y: 3 };
 /// in the event log, and the Cursor on the wanderer.
 fn busy_app(world: &World) -> App {
     let mut app = app_on(world);
-    let wanderer = world.sprite_at(Pos { x: 2, y: 3 }).unwrap().id();
+    let wanderer = world.sprite_at(at(2, 3)).unwrap().id();
     app.apply(Action::left_click(pointer_on(&app, WANDERER)), world);
     let hurt = ActionView {
         verb: Verb::Hit,
@@ -113,15 +113,7 @@ fn busy_app(world: &World) -> App {
         egg_at: None,
     };
     let events = [
-        Event {
-            tick: 1,
-            kind: EventKind::Died {
-                id: EntityId(99),
-                name: None,
-                cause: DeathCause::Starvation,
-                age: 400,
-            },
-        },
+        died(1, EntityId(99), DeathCause::Starvation, 400),
         Event {
             tick: 1,
             kind: EventKind::ActionEnded {
@@ -210,8 +202,8 @@ fn a_policy_that_denies_everything_blanks_every_display() {
         .collect::<Vec<_>>()
         .join("\n");
     assert!(!map.contains('X'), "no Decision marker:\n{map}");
-    let shaded = (0..5)
-        .any(|y| (0..10).any(|x| screen[cell(Pos { x, y })].bg == app.theme.attention_marker()));
+    let shaded =
+        (0..5).any(|y| (0..10).any(|x| screen[cell(at(x, y))].bg == app.theme.attention_marker()));
     assert!(!shaded, "no Attention marker");
     for tab in Tab::ALL {
         while app.tab() != tab {
@@ -254,11 +246,11 @@ fn a_policy_that_denies_everything_blanks_every_display() {
 fn a_policy_that_hides_map_colours_draws_sprites_in_their_own_colour() {
     let hungry = r#"(format: 1, genes: [InitialConcentration(chem: "hunger", value: 0.9)])"#;
     let world = WorldBuilder::grass(10, 5)
-        .genes(&[(Pos { x: 2, y: 3 }, hungry)])
+        .genes(&[(at(2, 3), hungry)])
         .seed(7)
         .build();
     let mut app = app_on(&world);
-    app.apply(Action::Point(pointer_on(&app, Pos { x: 9, y: 4 })), &world);
+    app.apply(Action::Point(pointer_on(&app, at(9, 4))), &world);
     assert_eq!(render(&app, &world)[cell(WANDERER)].fg, Color::Yellow);
     app.set_policy(Blind);
     assert_eq!(render(&app, &world)[cell(WANDERER)].fg, Color::White);
@@ -281,7 +273,7 @@ fn a_policy_that_hides_the_family_tree_hides_the_lineage_colours_too() {
     while app.colour_mode() != ColourMode::Lineage {
         app.apply(Action::CycleColours, &world);
     }
-    let other = Pos { x: 6, y: 1 };
+    let other = at(6, 1);
     assert_eq!(
         render(&app, &world)[cell(other)].fg,
         Color::DarkGray,
@@ -298,7 +290,7 @@ fn the_cursors_own_lines_ask_the_policy_about_the_sprite_they_name() {
     // the policy lets the Cursor's own lines be about what they name.
     // Hiding something else leaves them be.
     let world = field();
-    let wanderer = world.sprite_at(Pos { x: 2, y: 3 }).unwrap().id();
+    let wanderer = world.sprite_at(at(2, 3)).unwrap().id();
     let other = world.sprites().map(|s| s.id()).find(|&id| id != wanderer);
     let other = other.expect("a second sprite");
     let hide = |id| HideCursorLinesAbout(Subject::Sprite(id));
@@ -325,14 +317,14 @@ fn the_cursors_own_lines_ask_the_policy_about_the_sprite_they_name() {
     assert!(!line.contains("leading"), "{line}");
 
     let ball_field = WorldBuilder::grass(10, 5)
-        .objects(&[(Pos { x: 4, y: 1 }, "ball")])
+        .objects(&[(at(4, 1), "ball")])
         .seed(7)
         .build();
     let holding_line = |app: &App| status_line(app, &ball_field);
     let mut holding = app_on(&ball_field);
     holding.apply(Action::Mode(CursorMode::Grab), &ball_field);
     holding.apply(
-        Action::left_click(pointer_on(&holding, Pos { x: 4, y: 1 })),
+        Action::left_click(pointer_on(&holding, at(4, 1))),
         &ball_field,
     );
     let line = holding_line(&holding);
