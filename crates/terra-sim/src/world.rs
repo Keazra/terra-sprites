@@ -1409,8 +1409,7 @@ impl World {
     }
 
     /// Advances the world by exactly one tick, running the canonical tick order
-    /// (design §2.4), and reports what happened. Later slices fill in the steps
-    /// that are empty today.
+    /// (design §2.4), and reports what happened.
     ///
     /// In debug builds and tests, the world then checks its invariants (design
     /// §7.1), and panics naming the tick if one is broken.

@@ -106,9 +106,9 @@ mod tests {
     use super::*;
     use crate::ageing::LifeStage;
     use crate::expression::expressions;
-    use crate::genome::{EmitterMode, Gene, LocusRef};
+    use crate::genome::Gene;
     use crate::random::unit;
-    use crate::registry::{BrainParam, ChemId, LocusId, Trait};
+    use crate::registry::{BrainParam, Trait};
     use crate::test_util::{builtin, every_kind};
 
     /// Whether `varied` is `original` times a factor within ±10%.
@@ -117,144 +117,35 @@ mod tests {
         (low.min(high)..=low.max(high)).contains(&varied)
     }
 
+    /// Every value of `genome`'s genes (design §4.3), in genome order.
+    fn values(genome: &Genome, data: &DataPack) -> Vec<f32> {
+        let mut values = Vec::new();
+        for gene in &genome.genes {
+            each_value(gene, data, |value, _| {
+                values.push(value);
+                value
+            });
+        }
+        values
+    }
+
+    /// `genome`'s genes with every value replaced by the same stand-in, so
+    /// two genomes compare equal when only their values differ.
+    fn shape(genome: &Genome, data: &DataPack) -> Vec<Gene> {
+        let stand_in = |gene: &Gene| each_value(gene, data, |_, _| 0.0);
+        genome.genes.iter().map(stand_in).collect()
+    }
+
     #[test]
     fn spawn_variation_changes_only_gene_values_each_within_ten_percent() {
         let data = builtin();
         let original = every_kind(&data);
         for seed in 0..50 {
             let varied = varied(&original, &data, &mut ChaCha8Rng::seed_from_u64(seed));
-            let pairs = original.genes.iter().zip(&varied.genes);
-            for (before, after) in pairs {
-                match (before, after) {
-                    (
-                        Gene::HalfLife {
-                            chem: ChemId(18),
-                            ticks: 300,
-                        },
-                        &Gene::HalfLife {
-                            chem: ChemId(18),
-                            ticks,
-                        },
-                    ) => {
-                        assert!((270..=330).contains(&ticks), "{ticks}");
-                    }
-                    (
-                        Gene::Reaction {
-                            reactants,
-                            products,
-                            ..
-                        },
-                        Gene::Reaction {
-                            reactants: r,
-                            products: p,
-                            rate,
-                        },
-                    ) => {
-                        assert_eq!((reactants, products), (r, p));
-                        assert!(within_ten_percent(0.5, *rate), "{rate}");
-                    }
-                    (
-                        Gene::Emitter {
-                            locus: LocusRef::Chem(ChemId(1)),
-                            mode: EmitterMode::Level,
-                            invert: true,
-                            chem: ChemId(16),
-                            ..
-                        },
-                        &Gene::Emitter {
-                            locus: LocusRef::Chem(ChemId(1)),
-                            mode: EmitterMode::Level,
-                            invert: true,
-                            threshold,
-                            gain,
-                            chem: ChemId(16),
-                        },
-                    ) => {
-                        assert!(within_ten_percent(0.5, threshold), "{threshold}");
-                        assert!(within_ten_percent(-0.02, gain), "{gain}");
-                    }
-                    (
-                        Gene::Receptor {
-                            chem: ChemId(23),
-                            target: LocusId(64),
-                            ..
-                        },
-                        &Gene::Receptor {
-                            chem: ChemId(23),
-                            threshold,
-                            gain,
-                            target: LocusId(64),
-                        },
-                    ) => {
-                        assert!(within_ten_percent(0.2, threshold), "{threshold}");
-                        assert!(within_ten_percent(0.5, gain), "{gain}");
-                    }
-                    (
-                        Gene::InitialConcentration {
-                            chem: ChemId(20), ..
-                        },
-                        &Gene::InitialConcentration {
-                            chem: ChemId(20),
-                            value,
-                        },
-                    ) => {
-                        assert!(within_ten_percent(0.2, value), "{value}");
-                    }
-                    (
-                        Gene::Trait {
-                            which: Trait::Speed,
-                            ..
-                        },
-                        &Gene::Trait {
-                            which: Trait::Speed,
-                            value,
-                        },
-                    ) => {
-                        assert!(within_ten_percent(7.0, value), "{value}");
-                    }
-                    (
-                        Gene::BrainParam {
-                            param: BrainParam::TauBase,
-                            ..
-                        },
-                        &Gene::BrainParam {
-                            param: BrainParam::TauBase,
-                            value,
-                        },
-                    ) => {
-                        assert!(within_ten_percent(0.5, value), "{value}");
-                    }
-                    (
-                        Gene::Instinct { inputs, verb, .. },
-                        &Gene::Instinct {
-                            inputs: ref i,
-                            verb: v,
-                            weight,
-                        },
-                    ) => {
-                        assert_eq!((inputs, *verb), (i, v));
-                        assert!(within_ten_percent(1.0, weight), "{weight}");
-                    }
-                    (
-                        Gene::AttentionInstinct {
-                            input,
-                            category,
-                            whom,
-                            ..
-                        },
-                        &Gene::AttentionInstinct {
-                            input: i,
-                            category: c,
-                            whom: w,
-                            weight,
-                        },
-                    ) => {
-                        assert_eq!((*input, *category, *whom), (i, c, w));
-                        assert!(within_ten_percent(0.8, weight), "{weight}");
-                    }
-                    (Gene::Unknown { .. }, _) => assert_eq!(before, after),
-                    _ => panic!("{before:?} became {after:?}"),
-                }
+            assert_eq!(shape(&varied, &data), shape(&original, &data));
+            let (before, after) = (values(&original, &data), values(&varied, &data));
+            for (before, after) in before.into_iter().zip(after) {
+                assert!(within_ten_percent(before, after), "{before} became {after}");
             }
         }
     }

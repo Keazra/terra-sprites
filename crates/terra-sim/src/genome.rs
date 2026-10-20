@@ -1171,8 +1171,8 @@ fn hex(digits: &str) -> Result<Vec<u8>, String> {
 /// every reference as a stable ID, an emitter's locus as `[0, chemical ID]` or
 /// `[1, locus ID]`, and its mode as 0 (Level), 1 (Rise) or 2 (Fall). An
 /// attention instinct's version 2 adds whom it's about, last, as 0 (any),
-/// 1 (family), 2 (kin), 3 (partner), 4 (parents) or 5 (young) (M2 design
-/// §15.6).
+/// 1 (family), 2 (kin), 3 (partner), 4 (parents), 5 (young), 6 (grown) or
+/// 7 (showing) (M2 design §15.6, §18.1).
 fn decode(type_id: u16, version: u8, payload: Vec<u8>) -> Result<Gene, String> {
     if version == 0 {
         return Err("has version 0, but versions start at 1".into());
