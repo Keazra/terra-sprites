@@ -5,7 +5,7 @@
 
 mod common;
 use common::{
-    LONE, WorldBuilder, app_on, at, group, inspector_rows, pack_changing, pointer_on, render,
+    LONE, Q, WorldBuilder, app_on, at, group, inspector_rows, pack_changing, pointer_on, render,
     render_on, row, run, sized_app,
 };
 
@@ -16,7 +16,7 @@ use ratatui::layout::{Position, Size};
 use ratatui::style::{Color, Modifier};
 use terra_sim::{DataPack, Genome, Pos, World};
 use terra_tui::app::{App, CursorMode, Screen};
-use terra_tui::input::{Action, Button};
+use terra_tui::input::Action;
 use terra_tui::policy::{InfoPolicy, Panel, Subject};
 use terra_tui::theme::Theme;
 
@@ -352,14 +352,7 @@ fn the_pointer_picks_a_moment_and_leaves_the_cursor_where_it_is_on_the_map() {
     app.apply(Action::Point(Position::new(FIRST_COLUMN + 1, 9)), &world);
     assert_eq!(app.graph_pick(), Some(200));
     assert_eq!(app.shown_cursor(), Some(tile), "the pointer moved");
-    app.apply(
-        Action::Click {
-            at: Position::new(FIRST_COLUMN, 15),
-            button: Button::Left,
-            amplified: false,
-        },
-        &world,
-    );
+    app.apply(Action::left_click(Position::new(FIRST_COLUMN, 15)), &world);
     assert_eq!(app.graph_pick(), Some(100));
     assert_eq!(app.shown_cursor(), Some(tile), "a click");
     app.apply(Action::Population, &world);
@@ -472,14 +465,8 @@ fn a_death_is_read_in_the_moment_it_happened() {
     let column = (count.tick / 100 - 1) as u16;
     let mut app = app_on(&world);
     app.apply(Action::Population, &world);
-    app.apply(
-        Action::Click {
-            at: Position::new(FIRST_COLUMN + column, 15),
-            button: terra_tui::input::Button::Left,
-            amplified: false,
-        },
-        &world,
-    );
+    let cell = Position::new(FIRST_COLUMN + column, 15);
+    app.apply(Action::left_click(cell), &world);
     let screen = render(&app, &world);
     let tick = count.tick;
     assert_eq!(
@@ -542,10 +529,7 @@ fn other_keys_do_nothing_while_the_graph_is_open() {
         Action::Track,
         Action::ToggleDetail,
         Action::CycleEventFilter,
-        Action::Press {
-            button: Button::Left,
-            amplified: false,
-        },
+        Q,
         Action::Rename,
         Action::Help,
         Action::SpriteList,

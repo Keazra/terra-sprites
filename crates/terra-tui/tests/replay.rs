@@ -4,7 +4,7 @@
 //! parted from its recording; and `--data` reads a folder of pack files.
 
 mod common;
-use common::{at, ball_world, map_app, pack, render_on, row, scratch_folder};
+use common::{at, ball_world, map_app, pack, pointer_on, render_on, row, scratch_folder};
 
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::{Path, PathBuf};
@@ -13,7 +13,7 @@ use ratatui::layout::{Rect, Size};
 use terra_sim::{Command, DataPack, Playback, World, WorldConfig};
 use terra_tui::app::{AUTOSAVE_EVERY, App, CursorMode, Flow, REPLAY_REFUSAL, Ticks};
 use terra_tui::files;
-use terra_tui::input::{Action, Button};
+use terra_tui::input::Action;
 use terra_tui::session::{self, Session};
 
 /// An app on `world` showing 11×8 tiles of it from screen cell (1, 2), with
@@ -171,19 +171,7 @@ fn a_replay_refuses_whatever_would_change_the_world() {
     }
     // Clicks in Select only select; time and the view still work.
     let sprite = world.sprites().next().expect("a sprite");
-    let pos = sprite.pos();
-    // The pointer points a cell down and right of the tile, at the
-    // Cursor's corner.
-    let cell = app.cell_of(pos).expect("in view");
-    let cell = ratatui::layout::Position::new(cell.x + 1, cell.y + 1);
-    app.apply(
-        Action::Click {
-            at: cell,
-            button: Button::Left,
-            amplified: false,
-        },
-        world,
-    );
+    app.apply(Action::left_click(pointer_on(&app, sprite.pos())), world);
     assert!(app.selection().is_some(), "selected");
     app.apply(Action::TogglePause, world);
     assert!(!app.clock.is_paused());

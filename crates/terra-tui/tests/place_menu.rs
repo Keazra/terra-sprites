@@ -512,15 +512,8 @@ fn a_menu_longer_than_the_map_view_scrolls_to_keep_the_highlight_in_view() {
     }
     assert_eq!((app.menu_choice(), app.menu_first(&world)), (0, 0));
     // A click on the top row picks the first item shown.
-    apply(
-        &mut app,
-        &world,
-        Action::Click {
-            at: Position::new(area.x + 2, area.y + 1),
-            button: Button::Left,
-            amplified: false,
-        },
-    );
+    let top_row = Position::new(area.x + 2, area.y + 1);
+    apply(&mut app, &world, Action::left_click(top_row));
     assert_eq!(app.screen(), Screen::Normal);
     let _ = std::fs::remove_dir_all(&dir);
 }
