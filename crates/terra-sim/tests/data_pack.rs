@@ -1232,7 +1232,8 @@ fn the_brain_feels_the_drives_hormones_body_sensors_and_pulses_brain_io_lists() 
     // with breeding's from 66, its body language, and longing (M2 design
     // §10); then courtship's, its body language, and what a sprite knows of
     // the one it attends to (§15); then families' anxiety and senses, and
-    // whether the one it attends to is family (§15.6).
+    // whether the one it attends to is family (§15.6); then fullness
+    // (§19.4).
     expected.extend([
         (64, "cornered"),
         (65, "fruitless"),
@@ -1266,6 +1267,7 @@ fn the_brain_feels_the_drives_hormones_body_sensors_and_pulses_brain_io_lists() 
         (93, "partner_away"),
         (94, "target_family"),
         (95, "found_family"),
+        (96, "fullness"),
     ]);
     assert_eq!(inputs, expected);
 }

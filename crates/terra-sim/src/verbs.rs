@@ -14,10 +14,17 @@ use crate::rolling;
 use crate::tags::Contact;
 use crate::world::WorldState;
 
+/// How far past the gut's size a bite or a drink may go and still fit, so
+/// that sizes made to hold a berry and a drink together do, whatever the
+/// rounding.
+const GUT_SLACK: f32 = 1e-4;
+
 /// Sprite `actor` applies `verb` to `target`, once: `failed` if neither the
 /// target's tags nor its verb table have a rule for it, or a `RequireCounter`
-/// isn't met, and then nothing after it happens; `applied` otherwise. With
-/// the outcome comes which sprites it hurt.
+/// isn't met, and then nothing after it happens; `too full` if what it
+/// would put in the actor's gut doesn't fit (M2 design §19.4), and then
+/// nothing happens but a `too_full` pulse; `applied` otherwise. With the
+/// outcome comes which sprites it hurt.
 pub(crate) fn attempt(
     state: &mut WorldState,
     data: &DataPack,
@@ -46,7 +53,21 @@ pub(crate) fn attempt(
         fruitless(state, data, actor);
         return (Outcome::Failed, hurt);
     }
-    for effect in tagged.into_iter().chain(table).flatten() {
+    let effects: Vec<&Effect> = tagged.into_iter().chain(table).flatten().collect();
+    // The gut's room is checked once the try's requirements are met, before
+    // anything happens.
+    let mut room_checked = false;
+    for &effect in &effects {
+        if !room_checked && !matches!(effect, Effect::RequireCounter(..)) {
+            room_checked = true;
+            if !fits(state, data, actor, &effects) {
+                if let Some(too_full) = data.physiology().indices.too_full {
+                    let body = &mut state.sprites.get_mut(actor).expect("the actor").body;
+                    body.pulse(too_full, None);
+                }
+                return (Outcome::TooFull, hurt);
+            }
+        }
         match *effect {
             Effect::RequireCounter(counter, least) => {
                 let Target::Object(id) = target else {
@@ -181,6 +202,32 @@ fn party_sprite(actor: EntityId, target: Target, party: Party) -> Option<EntityI
         (Party::Target, Target::Sprite(id)) => Some(id),
         (Party::Target, _) => None,
     }
+}
+
+/// Whether what `effects` put in the gut of sprite `actor` fits there,
+/// with what it holds (M2 design §19.4). Anything fits a pack's two guts
+/// from before Slice 29, which had no limit.
+fn fits(state: &WorldState, data: &DataPack, actor: EntityId, effects: &[&Effect]) -> bool {
+    let physiology = data.physiology();
+    let Some(size) = physiology.digestion.gut else {
+        return true;
+    };
+    let (food, water) = (physiology.indices.food, physiology.indices.water);
+    let swallowed: f32 = effects
+        .iter()
+        .filter_map(|effect| match **effect {
+            Effect::Inject(Party::Actor, chem, amount) if amount > 0.0 => {
+                let index = data.chemical_index(chem)?;
+                (index == food || index == water).then_some(amount)
+            }
+            _ => None,
+        })
+        .sum();
+    if swallowed <= 0.0 {
+        return true;
+    }
+    let chems = &state.sprites.get(actor).expect("the actor").body.chems;
+    chems[food] + chems[water] + swallowed <= size + GUT_SLACK
 }
 
 /// A try that did nothing (design §5.2): the actor feels a `fruitless` pulse.

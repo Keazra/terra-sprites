@@ -2,7 +2,7 @@
 //! (design §3.5).
 
 mod common;
-use common::{WorldBuilder, at, builtin, builtin_with};
+use common::{WorldBuilder, at, builtin, builtin_changing, builtin_with};
 
 use terra_sim::{DataPack, EntityId, Event, EventKind, Pos, Removal, ScenarioError, World};
 
@@ -694,4 +694,57 @@ fn keeps_paths_open_holds_where_a_solid_object_would_not_split_the_open_tiles_ar
     let mut open = scenario(&pack, &FIELD, &[(3, 2, "ticker")]);
     open.step();
     assert_eq!(n_at(&open, at(3, 2)), 1, "in open ground");
+}
+
+#[test]
+fn a_grown_berry_bush_puts_up_seedlings_nearby_where_bushes_are_few() {
+    // M2 design §19.6: every 2,000 ticks, 1 in 10, within 4 tiles, on
+    // fertile land with fewer than 3 bushes within 4 tiles, keeping paths
+    // open. Here every try spreads and no berry sprouts, so each new bush
+    // is a seedling one put up.
+    let pack = builtin_changing(
+        "objects.ron",
+        &[
+            (
+                r#"if: [InStage("mature"), Chance(0.1)]"#,
+                r#"if: [InStage("mature"), Chance(1.0)]"#,
+            ),
+            (
+                "KeepsPathsOpen, Chance(0.1)],\n          do: [ReplaceWith",
+                "KeepsPathsOpen, Chance(0.0)],\n          do: [ReplaceWith",
+            ),
+        ],
+    );
+    // Grass but for a strip of sand, which isn't fertile, on the right.
+    let rows = ["...........:::"; 11];
+    let mut world = scenario(&pack, &rows, &[(5, 5, "berry_bush")]);
+    world
+        .start_object(at(5, 5), "mature", &[("fruit", 0)])
+        .expect("a grown bush");
+    let mut bushes = vec![at(5, 5)];
+    for _ in 0..20_000 {
+        for event in world.step() {
+            let EventKind::ObjectSpawned {
+                object_type, pos, ..
+            } = event.kind
+            else {
+                continue;
+            };
+            if object_type != "berry_bush" {
+                continue;
+            }
+            let within = |other: &Pos, radius: u16| {
+                pos.x.abs_diff(other.x) <= radius && pos.y.abs_diff(other.y) <= radius
+            };
+            assert!(
+                bushes.iter().any(|bush| within(bush, 4)),
+                "{pos:?} is within 4 of a bush"
+            );
+            assert!(pos.x < 11, "{pos:?} is on fertile grass");
+            let near = bushes.iter().filter(|bush| within(bush, 4)).count();
+            assert!(near < 3, "{pos:?} had {near} bushes within 4");
+            bushes.push(pos);
+        }
+    }
+    assert!(bushes.len() > 2, "the bush put up seedlings: {bushes:?}");
 }

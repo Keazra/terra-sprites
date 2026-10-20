@@ -15,7 +15,7 @@ use crate::family::Relation;
 use crate::genome::{Gene, Genome, LocusRef, Whom};
 use crate::learning::{
     Experience, Knowledge, Links, Signals, SpriteMemory, Subject, TRACE_CAP, Topic, Touch,
-    TraceEntry, TriedAt, TypeMemory, per_verb, still_counts, toward, weight,
+    TraceEntry, TriedAt, TypeMemory, per_verb, settled, still_counts, toward, weight,
 };
 use crate::map::Pos;
 use crate::objects::EntityId;
@@ -287,10 +287,13 @@ pub(crate) struct Snapshot {
     /// §5.9): its candidate, or the thing a running action is aimed at.
     pub(crate) scored: BTreeMap<CategoryId, Subject>,
     pub(crate) attended: Option<CategoryId>,
-    /// The one thing attention is on: a running action's target, or else the
-    /// attended category's candidate.
+    /// The one thing attention is on: a running action's target while
+    /// attention stays on it, or else the attended category's candidate.
     pub(crate) target: Option<Target>,
-    /// What that thing is learned about as (design v19 §5.6).
+    /// What the decision is about is learned about as (design v19 §5.6):
+    /// the thing attention is on, but a running action's target when it
+    /// carries on with its eye off it (M2 design §19.2). What its eye is
+    /// on is `eye_subject`.
     pub(crate) subject: Option<Subject>,
     /// Each verb's score, in `VERBS` order.
     #[serde(deserialize_with = "per_verb")]
@@ -304,6 +307,20 @@ pub(crate) struct Snapshot {
     pub(crate) sprite_seen: Option<EntityId>,
     /// The sprite the decision was about, and whether fear was quiet (§5.5).
     pub(crate) scoring: SpriteScoring,
+}
+
+impl Snapshot {
+    /// What the thing its eye is on is learned about as: the attended
+    /// category's row of `scored`, which is `subject` but while it carries
+    /// on with its eye off its action's target (M2 design §18.1, §19.2).
+    /// With its eye on nothing, or no row for it, `subject`.
+    pub(crate) fn eye_subject(&self) -> Option<Subject> {
+        let eye = self.target.and(self.attended);
+        match eye.and_then(|category| self.scored.get(&category)) {
+            Some(&seen) => Some(seen),
+            None => self.subject,
+        }
+    }
 }
 
 /// What something learned is about (design v19 §5.9, §6.1).
@@ -855,8 +872,9 @@ impl Brain {
         // which brings every learned value nearer 0 while each fade and the
         // Cursor's calming stay from 0 to 1, as the built-in pack's ranges
         // keep them, but for two things: a summary whose sprites, object types
-        // or generalising changed, and a learned habit and a taught one
-        // pulling opposite ways, as one fades faster than the other. So
+        // or generalising changed, and two of a learned habit, a taught one
+        // and a watched one (M2 design §19.7) pulling opposite ways, as one
+        // fades faster than the other. So
         // with none of these there's no lesson to look for. Every kind of
         // learning above is counted here.
         let learned_anything = hitter.is_some()
@@ -881,8 +899,16 @@ impl Brain {
     /// What it knows of `topic`, of the values watching passes on (M2
     /// design §18.2). Of a thing, its worth for each need but the breeding
     /// drive's (§18.3), good and bad; of a sprite or the Cursor, its fear;
-    /// and of either, the habit of the verb tried.
+    /// and of either, the habit of the verb tried. Its badness and habit
+    /// are what its decisions weigh, watched parts and all (§19.7).
     pub(crate) fn knowledge(&self, topic: Topic, data: &DataPack) -> Knowledge {
+        self.knows(topic, data, false)
+    }
+
+    /// What it knows of `topic`, as `knowledge` says; at `first_hand`, its
+    /// badness and habit only as it found them out itself and the Cursor
+    /// taught it, without what it took on by watching (M2 design §19.7).
+    fn knows(&self, topic: Topic, data: &DataPack, first_hand: bool) -> Knowledge {
         let experience = &self.experience;
         let mut knowledge = Knowledge::nothing(topic, data.need_places().len());
         let fear_of = |sprite: Option<EntityId>| {
@@ -899,7 +925,12 @@ impl Brain {
                 sprite,
             } => {
                 let known = experience.types.get(&subject);
-                knowledge.habit = known.map_or(0.0, |known| known.habit(column(verb)));
+                let i = column(verb);
+                knowledge.habit = match known {
+                    Some(known) if first_hand => known.first_hand_habit(i),
+                    Some(known) => known.habit(i),
+                    None => 0.0,
+                };
                 match (TriedAt::of(subject, sprite, data), known) {
                     (TriedAt::Feared(whom), _) => knowledge.fear = fear_of(whom),
                     (TriedAt::Thing, Some(known)) => {
@@ -908,7 +939,11 @@ impl Brain {
                             knowledge.worth[drive] = 0.0;
                         }
                         knowledge.good = known.good;
-                        knowledge.bad = known.bad;
+                        knowledge.bad = if first_hand {
+                            known.bad
+                        } else {
+                            known.badness()
+                        };
                     }
                     (TriedAt::Thing, None) => {}
                 }
@@ -922,11 +957,13 @@ impl Brain {
 
     /// What a sprite watching it make the try `topic` takes on (M2 design
     /// §18.2): what it knows of it, but of a thing's worth only that for
-    /// the try's motive, the need that chose it (design §5.5). A try no need
-    /// chose, or that its brain didn't choose, as a scripted one, shows no
-    /// worth.
+    /// the try's motive, the need that chose it (design §5.5), and of its
+    /// badness and habit only what it found out itself or the Cursor taught
+    /// it, so what's taken on by watching is never passed on (§19.7). A try
+    /// no need chose, or that its brain didn't choose, as a scripted one,
+    /// shows no worth.
     pub(crate) fn shown(&self, topic: Topic, data: &DataPack) -> Knowledge {
-        let mut knowledge = self.knowledge(topic, data);
+        let mut knowledge = self.knows(topic, data, true);
         if let Topic::Tried { subject, verb, .. } = topic {
             let motive = self.motive_for(verb, subject);
             for (need, worth) in knowledge.worth.iter_mut().enumerate() {
@@ -978,8 +1015,10 @@ impl Brain {
     /// Takes on `share` of each of `shown`, what a sprite it watched showed
     /// it (M2 design §18.2), and returns the lessons that tipped. Of a
     /// thing, its worth, good and bad, and it knows the thing's
-    /// object type; of a sprite or the Cursor, only fear. The habit of the
-    /// verb tried is kept as a taught habit, and a place is remembered.
+    /// object type; of a sprite or the Cursor, only fear. Its watched
+    /// badness and the watched habit of the verb tried, kept apart, settle
+    /// `share` of the way towards what was shown, either way (§19.7); and a
+    /// place is remembered.
     pub(crate) fn watched(
         &mut self,
         shown: &[Knowledge],
@@ -1016,7 +1055,10 @@ impl Brain {
                                 take_on(mine, their);
                             }
                             take_on(&mut known.good, theirs.good);
-                            take_on(&mut known.bad, theirs.bad);
+                            // Kept apart, settling either way (§19.7).
+                            let to = settled(known.watched_bad, theirs.bad, share);
+                            moved |= to != known.watched_bad;
+                            known.watched_bad = to;
                             if moved {
                                 known.touched = true;
                                 experience.types.insert(subject, known);
@@ -1024,11 +1066,13 @@ impl Brain {
                         }
                     }
                     let i = column(verb);
-                    let mine = experience.types.get(&subject).map_or(0.0, |k| k.habit(i));
-                    let moved = toward(mine, theirs.habit, share);
-                    if moved != mine {
-                        let taught = &mut experience.learn_about(subject, needs).taught_habits[i];
-                        *taught = (*taught + moved - mine).clamp(-1.0, 1.0);
+                    let mine = experience
+                        .types
+                        .get(&subject)
+                        .map_or(0.0, |k| k.watched_habits[i]);
+                    let to = settled(mine, theirs.habit, share);
+                    if to != mine {
+                        experience.learn_about(subject, needs).watched_habits[i] = to;
                     }
                 }
                 Topic::Hitter(sprite) => {
@@ -1088,16 +1132,22 @@ impl Brain {
         }
     }
 
-    /// Whether a habit it learned and one the Cursor taught pull opposite
-    /// ways (#187): fading at their own rates, their sum can move away
-    /// from 0.
+    /// Whether, of a habit it learned, one the Cursor taught and one it
+    /// took on by watching (#187, M2 design §19.7), two pull opposite ways:
+    /// fading at their own rates, their sum can move away from 0. What it
+    /// found out and took on of how bad a thing is can't, both being at
+    /// most 0.
     fn habits_pull_apart(&self) -> bool {
         self.experience.types.values().any(|known| {
-            known
-                .habits
-                .iter()
-                .zip(&known.taught_habits)
-                .any(|(&learned, &taught)| learned * taught < 0.0)
+            let apart = |a: f32, b: f32| a * b < 0.0;
+            (0..VERBS.len()).any(|i| {
+                let (learned, taught, watched) = (
+                    known.habits[i],
+                    known.taught_habits[i],
+                    known.watched_habits[i],
+                );
+                apart(learned, taught) || apart(learned, watched) || apart(taught, watched)
+            })
         })
     }
 
@@ -1129,6 +1179,12 @@ impl Brain {
             for value in &mut known.taught_habits {
                 *value *= taught;
             }
+            // What it took on by watching fades as what it was taught,
+            // and its badness as what it found out (M2 design §19.7).
+            for value in &mut known.watched_habits {
+                *value *= taught;
+            }
+            known.watched_bad *= bad;
         }
         experience.new_things *= good;
         let (fear, familiar) = (keep(BrainParam::FearFade), keep(BrainParam::BefriendFade));
@@ -1268,7 +1324,7 @@ impl Brain {
             let types = self.experience.types.iter();
             for (&subject, known) in types.filter(|(s, _)| s.category(data) == category.id) {
                 let thing = ThingKey::Subject(subject);
-                things.push((thing, &known.worth, known.good, known.bad));
+                things.push((thing, &known.worth, known.good, known.badness()));
             }
             // Then the category's summary, never learned directly (design
             // v19 §5.6).
@@ -1395,7 +1451,7 @@ impl Brain {
                 *summary += share * worth;
             }
             summary.good += share * known.good;
-            summary.bad += share * known.bad;
+            summary.bad += share * known.badness();
         }
         summary
     }
@@ -1481,9 +1537,11 @@ impl Brain {
     pub(crate) fn commit(&mut self, tick: u64, data: &DataPack) {
         if let Some(snapshot) = self.snapshot.as_ref().filter(|s| s.tick == tick) {
             let motive = snapshot.motive;
-            if let Some(subject) = snapshot.subject {
+            if let Some(subject) = snapshot.eye_subject() {
                 // Attending to an object type makes it familiar (design v19
-                // §5.6).
+                // §5.6): the one its eye is on, not a running action's
+                // target it carries on with, its eye off it (M2 design
+                // §19.2).
                 let rate = self.params.get(BrainParam::FamiliarityRate);
                 let known = self
                     .experience
@@ -1602,9 +1660,12 @@ impl Brain {
         // A stable sort keeps a tie in listed order: concepts, worth, fear,
         // habit.
         contributions.sort_by(|a, b| b.amount.abs().total_cmp(&a.amount.abs()));
+        // What its eye is on: not what the decision is about while it
+        // carries on with its eye off its action's target (M2 design
+        // §19.2).
         Some(Explanation {
             attention,
-            attended: snapshot.subject.map(seen),
+            attended: snapshot.eye_subject().map(seen),
             decision,
             contributions,
         })
@@ -1990,7 +2051,7 @@ impl Brain {
                 .map_or(0.0, |known| now(&known.worth, known.good, known.bad));
         }
         match self.experience.types.get(&subject).filter(|t| t.touched) {
-            Some(known) => now(&known.worth, known.good, known.bad),
+            Some(known) => now(&known.worth, known.good, known.badness()),
             None => {
                 let summary = self.category_summary(subject.category(data), data);
                 now(&summary.worth, summary.good, summary.bad)
@@ -2011,23 +2072,40 @@ impl Brain {
         1.0 - self.params.get(BrainParam::Quieting) * urgency * urgency
     }
 
-    /// A verb sampled from the `available` ones, by softmax(score / τ), τ
-    /// being `tau_base` × `exploration` (design §5.5): one draw.
+    /// A verb sampled from the `available` ones scoring at least
+    /// `act_threshold`, by softmax(score / τ), τ being `tau_base` ×
+    /// `exploration` (design §5.5): one draw. With none it draws nothing,
+    /// and a sprite with nothing to do stands where it is, while one whose
+    /// eye has left its action's target carries on (M2 design §19.2); at a
+    /// threshold of 0, every available verb may start, as before.
     pub(crate) fn choose(
         &self,
         scores: &[f32; VERBS.len()],
         available: &[Verb],
         exploration: f32,
         rng: &mut ChaCha8Rng,
-    ) -> Verb {
+    ) -> Option<Verb> {
+        let threshold = self.params.get(BrainParam::ActThreshold);
+        let moving: Vec<Verb> = available
+            .iter()
+            .copied()
+            .filter(|&verb| threshold <= 0.0 || scores[column(verb)] >= threshold)
+            .collect();
+        if moving.is_empty() {
+            return None;
+        }
         let tau = self.params.get(BrainParam::TauBase) * exploration;
-        let values: Vec<f32> = available.iter().map(|&v| scores[column(v)]).collect();
-        available[sample(&values, tau, rng)]
+        let values: Vec<f32> = moving.iter().map(|&v| scores[column(v)]).collect();
+        Some(moving[sample(&values, tau, rng)])
     }
 
     /// The verb a sprite doing `current` switches to, if any (design §5.5):
     /// the best available verb scoring more than `switch_margin` above it,
-    /// ties to the lower verb ID. It draws nothing.
+    /// ties to the lower verb ID. It draws nothing. It switches by the
+    /// margin alone: `act_threshold` holds back only a sprite choosing
+    /// afresh, one with nothing to do or whose eye has left its action's
+    /// target (M2 design §19.2), so a busy sprite whose action has lost its
+    /// pull can switch to a verb under it, a young one to its 0.15 Wander.
     pub(crate) fn switch(
         &self,
         current: Verb,
@@ -2415,8 +2493,8 @@ mod tests {
         ]);
         let n = builtin().brain_inputs().count();
         assert_eq!(
-            n, 76,
-            "59 State inputs, 4 of body language, 4 of whom it knows and 9 Target inputs"
+            n, 77,
+            "60 State inputs, 4 of body language, 4 of whom it knows and 9 Target inputs"
         );
         // One singleton per input, and one conjunction for both genes naming it.
         assert_eq!(brain.concepts.len(), n + 1);
@@ -2710,6 +2788,54 @@ mod tests {
         brain.attend(&scores, false, 1.0, &mut rng);
         brain.choose(&verbs, &available, 1.0, &mut rng);
         assert_eq!(rng, expected);
+    }
+
+    #[test]
+    fn a_sprite_starts_only_a_verb_pulling_at_least_the_act_threshold() {
+        // M2 design §19.2: with `act_threshold` 0.25, only Eat (0.5) may
+        // start; with nothing pulling that hard, it starts nothing and
+        // draws nothing, and stands where it is.
+        let brain = brain(&[r#"BrainParam(param: "act_threshold", value: 0.25)"#]);
+        let available = available(Situation {
+            target: true,
+            ..Situation::default()
+        });
+        let mut verbs = [0.1; VERBS.len()];
+        verbs[column(Verb::Eat)] = 0.5;
+        let mut rng = ChaCha8Rng::seed_from_u64(7);
+        for _ in 0..50 {
+            assert_eq!(
+                brain.choose(&verbs, &available, 4.0, &mut rng),
+                Some(Verb::Eat)
+            );
+        }
+        verbs[column(Verb::Eat)] = 0.2;
+        let untouched = rng.clone();
+        assert_eq!(brain.choose(&verbs, &available, 1.0, &mut rng), None);
+        assert_eq!(rng, untouched, "standing draws nothing");
+    }
+
+    #[test]
+    fn a_busy_sprite_switches_by_the_margin_alone_even_to_a_verb_under_the_act_threshold() {
+        // M2 design §19.2: the threshold bars only a sprite choosing
+        // afresh. A young sprite's Drink trip that has lost its pull (−.5)
+        // gives way to its .15 Wander, past −.5 + .2, though .15 is under
+        // .25.
+        let brain = brain(&[
+            r#"BrainParam(param: "act_threshold", value: 0.25)"#,
+            r#"BrainParam(param: "switch_margin", value: 0.2)"#,
+        ]);
+        let available = available(Situation {
+            target: true,
+            ..Situation::default()
+        });
+        let mut verbs = [0.0; VERBS.len()];
+        verbs[column(Verb::Drink)] = -0.5;
+        verbs[column(Verb::Wander)] = 0.15;
+        assert_eq!(
+            brain.switch(Verb::Drink, &verbs, &available),
+            Some(Verb::Wander)
+        );
     }
 
     #[test]
@@ -3141,6 +3267,32 @@ mod tests {
         let ball = teach(&mut brain, types::BALL);
         ball.habits[column(Verb::Play)] = 0.7;
         ball.taught_habits[column(Verb::Play)] = -0.21;
+        let learned: Vec<(u64, Vec<(Learned, bool)>)> = (1..=10)
+            .map(|tick| (tick, brain.learn(tick, &nothing_felt(&data), 1.0, &data)))
+            .filter(|(_, lessons)| !lessons.is_empty())
+            .collect();
+        let playing_with_balls = Learned::Habit {
+            thing: "ball".into(),
+            verb: Verb::Play,
+        };
+        assert_eq!(learned, [(6, vec![(playing_with_balls, true)])]);
+    }
+
+    #[test]
+    fn a_learned_and_a_watched_habit_pulling_apart_can_tip_a_lesson_in_a_tick_it_learns_nothing() {
+        // M2 design §19.7: a watched habit counts with the one it learned,
+        // and fades as a taught one does. Playing with balls learned at .7
+        // and taken on by watching at −.21 make .49, no lesson; the watched
+        // one fades by taught_fade (.01) a tick and the learned one not at
+        // all, so after five ticks of fading they pass .5.
+        let data = builtin();
+        let mut brain = brain(&[
+            r#"BrainParam(param: "habit_fade", value: 0.0)"#,
+            r#"BrainParam(param: "taught_fade", value: 0.01)"#,
+        ]);
+        let ball = teach(&mut brain, types::BALL);
+        ball.habits[column(Verb::Play)] = 0.7;
+        ball.watched_habits[column(Verb::Play)] = -0.21;
         let learned: Vec<(u64, Vec<(Learned, bool)>)> = (1..=10)
             .map(|tick| (tick, brain.learn(tick, &nothing_felt(&data), 1.0, &data)))
             .filter(|(_, lessons)| !lessons.is_empty())
@@ -4112,14 +4264,131 @@ mod tests {
     }
 
     #[test]
-    fn a_habit_taken_on_by_watching_is_kept_as_a_taught_habit() {
-        // M2 design §18.2 (Q3): apart from what it learns itself, fading as
-        // slowly as a habit the Cursor teaches (#187).
+    fn a_habit_taken_on_by_watching_is_kept_apart() {
+        // M2 design §19.7: apart from what it learns itself and what the
+        // Cursor teaches it, and counted with them.
         let learner = watched_playing();
         let ball = about(&learner, types::BALL);
         let play = column(Verb::Play);
-        assert!(close(ball.taught_habits[play], 0.45), "{ball:?}");
+        assert!(close(ball.watched_habits[play], 0.45), "{ball:?}");
         assert_eq!(ball.habits[play], 0.0);
+        assert_eq!(ball.taught_habits[play], 0.0);
+        assert!(close(ball.habit(play), 0.45), "{ball:?}");
+    }
+
+    /// A sprite that has watched `shown`'s player, knowing `mine` of balls
+    /// already, its share being a half.
+    fn watching_with(mine: impl Fn(&mut TypeMemory), shown: impl Fn(&mut TypeMemory)) -> Brain {
+        let data = builtin();
+        let play = Topic::Tried {
+            subject: types::BALL,
+            verb: Verb::Play,
+            sprite: None,
+        };
+        let mut player = unfading(&[]);
+        shown(teach(&mut player, types::BALL));
+        chose(&mut player, Verb::Play, types::BALL, None);
+        let mut learner = unfading(&[]);
+        mine(teach(&mut learner, types::BALL));
+        learner.watched(&[player.shown(play, &data)], 0.5, &data);
+        learner
+    }
+
+    #[test]
+    fn what_a_sprite_took_on_by_watching_settles_either_way_towards_what_it_sees() {
+        // M2 design §19.7: half of the way, back towards 0 too, and
+        // whatever it learned itself is left alone.
+        let play = column(Verb::Play);
+        let learner = watching_with(
+            |mine| {
+                mine.watched_habits[play] = 0.6;
+                mine.watched_bad = -0.6;
+                mine.habits[play] = 0.2;
+                mine.bad = -0.2;
+            },
+            |theirs| theirs.habits[play] = 0.0,
+        );
+        let ball = about(&learner, types::BALL);
+        assert!(close(ball.watched_habits[play], 0.3), "{ball:?}");
+        assert!(close(ball.watched_bad, -0.3), "{ball:?}");
+        assert_eq!((ball.habits[play], ball.bad), (0.2, -0.2));
+        assert!(close(ball.habit(play), 0.5), "{ball:?}");
+        assert!(close(ball.badness(), -0.5), "{ball:?}");
+    }
+
+    #[test]
+    fn badness_taken_on_by_watching_is_kept_apart_from_what_a_sprite_found_out() {
+        // M2 design §19.7: one it watches that finds balls very bad moves
+        // what it took on, and its own view of balls stays as it found out.
+        let learner = watching_with(|mine| mine.bad = -0.2, |theirs| theirs.bad = -0.8);
+        let ball = about(&learner, types::BALL);
+        assert_eq!(ball.bad, -0.2);
+        assert!(close(ball.watched_bad, -0.4), "{ball:?}");
+        assert!(close(ball.badness(), -0.6), "{ball:?}");
+    }
+
+    #[test]
+    fn a_decision_and_the_memory_weigh_badness_taken_on_by_watching() {
+        // M2 design §19.7: kept apart, weighed together. Found out at −.2
+        // and taken on at −.4, balls are worth −.6 to a decision, and the
+        // memory lists them so.
+        let data = builtin();
+        let learner = watching_with(|mine| mine.bad = -0.2, |theirs| theirs.bad = -0.8);
+        let general = learner.sprites_in_general(&data);
+        let worth = learner.worth_of(types::BALL, None, &inputs(&[]), &general, &data);
+        assert!(
+            close(worth, -0.6),
+            "decisions weigh what it watched: {worth}"
+        );
+        let balls = Learned::Bad {
+            thing: "ball".into(),
+        };
+        let memory = learner.memory(&data);
+        let listed = memory.iter().find(|m| m.learned == balls);
+        assert!(listed.is_some_and(|m| close(m.amount, -0.6)), "{memory:#?}");
+    }
+
+    #[test]
+    fn a_sprite_shows_what_it_found_out_and_was_taught_not_what_it_watched() {
+        // M2 design §19.7: what it took on by watching is never passed on.
+        let data = builtin();
+        let play = column(Verb::Play);
+        let mut sprite = unfading(&[]);
+        let ball = teach(&mut sprite, types::BALL);
+        ball.habits[play] = 0.1;
+        ball.taught_habits[play] = 0.2;
+        ball.watched_habits[play] = 0.4;
+        ball.bad = -0.1;
+        ball.watched_bad = -0.5;
+        chose(&mut sprite, Verb::Play, types::BALL, None);
+        let topic = Topic::Tried {
+            subject: types::BALL,
+            verb: Verb::Play,
+            sprite: None,
+        };
+        let shown = sprite.shown(topic, &data);
+        assert!(close(shown.habit, 0.3), "{shown:?}");
+        assert_eq!(shown.bad, -0.1);
+    }
+
+    #[test]
+    fn what_a_sprite_took_on_by_watching_fades_as_what_it_was_taught() {
+        // M2 design §19.7: its habits by taught_fade, and its badness as
+        // badness it found out, by worth_fade_bad.
+        let data = builtin();
+        let play = column(Verb::Play);
+        let mut brain = brain(&[
+            r#"BrainParam(param: "habit_fade", value: 0.01)"#,
+            r#"BrainParam(param: "taught_fade", value: 0.001)"#,
+            r#"BrainParam(param: "worth_fade_bad", value: 0.002)"#,
+        ]);
+        let ball = teach(&mut brain, types::BALL);
+        ball.watched_habits[play] = 0.5;
+        ball.watched_bad = -0.5;
+        brain.fade(data.physiology().forget_below);
+        let ball = about(&brain, types::BALL);
+        assert!(close(ball.watched_habits[play], 0.5 * 0.999), "{ball:?}");
+        assert!(close(ball.watched_bad, -0.5 * 0.998), "{ball:?}");
     }
 
     #[test]

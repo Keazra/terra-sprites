@@ -9,11 +9,12 @@ use ron::extensions::Extensions;
 use serde::Deserialize;
 
 use crate::action::Outcome;
+use crate::ageing::LifeStage;
 use crate::brain::{Learned, Thing};
 use crate::command::{Command, CursorTouch};
 use crate::config::WorldConfig;
 use crate::data::DataPack;
-use crate::events::{DeathCause, EventKind};
+use crate::events::{DeathCause, Event, EventKind};
 use crate::map::{Map, MapError, Pos};
 use crate::objects::EntityId;
 use crate::registry::Verb;
@@ -140,6 +141,10 @@ enum LabWorld {
     },
     /// A world generated from the built-in default preset.
     Generated,
+    /// The unattended run's world (M2 design §19.6): the built-in default
+    /// preset's world as generated, with its first sprites newborns spread
+    /// over the whole map, and nobody else.
+    Unattended,
 }
 
 /// What a key's glyph puts on a tile.
@@ -238,6 +243,48 @@ pub struct Window {
     /// What the young the scenario gives its sprites did and learned, once
     /// they've appeared (M2 design §18.6), if it gives them any.
     pub young: Option<YoungCounts>,
+    /// What became of the world's first sprites that started young (M2
+    /// design §19.6).
+    pub first: Childhood,
+    /// What became of the young that appeared after the start: hatched, or
+    /// given as the scenario's young.
+    pub later: Childhood,
+    /// Deaths, by the life stage each died at and their cause (M2 design
+    /// §19.6): a grown-up death is an adult's or an old sprite's.
+    pub stage_deaths: BTreeMap<(LifeStage, DeathCause), u64>,
+    /// How many of the world's first sprites died, at any life stage.
+    pub first_died: u64,
+}
+
+/// How many young grew up in a window, and how many died young (M2 design
+/// §19.6). A young sprite still growing at the window's end is in neither.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Childhood {
+    pub grew_up: u64,
+    pub died_young: u64,
+}
+
+impl Childhood {
+    /// The share of those it counts that grew up, or none if it counts none.
+    pub fn share(&self) -> Option<f64> {
+        let of = self.grew_up + self.died_young;
+        (of > 0).then(|| self.grew_up as f64 / of as f64)
+    }
+}
+
+/// What became of a sprite in a tick (M2 design §19.6): `first` if it was
+/// one of the world's first sprites.
+#[derive(Debug, Clone, Copy)]
+enum Fate {
+    GrewUp {
+        first: bool,
+    },
+    /// It died at `stage`, of `cause`.
+    Died {
+        first: bool,
+        stage: LifeStage,
+        cause: DeathCause,
+    },
 }
 
 /// What a window counted of the young a scenario gives its sprites (M2
@@ -265,6 +312,34 @@ pub struct YoungCounts {
 }
 
 impl Window {
+    /// Counts what became of a sprite in one of the window's ticks.
+    fn record(&mut self, fate: Fate) {
+        match fate {
+            Fate::GrewUp { first } => self.childhood(first).grew_up += 1,
+            Fate::Died {
+                first,
+                stage,
+                cause,
+            } => {
+                *self.stage_deaths.entry((stage, cause)).or_insert(0) += 1;
+                self.first_died += u64::from(first);
+                if stage == LifeStage::Young {
+                    self.childhood(first).died_young += 1;
+                }
+            }
+        }
+    }
+
+    /// What it counts of the first sprites' childhoods if `first`, or else
+    /// of those that appeared later.
+    fn childhood(&mut self, first: bool) -> &mut Childhood {
+        if first {
+            &mut self.first
+        } else {
+            &mut self.later
+        }
+    }
+
     /// How many `verb`s aimed at an object of type `target` applied.
     pub fn applied_on(&self, verb: Verb, target: &str, data: &DataPack) -> u64 {
         self.applied
@@ -386,7 +461,19 @@ impl LabScenario {
                 touches: BTreeMap::new(),
                 lessons: BTreeMap::new(),
                 young: None,
+                first: Childhood::default(),
+                later: Childhood::default(),
+                stage_deaths: BTreeMap::new(),
+                first_died: 0,
             })
+            .collect();
+        // The world's first sprites, and each sprite's life stage, to count
+        // what became of the young and at what stage each died (M2 design
+        // §19.6).
+        let first: BTreeSet<EntityId> = world.sprites().map(|sprite| sprite.id()).collect();
+        let mut stages: BTreeMap<EntityId, LifeStage> = world
+            .sprites()
+            .map(|sprite| (sprite.id(), sprite.life_stage()))
             .collect();
         // The young, by when each appeared, and when each learned each
         // lesson (M2 design §18.6).
@@ -401,12 +488,15 @@ impl LabScenario {
             }
             if self.young.is_some_and(|young| young.at == tick) {
                 let grown: Vec<EntityId> = world.sprites().map(|sprite| sprite.id()).collect();
-                young.extend(world.give_young().into_iter().map(|id| (id, tick)));
+                let given = world.give_young();
+                stages.extend(given.iter().map(|&id| (id, LifeStage::Young)));
+                young.extend(given.into_iter().map(|id| (id, tick)));
                 if orphans {
                     world.take_away(&grown);
                 }
             }
             let events = world.step();
+            let fates = fates(&events, &mut stages, &first);
             for event in &events {
                 if let EventKind::LearnedMilestone {
                     id,
@@ -466,6 +556,9 @@ impl LabScenario {
                         }
                     }
                 }
+                for &fate in &fates {
+                    window.record(fate);
+                }
                 if !young.is_empty() {
                     let counts = window.young.get_or_insert_with(YoungCounts::default);
                     for event in &events {
@@ -506,6 +599,10 @@ impl LabScenario {
                 let config = WorldConfig::builtin(&data);
                 World::new(config, data, seed)
             }
+            LabWorld::Unattended => {
+                let config = WorldConfig::builtin(&data);
+                World::unattended(config, data, seed)
+            }
             LabWorld::Drawn { rows, key } => drawn(rows, key, data, seed)?,
         };
         if let Some(age) = self.grows_old {
@@ -516,6 +613,43 @@ impl LabScenario {
         }
         Ok(world)
     }
+}
+
+/// What became of each sprite whose life stage changed or ended in a tick's
+/// `events`, in order, keeping `stages`, each sprite's life stage, up to
+/// date; `first` holds the world's first sprites (M2 design §19.6).
+fn fates(
+    events: &[Event],
+    stages: &mut BTreeMap<EntityId, LifeStage>,
+    first: &BTreeSet<EntityId>,
+) -> Vec<Fate> {
+    let mut fates = Vec::new();
+    for event in events {
+        match &event.kind {
+            EventKind::Hatched { id, .. } | EventKind::Spawned { id, .. } => {
+                stages.insert(*id, LifeStage::Young);
+            }
+            EventKind::GrewUp { id } => {
+                stages.insert(*id, LifeStage::Adult);
+                let first = first.contains(id);
+                fates.push(Fate::GrewUp { first });
+            }
+            EventKind::GrewOld { id } => {
+                stages.insert(*id, LifeStage::Old);
+            }
+            EventKind::Died { id, cause, .. } => {
+                let stage = stages.remove(id).unwrap_or_default();
+                let (first, cause) = (first.contains(id), *cause);
+                fates.push(Fate::Died {
+                    first,
+                    stage,
+                    cause,
+                });
+            }
+            _ => {}
+        }
+    }
+    fates
 }
 
 /// Fills in `counts` with how many of `young`, each by the tick it
@@ -665,6 +799,12 @@ fn windows_report(runs: &[(u64, &[Window])], data: &DataPack) -> String {
             |w| &w.deaths,
             |&cause| format!("died: {}", cause_name(cause, data)),
         ));
+        out.push_str(&childhood_rows(&windows));
+        out.push_str(&rows(
+            &windows,
+            |w| &w.stage_deaths,
+            |&(stage, cause)| format!("died, {}: {}", stage.name(), cause_name(cause, data)),
+        ));
         out.push_str(&rows(
             &windows,
             |w| &w.touches,
@@ -676,6 +816,24 @@ fn windows_report(runs: &[(u64, &[Window])], data: &DataPack) -> String {
             |lesson| format!("lesson: {}", lesson_name(lesson)),
         ));
         out.push_str(&young_rows(&windows, data));
+    }
+    out
+}
+
+/// The rows for what became of the young (M2 design §19.6), the world's
+/// first sprites and those that appeared later apart, where any of
+/// `windows` counted any.
+fn childhood_rows(windows: &[&Window]) -> String {
+    let mut out = String::new();
+    for whose in ["first", "later"] {
+        let of = |w: &Window| if whose == "first" { w.first } else { w.later };
+        if windows.iter().all(|&w| of(w) == Childhood::default()) {
+            continue;
+        }
+        let grew_up = windows.iter().map(|&w| of(w).grew_up);
+        out.push_str(&row(&format!("grew up: {whose}"), grew_up));
+        let died_young = windows.iter().map(|&w| of(w).died_young);
+        out.push_str(&row(&format!("died young: {whose}"), died_young));
     }
     out
 }
@@ -830,4 +988,88 @@ fn thousands(n: u64) -> String {
         out.push(c);
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A window with nothing counted yet.
+    fn empty() -> Window {
+        Window {
+            from: 0,
+            to: 2,
+            applied: BTreeMap::new(),
+            deaths: BTreeMap::new(),
+            touches: BTreeMap::new(),
+            lessons: BTreeMap::new(),
+            young: None,
+            first: Childhood::default(),
+            later: Childhood::default(),
+            stage_deaths: BTreeMap::new(),
+            first_died: 0,
+        }
+    }
+
+    /// The sprite `id` died of `cause`.
+    fn died(id: u64, cause: DeathCause) -> EventKind {
+        EventKind::Died {
+            id: EntityId(id),
+            name: None,
+            cause,
+            age: 0,
+        }
+    }
+
+    #[test]
+    fn a_window_counts_childhoods_by_first_or_later_and_deaths_by_life_stage() {
+        // M2 design §19.6: sprite 1 is a first sprite that starts young,
+        // grows up and dies of thirst as an adult; sprite 2 a first sprite,
+        // grown up, that grows old and then dies of hunger, counted apart
+        // from adults' hunger; and sprite 3 hatches, and dies young, not
+        // counted among the first sprites' deaths.
+        let first = BTreeSet::from([EntityId(1), EntityId(2)]);
+        let mut stages = BTreeMap::from([
+            (EntityId(1), LifeStage::Young),
+            (EntityId(2), LifeStage::Adult),
+        ]);
+        let ticks = [
+            vec![
+                EventKind::Hatched {
+                    id: EntityId(3),
+                    parents: vec![EntityId(2)],
+                },
+                EventKind::GrewUp { id: EntityId(1) },
+                EventKind::GrewOld { id: EntityId(2) },
+            ],
+            vec![
+                died(1, DeathCause::Dehydration),
+                died(2, DeathCause::Starvation),
+                died(3, DeathCause::Dehydration),
+            ],
+        ];
+        let mut window = empty();
+        for (tick, kinds) in (0..).zip(ticks) {
+            let events: Vec<Event> = kinds.into_iter().map(|kind| Event { tick, kind }).collect();
+            for fate in fates(&events, &mut stages, &first) {
+                window.record(fate);
+            }
+        }
+        let childhood = |grew_up, died_young| Childhood {
+            grew_up,
+            died_young,
+        };
+        assert_eq!(window.first, childhood(1, 0));
+        assert_eq!(window.later, childhood(0, 1));
+        assert_eq!(
+            window.stage_deaths,
+            BTreeMap::from([
+                ((LifeStage::Young, DeathCause::Dehydration), 1),
+                ((LifeStage::Adult, DeathCause::Dehydration), 1),
+                ((LifeStage::Old, DeathCause::Starvation), 1),
+            ])
+        );
+        assert_eq!(window.first_died, 2, "sprites 1 and 2, not sprite 3");
+        assert!(stages.is_empty(), "every sprite died: {stages:?}");
+    }
 }

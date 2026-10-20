@@ -229,16 +229,58 @@ fn body_tab(sprite: &SpriteView, app: &App, world: &World) -> Vec<Line<'static>>
 }
 
 /// What `sprite` is doing, as the Body tab's first line says it (design
-/// §6.1): sliding from a shove, being led, or its action; nothing if it has
-/// no action. The sprite list's Doing column says the same.
+/// §6.1): sliding from a shove, being led, standing with nothing to do, or
+/// its action. The sprite list's Doing column says the same.
 pub(crate) fn doing_line(sprite: &SpriteView, app: &App, world: &World) -> Option<String> {
     slide_line(sprite, app.detail())
         .or_else(|| led_line(sprite, app.detail(), world))
+        .or_else(|| standing_line(sprite, app.detail(), &app.words(world), world))
         .or_else(|| {
             sprite
                 .action()
                 .map(|action| action_line(&action, app.detail(), &app.words(world)))
         })
+}
+
+/// While `sprite` stands with nothing to do, what the Body tab says in
+/// place of an action (M2 design §19.2): what it's watching, "Watching Bo
+/// #7", or "Standing" if nothing; in the detail view `STAND → sprite #7`.
+fn standing_line(sprite: &SpriteView, detail: bool, data: &Words, world: &World) -> Option<String> {
+    if !sprite.is_standing() {
+        return None;
+    }
+    let attended = sprite.attended().zip(sprite.attending_to());
+    Some(match (detail, attended) {
+        (false, None) => "Standing".into(),
+        (false, Some((target, at))) => format!("Watching {}", thing_words(target, at, data, world)),
+        (true, None) => "STAND".into(),
+        (true, Some((Target::Sprite(id), _))) => format!("STAND → sprite #{}", id.0),
+        (true, Some((Target::Object(id), at))) => {
+            format!("STAND → {} #{}", object_type(id, at, world), id.0)
+        }
+        (true, Some((Target::Water(at), _))) => format!("STAND → water ({},{})", at.x, at.y),
+        (true, Some((Target::Cursor, _))) => "STAND → cursor".into(),
+    })
+}
+
+/// A thing a sprite can attend to, on tile `at`, in words: "Bo #7", "the
+/// berry bush", "the water".
+fn thing_words(target: Target, at: Pos, data: &Words, world: &World) -> String {
+    match target {
+        Target::Sprite(id) => data.label(id),
+        Target::Water(_) => "the water".into(),
+        Target::Cursor => CURSOR.into(),
+        Target::Object(id) => format!("the {}", display_name(object_type(id, at, world))),
+    }
+}
+
+/// The type of object `id` on tile `at`, where the eye found it: a held
+/// object is never attended, and a tile holds one object.
+fn object_type(id: EntityId, at: Pos, world: &World) -> &str {
+    world
+        .object_at(at)
+        .filter(|object| object.id() == id)
+        .map_or("?", |object| object.type_name())
 }
 
 /// A sprite's sex and fertility, its parents, or where it came from
@@ -499,6 +541,14 @@ fn aimed_line(action: &ActionView, data: &Words) -> Option<String> {
         Progress::Ended(Outcome::Blocked) if action.verb == Verb::Retreat => {
             "Backed into a corner".into()
         }
+        // Its gut had no room (M2 design §19.4). A pack may feed a sprite
+        // through any verb, so one that isn't Eat or Drink is just too full.
+        Progress::Ended(Outcome::TooFull) => match action.verb {
+            Verb::Eat if eaten_from(action, data) => format!("Too full to eat from {what}"),
+            Verb::Eat => format!("Too full to eat {what}"),
+            Verb::Drink => "Too full to drink".into(),
+            _ => return ended_line(Outcome::TooFull),
+        },
         Progress::Ended(outcome) => return ended_line(outcome),
     })
 }
@@ -552,6 +602,7 @@ pub(crate) fn observed_line(action: &ActionView, data: &Words) -> String {
         },
         Outcome::Interrupted => "changed its mind".into(),
         Outcome::PulledAway => "was pulled away".into(),
+        Outcome::TooFull => "was too full".into(),
         outcome => {
             let reason = ended_line(outcome).expect("an outcome that isn't applied");
             reason.replacen("Gave up", "gave up", 1)
@@ -618,6 +669,16 @@ fn deed(action: &ActionView, what: &str, data: &Words) -> String {
     }
 }
 
+/// Whether an Eat aimed at `action`'s target eats from it, as from a berry
+/// bush, rather than eating it whole, as a berry: whether the target's
+/// object type counts what's on it to eat, as a bush counts its fruit
+/// (design §3.5.2). A try the gut has no room for leaves either there, so
+/// its words can't go by whether the target's gone, as `deed`'s do.
+fn eaten_from(action: &ActionView, data: &Words) -> bool {
+    let name = action.target_type.and_then(|t| data.object_type_name(t));
+    name.is_some_and(|name| !data.counter_names(name).is_empty())
+}
+
 /// `name` after "a", or "an" before a vowel, whatever its case: "a ball",
 /// "an Apple".
 pub(crate) fn with_article(name: &str) -> String {
@@ -682,6 +743,7 @@ fn ended_line(outcome: Outcome) -> Option<String> {
             Outcome::Failed => "Gave up: it couldn't get there",
             Outcome::Interrupted => "Changed its mind",
             Outcome::PulledAway => "Pulled away",
+            Outcome::TooFull => "Too full",
         }
         .into(),
     )
@@ -805,6 +867,7 @@ fn outcome_name(outcome: Outcome) -> &'static str {
         Outcome::Interrupted => "interrupted",
         Outcome::TimedOut => "timed_out",
         Outcome::PulledAway => "pulled_away",
+        Outcome::TooFull => "too_full",
     }
 }
 
@@ -1222,9 +1285,10 @@ fn how_far(from: Pos, to: Pos) -> String {
 }
 
 /// The Brain tab's attention and decision: each category attention could go
-/// to, with its score, the attended one marked; then the verb chosen, with
-/// its score, and the concepts adding most to it, largest first. A snapshot
-/// always has a verb; "none" only guards against one that doesn't.
+/// to, with its score, the attended one marked; then the verb chosen or
+/// kept doing, with its score, and the concepts adding most to it, largest
+/// first, or "none" for a sprite standing with nothing to do (M2 design
+/// §19.2).
 fn explained_lines(explained: &Explanation, data: &Words) -> Vec<String> {
     let mut lines = vec![" ATTENTION".to_string()];
     if explained.attention.is_empty() {
@@ -2584,6 +2648,18 @@ mod tests {
                 "Gave up: the berry was gone",
                 "EAT → berry #9 · failed",
             ),
+            // Its gut had no room (M2 design §19.4): a bush is eaten from,
+            // a berry whole.
+            (
+                tried(bush(Ended(TooFull))),
+                "Too full to eat from the berry bush",
+                "EAT → berry_bush #812 · too_full",
+            ),
+            (
+                tried(berry(Ended(TooFull))),
+                "Too full to eat the berry",
+                "EAT → berry #9 · too_full",
+            ),
             (
                 bush(Ended(Failed)),
                 "Gave up: it couldn't get there",
@@ -2603,6 +2679,11 @@ mod tests {
                 tried(water(Ended(Applied))),
                 "Drank",
                 "DRINK → water (40,12) · applied",
+            ),
+            (
+                tried(water(Ended(TooFull))),
+                "Too full to drink",
+                "DRINK → water (40,12) · too_full",
             ),
             (
                 sprite(Walking { steps_left: 4 }),
@@ -2716,6 +2797,12 @@ mod tests {
                 tried_and_hurt(thorns(Verb::Eat, Ended(Failed))),
                 "Couldn't eat from the thornbush, and got hurt",
                 "EAT → thornbush #77 · failed",
+            ),
+            // A pack may feed a sprite through a play (M2 design §19.4).
+            (
+                tried(ball(Verb::Play, Ended(TooFull))),
+                "Too full",
+                "PLAY → ball #40 · too_full",
             ),
         ];
         for (view, plain, exact) in cases {
@@ -3052,6 +3139,11 @@ mod tests {
                 water(Failed),
                 "Went to drink, but gave up: it couldn't get there",
             ),
+            (
+                tried(bush(TooFull)),
+                "Went to eat the berry bush, but was too full",
+            ),
+            (tried(water(TooFull)), "Went to drink, but was too full"),
             (tried(sprite(Applied)), "Went over to Sprite #530"),
             (
                 gone(sprite(Failed)),

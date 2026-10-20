@@ -154,7 +154,7 @@ _Avoid_: label
 The genome in the data pack that sprites are made from when they have no parents.
 
 **Gene value**:
-A number in a gene that spawn variation or a copying error may change, such as a strength or a threshold. The rest of a gene, such as which chemical it touches, never varies. Followed across a species, each is named for what its gene does and its field, as `hunger → Eat: weight` (M2 design §12.7, §16.4). A trait's or a brain parameter's is held within a range physiology gives, and a level within 0 to 1; the rest can grow or shrink without end, but never cross 0 (M2 design §16.6).
+A number in a gene that spawn variation or a copying error may change, such as a strength or a threshold. The rest of a gene, such as which chemical it touches, never varies. Followed across a species, each is named for what its gene does, when it works and its field, as `hunger → Eat: weight` or `always → Wander until Adult: weight` (M2 design §12.7, §16.4). A trait's or a brain parameter's is held within a range physiology gives, and a level within 0 to 1; the rest can grow or shrink without end, but never cross 0 (M2 design §16.6).
 
 **Spawn variation**:
 The small random change to the gene values of a sprite made from the starter genome, larger for `grows_old` so that lives differ.
@@ -183,6 +183,14 @@ _Avoid_: heterozygote
 **Broken gene** (M2):
 A gene with both copies flawed: born at half health, it works at half strength, and it brings old age sooner and speeds decay as wear does. A lone egg breaks each flaw its mother carries about half the time, and close kin share flaws.
 _Avoid_: dead gene, failed gene, knockout
+
+**Falling behind** (M2, Slice 29):
+A species that has become worse at living than the starter's genes in the same world: its world fails its bars, or it loses the race against the starter's genes (the same fresh worlds run once with the starter's genome and once with genomes from the end of its long run, M2 design §19.6). What a species does better without is evolution; falling behind is the harm.
+_Avoid_: wear and decay for this (those are a sprite's), genetic decline, degeneration
+
+**Careful copying** (M2, held in reserve):
+Copying the needs genes so that they're lost or changed a tenth as often as other genes, as *Creatures*' gene flags do. It's built only if a world in the long run fails a bar (or the race is lost overall) while more than half its living lack a needs gene.
+_Avoid_: protected genes, mutation bias (it changes how often, never which way)
 
 **Flagged gene**:
 A gene that would change the body directly, which no gene may do. It stays in the genome but has no effect.
@@ -228,8 +236,8 @@ A need that comes before a sprite's likes: hunger or thirst. The more it presses
 _Avoid_: primary need, survival need, blocker (it quiets, never blocks)
 
 **Needs gene** (M2, #237):
-One of the starter genome's genes that keeps a sprite fed, watered and rested: it raises or eases hunger, thirst or tiredness, fades one, or turns one into its action, as `drank → thirst` or `hunger → Eat`. The starter has eleven. They're found from the data, not listed: the needs a starter gene raises from the body's own state are the body's needs, so another species' data pack has its own (M2 design §16.6).
-_Avoid_: vital gene, essential gene, survival gene
+One of the starter genome's genes that keeps a sprite fed, watered and rested: it raises or eases hunger, thirst or tiredness, fades one, or turns one into its action, as `drank → thirst` or `hunger → Eat`. The starter has twelve: for hunger, `energy → hunger`, `ate → hunger`, `fullness → hunger`, hunger's half-life and `hunger → Eat`; for thirst, `hydration → thirst`, `drank → thirst`, thirst's half-life and `thirst → Drink`; and for tiredness, its two emitters and `tiredness → Rest`. #237 named eleven, before Slice 29 added `fullness → hunger`. They're found from the data, not listed: the needs a starter gene raises from the body's own state are the body's needs, so another species' data pack has its own (M2 design §16.6). A species that lost one spread it because it did better without it, which is evolution, not wear.
+_Avoid_: vital gene, essential gene, survival gene, core gene
 
 **Relief**:
 A need falling, by enough in a tick to count. It teaches that the thing touched is good for that need.
@@ -266,6 +274,18 @@ _Avoid_: physics (for the body)
 **Injury**:
 The physical chemical that measures harm. A sprite dies when its injury reaches 1.
 _Avoid_: damage, health
+
+**Gut** (M2, Slice 29):
+The one place where everything a sprite eats or drinks waits before its body takes it in. Each thing moves on at its own pace: food only as the body has room for it, while water the body can't hold passes through. It holds about a berry and a drink.
+_Avoid_: stomach, belly, chamber
+
+**Full** (M2, Slice 29):
+Said of a sprite whose gut has no room for what's in front of it. Its body won't take the bite or the drink.
+_Avoid_: sated, stuffed
+
+**Fullness** (M2, Slice 29):
+The starter genes' hormone for how full the gut feels: everything in the gut raises it, and a bite or a drink that finds no room raises it at once. It drains hunger, and leans a sprite away from eating and drinking alike, though strong thirst can outweigh it. It isn't a need, so its fading teaches nothing, and it isn't a drive, so it doesn't colour a sprite.
+_Avoid_: satiety, satiation
 
 **Life stage** (M2):
 Where a sprite is in its life: young, adult or old. Before it hatches it's an egg, which has none. Its genes set when it grows up and when it grows old, and some genes switch with it. Code may call it `stage` where only a sprite's is meant.
@@ -376,7 +396,7 @@ A sprite's parents, its young, and its brothers and sisters, the sprites with a 
 _Avoid_: relatives, family (family is the household)
 
 **Family** (M2, Slice 32):
-A sprite's partner, its parents while it's young, its young, and its eggs: those anxiety draws it back to. An attention instinct can name whom it's about: its family, its kin, one kind of family, its partner, its parents or its young, or, since Slice 28, grown-ups. Then it draws the eye to them and not to others of their kind. A parent remembers where it last saw each egg of its own, and goes back there.
+A sprite's partner, its parents while it's young, its young, and its eggs: those anxiety draws it back to. An attention instinct can name whom it's about: its family, its kin, one kind of family, its partner, its parents or its young, or, since Slice 28, grown-ups or a parent showing it something. Then it draws the eye to them and not to others of their kind. A parent remembers where it last saw each egg of its own, and goes back there.
 _Avoid_: clan, herd, kin (kin is by blood)
 
 **Anxiety** (M2, Slice 32):
@@ -390,6 +410,9 @@ _Avoid_: sadness, mourning (as a name for the hormone)
 **Most sprites** (M2):
 The most sprites a world holds, eggs included: the preset's `most_sprites` (100 in the default world). A full world has no fertile sprite. The Cursor may still place one past it.
 _Avoid_: population cap, carrying capacity (food sets that)
+
+**Die-out** (M2, #222):
+A world dying out: no sprites and no eggs left in it. A fall it recovers from isn't one.
 
 **Population record** (M2):
 The counts the world keeps of its sprites by life stage, and of its eggs, over its whole run, for the population graph: one every 100 ticks from the first tick it runs, each with the oldest and newest generations among its sprites, and the eggs laid and hatched, the sprites spawned and the deaths since the one before. It's world state, so it's saved and replayed. Past 512 counts it keeps every other one and counts half as often, so it always covers the whole run (M2 design §14.1).
@@ -420,6 +443,10 @@ _Avoid_: appendage, extremity, organ (organs are a separate design, #31)
 What a sprite is doing, such as wandering to a spot or resting, from when it starts until it ends. A sprite does one at a time.
 _Avoid_: task, behaviour, activity
 
+**Standing** (M2, Slice 29):
+What a sprite does with no action running: since Slice 29 it acts only when something pulls on it at least its `act_threshold`, and otherwise stands where it is, still watching. One the Cursor leads or a shove slides isn't standing. Standing about builds boredom in the starter genes. Its doing line reads "Watching Bo #7", or "Standing" if its eye is on nothing, though an action that ended on the latest tick still shows how it ended. "Watching" there says where its eye is, on anything; learning from another sprite is **Watching**, below.
+_Avoid_: idle, waiting (that's an action stuck behind another sprite), resting (that's an action)
+
 **Verb**:
 A kind of action a sprite can take: Approach, Eat, Drink, Hit, Play, Retreat, Rest or Wander. Mate and BreedAlone join in M2 (Slice 23), and Call and Court in Slice 32. Under #164 (M3), Play stops being a verb — it is boredom's relief, and the `played` pulse, that other verbs' effects can cause — and Touch, Grab, Push, Pull, Throw and Drop join. Speak is reserved for M6 (Words).
 _Avoid_: command (the player's commands are different), move
@@ -429,8 +456,12 @@ A sprite keeping things in its arms after one or more Grabs: each arm is its own
 _Avoid_: Carry (as a verb), inventory (that's the keeper's), inventory slot
 
 **Outcome**:
-How an action went: still walking, applied, blocked, failed or timed out.
+How an action went: still walking, applied, blocked, failed, timed out or too full.
 _Avoid_: result, status
+
+**Too full** (M2, Slice 29):
+How an Eat or a Drink ends when the sprite is full. The food or water stays where it was, and unlike a fruitless try it teaches nothing. The Body tab reads "Too full to eat the berry", "Too full to eat from the berry bush" or "Too full to drink".
+_Avoid_: refused (the Cursor's word for a click that didn't apply), failed
 
 **Timeout**:
 The longest any action may last. An action still going at the timeout ends as timed out. A trip has as long as its walk takes on top.
@@ -545,11 +576,11 @@ What a sprite has learned about doing one verb to one object type, or to sprites
 _Avoid_: skill (a later design, #48), reflex
 
 **Taught habit**:
-The part of a habit the Cursor taught: a Reward or Correct for what the sprite just tried. It is kept apart from the habit the sprite learns by itself, so what it learns afterwards doesn't wash it out, and it fades as slowly as a bad lesson, so in effect it lasts a life. A sprite acts on the two together, and the Brain tab shows them together as its habit. Since Slice 28 a habit learned by watching is kept the same way.
+The part of a habit the Cursor taught: a Reward or Correct for what the sprite just tried. It is kept apart from the habit the sprite learns by itself, so what it learns afterwards doesn't wash it out, and it fades as slowly as a bad lesson, so in effect it lasts a life. A sprite acts on the two together, and the Brain tab shows them together as its habit. Since Slice 28 a habit learned by watching is kept apart the same way, and since Slice 29 apart from the taught one too.
 _Avoid_: training (that's what the player does), conditioning
 
 **Watching** (M2, Slice 28):
-Learning from another sprite: when a sprite's eye is on another that uses something, or has something done to it, it takes on a share of what that sprite knows about it, only ever up to the other's view, and remembers a place it sees the other eased at. Of what a thing is worth, it takes on only that for the other's motive. It's about things and whom to fear, never whom to like, and never anything about mating. In the starter genes every sprite watches, the young most, looking to the grown-ups, their parents more, and most of all to a parent doing something that would show them a lesson they haven't learned.
+Learning from another sprite: when a sprite's eye is on another that uses something, or has something done to it, it takes on a share of what that sprite knows about it, only ever up to the other's view, and remembers a place it sees the other eased at. Since Slice 29, what it takes on of a thing's badness and habits is kept apart from what it found out itself, settles either way towards what the other found out at first hand, and is never passed on. Of what a thing is worth, it takes on only that for the other's motive. It's about things and whom to fear, never whom to like, and never anything about mating. In the starter genes every sprite watches, the young most, looking to the grown-ups, their parents more, and most of all to a parent doing something that would show them a lesson they haven't learned.
 _Avoid_: imitation, copying (copying the act itself is for later), observing (the observer is the agent that reads baseline reports)
 
 **Thing touched**:
@@ -894,16 +925,28 @@ The same seed run again for comparison, without the one thing being measured: wi
 _Avoid_: baseline (that's a measurement on `main`)
 
 **Viability run**:
-The default world run for many seeds with no player, counting who survives and what killed those who didn't (A4).
+The default world run for many seeds with no player, counting the young hatched that grow up, the deaths by life stage, and what killed whom (A4).
 _Avoid_: soak, ecological soak
 
+**Unattended** (M2, Slice 29):
+Said of a young sprite with nobody to learn from: no player and no grown sprite.
+_Avoid_: orphan (an orphan's parents are gone, but it may still watch other grown-ups), left alone (that's a world with no player)
+
+**Unattended run** (M2, Slice 29):
+The default world on seeds 1–10 as it generates, with its first sprites newborns, placed as the Cursor places them and spread over the whole map, and nobody else, until each has grown up or died. A4 and G5 ask that 10% to 30% grow up, in the middle seed.
+_Avoid_: newborn test, orphan run
+
 **Grown-up death**:
-A death in the viability run after tick 10,000. The first 10,000 ticks count as childhood, since every sprite there starts as a newborn. A newborn dying of thirst is natural, but a grown sprite dying of hunger or thirst means it can't fend for itself (A4).
-_Avoid_: adult death (A4 counts by tick, not by life stage, so the founders, who start as adults since M2, count as children until tick 10,000)
+The death of a sprite that had grown up, adult or old, judged by life stage. The world's first sprites start as adults, so their deaths count from the start. A newborn dying of thirst is natural, but an adult dying of hunger or thirst means it can't fend for itself (A4); old sprites' are reported apart.
+_Avoid_: adult death (old sprites' count too); a death after tick 10,000 (A4 counted by tick until Slice 29)
+
+**Long run** (M2, Slice 29):
+The default world left alone for 220 hours on seeds 1–10, on the owner's PC: the `childhood` example. It reports Slice 29's bars, G1's (whether each seed's world lasts), the starter genes the living lack, lone newborns given the end's genes, and G4 (gene values moved, over the seeds that last).
+_Avoid_: soak (that has the Cursor's commands), viability run (that's 50,000 ticks)
 
 **Soak**:
 A run of a million ticks with a random script of the Cursor's commands, looking only for panics and broken invariants (A7).
-_Avoid_: stress test; a soak for any long run without commands (that's a viability run)
+_Avoid_: stress test; a soak for any long run without commands (that's a viability run, or the long run)
 
 **Baseline run**:
 The measurements taken on one commit of `main`, so that each commit can be compared with the last: the viability run, the soak, and the A1–A3 lessons' numbers.

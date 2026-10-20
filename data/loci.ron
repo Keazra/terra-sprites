@@ -35,6 +35,9 @@
     (id: 15, name: "young_away",        kind: BodySensor),
     (id: 16, name: "parent_away",       kind: BodySensor),
     (id: 17, name: "partner_away",      kind: BodySensor),
+    // 1 while it has no action running and isn't led by the Cursor or
+    // sliding from a shove, standing where it is (M2 design §19.2).
+    (id: 18, name: "standing",          kind: BodySensor),
 
     (id: 32, name: "ate",               kind: Pulse),
     (id: 33, name: "drank",             kind: Pulse),
@@ -53,6 +56,7 @@
     (id: 46, name: "danced",            kind: Pulse),  // it danced for another (§15.3)
     (id: 47, name: "lost_partner",      kind: Pulse),  // its partner died (§15.4)
     (id: 48, name: "found_family",      kind: Pulse),  // it found family it was missing (§15.6)
+    (id: 49, name: "too_full",          kind: Pulse),  // a bite or a drink found no room in the gut (M2 design §19.4)
 
     (id: 64, name: "learning_rate_mod", kind: ReceptorTarget),
     (id: 65, name: "exploration_mod",   kind: ReceptorTarget),

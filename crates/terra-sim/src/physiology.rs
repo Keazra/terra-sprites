@@ -81,8 +81,9 @@ pub(crate) struct PhysiologyEntry {
     stamina: Stamina,
     healing: f32,
     injury: Injury,
-    /// A pack from before life stages takes the built-in ageing (design
-    /// §2.8: a save carries its own pack).
+    /// A pack from before life stages takes the built-in ageing, without
+    /// `thirst_childhood`, as it's from before Slice 29 too, so its young
+    /// dry out at the grown rate (design §2.8: a save carries its own pack).
     #[serde(default)]
     ageing: Ageing,
     /// A pack from before breeding takes the built-in breeding (design
@@ -220,6 +221,10 @@ fn added_since_saves(param: BrainParam) -> Option<ParamRange> {
             range: (0.0, 1.0),
             default: 0.0,
         }),
+        BrainParam::ActThreshold => Some(ParamRange {
+            range: (0.0, 2.0),
+            default: 0.0,
+        }),
         _ => None,
     }
 }
@@ -326,14 +331,91 @@ pub(crate) struct Metabolism {
     pub(crate) per_sense_tile: f32,
     /// Per step at speed 8; it scales with (speed / 8)².
     pub(crate) per_step: f32,
+    /// What the basal and sense costs are multiplied by while it rests (M2
+    /// design §19.2): 1, the same as standing awake, for a pack from before
+    /// Slice 29.
+    #[serde(default = "same")]
+    pub(crate) resting: f32,
 }
 
-/// Gut contents moved into the body per tick.
+/// A multiplier that changes nothing, for a pack from before it.
+fn same() -> f32 {
+    1.0
+}
+
+/// The gut, and how what's in it moves into the body (M2 design §19.4).
 #[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Digestion {
-    pub(crate) food: f32,
-    pub(crate) water: f32,
+    /// How much the one gut holds, food and water together, at most 1: a
+    /// bite or a drink that doesn't fit is Too full. `None`, for a pack
+    /// from before Slice 29, is two guts with no limit.
+    #[serde(default)]
+    pub(crate) gut: Option<f32>,
+    /// Food, into energy.
+    pub(crate) food: GutContent,
+    /// Water, into hydration.
+    pub(crate) water: GutContent,
+}
+
+/// One thing in the gut: how much of it moves into the body a tick, and
+/// whether it waits for the body to have room or passes through, the body
+/// keeping what it can (M2 design §19.4).
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct GutContent {
+    pub(crate) pace: f32,
+    pub(crate) waits: bool,
+}
+
+/// A thing in the gut as the file has it: `(pace: 0.001, waits: true)`,
+/// or as a pack from before Slice 29 has it, only its pace, and then it
+/// passes through.
+impl<'de> Deserialize<'de> for GutContent {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<GutContent, D::Error> {
+        deserializer.deserialize_any(GutContentVisitor)
+    }
+}
+
+struct GutContentVisitor;
+
+impl<'de> serde::de::Visitor<'de> for GutContentVisitor {
+    type Value = GutContent;
+
+    fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        f.write_str("a pace, or `(pace: ..., waits: ...)`")
+    }
+
+    fn visit_f64<E: serde::de::Error>(self, pace: f64) -> Result<GutContent, E> {
+        Ok(GutContent {
+            pace: pace as f32,
+            waits: false,
+        })
+    }
+
+    fn visit_u64<E: serde::de::Error>(self, pace: u64) -> Result<GutContent, E> {
+        self.visit_f64(pace as f64)
+    }
+
+    fn visit_i64<E: serde::de::Error>(self, pace: i64) -> Result<GutContent, E> {
+        self.visit_f64(pace as f64)
+    }
+
+    fn visit_map<A: serde::de::MapAccess<'de>>(self, mut map: A) -> Result<GutContent, A::Error> {
+        let (mut pace, mut waits) = (None, None);
+        while let Some(key) = map.next_key::<String>()? {
+            match key.as_str() {
+                "pace" => pace = Some(map.next_value::<f32>()?),
+                "waits" => waits = Some(map.next_value::<bool>()?),
+                other => {
+                    return Err(serde::de::Error::unknown_field(other, &["pace", "waits"]));
+                }
+            }
+        }
+        Ok(GutContent {
+            pace: pace.ok_or_else(|| serde::de::Error::missing_field("pace"))?,
+            waits: waits.ok_or_else(|| serde::de::Error::missing_field("waits"))?,
+        })
+    }
 }
 
 #[derive(Debug, Clone, Copy, Deserialize)]
@@ -376,6 +458,12 @@ pub(crate) struct Ageing {
     pub(crate) decay: Decay,
     /// How a bad injury scars a gene, at any age (§9.4).
     pub(crate) scar: Scar,
+    /// The childhood a young sprite's thirst is paced to, in ticks: its
+    /// hydration loss, and its dying once it has dried out, are the grown
+    /// rate times this over its `grows_up` (M2 design §19.5). `None`, for a
+    /// pack from before Slice 29, is the grown rate.
+    #[serde(default)]
+    pub(crate) thirst_childhood: Option<f32>,
 }
 
 /// How an old sprite's genes decay (M2 design §9.4): damage its repair no
@@ -421,7 +509,7 @@ pub(crate) struct Wear {
 }
 
 /// What a saved world's pack from before life stages gets: the built-in
-/// pack's, which a test checks they match.
+/// pack's, which a test checks they match, but for `thirst_childhood`.
 impl Default for Ageing {
     fn default() -> Ageing {
         Ageing {
@@ -446,6 +534,9 @@ impl Default for Ageing {
                 chance: 0.002,
                 hit: 0.05,
             },
+            // From before Slice 29 too, so its young dry out at the grown
+            // rate (M2 design §19.5).
+            thirst_childhood: None,
         }
     }
 }
@@ -723,8 +814,9 @@ impl PhysiologyEntry {
             ("metabolism.basal", metabolism.basal),
             ("metabolism.per_sense_tile", metabolism.per_sense_tile),
             ("metabolism.per_step", metabolism.per_step),
-            ("digestion.food", digestion.food),
-            ("digestion.water", digestion.water),
+            ("metabolism.resting", metabolism.resting),
+            ("digestion.food.pace", digestion.food.pace),
+            ("digestion.water.pace", digestion.water.pace),
             ("hydration_loss", self.hydration_loss),
             ("stamina.per_step", stamina.per_step),
             ("stamina.idle", stamina.idle),
@@ -739,6 +831,25 @@ impl PhysiologyEntry {
                     "`{name}` is {rate}, but must be a number, and can't be negative"
                 ));
             }
+        }
+        for (name, size) in [
+            ("digestion.gut", digestion.gut),
+            ("ageing.thirst_childhood", self.ageing.thirst_childhood),
+        ] {
+            if let Some(size) = size
+                && !(size.is_finite() && size > 0.0)
+            {
+                return Err(format!("`{name}` is {size}, but must be a number above 0"));
+            }
+        }
+        // Each thing in the gut stops at 1, so a bite that fitted a bigger
+        // gut could still be lost (M2 design §19.4).
+        if let Some(gut) = digestion.gut
+            && gut > 1.0
+        {
+            return Err(format!(
+                "`digestion.gut` is {gut}, but can't be above 1: each thing in the gut stops at 1"
+            ));
         }
         let ageing = self.ageing;
         let (wear, decay, scar) = (ageing.wear, ageing.decay, ageing.scar);
@@ -1070,6 +1181,9 @@ pub(crate) struct Indices {
     pub(crate) nearby_sprites: usize,
     pub(crate) moving: usize,
     pub(crate) resting: usize,
+    /// 1 while it has no action (M2 design §19.2), if the pack has it: a
+    /// pack from before Slice 29 doesn't.
+    pub(crate) standing: Option<usize>,
     /// The receptor target that scales the brain's temperatures (design §5.3, §5.5).
     pub(crate) exploration_mod: usize,
     /// The receptor target that scales learning (design §5.6).
@@ -1086,6 +1200,9 @@ pub(crate) struct Indices {
     /// The pulses the Cursor's Reward and Correct fire (design v21 §4.6).
     pub(crate) petted: usize,
     pub(crate) shocked: usize,
+    /// The pulse a bite or a drink with no room in the gut fires (M2 design
+    /// §19.4), if the pack has it: a pack from before Slice 29 doesn't.
+    pub(crate) too_full: Option<usize>,
     /// What breeding reads and writes (M2 design §10), if the pack has it
     /// all: a pack from before breeding doesn't.
     pub(crate) breeding: Option<BreedingIndices>,
@@ -1329,6 +1446,7 @@ impl Indices {
             nearby_sprites: sensor("nearby_sprites")?,
             moving: sensor("moving")?,
             resting: sensor("resting")?,
+            standing: sensor_if("standing"),
             exploration_mod: target("exploration_mod")?,
             learning_rate_mod: target("learning_rate_mod")?,
             curiosity_mod: target("curiosity_mod")?,
@@ -1337,6 +1455,7 @@ impl Indices {
             fruitless: pulse("fruitless")?,
             petted: pulse("petted")?,
             shocked: pulse("shocked")?,
+            too_full: locus("too_full", LocusKind::Pulse),
             breeding,
             courtship,
             families,
@@ -1348,7 +1467,7 @@ impl Indices {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::data::DataPack;
+    use crate::data::{DataError, DataPack};
     use crate::test_util::builtin_changing;
 
     #[test]
@@ -1372,10 +1491,37 @@ mod tests {
             (saved.held, saved.per_kind, saved.merge),
             (built_in.held, built_in.per_kind, built_in.merge)
         );
-        assert_eq!(Ageing::default(), physiology.ageing);
+        // A pack from before life stages is from before Slice 29 too, so
+        // its young, such as an old save's or one the Cursor places, dry out
+        // at the grown rate (M2 design §19.5).
+        let ageing = Ageing {
+            thirst_childhood: None,
+            ..physiology.ageing
+        };
+        assert_eq!(Ageing::default(), ageing);
         assert_eq!(Breeding::default(), physiology.breeding);
         assert_eq!(Calls::default(), physiology.calls);
         assert_eq!(grows_up_range(), physiology.traits.grows_up);
+    }
+
+    #[test]
+    fn the_gut_holds_at_most_1_as_each_thing_in_it_stops_at_1() {
+        // M2 design §19.4: in a bigger gut, a bite could fit and still be
+        // lost, as its food stopped at 1.
+        let sources: Vec<(&str, String)> = DataPack::builtin_sources()
+            .iter()
+            .map(|&(path, text)| (path, text.replace("gut: 0.5,", "gut: 1.5,")))
+            .collect();
+        let sources: Vec<(&str, &str)> = sources.iter().map(|(p, t)| (*p, t.as_str())).collect();
+        match DataPack::from_sources(&sources).err() {
+            Some(DataError::Invalid { file, message }) => {
+                assert_eq!(file, "physiology.ron");
+                assert!(message.contains("digestion.gut"), "{message}");
+            }
+            other => panic!("a gut of 1.5 should be refused, not {other:?}"),
+        }
+        let full = builtin_changing("physiology.ron", &[("gut: 0.5,", "gut: 1.0,")]);
+        assert_eq!(full.physiology().digestion.gut, Some(1.0));
     }
 
     #[test]

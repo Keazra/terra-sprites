@@ -109,3 +109,58 @@ fn a_preset_resized_keeps_each_side_within_what_a_map_may_be() {
     let config = WorldConfig::builtin(&builtin()).sized(20, 2000);
     assert_eq!((config.width(), config.height()), (32, 1024));
 }
+
+#[test]
+fn the_built_in_preset_is_the_dry_world_of_big_lakes_with_its_first_sprites_near_water() {
+    // M2 design §19.1.
+    let config = WorldConfig::builtin(&builtin());
+    assert_eq!(config.water(), 4);
+    assert_eq!(config.lake_size(), 3);
+    assert_eq!(config.start_near_water(), Some(10));
+}
+
+#[test]
+fn a_preset_that_leaves_out_the_water_is_the_watery_world_from_before_slice_29() {
+    let config = preset("(width: 64, height: 40)").expect("valid preset");
+    assert_eq!(config.water(), 32);
+    assert_eq!(config.lake_size(), 1);
+    assert_eq!(config.start_near_water(), None);
+}
+
+#[test]
+fn the_gentle_preset_is_the_watery_world() {
+    // M2 design §19.1: the world before Slice 29 stays as a preset.
+    let text = include_str!("../../../data/presets/gentle.ron");
+    let gentle = preset(text).expect("valid preset");
+    let default = WorldConfig::builtin(&builtin());
+    assert_eq!(gentle.water(), 32);
+    assert_eq!(gentle.lake_size(), 1);
+    assert_eq!(gentle.start_near_water(), None);
+    assert_eq!(
+        (gentle.width(), gentle.height()),
+        (default.width(), default.height())
+    );
+    assert_eq!(gentle.sprites(), default.sprites());
+    assert_eq!(gentle.most_sprites(), default.most_sprites());
+    for name in ["berry_bush", "thornbush", "ball"] {
+        assert_eq!(
+            gentle.object_count(name),
+            default.object_count(name),
+            "{name}"
+        );
+    }
+}
+
+#[test]
+fn the_water_must_be_from_1_to_60_percent_and_lakes_from_1_to_5() {
+    assert_invalid("(width: 64, height: 40, water: 0)", "water");
+    assert_invalid("(width: 64, height: 40, water: 61)", "water");
+    assert_invalid("(width: 64, height: 40, lake_size: 0)", "lake_size");
+    assert_invalid("(width: 64, height: 40, lake_size: 6)", "lake_size");
+    for text in [
+        "(width: 64, height: 40, water: 1, lake_size: 1)",
+        "(width: 64, height: 40, water: 60, lake_size: 5)",
+    ] {
+        assert!(preset(text).is_ok(), "{text}");
+    }
+}

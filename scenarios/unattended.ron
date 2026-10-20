@@ -1,0 +1,12 @@
+// The unattended run (M2 design §19.6): the default world as generated, but
+// its 30 first sprites are newborns, placed as the Cursor places them and
+// spread over the whole map, and nobody else is there, so no young sprite
+// has anyone to learn from. Each grows up or dies within about 5,000 ticks.
+// A4 (design §7.4) and G5 (M2 design §6) ask that 10% to 30% grow up, in
+// the middle seed of ten. Baseline runs use it on seeds 1–10:
+// cargo run --release -p terra-sim --example lab -- scenarios/unattended.ron --seeds 10
+(
+    world: Unattended,
+    ticks: 6000,
+    windows: [(0, 6000)],
+)

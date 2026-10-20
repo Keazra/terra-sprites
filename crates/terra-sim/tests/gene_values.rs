@@ -15,9 +15,10 @@ fn each_value_is_named_for_what_its_gene_does_and_its_field() {
         Instinct(inputs: [("hunger", false), ("ate", true)], verb: Eat, weight: 0.5),
         Receptor(chem: "boredom", threshold: 0.25, gain: 2.0, target: "exploration_mod"),
         BrainParam(param: "habit_fade", value: 0.01),
+        Instinct(inputs: [("always", false)], verb: Wander, weight: 0.15, until: Adult),
     ])"#;
     let genome = Genome::from_ron(text, &data).expect("a valid genome");
-    let values = gene_values(&genome.genes(&data));
+    let values = gene_values(&genome.genes(&data), &genome.switches());
     let named: Vec<(&str, f32)> = values.iter().map(|(name, n)| (name.as_str(), *n)).collect();
     assert_eq!(
         named,
@@ -27,6 +28,7 @@ fn each_value_is_named_for_what_its_gene_does_and_its_field() {
             ("boredom → exploration_mod: threshold", 0.25),
             ("boredom → exploration_mod: gain", 2.0),
             ("habit_fade: brain", 0.01),
+            ("always → Wander until Adult: weight", 0.15),
         ]
     );
 }
@@ -34,8 +36,36 @@ fn each_value_is_named_for_what_its_gene_does_and_its_field() {
 #[test]
 fn the_starter_genome_has_values_to_follow() {
     let data = builtin();
-    let starter = gene_values(&data.starter().genes(&data));
+    let starter = gene_values(&data.starter().genes(&data), &data.starter().switches());
     assert!(starter.len() > 50, "{} values", starter.len());
+}
+
+#[test]
+fn a_gene_split_by_life_stage_lines_up_by_when_it_works() {
+    // M2 design §13: a sprite that lost the young's copy of a split gene
+    // has its grown sprites' value set beside the starter's grown one, not
+    // the young's.
+    let data = builtin();
+    let wander = |genes: &str| {
+        let text = format!("(format: 2, genes: [{genes}])");
+        Genome::from_ron(&text, &data).expect("a valid genome")
+    };
+    let young =
+        r#"Instinct(inputs: [("always", false)], verb: Wander, weight: 0.15, until: Adult)"#;
+    let grown = r#"Instinct(inputs: [("always", false)], verb: Wander, weight: 0.3, from: Adult)"#;
+    let both = wander(&format!("{young}, {grown}"));
+    let sprites = vec![
+        (at(1, 1), Some(both.clone())),
+        (at(3, 1), Some(wander(grown))),
+    ];
+    let world = WorldBuilder::new(&["........"; 3])
+        .sprites_with(sprites)
+        .build();
+    let values = gene_values(&both.genes(&data), &both.switches());
+    assert_eq!(
+        middle_values(&world, &values),
+        Some(vec![Some(0.15), Some(0.3)])
+    );
 }
 
 #[test]

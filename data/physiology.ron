@@ -16,9 +16,22 @@
         basal: 0.0001,              // energy per tick
         per_sense_tile: 0.0000067,  // energy per tick, per tile of sense radius
         per_step: 0.0002,           // energy per step at speed 8; scales with (speed / 8)²
+        // What the basal and sense costs are multiplied by while it rests:
+        // a rest costs a fifth less than standing awake (M2 design §19.2).
+        resting: 0.8,
     ),
-    // Gut contents moved into the body per tick: food into energy, water into hydration.
-    digestion: (food: 0.001, water: 0.002),
+    // The one gut (M2 design §19.4). It holds `gut` of food and water
+    // together, at most 1: room for a berry and a drink. A bite or a drink
+    // that doesn't fit is Too full. Each thing in it moves into the body at
+    // its own `pace` a tick, food into energy and water into hydration: one
+    // that `waits` only as the body has room for it, one that doesn't
+    // passing through, the body keeping what it can. Leave out `gut` for two
+    // guts with no limit, and give a bare pace for one that passes through.
+    digestion: (
+        gut: 0.5,
+        food: (pace: 0.001, waits: true),
+        water: (pace: 0.002, waits: false),
+    ),
     hydration_loss: 0.00033,
     stamina: (per_step: 0.002, idle: 0.0005, resting: 0.002),
     healing: 0.0001,  // injury healed per tick
@@ -57,6 +70,11 @@
         // While its injury is above `above`, each tick a random gene may be
         // scarred, losing `hit` health for good, at any age.
         scar: (above: 0.5, chance: 0.002, hit: 0.05),
+        // A young sprite's water drains, and once it has dried out it dies
+        // of thirst, at the grown rate times this many ticks over the ticks
+        // its genes take to grow up (M2 design §19.5), so one that grows up
+        // sooner needs as much water. Leave it out for the grown rate.
+        thirst_childhood: 4500.0,
     ),
     // Having young (M2 design §10). An egg is an item, `egg` in objects.ron,
     // which says when it hatches (M2 design §10.4). It costs its parents
@@ -181,6 +199,11 @@
         // 0 it doesn't learn by watching; the starter genome's sprites all
         // do, the young most (M2 design §18.1).
         "watch_rate":        (range: (0.0, 1.0),     default: 0.0),
+        // How strong a pull it takes to act (M2 design §19.2): a sprite with
+        // nothing to do starts only a verb scoring at least this, and with
+        // none, stands where it is. At 0 it always starts one; the starter
+        // genome's sprites need 0.25.
+        "act_threshold":     (range: (0.0, 2.0),     default: 0.0),
     },
     // The range of each receptor target in `loci.ron`. Each rests at 1.0 when
     // no receptor writes it.

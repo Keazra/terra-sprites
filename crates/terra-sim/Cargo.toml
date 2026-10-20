@@ -31,3 +31,9 @@ harness = false
 [[example]]
 name = "baseline"
 test = true
+
+# The long run's counting and bars are tested with everything else (M2
+# design §19.6).
+[[example]]
+name = "childhood"
+test = true

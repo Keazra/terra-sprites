@@ -30,10 +30,14 @@ const SOAK_TICKS: u64 = 1_000_000;
 
 /// The lab scenarios a baseline run measures, by the names of their files
 /// in `scenarios/`.
-const SCENARIOS: [(&str, &str); 4] = [
+const SCENARIOS: [(&str, &str); 5] = [
     (
         "viability",
         include_str!("../../../../scenarios/viability.ron"),
+    ),
+    (
+        "unattended",
+        include_str!("../../../../scenarios/unattended.ron"),
     ),
     (
         "a1-thornbush",
@@ -98,6 +102,7 @@ fn main() -> ExitCode {
         seconds: started.elapsed().as_secs(),
         seeds: options.seeds,
         sprites,
+        unattended: report::unattended(seeds_of("unattended"), &data),
         viability: report::viability(seeds_of("viability"), sprites, &data),
         a1: report::a1(seeds_of("a1-thornbush"), &data),
         a2: report::a2(seeds_of("a2-reward-training"), &data),
@@ -287,7 +292,7 @@ fn save(dir: &Path, report: &Report, page: &str) -> Result<(PathBuf, PathBuf), S
 #[cfg(test)]
 mod tests {
     use super::*;
-    use report::{Behaviour, Verdict, Viability};
+    use report::{Behaviour, Unattended, Verdict, Viability};
 
     fn report() -> Report {
         let none = || Behaviour {
@@ -305,6 +310,7 @@ mod tests {
             seconds: 900,
             seeds: 10,
             sprites: 30,
+            unattended: Unattended::default(),
             viability,
             a1: none(),
             a2: none(),

@@ -139,15 +139,16 @@ impl Subject {
 
 /// What a sprite has learned about one object type (design v19 §5.6): its
 /// worth for each need and in general, how bad it is, its habits and its
-/// taught habits (design §5.6, #187), how familiar it is, and whether it
-/// knows it.
+/// taught habits (design §5.6, #187), what it took on by watching of how
+/// bad it is and of its habits (M2 design §19.7), how familiar it is, and
+/// whether it knows it.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub(crate) struct TypeMemory {
     /// Worth for each need, in the pack's needs order (0 to 1).
     pub(crate) worth: Vec<f32>,
     /// General good, from `reward` (0 to 1).
     pub(crate) good: f32,
-    /// Bad, from `punishment` (−1 to 0).
+    /// Bad, from `punishment`, as it found out itself (−1 to 0).
     pub(crate) bad: f32,
     /// Habits: doing each verb to it, in `VERBS` order.
     #[serde(deserialize_with = "per_verb")]
@@ -158,6 +159,16 @@ pub(crate) struct TypeMemory {
     /// Court and Call has fewer (M2 design §15).
     #[serde(default, deserialize_with = "per_verb")]
     pub(crate) taught_habits: [f32; VERBS.len()],
+    /// How bad it is, as it took on by watching, kept apart from what it
+    /// found out itself (−1 to 0; M2 design §19.7). A save from before
+    /// Slice 29 has none.
+    #[serde(default)]
+    pub(crate) watched_bad: f32,
+    /// Watched habits: what it took on by watching about doing each verb to
+    /// it, kept apart from its own and its taught habits (M2 design §19.7),
+    /// in `VERBS` order. A save from before Slice 29 has none.
+    #[serde(default, deserialize_with = "per_verb")]
+    pub(crate) watched_habits: [f32; VERBS.len()],
     /// How familiar it is, from attending to it (0 to 1).
     pub(crate) familiarity: f32,
     /// Whether it has touched one, and so knows it: until then, it's
@@ -174,16 +185,31 @@ impl TypeMemory {
             bad: 0.0,
             habits: [0.0; VERBS.len()],
             taught_habits: [0.0; VERBS.len()],
+            watched_bad: 0.0,
+            watched_habits: [0.0; VERBS.len()],
             familiarity: 0.0,
             touched: false,
         }
     }
 
     /// Its habit of doing `VERBS[i]` to it, as a decision weighs it: the
-    /// one it learned and the one the Cursor taught, together (design §5.5,
-    /// #187).
+    /// one it learned, the one the Cursor taught (design §5.5, #187) and
+    /// the one it took on by watching (M2 design §19.7), together.
     pub(crate) fn habit(&self, i: usize) -> f32 {
+        (self.habits[i] + self.taught_habits[i] + self.watched_habits[i]).clamp(-1.0, 1.0)
+    }
+
+    /// Its habit of doing `VERBS[i]` to it at first hand: the one it
+    /// learned and the one the Cursor taught, which is what watching it
+    /// shows another (M2 design §19.7).
+    pub(crate) fn first_hand_habit(&self, i: usize) -> f32 {
         (self.habits[i] + self.taught_habits[i]).clamp(-1.0, 1.0)
+    }
+
+    /// How bad it is, as a decision weighs it: what it found out itself
+    /// and what it took on by watching, together (M2 design §19.7).
+    pub(crate) fn badness(&self) -> f32 {
+        (self.bad + self.watched_bad).clamp(-1.0, 0.0)
     }
 }
 
@@ -256,6 +282,8 @@ impl Experience {
             within([&known.bad], (-1.0, 0.0), "a bad")?;
             within(&known.habits, (-1.0, 1.0), "a habit")?;
             within(&known.taught_habits, (-1.0, 1.0), "a taught habit")?;
+            within([&known.watched_bad], (-1.0, 0.0), "a watched bad")?;
+            within(&known.watched_habits, (-1.0, 1.0), "a watched habit")?;
             within([&known.familiarity], (0.0, 1.0), "a familiarity")?;
         }
         within([&self.new_things], (-1.0, 1.0), "the worth of new things")?;
@@ -658,7 +686,8 @@ impl Knowledge {
 /// `mine` moved `share` of the way towards `theirs`, when theirs is further
 /// from 0 the same way (M2 design §18.2): never past it, never back towards
 /// 0, and never across it, so watching never undoes what a sprite found out
-/// for itself.
+/// for itself. Worth, good and fear move so; badness and habits are kept
+/// apart and settle either way (M2 design §19.7).
 pub(crate) fn toward(mine: f32, theirs: f32, share: f32) -> f32 {
     let further = if theirs > 0.0 {
         mine >= 0.0 && theirs > mine
@@ -670,6 +699,13 @@ pub(crate) fn toward(mine: f32, theirs: f32, share: f32) -> f32 {
     } else {
         mine
     }
+}
+
+/// `mine` moved `share` of the way towards `theirs`, either way: what a
+/// sprite learns by watching, kept apart from what it found out for itself,
+/// settles on what it sees (M2 design §19.7).
+pub(crate) fn settled(mine: f32, theirs: f32, share: f32) -> f32 {
+    mine + share * (theirs - mine)
 }
 
 /// What step 4 reads for one sprite (design §5.6).
@@ -728,8 +764,9 @@ pub(crate) struct TraceEntry {
     pub(crate) tick: u64,
     /// The verb it chose or kept doing, if any.
     pub(crate) verb: Option<Verb>,
-    /// What the thing attention was on, if any, is learned about as (design
-    /// v19 §5.6).
+    /// What the thing its decision was about, if any, is learned about as
+    /// (design v19 §5.6): the one attention was on, or a running action's
+    /// target it carried on with, its eye off it (M2 design §19.2).
     pub(crate) subject: Option<Subject>,
     /// The verb's motive (design §5.5): the need, by its place in the pack's
     /// needs, whose instinct did most to choose it.
@@ -893,7 +930,7 @@ fn watch(
             let shown: Vec<Knowledge> = moment
                 .iter()
                 .filter(|topic| !topic.about(id))
-                .filter(|topic| on_them || topic.caught(eye.target, eye.subject))
+                .filter(|topic| on_them || topic.caught(eye.target, eye.eye_subject()))
                 .map(|&topic| them.brain.shown(topic, data))
                 .collect();
             if !shown.is_empty() {
