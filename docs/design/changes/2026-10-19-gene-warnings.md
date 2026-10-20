@@ -2,7 +2,7 @@
 
 [#274](https://github.com/Keazra/terra-sprites/issues/274): the baseline report and the end of a fast-forward say when the species' genes have gone somewhere worth a look, the "genetic canary" of the owner's notes. Designed on 2026-10-19 by an agent alone in [#329](https://github.com/Keazra/terra-sprites/pull/329), from #274's design brief, the owner's principles and the decisions on [#237](https://github.com/Keazra/terra-sprites/issues/237) and [#221](https://github.com/Keazra/terra-sprites/issues/221), as triage's autonomous design allows ([AUTONOMOUS-DESIGN.md](../../../.claude/skills/triage/AUTONOMOUS-DESIGN.md)). The owner agreed the warning levels on 2026-10-20, as proposed, before anything was built (`docs/agents/how-we-work.md`, "When a decision waits on a measurement"). Nothing is built yet: the build follows Slice 30 ([#148](https://github.com/Keazra/terra-sprites/issues/148)).
 
-## The levels to agree
+## The warning levels, as agreed
 
 | Warning | Level | From |
 |---|---|---|
