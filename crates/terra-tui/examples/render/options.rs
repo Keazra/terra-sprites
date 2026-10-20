@@ -125,6 +125,20 @@ pub struct WorldScene {
     pub tab: Option<Tab>,
 }
 
+impl WorldScene {
+    /// A world's clip as the command line has it unless told otherwise:
+    /// from where the world starts to the usual end, at 4×, tracking the
+    /// sprite `Tab` selects first, with no Cursor, on the tab that opens.
+    pub const USUAL: WorldScene = WorldScene {
+        from: None,
+        end: End::Usual,
+        pace: Pace::Game(Speed::X4),
+        track: Track::First,
+        cursor: false,
+        tab: None,
+    };
+}
+
 /// Where a world's clip ends.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum End {
@@ -194,14 +208,7 @@ impl Options {
         let mut seconds = None;
         // The flags given that only a world's clip takes.
         let mut for_a_world = Vec::new();
-        let mut scene = WorldScene {
-            from: None,
-            end: End::Usual,
-            pace: Pace::Game(Speed::X4),
-            track: Track::First,
-            cursor: false,
-            tab: None,
-        };
+        let mut scene = WorldScene::USUAL;
         while let Some(flag) = args.next() {
             let mut value = || {
                 args.next()

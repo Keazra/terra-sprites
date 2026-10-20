@@ -152,18 +152,15 @@ fn arguments(width: usize, height: usize, frame: Duration, out: &Path) -> Vec<St
 mod tests {
     use std::path::PathBuf;
 
-    use ratatui::buffer::Buffer;
-    use ratatui::layout::Rect;
+    use ratatui::style::Color;
 
     use super::*;
     use crate::clip::Frame;
-    use crate::test_util::glyphs;
+    use crate::test_util::{self, glyphs};
 
+    /// A blank frame of three cells, for `millis`.
     fn frame(millis: u64) -> Frame {
-        Frame {
-            screen: Buffer::empty(Rect::new(0, 0, 3, 1)),
-            shows_for: Duration::from_millis(millis),
-        }
+        test_util::frame(3, "", Color::Reset, millis)
     }
 
     #[test]

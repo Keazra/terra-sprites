@@ -387,8 +387,7 @@ mod tests {
             end: End::At(to),
             pace,
             track,
-            cursor: false,
-            tab: None,
+            ..WorldScene::USUAL
         }
     }
 
@@ -412,6 +411,23 @@ mod tests {
 
     fn live(world: World) -> Source {
         Source::World(world)
+    }
+
+    /// `world`'s replay, recorded from tick 5 to tick 15, as a session log
+    /// begun after a load would be.
+    fn recorded(mut world: World) -> Source {
+        for _ in 0..5 {
+            world.step();
+        }
+        world.start_recording();
+        for _ in 0..10 {
+            world.step();
+        }
+        let playback = Playback::new(&world.replay().expect("recording")).expect("it plays");
+        Source::Replay {
+            name: "last_session.replay".into(),
+            playback,
+        }
     }
 
     #[test]
@@ -469,31 +485,11 @@ mod tests {
         // A recording begun at tick 5, as a session log is after a load,
         // starts from a snapshot there: its clip starts there too, unless
         // told, and runs to its end (#241).
-        let mut world = field(&[Pos { x: 20, y: 10 }], &[]);
-        for _ in 0..5 {
-            world.step();
-        }
-        world.start_recording();
-        for _ in 0..10 {
-            world.step();
-        }
-        let playback = Playback::new(&world.replay().expect("recording")).expect("it plays");
-        let scene = WorldScene {
-            from: None,
-            end: End::Usual,
-            pace: Pace::Game(Speed::X4),
-            track: Track::First,
-            cursor: false,
-            tab: None,
-        };
-        let source = Source::Replay {
-            name: "last_session.replay".into(),
-            playback,
-        };
+        let source = recorded(field(&[Pos { x: 20, y: 10 }], &[]));
         let clip = world_clip(
             source,
             Theme::cp437(),
-            &scene,
+            &WorldScene::USUAL,
             &framing(Size::new(100, 30), false),
         )
         .unwrap();
@@ -578,29 +574,12 @@ mod tests {
     #[test]
     fn a_replay_s_clip_must_fall_within_its_ticks() {
         // A recording from tick 5 to tick 15 (#241).
-        let replay = || {
-            let mut world = field(&[], &[]);
-            for _ in 0..5 {
-                world.step();
-            }
-            world.start_recording();
-            for _ in 0..10 {
-                world.step();
-            }
-            let playback = Playback::new(&world.replay().expect("recording")).expect("it plays");
-            Source::Replay {
-                name: "last_session.replay".into(),
-                playback,
-            }
-        };
+        let replay = || recorded(field(&[], &[]));
         let refused = |from, end, why: &str| {
             let scene = WorldScene {
                 from,
                 end,
-                pace: Pace::Game(Speed::X4),
-                track: Track::First,
-                cursor: false,
-                tab: None,
+                ..WorldScene::USUAL
             };
             let err = world_clip(
                 replay(),
