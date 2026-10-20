@@ -20,6 +20,7 @@ These skills are copied from [mattpocock/skills](https://github.com/mattpocock/s
 - **`two-axis-review` reads this project's review checklist,** `docs/agents/review-checklist.md`, as a standards source on every review (step 3).
 - **Line endings** are LF, as the rest of the repo.
 - **`triage` and `implement` can be started by Claude.** The originals set `disable-model-invocation: true`, which hides a skill from Claude so that only a typed `/triage` starts it. Claude Code Projects and other cloud chats have no slash commands, so the two could never run there. Their descriptions say instead to use them only when the user names them, and `AGENTS.md` says a message starting with a skill's name asks for that skill.
+- **`triage` has a sixth state, `ready-for-agent-design`,** for a small design question an agent can settle alone (the owner, 2026-10-19). `AUTONOMOUS-DESIGN.md` holds its tests, the ranking and the design brief, and `SKILL.md` points at it from the roles, the invocation examples, a "Rank design candidates" section and the outcomes.
 - **No `/setup-matt-pocock-skills`.** `triage` and `two-axis-review` point at `docs/agents/triage-labels.md` and `docs/agents/issue-tracker.md` instead of telling the user to run a setup skill this repo doesn't have.
 - **`tdd` proposes the seams and carries on,** since the owner replies only to what they disagree with, rather than writing no test until the user confirms them.
 - **No `agents/openai.yaml`.** Those files configure the skills for OpenAI's tools; nothing here reads them.
