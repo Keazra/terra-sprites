@@ -68,16 +68,20 @@ pub fn evolution(starter: &[(String, f32)], lasted: &[(u64, &[f32])], dropped: &
             .collect();
         let drifted = |way| ratios.iter().filter(|&&r| drift(r) == Some(way)).count();
         let (up, down) = (drifted(Drift::Up), drifted(Drift::Down));
-        let mut sorted = ratios.clone();
+        // A seed whose living all lack the number has no middle value for
+        // it, so it's left out of the least, middle and most.
+        let mut sorted: Vec<f32> = ratios.iter().copied().filter(|r| !r.is_nan()).collect();
         sorted.sort_by(f32::total_cmp);
+        let at = |i: usize| sorted.get(i).copied().unwrap_or(f32::NAN);
         moved.push(Moved {
             name,
             starter: *value,
-            least: sorted[0],
-            middle: sorted[sorted.len() / 2],
-            most: sorted[sorted.len() - 1],
+            least: at(0),
+            middle: at(sorted.len() / 2),
+            most: at(sorted.len().saturating_sub(1)),
             up,
             down,
+            gone: ratios.len() - sorted.len(),
         });
     }
     let seeds = lasted.len();
@@ -90,30 +94,32 @@ pub fn evolution(starter: &[(String, f32)], lasted: &[(u64, &[f32])], dropped: &
         if met { "met" } else { "not met" }
     );
     let mut by_size = moved.clone();
-    by_size.sort_by(|a, b| distance(b.middle).total_cmp(&distance(a.middle)));
+    by_size.sort_by(|a, b| a.distance().total_cmp(&b.distance()).reverse());
     by_size.truncate(25);
     let width = by_size.iter().map(|m| m.name.chars().count()).max();
     let width = width.unwrap_or_default().max(50);
     println!(
-        "\n {:<width$} {:>10} {:>6} {:>6} {:>6} {:>4} {:>4}",
-        "Number", "Starter", "Least", "Middle", "Most", "Up", "Down"
+        "\n {:<width$} {:>10} {:>6} {:>6} {:>6} {:>4} {:>4} {:>4}",
+        "Number", "Starter", "Least", "Middle", "Most", "Up", "Down", "Gone"
     );
     for m in &by_size {
         let mark = if m.every_seed(seeds) { "*" } else { " " };
         println!(
-            "{mark}{:<width$} {:>10.4} {:>6.2} {:>6.2} {:>6.2} {:>4} {:>4}",
-            m.name, m.starter, m.least, m.middle, m.most, m.up, m.down
+            "{mark}{:<width$} {:>10.4} {:>6.2} {:>6.2} {:>6.2} {:>4} {:>4} {:>4}",
+            m.name, m.starter, m.least, m.middle, m.most, m.up, m.down, m.gone
         );
     }
     println!(
-        "\n* moved the same way in every seed. Least, middle and most are seeds' ratios to the starter."
+        "\n* moved the same way in every seed. Least, middle and most are seeds' ratios to the \
+         starter, over the seeds where some of the living carry it; Gone counts those where none do."
     );
     met
 }
 
 /// How far one gene number moved from the starter's, across seeds: its
-/// least, middle and most ratio to the starter's value, and in how many
-/// seeds it moved a tenth up and a tenth down.
+/// least, middle and most ratio to the starter's value, in how many seeds
+/// it moved a tenth up and a tenth down, and in how many none of the living
+/// carry it.
 #[derive(Debug, Clone)]
 struct Moved<'a> {
     name: &'a str,
@@ -123,12 +129,23 @@ struct Moved<'a> {
     most: f32,
     up: usize,
     down: usize,
+    gone: usize,
 }
 
 impl Moved<'_> {
     /// Whether it moved a tenth the same way in every one of `seeds`.
     fn every_seed(&self, seeds: usize) -> bool {
         self.up == seeds || self.down == seeds
+    }
+
+    /// How far its middle ratio is from 1, for listing the furthest first;
+    /// one no seed's living carry lists last.
+    fn distance(&self) -> f32 {
+        if self.middle.is_nan() {
+            -1.0
+        } else {
+            distance(self.middle)
+        }
     }
 }
 

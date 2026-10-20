@@ -1276,6 +1276,19 @@ mod tests {
             &[]
         ));
         assert!(!evolution::evolution(&starter, &[], &[1, 2]));
+        // A number none of a seed's living carry moves no way there.
+        let lost = [1.2, 0.8, 1.5, f32::NAN];
+        assert!(evolution::evolution(
+            &starter,
+            &[(1, &lost), (2, &lost)],
+            &[]
+        ));
+        let half_lost = [1.2, 0.8, f32::NAN, 1.0];
+        assert!(!evolution::evolution(
+            &starter,
+            &[(1, &three), (2, &half_lost)],
+            &[]
+        ));
     }
 
     #[test]
