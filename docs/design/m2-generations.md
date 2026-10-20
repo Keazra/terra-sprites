@@ -1563,11 +1563,22 @@ Agreed before measuring (#222, #223, #224, #225):
 - **Guided:** 1,587 of 1,622, 97.8%: met.
 - **Grown:** adults' deaths of hunger or thirst 47 of 1,132 grown-up deaths, 4.2%: met. Old sprites', apart: 64.
 - **A1–A3:** A1 1 thornbush contact (control 38), A2 8,414 plays (control 169), A3 3.5 hits (control 49.5) on seeds 1–10; A3 over seeds 1–30, 5.5 hits (control 40.5): all met.
-- **The long run and `generations`:** on the owner's PC.
+
+**Measured on the owner's PC** (2026-10-20, at 9bc50de), with `cargo run --release -p terra-sim --example childhood` and `cargo run --release -p terra-sim --example generations -- --ticks 200000`, seeds 1–10:
+
+- **The world lasts (G1, #222):** in 10 of 10 seeds, none under 29 sprites at a count: met, so #212 is too. **The bushes hold:** in 10 of 10: met.
+- **Grown, in every seed that lasts:** not met. Adults' deaths of hunger or thirst were 2.2% of grown-up deaths over all seeds (560 of 25,384), but seed 8 had 5.2% over the run and 9.2% over its last 50 hours, and seed 10 had 8.2% over its last 50 hours. Old sprites', apart: 750.
+- **Too full, at most 1 in 10 bites:** not met. 3.0% over all seeds, but 13.2% over seed 10's last 50 hours (seed 4 8.6%). In most seeds the share climbs over the hours, from about 1% at hour 10.
+- **Slice 32's families:** partners had each other in sight for a median 46% of the time: not met (54% before this slice). Eggs laid alone 0.0%, 91.8% of pairs' eggs after a dance each way, an egg with a parent in sight 93% of its time and a young sprite seeing a living parent 93% of its childhood: met.
+- **G4:** 2 of 148 numbers moved a tenth the same way in all 10 seeds (`grows_old`, and the grown sprites' gain of `low female_near → feminiser`), short of 3, so the race decides it in Slice 30 (#226).
+- **For information:** the young hatched grew up 98.0% of the time, those that saw a parent for most of their childhood 99.0% and the rest 77.9%. Lone newborns given the end's genes grew up 32% in the middle seed. No seed tripped careful copying. Adults were on the move 15.9% of the time over the last 50 hours ([#331](https://github.com/Keazra/terra-sprites/issues/331)). At 200,000 ticks, hunger and thirst killed 5.8% of all sprites that died after tick 10,000, and the adults at the end were 561 males to 267 females.
+
+The grown bar's and the too-full bar's misses came late in the run and grew over the generations. **The owner's call (2026-10-20):** "Lets merge and revisit harshness at a later time, when more features are in." The misses wait in [#332](https://github.com/Keazra/terra-sprites/issues/332).
 
 ### 19.9 Later
 
-- **Roaming that pays** ([#318](https://github.com/Keazra/terra-sprites/issues/318)): adults on the move a quarter of the time. #225's check failed it in every seed (7–25%), with the world sitting full.
+- **Roaming that pays** ([#318](https://github.com/Keazra/terra-sprites/issues/318)): adults on the move a quarter of the time. #225's check failed it in every seed (7–25%), with the world sitting full. Slice 29b builds room nearby for it ([#331](https://github.com/Keazra/terra-sprites/issues/331)).
+- **Harshness, revisited once more features are in** ([#332](https://github.com/Keazra/terra-sprites/issues/332)): the grown bar on seeds 8 and 10, too-full bites on seed 10 and partners in sight (§19.8).
 - **Careful copying,** if a long run trips its trigger (§19.6).
 - **Parents that look after their young.** As genes change, parents stop looking for their young, because nothing threatens the young yet. M3's dangers would give that care a use.
 - **The gentle world on the title screen,** as a choice when making a world.
