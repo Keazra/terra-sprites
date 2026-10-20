@@ -496,19 +496,14 @@ fn the_aim_is_cancelled_when_the_led_sprite_dies() {
 /// can (M2 design §10.4), in a pack that lets her at once (§15.7), stepped
 /// until it has: the world and the egg.
 fn laid_an_egg(mother: Pos) -> (World, EntityId) {
-    let pack = pack_changing(&[LONE]);
-    let genome = terra_sim::Genome::from_ron(
-        r#"(format: 1, genes: [
-            InitialConcentration(chem: "feminiser", value: 1.0),
-            InitialConcentration(chem: "longing", value: 1.0),
-            Instinct(inputs: [("always", false)], verb: BreedAlone, weight: 1.0),
-        ])"#,
-        &pack,
-    )
-    .expect("a valid genome");
+    let genes = r#"(format: 1, genes: [
+        InitialConcentration(chem: "feminiser", value: 1.0),
+        InitialConcentration(chem: "longing", value: 1.0),
+        Instinct(inputs: [("always", false)], verb: BreedAlone, weight: 1.0),
+    ])"#;
     let mut world = WorldBuilder::grass(20, 12)
-        .sprites_with(vec![(mother, Some(genome))])
-        .data(pack)
+        .data(pack_changing(&[LONE]))
+        .genes(&[(mother, genes)])
         .build();
     let egg = (0..50)
         .flat_map(|_| world.step())

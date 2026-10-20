@@ -252,14 +252,9 @@ fn a_policy_that_denies_everything_blanks_every_display() {
 
 #[test]
 fn a_policy_that_hides_map_colours_draws_sprites_in_their_own_colour() {
-    let pack = pack();
-    let hungry = terra_sim::Genome::from_ron(
-        r#"(format: 1, genes: [InitialConcentration(chem: "hunger", value: 0.9)])"#,
-        &pack,
-    )
-    .expect("a valid genome");
+    let hungry = r#"(format: 1, genes: [InitialConcentration(chem: "hunger", value: 0.9)])"#;
     let world = WorldBuilder::grass(10, 5)
-        .sprites_with(vec![(Pos { x: 2, y: 3 }, Some(hungry))])
+        .genes(&[(Pos { x: 2, y: 3 }, hungry)])
         .seed(7)
         .build();
     let mut app = app_on(&world);

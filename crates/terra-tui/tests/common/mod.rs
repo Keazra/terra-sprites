@@ -679,3 +679,22 @@ pub const E: Action = Action::Press {
     button: Button::Right,
     amplified: false,
 };
+
+impl WorldBuilder<'_> {
+    /// Sprites as `(tile, genes)`, the genes written as in a genome file
+    /// and read against the data given so far: the built-in pack, or
+    /// [`Self::data`]'s, so a test with data of its own gives it first
+    /// (appends).
+    pub fn genes(self, sprites: &[(Pos, &str)]) -> Self {
+        let builtin = self.data.is_none().then(pack);
+        let data = self.data.as_ref().or(builtin.as_ref()).expect("a pack");
+        let sprites = sprites
+            .iter()
+            .map(|&(tile, genes)| {
+                let genome = Genome::from_ron(genes, data).expect("valid genes");
+                (tile, Some(genome))
+            })
+            .collect();
+        self.sprites_with(sprites)
+    }
+}

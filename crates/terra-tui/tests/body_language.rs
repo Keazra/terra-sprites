@@ -2,7 +2,7 @@
 //! the map how a sprite is.
 
 mod common;
-use common::{WorldBuilder, app_in, app_on, at, pack, pointer_on, render};
+use common::{WorldBuilder, app_in, app_on, at, pack, pointer_on, render, run};
 
 use std::time::Duration;
 
@@ -443,10 +443,8 @@ fn emotes_last_a_second_of_real_time_at_any_speed() {
     // Design §6.3: many ticks a frame, as at Max, still show the emote for
     // a second, and frames with no ticks don't end it sooner.
     let (mut world, id, mut app) = one_sprite();
-    let frame = |app: &mut App, world: &mut World, ticks: u32, events: Vec<Event>| {
-        for _ in 0..ticks {
-            world.step();
-        }
+    let frame = |app: &mut App, world: &mut World, ticks: u64, events: Vec<Event>| {
+        run(world, ticks);
         app.animate(Duration::from_millis(33));
         app.record(&events, world);
     };
@@ -475,17 +473,15 @@ fn the_resting_emote_shows_for_a_second_at_16x_and_at_max_through_the_frame_loop
     // Design §6.3: emotes are driven by the sim's events, a frame's ticks
     // taken in through `Ticks`, so a rest over in a blink still shows.
     for speed in [Speed::X16, Speed::Max] {
-        let pack = pack();
         // It never calls, whose emote would take the rest's place (M2
         // design §15.8).
         let quiet = r#"(format: 1, genes: [
             Instinct(inputs: [("always", false)], verb: Call, weight: -5.0),
         ])"#;
-        let quiet = Genome::from_ron(quiet, &pack).expect("a valid genome");
         // Young, so it can't try breeding alone, fail and show that instead
         // (M2 design §10).
         let mut world = WorldBuilder::grass(10, 5)
-            .sprites_with(vec![(at(2, 3), Some(quiet))])
+            .genes(&[(at(2, 3), quiet)])
             .scripts(&[(at(2, 3), ScriptedAction::Rest)])
             .newborns(&[at(2, 3)])
             .seed(7)
