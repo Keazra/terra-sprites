@@ -3,7 +3,7 @@
 //! can't reach.
 
 mod common;
-use common::{SCREEN, WorldBuilder, app_on, apply, render, row, status_line, tick};
+use common::{E, Q, SCREEN, WorldBuilder, app_on, apply, render, row, status_line, tick};
 
 use std::time::Duration;
 
@@ -324,11 +324,7 @@ fn following_a_sprite_a_click_over_space_and_q_still_reach_it() {
         std::slice::from_ref(&pet),
         "a click on the glass"
     );
-    let press = Action::Press {
-        button: Button::Left,
-        amplified: false,
-    };
-    apply(&mut app, &world, press);
+    apply(&mut app, &world, Q);
     assert_eq!(app.take_commands(), [pet], "Q");
     // `F` over space stops following, as anywhere.
     apply(&mut app, &world, Action::middle_click(SPACE));
@@ -443,11 +439,7 @@ fn an_item_held_over_space_stays_held_until_the_pointer_comes_back() {
     assert!(matches!(app.grip(&world), Some(Grip::Holds(_))), "held");
     assert_eq!(app.cursor(), Pos { x: 7, y: 3 }, "on its last tile");
     apply(&mut app, &world, Action::Point(on(Pos { x: 8, y: 2 })));
-    let q = Action::Press {
-        button: Button::Left,
-        amplified: false,
-    };
-    apply(&mut app, &world, q);
+    apply(&mut app, &world, Q);
     let put_down = Command::PutDown {
         tile: Pos { x: 8, y: 2 },
     };
@@ -494,13 +486,7 @@ fn aiming_the_pull_goes_on_past_the_wall_and_a_right_click_or_e_over_space_sends
         toward: Dir::E,
         tiles: 4,
     };
-    let sends = [
-        Action::right_click(past(-4, 3)),
-        Action::Press {
-            button: Button::Right,
-            amplified: false,
-        },
-    ];
+    let sends = [Action::right_click(past(-4, 3)), E];
     for send in sends {
         let (world, mut app) = holding_a_ball_from(Pos { x: 0, y: 3 });
         apply(
@@ -558,11 +544,7 @@ fn leading_the_followed_sprite_over_space_q_does_nothing() {
     apply(&mut app, &world, Action::Point(SPACE));
     assert!(app.out_of_reach());
     app.take_commands();
-    let q = Action::Press {
-        button: Button::Left,
-        amplified: false,
-    };
-    apply(&mut app, &world, q);
+    apply(&mut app, &world, Q);
     assert_eq!(app.take_commands(), [], "a grab click would let go");
     assert!(matches!(app.grip(&world), Some(Grip::Leads(_))));
 }
@@ -597,11 +579,7 @@ fn off_the_map_view_after_space_the_cursor_shows_on_its_last_tile_again() {
     assert!(!app.out_of_reach());
     let status = status_line(&app, &world);
     assert!(status.starts_with(" (4,3) grass · Sprite #"), "{status}");
-    let q = Action::Press {
-        button: Button::Left,
-        amplified: false,
-    };
-    apply(&mut app, &world, q);
+    apply(&mut app, &world, Q);
     let pet = CursorTouch::Pet.command(id, app.clock.reach_back());
     assert_eq!(app.take_commands(), [pet]);
 }

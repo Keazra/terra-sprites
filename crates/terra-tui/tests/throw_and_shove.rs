@@ -5,7 +5,7 @@
 
 mod common;
 use common::{
-    LONE, WorldBuilder, apply, at, click, follow, grab_app, object_on, pack_changing, point,
+    E, LONE, WorldBuilder, apply, at, click, follow, grab_app, object_on, pack_changing, point,
     pointing_at, sprite_on, tick,
 };
 
@@ -173,19 +173,15 @@ fn the_aim_is_cancelled_when_what_the_cursor_held_is_gone() {
 fn e_aims_from_the_cursor_and_letting_it_go_or_pressing_it_again_sends() {
     // A terminal that doesn't report a key let go sends a second press
     // instead (design v25 §6.5).
-    let press = Action::Press {
-        button: Button::Right,
-        amplified: false,
-    };
     let release = Action::Release {
         button: Button::Right,
         at: None,
     };
-    for second in [release, press] {
+    for second in [release, E] {
         let mut world = field(&[(at(5, 5), "ball")], &[]);
         let mut app = grab_app(&world);
         hold(&mut app, &mut world, at(5, 5));
-        apply(&mut app, &world, press);
+        apply(&mut app, &world, E);
         point(&mut app, &world, at(5, 8));
         apply(&mut app, &world, second);
         let throw = Command::Throw {

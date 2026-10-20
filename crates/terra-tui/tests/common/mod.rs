@@ -666,3 +666,16 @@ pub fn inspector_line(app: &App, world: &World, start: &str) -> String {
     let (_, rows) = inspector_rows(app, world, 30);
     rows_from(&rows, start)[0].trim_start().to_string()
 }
+
+/// `Q`: what a plain left click does, where the Cursor is (design v21
+/// §6.5).
+pub const Q: Action = Action::Press {
+    button: Button::Left,
+    amplified: false,
+};
+
+/// `E`: what a plain right click does, where the Cursor is.
+pub const E: Action = Action::Press {
+    button: Button::Right,
+    amplified: false,
+};

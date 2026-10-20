@@ -3,7 +3,7 @@
 //! every move onto a new tile tells the world.
 
 mod common;
-use common::{app_on, apply, at, field, point, render, status_line, tick};
+use common::{Q, app_on, apply, at, field, point, render, status_line, tick};
 
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::layout::Position;
@@ -174,14 +174,7 @@ fn a_touch_from_a_visible_cursor_is_told_as_coming_from_the_cursor() {
             apply(&mut app, &world, Action::ToggleVisible);
         }
         apply(&mut app, &world, Action::Follow { at: None });
-        apply(
-            &mut app,
-            &world,
-            Action::Press {
-                button: terra_tui::input::Button::Left,
-                amplified: false,
-            },
-        );
+        apply(&mut app, &world, Q);
         tick(&mut app, &mut world);
         // What it did of its own in the same tick may be listed too.
         let lines = observed(&app);
@@ -200,15 +193,7 @@ fn being_led_and_shoved_by_a_visible_cursor_is_told_as_the_cursor_s_doing() {
             apply(&mut app, &world, Action::ToggleVisible);
         }
         point(&mut app, &world, at(2, 2));
-        apply(
-            &mut app,
-            &world,
-            Action::Click {
-                at: Position::new(3, 3),
-                button: terra_tui::input::Button::Left,
-                amplified: false,
-            },
-        );
+        apply(&mut app, &world, Action::left_click(Position::new(3, 3)));
         tick(&mut app, &mut world);
         world.submit(Command::Shove {
             toward: terra_sim::Dir::E,

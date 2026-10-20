@@ -2,7 +2,7 @@
 //! and Follow.
 
 mod common;
-use common::{WorldBuilder, app, apply, at, click, field, pointing_at, sprite_on, touched};
+use common::{E, Q, WorldBuilder, app, apply, at, click, field, pointing_at, sprite_on, touched};
 
 use std::time::Duration;
 
@@ -273,11 +273,7 @@ fn in_select_mode_a_right_click_or_e_activates_and_nothing_can_be_activated_yet(
     assert_eq!(app.refusal(), Some("Nothing here to activate"));
     follow(&mut app, &world, at(4, 2));
     click(&mut app, &world, at(4, 2), Button::Right);
-    let e = Action::Press {
-        button: Button::Right,
-        amplified: false,
-    };
-    apply(&mut app, &world, e);
+    apply(&mut app, &world, E);
     assert_eq!((app.selection(), app.followed()), (None, Some(id)));
     assert_eq!(app.refusal(), Some("Nothing here to activate"));
 }
@@ -380,11 +376,7 @@ fn in_train_mode_the_followed_sprite_is_the_target_wherever_the_click_or_key_is(
     apply(&mut app, &world, Action::Mode(CursorMode::Train));
     click(&mut app, &world, at(6, 2), Button::Left);
     click(&mut app, &world, at(9, 5), Button::Right);
-    let q = Action::Press {
-        button: Button::Left,
-        amplified: false,
-    };
-    apply(&mut app, &world, q);
+    apply(&mut app, &world, Q);
     assert_eq!(
         app.take_commands(),
         [pet(first, 3), zap(first), pet(first, 3)]
@@ -401,11 +393,7 @@ fn q_and_f_act_where_the_cursor_is() {
     apply(&mut app, &world, F);
     assert_eq!(app.followed(), Some(id), "F followed it");
     apply(&mut app, &world, Action::Point(pointing_at(at(7, 2))));
-    let q = Action::Press {
-        button: Button::Left,
-        amplified: false,
-    };
-    apply(&mut app, &world, q);
+    apply(&mut app, &world, Q);
     assert_eq!(
         app.followed(),
         Some(id),

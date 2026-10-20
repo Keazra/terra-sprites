@@ -332,11 +332,7 @@ fn a_click_or_a_turn_of_the_wheel_leaves_the_quit_prompt_open() {
     app.apply(Action::Back, &world);
     let at = Position::new(3, 3);
     for pointer in [
-        Action::Click {
-            at,
-            button: Button::Left,
-            amplified: false,
-        },
+        Action::left_click(at),
         Action::Wheel { at, notches: 1 },
         Action::Wheel { at, notches: -1 },
     ] {
