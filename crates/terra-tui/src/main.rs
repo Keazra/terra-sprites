@@ -20,6 +20,8 @@ use ratatui::crossterm::terminal::{self, supports_keyboard_enhancement};
 use terra_sim::{Playback, World};
 use terra_tui::app::{App, Flow, Ticks};
 use terra_tui::args::{Args, USAGE, VERSION};
+use terra_tui::clock::SIM_BUDGET;
+use terra_tui::debug_overlay::FrameTimes;
 use terra_tui::fast_forward::{self, FastForward};
 use terra_tui::files;
 use terra_tui::input::{self, Keys};
@@ -32,8 +34,6 @@ use terra_tui::ui;
 
 /// About 30 frames per second.
 const FRAME: Duration = Duration::from_millis(33);
-/// The most simulation time a frame may spend, so the UI stays responsive at any speed.
-const SIM_BUDGET: Duration = Duration::from_millis(25);
 
 fn main() -> ExitCode {
     let args = match Args::parse(std::env::args().skip(1)) {
@@ -589,7 +589,9 @@ fn run(
     loop {
         // The terminal may have been resized since the last frame.
         app.fit(ui::areas(terminal.size()?));
+        let draw_start = Instant::now();
         terminal.draw(|frame| ui::render(frame, app, session.world()))?;
+        let drawing = draw_start.elapsed();
         if setup.force_panic {
             panic!("forced panic (--force-panic): the terminal should now be restored");
         }
@@ -637,7 +639,7 @@ fn run(
         // the world different from it, so the screen pauses there.
         let stop = Cell::new(false);
         let stops = app.replay_stops();
-        app.clock.advance(
+        let ran = app.clock.advance(
             elapsed,
             || {
                 let events = session.step();
@@ -648,6 +650,15 @@ fn run(
             },
             || stop.get() || frame_start.elapsed() >= SIM_BUDGET,
         );
+        // What the debug overlay reads (design §6.1): the time the budget
+        // counts, and the drawing's.
+        let times = FrameTimes {
+            elapsed,
+            ticks: ran,
+            simulating: frame_start.elapsed(),
+            drawing,
+        };
+        app.note_frame(times, keys.reports());
         app.take_in(ticks, session.world());
         if let Some(playback) = session.playback() {
             app.take_in_replay(playback);

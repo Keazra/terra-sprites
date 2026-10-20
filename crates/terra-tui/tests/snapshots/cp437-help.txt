@@ -12,8 +12,8 @@
 │ v          exact detail         C again    the Place menu       INSPECTOR                        │
 │ ?          this help            hold E     aim, let go to send  [ ]        switch tabs           │
 │ Esc        let go, back, quit?                                  PgUp PgDn  scroll a tab          │
-│ Ctrl+C     quit at once                                                                          │
-│ FILES                                                                                            │
+│ Ctrl+C     quit at once                                         DEBUG                            │
+│ FILES                                                           F3         how it's running      │
 │ F5 F9      quicksave / load                                                                      │
 │ Ctrl+S     save as...                                                                            │
 │ Ctrl+O     load a save                                                                           │
