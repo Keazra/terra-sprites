@@ -230,7 +230,7 @@ pub(crate) fn lines(
         .chain(["Life stage".len()])
         .max()
         .unwrap_or(0);
-    // Each sprite's generation after its drive (M2 design §17.5, #313).
+    // Each sprite's generation after its drive (M2 design §17.1, #313).
     let generation_width = every_row
         .iter()
         .map(|row| row.generation.to_string().len())

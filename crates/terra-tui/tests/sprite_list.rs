@@ -466,7 +466,7 @@ fn the_filter_matches_any_column_the_row_shows() {
 
 #[test]
 fn the_list_shows_each_sprite_s_generation_and_gen_finds_one() {
-    // M2 design §17.5, and #313's "by generation". By tick 230 the pairs
+    // M2 design §17.1, and #313's "by generation". By tick 230 the pairs
     // have young, and young of their young.
     let world = pairs(230);
     let mut app = app_on(&world);
