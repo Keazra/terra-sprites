@@ -538,3 +538,12 @@ pub fn refusal(world: &mut World, command: Command) -> Option<Rejection> {
     world.submit(command.clone());
     refusal_in(&world.step(), &command)
 }
+
+/// The built-in text of the data pack's `file`.
+pub fn builtin_source(file: &str) -> &'static str {
+    DataPack::builtin_sources()
+        .iter()
+        .find(|&&(path, _)| path == file)
+        .unwrap_or_else(|| panic!("the built-in pack has no {file}"))
+        .1
+}

@@ -3,17 +3,13 @@
 //! with scripted kicks.
 
 mod common;
-use common::{at, builtin_with, run_for, walkers, walkers_in};
+use common::{at, builtin_source, builtin_with, run_for, walkers, walkers_in};
 
 use terra_sim::{DataPack, EventKind, Outcome, Pos, Removal, ScriptedAction, Verb, World};
 
 /// The built-in pack, with the object types `extra` added.
 fn builtin_and(extra: &str) -> DataPack {
-    let objects = DataPack::builtin_sources()
-        .iter()
-        .find(|&&(path, _)| path == "objects.ron")
-        .expect("the built-in objects")
-        .1;
+    let objects = builtin_source("objects.ron");
     let body = objects.trim_end().strip_suffix(']').expect("a list");
     let body = body.trim_end().trim_end_matches(',');
     builtin_with("objects.ron", &format!("{body}, {extra}]"))

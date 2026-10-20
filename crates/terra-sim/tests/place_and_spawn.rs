@@ -2,11 +2,11 @@
 //! new object or spawns a new sprite, and the player names sprites.
 
 mod common;
-use common::{at, builtin, refusal, starters, starters_in};
+use common::{at, builtin, builtin_source, builtin_with, refusal, starters, starters_in};
 
 use terra_sim::{
-    Blocker, Command, DataPack, EntityId, Event, EventKind, Genome, NameProblem, PlaceRule, Pos,
-    Rejection, Terrain, World,
+    Blocker, Command, EntityId, Event, EventKind, Genome, NameProblem, PlaceRule, Pos, Rejection,
+    Terrain, World,
 };
 
 /// The stable ID of the object type called `name`.
@@ -91,7 +91,7 @@ fn a_placement_rule_in_the_data_can_keep_paths_open() {
         r#"place: (label: "berry bush seedling"),"#,
         r#"place: (label: "berry bush seedling", if: [KeepsPathsOpen]),"#,
     );
-    let data = pack_with("objects.ron", &objects);
+    let data = builtin_with("objects.ron", &objects);
     let rows = ["#####", ".....", "#####"];
     let mut world = starters_in(data, &rows, &[], &[], &[]);
     let bush = type_id(&world, "berry_bush");
@@ -151,7 +151,7 @@ fn placement_rules_in_the_data_refuse_with_the_rule_they_name() {
             r#"place: (label: "berry bush seedling"),"#,
             &format!(r#"place: (label: "berry bush seedling", if: [{condition}]),"#),
         );
-        let data = pack_with("objects.ron", &objects);
+        let data = builtin_with("objects.ron", &objects);
         let mut world = starters_in(data, &rows, &[(at(2, 1), "berry")], &[], &[]);
         let command = place(&world, at(0, 0), "berry_bush");
         assert_eq!(
@@ -244,7 +244,7 @@ fn a_spawned_sprite_is_a_newborn_from_the_starter_genome_with_variation() {
 fn a_sprite_spawned_from_a_genome_carries_that_genome_exactly() {
     let data = builtin();
     let text = builtin_source("genomes/starter.ron");
-    let genome = Genome::from_ron(&text, &data).expect("the starter genome");
+    let genome = Genome::from_ron(text, &data).expect("the starter genome");
     let mut world = starters(&["....."], &[], &[], &[]);
     run(
         &mut world,
@@ -309,7 +309,7 @@ fn a_genome_from_another_pack_that_doesnt_fit_this_world_is_refused() {
         r#"    (id: 47, name: "h15", class: Hormone),"#,
         "    (id: 47, name: \"h15\", class: Hormone),\n    (id: 60, name: \"zest\", class: Hormone),",
     );
-    let other = pack_with("chemicals.ron", &chemicals);
+    let other = builtin_with("chemicals.ron", &chemicals);
     let text = builtin_source("genomes/starter.ron").replace(r#""h0""#, r#""zest""#);
     let genome = Genome::from_ron(&text, &other).expect("it fits the other pack");
     let mut world = starters(&["....."], &[], &[], &[]);
@@ -427,22 +427,6 @@ fn a_random_name_is_made_of_the_datas_syllables_and_is_always_a_valid_name() {
     assert!(distinct.len() > 150, "only {} distinct", distinct.len());
 }
 
-fn builtin_source(path: &str) -> String {
-    DataPack::builtin_sources()
-        .iter()
-        .find(|(name, _)| *name == path)
-        .map(|(_, text)| text.to_string())
-        .expect("a built-in file")
-}
-
-fn pack_with(path: &str, text: &str) -> DataPack {
-    let sources: Vec<(&str, &str)> = DataPack::builtin_sources()
-        .iter()
-        .map(|&(name, original)| (name, if name == path { text } else { original }))
-        .collect();
-    DataPack::from_sources(&sources).expect("a valid pack")
-}
-
 #[test]
 fn a_new_objects_look_is_its_first_stages() {
     let data = builtin();
@@ -460,11 +444,7 @@ fn a_placed_object_takes_its_first_turn_in_the_tick_it_is_placed() {
         stages: [(name: "only", ticks: (100, 100), next: Expire)],
         rules: [(trigger: OnStageEnter("only"), do: [AddCounter("turns", 1)])],
         place: (label: "counted"))]"#;
-    let sources: Vec<(&str, &str)> = DataPack::builtin_sources()
-        .iter()
-        .map(|&(path, text)| (path, if path == "objects.ron" { counted } else { text }))
-        .collect();
-    let data = DataPack::from_sources(&sources).expect("a valid pack");
+    let data = builtin_with("objects.ron", counted);
     let mut world = starters_in(data, &["....."], &[], &[], &[]);
     let tile = at(2, 0);
     let command = place(&world, tile, "counted");

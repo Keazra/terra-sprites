@@ -5,7 +5,7 @@
 //! before its fenced block, so the reference can't drift from the formats.
 
 mod common;
-use common::builtin;
+use common::{builtin, builtin_source};
 
 use terra_sim::{DataError, DataPack, Genome, LabScenario, WorldConfig};
 
@@ -25,14 +25,6 @@ fn example(page: &str, name: &str) -> String {
         .find("\n```")
         .unwrap_or_else(|| panic!("example `{name}` isn't closed"));
     block[..end].to_string()
-}
-
-fn builtin_source(file: &str) -> &'static str {
-    DataPack::builtin_sources()
-        .iter()
-        .find(|&&(path, _)| path == file)
-        .unwrap_or_else(|| panic!("the built-in pack has no {file}"))
-        .1
 }
 
 /// Loads the built-in pack with each of `files` replaced by its text.

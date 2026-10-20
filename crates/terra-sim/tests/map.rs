@@ -1,12 +1,12 @@
 mod common;
-use common::at;
+use common::{at, builtin, builtin_changing};
 
-use terra_sim::{DataPack, Dir, Map, MapError};
+use terra_sim::{Dir, Map, MapError};
 
 /// Draws a map with the ascii legend: `.` grass, `,` dirt, `:` sand,
 /// `~` shallow water, `=` deep water, `#` rock.
 fn draw(rows: &[&str]) -> Map {
-    let data = DataPack::builtin().expect("built-in data pack is valid");
+    let data = builtin();
     Map::from_ascii(rows, &data).expect("valid drawing")
 }
 
@@ -108,7 +108,7 @@ fn a_diagonal_step_needs_both_tiles_beside_it_walkable() {
 }
 
 fn try_draw(rows: &[&str]) -> Result<Map, MapError> {
-    let data = DataPack::builtin().expect("built-in data pack is valid");
+    let data = builtin();
     Map::from_ascii(rows, &data)
 }
 
@@ -151,17 +151,7 @@ fn a_drawing_must_be_from_1_to_1024_tiles_on_each_side() {
 #[test]
 fn diagonal_costs_round_down_in_integer_maths() {
     // Sand at 19 makes a diagonal 19 × 14 / 10 = 26.6, which must round down to 26.
-    let terrain =
-        include_str!("../../../data/terrain.ron").replace("step_cost: 15", "step_cost: 19");
-    let data = DataPack::from_sources(&builtin_with("terrain.ron", &terrain)).expect("valid pack");
+    let data = builtin_changing("terrain.ron", &[("step_cost: 15", "step_cost: 19")]);
     let map = Map::from_ascii(&["..", ".:"], &data).expect("valid drawing");
     assert_eq!(map.step_cost(at(0, 0), Dir::SE), Some(26));
-}
-
-/// The built-in pack's files with `file` replaced by `text`.
-fn builtin_with<'a>(file: &str, text: &'a str) -> Vec<(&'static str, &'a str)> {
-    DataPack::builtin_sources()
-        .iter()
-        .map(|&(path, builtin)| (path, if path == file { text } else { builtin }))
-        .collect()
 }

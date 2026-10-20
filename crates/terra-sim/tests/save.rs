@@ -3,10 +3,10 @@
 //! build, or a damaged one, is refused rather than crashing.
 
 mod common;
-use common::{WorldBuilder, at, builtin, builtin_changing, pet, run_for};
+use common::{WorldBuilder, at, builtin, builtin_changing, builtin_source, pet, run_for};
 
 use terra_sim::{
-    Command, DataPack, EntityId, EventKind, Genome, LoadError, SCHEMA_VERSION, World, WorldConfig,
+    Command, EntityId, EventKind, Genome, LoadError, SCHEMA_VERSION, World, WorldConfig,
 };
 
 /// The default world, with the Cursor busy: it leads a sprite for a while,
@@ -145,7 +145,7 @@ fn a_loaded_world_uses_the_pack_its_save_embeds_not_the_built_in_one() {
 #[test]
 fn an_unknown_gene_survives_a_save_and_load_byte_for_byte() {
     let data = builtin();
-    let starter = data_starter_ron();
+    let starter = builtin_source("genomes/starter.ron");
     let unknown = starter.replace(
         "genes: [",
         "genes: [\n        Gene(type: 900, version: 3, payload: \"c0ffee\"),",
@@ -163,16 +163,6 @@ fn an_unknown_gene_survives_a_save_and_load_byte_for_byte() {
         genome.to_ron(world.data())
     );
     assert!(sprite.genome().to_ron(loaded.data()).contains("c0ffee"));
-}
-
-/// The built-in starter genome's file.
-fn data_starter_ron() -> String {
-    DataPack::builtin_sources()
-        .iter()
-        .find(|(path, _)| *path == "genomes/starter.ron")
-        .expect("the starter genome")
-        .1
-        .to_string()
 }
 
 #[test]
