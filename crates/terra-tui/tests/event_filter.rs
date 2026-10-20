@@ -2,12 +2,11 @@
 //! or major ones only, switched with `m` or a click on its label.
 
 mod common;
-use common::{WorldBuilder, app_on, at, died, render, row};
+use common::{UNHURT, WorldBuilder, acted, app_on, at, at_sprite, died, render, row};
 
 use ratatui::layout::Position;
 use terra_sim::{
-    ActionView, Command, DeathCause, EntityId, Event, EventKind, Hurt, Learned, Outcome, Progress,
-    Rejection, Target, Verb, World,
+    Command, DeathCause, EntityId, Event, EventKind, Learned, Outcome, Rejection, Verb, World,
 };
 use terra_tui::app::{App, EventFilter};
 use terra_tui::input::Action;
@@ -35,29 +34,10 @@ fn log(app: &App, world: &World) -> Vec<String> {
         .collect()
 }
 
+/// Sprite #`hitter` hit sprite #`hit` on `tick`, hurting nobody.
 fn hit(tick: u64, hitter: u64, hit: u64) -> Event {
-    let action = ActionView {
-        verb: Verb::Hit,
-        destination: None,
-        target: Some(Target::Sprite(EntityId(hit))),
-        target_type: Some(101),
-        attempted: true,
-        target_gone: false,
-        hurt: Hurt::default(),
-        progress: Progress::Ended(Outcome::Applied),
-        remembered: false,
-        heard: None,
-        egg_at: None,
-    };
-    Event {
-        tick,
-        kind: EventKind::ActionEnded {
-            id: EntityId(hitter),
-            verb: Verb::Hit,
-            outcome: Outcome::Applied,
-            action,
-        },
-    }
+    let (hitter, target) = (EntityId(hitter), at_sprite(EntityId(hit)));
+    acted(tick, hitter, Verb::Hit, target, Outcome::Applied, UNHURT)
 }
 
 /// An app on `world` whose log has, oldest first: #2 learning a lesson, a

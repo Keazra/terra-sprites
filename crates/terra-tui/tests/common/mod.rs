@@ -16,7 +16,7 @@ use ratatui::layout::{Position, Rect, Size};
 use ratatui::{Terminal, backend::TestBackend};
 use terra_sim::{
     ActionView, Command, DataPack, EntityId, Event, EventKind, Genome, Hurt, Map, Outcome, Pos,
-    Progress, Rejection, Scenario, ScriptedAction, Verb, World,
+    Progress, Rejection, Scenario, ScriptedAction, Target, Verb, World,
 };
 use terra_tui::app::{App, Areas, CursorMode, Flow, Screen, Selection, Tab};
 use terra_tui::input::{Action, Button};
@@ -314,14 +314,52 @@ pub fn tick(app: &mut App, world: &mut World) {
 
 /// Sprite `id` finished `verb`, aimed at nothing, with `outcome`, on `tick`.
 pub fn finished(tick: u64, id: EntityId, verb: Verb, outcome: Outcome) -> Event {
+    acted(tick, id, verb, None, outcome, UNHURT)
+}
+
+/// Nobody hurt.
+pub const UNHURT: Hurt = Hurt {
+    actor: false,
+    target: false,
+};
+
+/// The actor hurt, by what it did.
+pub const HURT_ITSELF: Hurt = Hurt {
+    actor: true,
+    target: false,
+};
+
+/// The sprite it was aimed at hurt, by what was done to it.
+pub const HURT_TARGET: Hurt = Hurt {
+    actor: false,
+    target: true,
+};
+
+/// Aimed at sprite `id`: the target, and its type, a sprite's pseudo type
+/// 101, for [`acted`].
+pub fn at_sprite(id: EntityId) -> Option<(Target, u16)> {
+    Some((Target::Sprite(id), 101))
+}
+
+/// Sprite `id` finished `verb` on `tick`, with `outcome`, aimed at
+/// `target` of the object type given, if at anything, its attempt hurting
+/// whom `hurt` says. An aimed action that applied made its attempt.
+pub fn acted(
+    tick: u64,
+    id: EntityId,
+    verb: Verb,
+    target: Option<(Target, u16)>,
+    outcome: Outcome,
+    hurt: Hurt,
+) -> Event {
     let action = ActionView {
         verb,
         destination: None,
-        target: None,
-        target_type: None,
-        attempted: false,
+        target: target.map(|(target, _)| target),
+        target_type: target.map(|(_, target_type)| target_type),
+        attempted: target.is_some() && outcome == Outcome::Applied,
         target_gone: false,
-        hurt: Hurt::default(),
+        hurt,
         progress: Progress::Ended(outcome),
         remembered: false,
         heard: None,

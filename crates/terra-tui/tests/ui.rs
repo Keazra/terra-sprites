@@ -1,7 +1,8 @@
 mod common;
 use common::{
-    LETHAL_THORNS, LONE, WorldBuilder, finished, group, inspector_line, inspector_rows, lines,
-    open, pack, pack_changing, render_on, select, sized_app, status_line,
+    HURT_ITSELF, HURT_TARGET, LETHAL_THORNS, LONE, UNHURT, WorldBuilder, acted, at_sprite,
+    finished, group, inspector_line, inspector_rows, lines, open, pack, pack_changing, render_on,
+    select, sized_app, status_line,
 };
 
 use std::time::Duration;
@@ -11,9 +12,9 @@ use ratatui::layout::{Position, Rect, Size};
 use ratatui::style::{Color, Modifier};
 use ratatui::{Terminal, backend::TestBackend};
 use terra_sim::{
-    ActionView, Blocker, Command, CopyChangeView, DataPack, DeathCause, Emptied, EntityId, Event,
-    EventKind, GeneView, Grip, Hurt, Learned, Map, Outcome, Pos, Progress, Rejection, Removal,
-    ScriptedAction, Target, Terrain, Thing, Verb, World, WorldConfig,
+    Blocker, Command, CopyChangeView, DataPack, DeathCause, Emptied, EntityId, Event, EventKind,
+    GeneView, Grip, Learned, Map, Outcome, Pos, Rejection, Removal, ScriptedAction, Target,
+    Terrain, Thing, Verb, World, WorldConfig,
 };
 use terra_tui::app::{App, CursorMode, Flow, Selection, Tab};
 use terra_tui::input::{Action, Button};
@@ -989,27 +990,7 @@ fn the_event_log_leaves_object_and_action_events_out_and_keeps_the_latest_100() 
                     verb: Verb::Wander,
                 },
             },
-            Event {
-                tick: 1,
-                kind: EventKind::ActionEnded {
-                    id,
-                    verb: Verb::Wander,
-                    outcome: Outcome::Failed,
-                    action: ActionView {
-                        verb: Verb::Wander,
-                        destination: None,
-                        target: None,
-                        target_type: None,
-                        attempted: false,
-                        target_gone: false,
-                        hurt: Hurt::default(),
-                        progress: Progress::Ended(Outcome::Failed),
-                        remembered: false,
-                        heard: None,
-                        egg_at: None,
-                    },
-                },
-            },
+            finished(1, id, Verb::Wander, Outcome::Failed),
         ],
         &world,
     );
@@ -1022,60 +1003,14 @@ fn the_event_log_leaves_object_and_action_events_out_and_keeps_the_latest_100() 
     assert_eq!((ticks[0], ticks[99]), (149, 50), "newest first");
 }
 
-/// Nobody hurt.
-const UNHURT: Hurt = Hurt {
-    actor: false,
-    target: false,
-};
-
-/// The actor hurt, by what it did.
-const HURT_ITSELF: Hurt = Hurt {
-    actor: true,
-    target: false,
-};
-
-/// Sprite `id` finished `verb` at `target`, of the object type `target_type`,
-/// on `tick`, with `outcome`, its attempt hurting whom `hurt` says.
-fn acted(
-    tick: u64,
-    id: u64,
-    verb: Verb,
-    (target, target_type): (Target, u16),
-    outcome: Outcome,
-    hurt: Hurt,
-) -> Event {
-    let action = ActionView {
-        verb,
-        destination: None,
-        target: Some(target),
-        target_type: Some(target_type),
-        attempted: outcome == Outcome::Applied,
-        target_gone: false,
-        hurt,
-        progress: Progress::Ended(outcome),
-        remembered: false,
-        heard: None,
-        egg_at: None,
-    };
-    Event {
-        tick,
-        kind: EventKind::ActionEnded {
-            id: EntityId(id),
-            verb,
-            outcome,
-            action,
-        },
-    }
-}
-
 #[test]
 fn the_event_log_shows_every_play_and_hit_and_whatever_hurt_a_sprite() {
     use Outcome::{Applied, Interrupted};
     // Object types: berry_bush 1, thornbush 3, ball 4, sprite 101.
-    let ball = (Target::Object(EntityId(40)), 4);
-    let thorns = (Target::Object(EntityId(77)), 3);
-    let bush = (Target::Object(EntityId(80)), 1);
-    let sprite = |id| (Target::Sprite(EntityId(id)), 101);
+    let ball = Some((Target::Object(EntityId(40)), 4));
+    let thorns = Some((Target::Object(EntityId(77)), 3));
+    let bush = Some((Target::Object(EntityId(80)), 1));
+    let sprite = |id| at_sprite(EntityId(id));
     let world = garden(pack());
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
     let log = |app: &App| -> Vec<String> {
@@ -1087,11 +1022,11 @@ fn the_event_log_shows_every_play_and_hit_and_whatever_hurt_a_sprite() {
     };
     app.record(
         &[
-            acted(10, 4, Verb::Play, ball, Applied, UNHURT),
-            acted(11, 5, Verb::Eat, bush, Applied, UNHURT),
-            acted(12, 9, Verb::Play, sprite(2), Applied, UNHURT),
-            acted(13, 7, Verb::Hit, sprite(12), Interrupted, UNHURT),
-            acted(14, 7, Verb::Hit, sprite(12), Applied, UNHURT),
+            acted(10, EntityId(4), Verb::Play, ball, Applied, UNHURT),
+            acted(11, EntityId(5), Verb::Eat, bush, Applied, UNHURT),
+            acted(12, EntityId(9), Verb::Play, sprite(2), Applied, UNHURT),
+            acted(13, EntityId(7), Verb::Hit, sprite(12), Interrupted, UNHURT),
+            acted(14, EntityId(7), Verb::Hit, sprite(12), Applied, UNHURT),
         ],
         &world,
     );
@@ -1106,9 +1041,9 @@ fn the_event_log_shows_every_play_and_hit_and_whatever_hurt_a_sprite() {
     );
     app.record(
         &[
-            acted(20, 3, Verb::Eat, thorns, Applied, HURT_ITSELF),
-            acted(21, 3, Verb::Play, thorns, Applied, HURT_ITSELF),
-            acted(22, 6, Verb::Hit, ball, Applied, UNHURT),
+            acted(20, EntityId(3), Verb::Eat, thorns, Applied, HURT_ITSELF),
+            acted(21, EntityId(3), Verb::Play, thorns, Applied, HURT_ITSELF),
+            acted(22, EntityId(6), Verb::Hit, ball, Applied, UNHURT),
         ],
         &world,
     );
@@ -3056,12 +2991,12 @@ fn a_hurt_sprite_takes_turns_with_a_red_bang_for_a_second() {
             .symbol()
             .to_string();
         // A thornbush bite, which hurts the biter, and a harmless kick.
-        let thorns = (Target::Object(EntityId(77)), 3);
-        let ball = (Target::Object(EntityId(40)), 4);
+        let thorns = Some((Target::Object(EntityId(77)), 3));
+        let ball = Some((Target::Object(EntityId(40)), 4));
         app.record(
             &[
-                acted(1, biter.0, Verb::Eat, thorns, Outcome::Applied, HURT_ITSELF),
-                acted(1, other.0, Verb::Play, ball, Outcome::Applied, UNHURT),
+                acted(1, biter, Verb::Eat, thorns, Outcome::Applied, HURT_ITSELF),
+                acted(1, other, Verb::Play, ball, Outcome::Applied, UNHURT),
             ],
             &world,
         );
@@ -3084,17 +3019,13 @@ fn a_hurt_sprite_takes_turns_with_a_red_bang_for_a_second() {
         assert_eq!(at(&app, biter_cell).0, sprite_glyph);
 
         // A hit hurts the sprite hit, not the hitter.
-        let target = Hurt {
-            actor: false,
-            target: true,
-        };
         let hit = acted(
             2,
-            biter.0,
+            biter,
             Verb::Hit,
-            (Target::Sprite(other), 101),
+            at_sprite(other),
             Outcome::Applied,
-            target,
+            HURT_TARGET,
         );
         app.record(&[hit], &world);
         assert_eq!(at(&app, other_cell), bang);
@@ -3545,15 +3476,16 @@ fn lines_that_read_the_same_merge_though_their_events_differ() {
     // Design v21 §6.1: two different balls read the same, and so do pets
     // refused at different speeds.
     let world = garden(pack());
+    let sprite = EntityId(12);
     let kick = |tick, ball| {
-        let ball = (Target::Object(EntityId(ball)), 4);
-        acted(tick, 12, Verb::Play, ball, Outcome::Applied, UNHURT)
+        let ball = Some((Target::Object(EntityId(ball)), 4));
+        acted(tick, sprite, Verb::Play, ball, Outcome::Applied, UNHURT)
     };
     let refused = |tick, reach_back| Event {
         tick,
         kind: EventKind::CommandRejected {
             command: Command::Reward {
-                sprite: EntityId(12),
+                sprite,
                 amplified: false,
                 reach_back,
             },

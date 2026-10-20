@@ -1,10 +1,10 @@
 mod common;
-use common::{WorldBuilder, at, died, finished, map_app, map_only, sprite_on};
+use common::{
+    UNHURT, WorldBuilder, acted, at, at_sprite, died, finished, map_app, map_only, sprite_on,
+};
 
 use ratatui::layout::{Position, Rect};
-use terra_sim::{
-    ActionView, DeathCause, EntityId, Event, EventKind, Outcome, Pos, Target, Verb, World,
-};
+use terra_sim::{DeathCause, EntityId, Outcome, Pos, Verb, World};
 use terra_tui::app::{App, Flow, Origin, Screen, Selection, Tab};
 use terra_tui::clock::Speed;
 use terra_tui::input::{Action, Button};
@@ -584,31 +584,9 @@ fn the_observed_list_keeps_what_the_selected_sprite_finished_newest_first() {
     );
 }
 
-/// Sprite `id` finished `verb` at sprite `target`, with `outcome`, on `tick`.
-fn finished_at(tick: u64, id: EntityId, verb: Verb, target: EntityId, outcome: Outcome) -> Event {
-    let Event { tick, kind } = finished(tick, id, verb, outcome);
-    let EventKind::ActionEnded { action, .. } = kind else {
-        unreachable!("finished makes an ending");
-    };
-    let action = ActionView {
-        target: Some(Target::Sprite(target)),
-        target_type: Some(101),
-        attempted: outcome == Outcome::Applied,
-        ..action
-    };
-    Event {
-        tick,
-        kind: EventKind::ActionEnded {
-            id,
-            verb,
-            outcome,
-            action,
-        },
-    }
-}
-
 #[test]
 fn the_observed_list_also_keeps_what_others_did_to_the_selected_sprite() {
+    use Outcome::{Applied, Interrupted};
     let world = grass_with(20, 10, &[at(3, 4), at(6, 2)]);
     let ids: Vec<EntityId> = world.sprites().map(|s| s.id()).collect();
     let (me, other) = (ids[0], ids[1]);
@@ -616,10 +594,10 @@ fn the_observed_list_also_keeps_what_others_did_to_the_selected_sprite() {
     app.apply(Action::SelectNext, &world);
     app.record(
         &[
-            finished_at(3, other, Verb::Hit, me, Outcome::Applied),
-            finished_at(4, other, Verb::Hit, me, Outcome::Interrupted),
-            finished_at(5, other, Verb::Play, other, Outcome::Applied),
-            finished_at(6, other, Verb::Play, me, Outcome::Applied),
+            acted(3, other, Verb::Hit, at_sprite(me), Applied, UNHURT),
+            acted(4, other, Verb::Hit, at_sprite(me), Interrupted, UNHURT),
+            acted(5, other, Verb::Play, at_sprite(other), Applied, UNHURT),
+            acted(6, other, Verb::Play, at_sprite(me), Applied, UNHURT),
         ],
         &world,
     );

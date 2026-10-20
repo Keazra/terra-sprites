@@ -2,14 +2,17 @@
 //! `InfoPolicy` first.
 
 mod common;
-use common::{SCREEN, WorldBuilder, app_on, at, died, pack, pointer_on, render, status_line};
+use common::{
+    HURT_TARGET, SCREEN, WorldBuilder, acted, app_on, at, at_sprite, died, pack, pointer_on,
+    render, status_line,
+};
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::Position;
 use ratatui::style::Color;
 use terra_sim::{
-    ActionView, Command, DeathCause, EntityId, Event, EventKind, Grip, Hurt, Map, Outcome, Pos,
-    Progress, Rejection, ScriptedAction, Target, Verb, World,
+    Command, DeathCause, EntityId, Event, EventKind, Grip, Map, Outcome, Pos, Rejection,
+    ScriptedAction, Verb, World,
 };
 use terra_tui::app::{App, ColourMode, CursorMode, Tab};
 use terra_tui::input::Action;
@@ -96,34 +99,15 @@ fn busy_app(world: &World) -> App {
     let mut app = app_on(world);
     let wanderer = world.sprite_at(at(2, 3)).unwrap().id();
     app.apply(Action::left_click(pointer_on(&app, WANDERER)), world);
-    let hurt = ActionView {
-        verb: Verb::Hit,
-        destination: None,
-        target: Some(Target::Sprite(wanderer)),
-        target_type: Some(101),
-        attempted: true,
-        target_gone: false,
-        hurt: Hurt {
-            actor: false,
-            target: true,
-        },
-        progress: Progress::Ended(Outcome::Applied),
-        remembered: false,
-        heard: None,
-        egg_at: None,
-    };
-    let events = [
-        died(1, EntityId(99), DeathCause::Starvation, 400),
-        Event {
-            tick: 1,
-            kind: EventKind::ActionEnded {
-                id: EntityId(98),
-                verb: Verb::Hit,
-                outcome: Outcome::Applied,
-                action: hurt,
-            },
-        },
-    ];
+    let hurt = acted(
+        1,
+        EntityId(98),
+        Verb::Hit,
+        at_sprite(wanderer),
+        Outcome::Applied,
+        HURT_TARGET,
+    );
+    let events = [died(1, EntityId(99), DeathCause::Starvation, 400), hurt];
     app.record(&events, world);
     app
 }
