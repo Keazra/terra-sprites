@@ -2,7 +2,7 @@
 //! something that stays put eased a need, and goes back to it out of sight.
 
 mod common;
-use common::{WorldBuilder, at, builtin, builtin_changing};
+use common::{WorldBuilder, at, builtin, builtin_changing, run_for};
 
 use terra_sim::{
     Command, DataPack, EventKind, Genome, Outcome, Pos, RememberedPlace, ScriptedAction, Target,
@@ -442,13 +442,6 @@ fn places(world: &World) -> Vec<RememberedPlace> {
         .remembered_places()
 }
 
-/// Steps `world` `ticks` times.
-fn run(world: &mut World, ticks: u64) {
-    for _ in 0..ticks {
-        world.step();
-    }
-}
-
 /// Rests, to grow hungry or thirsty, then does `then`.
 fn after_a_while(then: &[ScriptedAction]) -> Vec<ScriptedAction> {
     let mut script = vec![ScriptedAction::Rest; 10];
@@ -474,7 +467,7 @@ fn a_bush_that_eased_hunger_is_remembered_where_it_stands_but_a_berry_on_the_gro
         hungry.clone(),
         &eat(berry),
     );
-    run(&mut world, 120);
+    run_for(&mut world, 120);
     assert_eq!(
         places(&world),
         [],
@@ -491,7 +484,7 @@ fn a_bush_that_eased_hunger_is_remembered_where_it_stands_but_a_berry_on_the_gro
     world
         .start_object(bush, "mature", &[("fruit", 6)])
         .expect("the bush");
-    run(&mut world, 120);
+    run_for(&mut world, 120);
     let remembered = places(&world);
     assert_eq!(remembered.len(), 1, "{remembered:?}");
     assert_eq!(remembered[0].thing, Thing::from("berry_bush"));
@@ -505,7 +498,7 @@ fn a_drink_that_eases_nothing_leaves_no_place() {
     let never_thirsty = genome(10.0, "", &data);
     let drink = [ScriptedAction::Drink { at: at(0, 2) }, ScriptedAction::Rest];
     let mut world = world_in(data, &ROOM, &[], at(1, 2), never_thirsty, &drink);
-    run(&mut world, 20);
+    run_for(&mut world, 20);
     assert_eq!(places(&world), []);
 }
 
@@ -540,10 +533,10 @@ fn a_sprite_sees_a_remembered_bush_is_gone_and_forgets_it() {
     world
         .start_object(tree, "fruiting", &[("fruit", 6)])
         .expect("the tree");
-    run(&mut world, 200);
+    run_for(&mut world, 200);
     assert!(world.object_at(tree).is_none(), "the tree has died");
     assert_eq!(places(&world).len(), 1, "it hasn't seen it's gone");
-    run(&mut world, 100);
+    run_for(&mut world, 100);
     assert_eq!(places(&world), []);
 }
 
@@ -572,7 +565,7 @@ fn a_sprite_drinks_at_water_in_sight_rather_than_walk_to_water_it_remembers() {
     script.extend([ScriptedAction::Rest; 7]);
     let mut world = world_in(data, &rows, &[], at(1, 2), thirsty, &script);
     assert_eq!(first_drink(&mut world, 200), Some(at(1, 2)));
-    run(&mut world, 100);
+    run_for(&mut world, 100);
     let here = world.sprites().next().expect("the sprite").pos();
     assert!(here.x >= 24, "{here:?} is out of sight of the east end");
     let mut drank_at = None;
@@ -628,7 +621,7 @@ fn remembered_places_are_saved_and_loaded() {
     let mut world = drank_and_wandered_off();
     first_drink(&mut world, 200);
     // The relief is learned the tick after the drink.
-    run(&mut world, 5);
+    run_for(&mut world, 5);
     let loaded = World::load(&world.save()).expect("the save loads");
     assert_eq!(places(&loaded), places(&world));
     assert_eq!(places(&loaded).len(), 1);

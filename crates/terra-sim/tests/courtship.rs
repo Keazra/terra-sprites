@@ -9,7 +9,7 @@
 mod common;
 use common::{
     ALONE, FEMALE, KEEN, LONE, WorldBuilder, at, builtin, builtin_changing, builtin_changing_files,
-    hatch, id_at, laid, pulse_in_h1, until, world_in,
+    hatch, id_at, laid, pulse_in_h1, run_for, until, world_in,
 };
 
 use terra_sim::{
@@ -304,9 +304,7 @@ fn a_caller_that_calls_again_from_elsewhere_turns_the_trip_there() {
         let action = world.sprite(answerer).unwrap().action();
         action.filter(|a| a.remembered).and_then(|a| a.heard)
     };
-    for _ in 0..3 {
-        world.step();
-    }
+    run_for(&mut world, 3);
     assert_eq!(heading(&world), Some(first), "on its way by ear");
     world.submit(Command::TakeHold { sprite: caller });
     world.submit(Command::MoveCursor { tile: second });
@@ -414,9 +412,7 @@ fn a_male_that_hears_a_female_call_counts_her_near_and_stays_male() {
         let female = format!("{FEMALE}{her_genes}");
         let mut world = world(&rows, &[(at(0, 0), &female), (at(25, 0), turning)]);
         let him = id_at(&world, at(25, 0));
-        for _ in 0..2_000 {
-            world.step();
-        }
+        run_for(&mut world, 2_000);
         world.sprite(him).expect("him").sex()
     };
     assert_eq!(sex_after(CALLER), Sex::Male, "he heard her");
@@ -457,9 +453,7 @@ fn a_sprite_gets_to_know_one_it_sees_and_better_one_it_plays_with() {
     let sprites = [(at(0, 0), RESTER), (at(3, 0), RESTER), (at(25, 0), RESTER)];
     let mut seeing = world(&rows, &sprites);
     let [a, b, far] = [at(0, 0), at(3, 0), at(25, 0)].map(|pos| id_at(&seeing, pos));
-    for _ in 0..100 {
-        seeing.step();
-    }
+    run_for(&mut seeing, 100);
     let knows =
         |world: &World, id: EntityId, other: EntityId| world.sprite(id).unwrap().familiarity(other);
     let seen = knows(&seeing, a, b);
@@ -523,9 +517,7 @@ fn a_sprite_known_only_by_sight_is_forgotten_once_out_of_sight_it_fades() {
     let (a, b) = (id_at(&world, at(0, 0)), id_at(&world, at(3, 0)));
     world.step();
     assert!(world.sprite(a).unwrap().familiarity(b) > 0.0, "seen");
-    for _ in 0..200 {
-        world.step();
-    }
+    run_for(&mut world, 200);
     assert_eq!(world.sprite(b).unwrap().pos(), at(29, 0), "it walked off");
     assert_eq!(world.sprite(a).unwrap().familiarity(b), 0.0, "forgotten");
 }

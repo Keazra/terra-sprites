@@ -2,7 +2,7 @@
 //! and holds items, one thing at a time.
 
 mod common;
-use common::{WorldBuilder, at, builtin_changing, id_at};
+use common::{WorldBuilder, at, builtin_changing, id_at, pet, run_for};
 
 use terra_sim::{
     Blocker, Command, DataPack, Emptied, EntityId, Event, EventKind, Grip, Outcome, Pos, Rejection,
@@ -135,13 +135,11 @@ fn a_led_sprite_walks_to_the_cursor_at_its_own_pace_and_chooses_nothing() {
 
 /// Leads the sprite on `from` towards `tile` for `ticks` ticks, and says
 /// where it ends up.
-fn lead(world: &mut World, from: Pos, tile: Pos, ticks: u32) -> Pos {
+fn lead(world: &mut World, from: Pos, tile: Pos, ticks: u64) -> Pos {
     let id = id_at(world, from);
     world.submit(Command::TakeHold { sprite: id });
     world.submit(Command::MoveCursor { tile });
-    for _ in 0..ticks {
-        world.step();
-    }
+    run_for(world, ticks);
     assert_eq!(world.cursor().leads(), Some(id), "still led");
     world.sprite(id).expect("the sprite").pos()
 }
@@ -173,11 +171,7 @@ fn a_pet_reaches_a_led_sprite() {
     let id = id_at(&world, at(0, 0));
     world.submit(Command::TakeHold { sprite: id });
     world.step();
-    world.submit(Command::Reward {
-        sprite: id,
-        amplified: false,
-        reach_back: 3,
-    });
+    world.submit(pet(id, 3));
     let events = world.step();
     assert!(
         events.iter().any(|e| e.kind
@@ -407,9 +401,7 @@ fn a_rolling_ball_picked_up_stops_rolling() {
     );
     world.submit(Command::PickUp { item: ball });
     world.submit(Command::PutDown { tile: at(3, 1) });
-    for _ in 0..4 {
-        world.step();
-    }
+    run_for(&mut world, 4);
     assert_eq!(
         world.object_at(at(3, 1)).map(|o| o.id()),
         Some(ball),
@@ -482,9 +474,7 @@ fn a_held_items_location_conditions_are_false() {
         .build();
     let held = object_on(&world, at(2, 0));
     world.submit(Command::PickUp { item: held });
-    for _ in 0..3 {
-        world.step();
-    }
+    run_for(&mut world, 3);
     assert!(
         world.object_at(at(4, 0)).is_none(),
         "the one on the map went"

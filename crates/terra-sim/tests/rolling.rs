@@ -3,7 +3,7 @@
 //! with scripted kicks.
 
 mod common;
-use common::{at, builtin_with, walkers, walkers_in};
+use common::{at, builtin_with, run_for, walkers, walkers_in};
 
 use terra_sim::{DataPack, EventKind, Outcome, Pos, Removal, ScriptedAction, Verb, World};
 
@@ -454,9 +454,7 @@ fn a_ball_knocks_on_a_smaller_harder_item_rather_than_crushing_it() {
         &[(at(2, 1), "ball"), (at(4, 1), "pebble")],
         &[(at(1, 1), &kick(at(2, 1)))],
     );
-    for _ in 0..6 {
-        world.step();
-    }
+    run_for(&mut world, 6);
     assert_eq!(ball(&world), at(3, 1));
     assert_eq!(tiles_of(&world, "pebble"), [at(6, 1)]);
 }

@@ -4,7 +4,7 @@
 //! another build, or with the wrong data pack, is refused, never a crash.
 
 mod common;
-use common::{WorldBuilder, at, builtin};
+use common::{WorldBuilder, at, builtin, hug, run_for, zap};
 
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
@@ -56,11 +56,7 @@ fn play(world: &mut World, until: u64) -> Vec<Vec<terra_sim::Event>> {
             }
             120 => {
                 let sprite = world.sprites().last().expect("a sprite").id();
-                world.submit(Command::Reward {
-                    sprite,
-                    amplified: true,
-                    reach_back: 5,
-                });
+                world.submit(hug(sprite, 5));
             }
             _ => {}
         }
@@ -111,10 +107,7 @@ fn a_session_started_from_a_save_replays_from_it() {
     play(&mut world, 300);
     // A click made while paused waits in the save, for the next tick.
     let sprite = world.sprites().next().expect("a sprite").id();
-    world.submit(Command::Correct {
-        sprite,
-        amplified: false,
-    });
+    world.submit(zap(sprite));
     let mut world = World::load(&world.save()).expect("the save loads");
     world.start_recording();
     play(&mut world, 2_100);
@@ -140,9 +133,7 @@ fn a_hand_made_world_replays_from_its_save() {
     world.start_recording();
     let item = world.objects().next().unwrap().id();
     world.submit(Command::PickUp { item });
-    for _ in 0..1_200 {
-        world.step();
-    }
+    run_for(&mut world, 1_200);
     let mut playback = Playback::new(&world.replay().unwrap()).unwrap();
     assert!(
         !playback.started_fresh(),

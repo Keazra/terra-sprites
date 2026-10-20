@@ -4,7 +4,7 @@
 //! changes nothing in how a world runs.
 
 mod common;
-use common::builtin;
+use common::{builtin, run_for};
 
 use terra_sim::{Mode, Playback, World, WorldConfig};
 
@@ -41,9 +41,7 @@ fn the_mode_is_in_the_state_hash() {
 #[test]
 fn a_save_keeps_its_worlds_mode() {
     let mut world = world_in(Mode::Lab, 7);
-    for _ in 0..20 {
-        world.step();
-    }
+    run_for(&mut world, 20);
     let loaded = World::load(&world.save()).expect("the save loads");
     assert_eq!(loaded.mode(), Mode::Lab);
     assert_eq!(loaded.state_hash(), world.state_hash());
@@ -59,9 +57,7 @@ fn a_save_from_before_the_modes_loads_as_a_story_world() {
 fn a_lab_worlds_replay_starts_afresh_in_lab_mode() {
     let mut world = world_in(Mode::Lab, 7);
     world.start_recording();
-    for _ in 0..1_100 {
-        world.step();
-    }
+    run_for(&mut world, 1_100);
     let bytes = world.replay().expect("the world records");
     let mut playback = Playback::new(&bytes).expect("the replay plays");
     assert!(playback.started_fresh(), "from its seed, not from a save");

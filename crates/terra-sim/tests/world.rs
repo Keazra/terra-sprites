@@ -1,3 +1,6 @@
+mod common;
+use common::run_for;
+
 use terra_sim::{DataPack, Map, MapError, Pos, Terrain, World, WorldConfig};
 
 fn new_world(seed: u64) -> World {
@@ -13,9 +16,7 @@ fn a_new_world_starts_at_tick_zero_and_each_step_advances_one_tick() {
     world.step();
     assert_eq!(world.tick(), 1);
 
-    for _ in 0..10 {
-        world.step();
-    }
+    run_for(&mut world, 10);
     assert_eq!(world.tick(), 11);
 }
 

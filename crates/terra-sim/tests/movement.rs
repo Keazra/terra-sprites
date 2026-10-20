@@ -2,7 +2,7 @@
 //! re-planning, driven through hand-made worlds.
 
 mod common;
-use common::{WorldBuilder, at, builtin, id_at, traits_only};
+use common::{WorldBuilder, at, builtin, id_at, run_for, traits_only};
 
 use terra_sim::{
     ActionView, Command, DataPack, EntityId, Event, EventKind, Genome, Hurt, Outcome, Pos,
@@ -452,9 +452,7 @@ fn a_swap_ends_both_sprites_walking_for_the_tick() {
         let scripted = [(west, wander_to(east)), (east, wander_to(west))];
         let mut world = seeded(&["..........."], &[], 12.0, &[west, east], &scripted, seed);
         let (a, b) = (id_at(&world, west), id_at(&world, east));
-        for _ in 0..5 {
-            world.step();
-        }
+        run_for(&mut world, 5);
         let x = |id| world.sprite(id).expect("alive").pos().x;
         assert_eq!(x(a), x(b) + 1, "just past each other, seed {seed}");
     }

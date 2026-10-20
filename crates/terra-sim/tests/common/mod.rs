@@ -6,7 +6,7 @@
 #![allow(dead_code)]
 
 use terra_sim::{
-    DataPack, EntityId, Event, EventKind, Genome, Learned, Map, Outcome, Pos, Scenario,
+    Command, DataPack, EntityId, Event, EventKind, Genome, Learned, Map, Outcome, Pos, Scenario,
     ScenarioError, ScriptedAction, Verb, World,
 };
 
@@ -453,3 +453,46 @@ pub const NO_COPYING_ERRORS: [(&str, &str); 2] = [
     ("mutation: (chance: 0.01,", "mutation: (chance: 0.0,"),
     ("flaws: (arise: 0.004,", "flaws: (arise: 0.0,"),
 ];
+
+/// Steps `world` `ticks` times.
+pub fn run_for(world: &mut World, ticks: u64) {
+    for _ in 0..ticks {
+        world.step();
+    }
+}
+
+/// The Cursor's pet for `sprite` (design v21 §4.6), its feeling looking
+/// `reach_back` ticks back for the sprite's latest attempt (§5.6).
+pub fn pet(sprite: EntityId, reach_back: u64) -> Command {
+    Command::Reward {
+        sprite,
+        amplified: false,
+        reach_back,
+    }
+}
+
+/// The Cursor's hug for `sprite`: an amplified pet (design v21 §4.6).
+pub fn hug(sprite: EntityId, reach_back: u64) -> Command {
+    Command::Reward {
+        sprite,
+        amplified: true,
+        reach_back,
+    }
+}
+
+/// The Cursor's zap for `sprite` (design v21 §4.6). Its feeling looks back
+/// only the touch window (§5.6).
+pub fn zap(sprite: EntityId) -> Command {
+    Command::Correct {
+        sprite,
+        amplified: false,
+    }
+}
+
+/// The Cursor's shock for `sprite`: an amplified zap (design v21 §4.6).
+pub fn shock(sprite: EntityId) -> Command {
+    Command::Correct {
+        sprite,
+        amplified: true,
+    }
+}

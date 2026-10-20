@@ -6,7 +6,7 @@
 //! small.
 
 mod common;
-use common::{ALONE, FEMALE, WorldBuilder, at, builtin, family_in, laid, lone, until};
+use common::{ALONE, FEMALE, WorldBuilder, at, builtin, family_in, laid, lone, run_for, until};
 
 use std::collections::BTreeMap;
 
@@ -217,9 +217,7 @@ fn a_replay_plays_the_record_back_with_its_generations() {
     // replay checks them with the rest of it (design §2.7).
     let mut world = mother();
     world.start_recording();
-    for _ in 0..3_000 {
-        world.step();
-    }
+    run_for(&mut world, 3_000);
     assert!(
         world
             .population()
@@ -252,9 +250,7 @@ fn a_sprite_the_cursor_spawned_is_counted_as_spawned() {
 fn a_save_keeps_the_record() {
     let data = builtin();
     let mut world = World::new(WorldConfig::builtin(&data), data, 3);
-    for _ in 0..350 {
-        world.step();
-    }
+    run_for(&mut world, 350);
     let mut loaded = World::load(&world.save()).expect("the save loads");
     assert_eq!(loaded.population(), world.population());
     assert_eq!(loaded.population_now(), world.population_now());
@@ -276,9 +272,7 @@ fn a_save_from_before_the_record_begins_it_where_it_was_loaded() {
     world.step();
     assert_eq!(ticks(&world), [61]);
     assert_eq!(stages_of(&world.population()[0]), sprites);
-    for _ in 0..100 {
-        world.step();
-    }
+    run_for(&mut world, 100);
     assert_eq!(ticks(&world), [61, 100]);
 }
 
@@ -315,9 +309,7 @@ fn a_long_run_squeezes_the_record_and_keeps_the_whole_run() {
     // 512 counts take it to tick 51,100, where it keeps every other one and
     // counts every 200 ticks; at 512 again, at tick 102,200, every 400.
     let mut world = empty_world();
-    for _ in 0..110_000 {
-        world.step();
-    }
+    run_for(&mut world, 110_000);
     assert_eq!(world.population_every(), 400);
     let ticks = ticks(&world);
     assert!(ticks.len() < 512, "{} counts", ticks.len());

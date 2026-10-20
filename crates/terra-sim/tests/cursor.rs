@@ -3,11 +3,9 @@
 //! from them.
 
 mod common;
-use common::{WorldBuilder, at, close, value_of};
+use common::{WorldBuilder, at, close, hug, pet, shock, value_of, zap};
 
-use terra_sim::{
-    Command, EntityId, EventKind, Learned, Pos, Rejection, ScriptedAction, Thing, Verb, World,
-};
+use terra_sim::{EntityId, EventKind, Learned, Pos, Rejection, ScriptedAction, Thing, Verb, World};
 
 /// A world drawn from `rows`, with `objects`, and one sprite of `genes` on
 /// `sprite` doing `script`.
@@ -38,20 +36,12 @@ fn resting_sprite() -> (World, EntityId) {
     (world, id)
 }
 
-fn pet(sprite: EntityId) -> Command {
-    Command::Reward {
-        sprite,
-        amplified: false,
-        reach_back: 3,
-    }
-}
-
 #[test]
 fn a_pet_gives_the_sprite_a_good_feeling_of_a_half_on_the_next_tick() {
     // Design v21 §4.6: a pet injects reward .5 at step 1, and learning takes
     // it in at step 4 of the same tick.
     let (mut world, id) = resting_sprite();
-    world.submit(pet(id));
+    world.submit(pet(id, 3));
     let events = world.step();
     assert!(
         events.iter().any(|e| e.kind
@@ -69,11 +59,7 @@ fn a_pet_gives_the_sprite_a_good_feeling_of_a_half_on_the_next_tick() {
 fn a_hug_gives_the_sprite_a_full_good_feeling() {
     // Design v21 §4.6: amplified, a Reward is a hug, reward 1.
     let (mut world, id) = resting_sprite();
-    world.submit(Command::Reward {
-        sprite: id,
-        amplified: true,
-        reach_back: 3,
-    });
+    world.submit(hug(id, 3));
     let events = world.step();
     assert!(
         events.iter().any(|e| e.kind
@@ -85,13 +71,6 @@ fn a_hug_gives_the_sprite_a_full_good_feeling() {
     );
     let sprite = world.sprite(id).expect("the sprite");
     assert!(close(sprite.felt(), 1.0), "{}", sprite.felt());
-}
-
-fn zap(sprite: EntityId) -> Command {
-    Command::Correct {
-        sprite,
-        amplified: false,
-    }
 }
 
 #[test]
@@ -119,10 +98,7 @@ fn a_zap_gives_a_bad_feeling_of_a_half_and_some_pain_but_no_injury() {
 fn a_shock_gives_a_full_bad_feeling_and_more_pain_but_no_injury() {
     // Design v21 §4.6: amplified, a Correct is a shock: punishment 1, pain .6.
     let (mut world, id) = resting_sprite();
-    world.submit(Command::Correct {
-        sprite: id,
-        amplified: true,
-    });
+    world.submit(shock(id));
     let events = world.step();
     assert!(
         events.iter().any(|e| e.kind
@@ -155,7 +131,7 @@ fn a_pet_and_a_zap_each_reach_the_sprite_as_their_own_sense() {
         (world, id)
     };
     let (mut petted, id) = world_with_senses();
-    petted.submit(pet(id));
+    petted.submit(pet(id, 3));
     petted.step();
     let sprite = petted.sprite(id).expect("the sprite");
     assert_eq!(
@@ -178,7 +154,7 @@ fn commands_wait_for_the_next_tick_then_apply_in_the_order_sent_and_levels_stop_
     // of the next tick, and three pets in a tick give one full dose.
     let (mut world, id) = resting_sprite();
     for _ in 0..3 {
-        world.submit(pet(id));
+        world.submit(pet(id, 3));
     }
     world.submit(zap(id));
     let events = world.step();
@@ -214,7 +190,7 @@ fn a_command_for_a_sprite_that_is_gone_is_refused_and_touches_no_one() {
     // as one that never was is.
     let (mut world, id) = resting_sprite();
     let nobody = EntityId(999);
-    world.submit(pet(nobody));
+    world.submit(pet(nobody, 3));
     world.submit(zap(nobody));
     let events = world.step();
     let refused: Vec<&EventKind> = events
@@ -226,7 +202,7 @@ fn a_command_for_a_sprite_that_is_gone_is_refused_and_touches_no_one() {
         refused,
         [
             &EventKind::CommandRejected {
-                command: pet(nobody),
+                command: pet(nobody, 3),
                 reason: Rejection::Gone
             },
             &EventKind::CommandRejected {
@@ -291,11 +267,7 @@ fn a_pet_within_its_reach_back_makes_the_last_thing_tried_and_that_habit_good() 
     // weight: .5 × taught_rate (.9, #187).
     let (mut world, id) = kicker("");
     run_to(&mut world, 6);
-    world.submit(Command::Reward {
-        sprite: id,
-        amplified: false,
-        reach_back: 10,
-    });
+    world.submit(pet(id, 10));
     world.step();
     assert!(close(value_of(&world, id, &balls_good()), 0.25));
     assert!(close(value_of(&world, id, &kicking_balls()), 0.45));
@@ -306,11 +278,7 @@ fn a_pet_within_its_reach_back_makes_the_last_thing_tried_and_that_habit_good() 
 fn pet_after_a_kick(tick: u64, reach_back: u64) -> (f32, f32) {
     let (mut world, id) = kicker("");
     run_to(&mut world, tick);
-    world.submit(Command::Reward {
-        sprite: id,
-        amplified: false,
-        reach_back,
-    });
+    world.submit(pet(id, reach_back));
     world.step();
     (
         value_of(&world, id, &balls_good()),
@@ -353,11 +321,7 @@ fn in_a_tick_the_cursor_touches_a_sprite_relief_still_looks_back_only_the_touch_
     run_to(&mut world, 6);
     let before = value_of(&world, id, &balls_restful);
     assert!(before > 0.0, "resting just after the kick taught it");
-    world.submit(Command::Reward {
-        sprite: id,
-        amplified: false,
-        reach_back: 10,
-    });
+    world.submit(pet(id, 10));
     world.step();
     assert_eq!(value_of(&world, id, &balls_restful), before);
     assert!(close(value_of(&world, id, &balls_good()), 0.25));
@@ -408,7 +372,7 @@ fn commands_waiting_for_the_next_tick_are_part_of_the_world_s_state() {
     // Design v21 §2.8: they're saved, so they're hashed.
     let (mut world, id) = resting_sprite();
     let before = world.state_hash();
-    world.submit(pet(id));
+    world.submit(pet(id, 3));
     assert_ne!(world.state_hash(), before);
 }
 
@@ -446,11 +410,7 @@ fn a_zap_with_a_pet_in_the_same_tick_still_looks_back_only_the_touch_window() {
     // zap, looking back only 3, teaches nothing about it.
     let (mut world, id) = kicker("");
     run_to(&mut world, 6);
-    world.submit(Command::Reward {
-        sprite: id,
-        amplified: false,
-        reach_back: 10,
-    });
+    world.submit(pet(id, 10));
     world.submit(zap(id));
     world.step();
     let balls_bad = Learned::Bad {
