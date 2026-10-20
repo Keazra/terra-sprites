@@ -6,8 +6,8 @@
 #![allow(dead_code)]
 
 use terra_sim::{
-    Command, DataPack, EntityId, Event, EventKind, Genome, Learned, Map, Outcome, Pos, Scenario,
-    ScenarioError, ScriptedAction, Verb, World,
+    Command, DataPack, EntityId, Event, EventKind, Genome, Learned, Map, Outcome, Pos, Rejection,
+    Scenario, ScenarioError, ScriptedAction, Verb, World,
 };
 
 /// The built-in data pack.
@@ -495,4 +495,46 @@ pub fn shock(sprite: EntityId) -> Command {
         sprite,
         amplified: true,
     }
+}
+
+/// A world drawn from `rows`, with `objects`, and a starter sprite on each
+/// of `sprites`, doing `script`, by the tile it starts on.
+pub fn starters(
+    rows: &[&str],
+    objects: &[(Pos, &str)],
+    sprites: &[Pos],
+    script: &[(Pos, ScriptedAction)],
+) -> World {
+    starters_in(builtin(), rows, objects, sprites, script)
+}
+
+/// The same, made with `data`.
+pub fn starters_in(
+    data: DataPack,
+    rows: &[&str],
+    objects: &[(Pos, &str)],
+    sprites: &[Pos],
+    script: &[(Pos, ScriptedAction)],
+) -> World {
+    WorldBuilder::new(rows)
+        .data(data)
+        .objects(objects)
+        .starters(sprites)
+        .scripts(script)
+        .build()
+}
+
+/// The reason the world gave in `events` for refusing `command`, if it did.
+pub fn refusal_in(events: &[Event], command: &Command) -> Option<Rejection> {
+    events.iter().find_map(|e| match &e.kind {
+        EventKind::CommandRejected { command: c, reason } if c == command => Some(*reason),
+        _ => None,
+    })
+}
+
+/// Submits `command` and steps `world` a tick, then gives the reason the
+/// world gave for refusing it, if it did.
+pub fn refusal(world: &mut World, command: Command) -> Option<Rejection> {
+    world.submit(command.clone());
+    refusal_in(&world.step(), &command)
 }

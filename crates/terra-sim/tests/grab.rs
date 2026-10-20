@@ -2,31 +2,16 @@
 //! and holds items, one thing at a time.
 
 mod common;
-use common::{WorldBuilder, at, builtin_changing, id_at, pet, run_for};
+use common::{WorldBuilder, at, builtin_changing, id_at, pet, refusal, run_for, starters};
 
 use terra_sim::{
-    Blocker, Command, DataPack, Emptied, EntityId, Event, EventKind, Grip, Outcome, Pos, Rejection,
+    Blocker, Command, DataPack, Emptied, EntityId, EventKind, Grip, Outcome, Pos, Rejection,
     Removal, ScriptedAction, Terrain, World,
 };
 
-/// A world drawn from `rows`, with `objects`, and a starter sprite on each
-/// of `sprites`, doing `script`, by the tile it starts on.
-fn world(
-    rows: &[&str],
-    objects: &[(Pos, &str)],
-    sprites: &[Pos],
-    script: &[(Pos, ScriptedAction)],
-) -> World {
-    WorldBuilder::new(rows)
-        .objects(objects)
-        .starters(sprites)
-        .scripts(script)
-        .build()
-}
-
 #[test]
 fn taking_hold_of_a_sprite_leads_it_and_leaves_it_where_it_stands() {
-    let mut world = world(
+    let mut world = starters(
         &[".....", ".....", "....."],
         &[],
         &[at(2, 1)],
@@ -47,7 +32,7 @@ fn taking_hold_of_a_sprite_leads_it_and_leaves_it_where_it_stands() {
 
 #[test]
 fn taking_hold_of_a_sprite_pulls_it_away_from_what_it_was_doing() {
-    let mut world = world(
+    let mut world = starters(
         &["........"],
         &[],
         &[at(0, 0)],
@@ -71,36 +56,24 @@ fn taking_hold_of_a_sprite_pulls_it_away_from_what_it_was_doing() {
     assert_eq!(ended, Some(Outcome::PulledAway), "{events:?}");
 }
 
-/// The reason the world gave for refusing `command`, if it did.
-fn refused(events: &[Event], command: Command) -> Option<Rejection> {
-    events.iter().find_map(|e| match &e.kind {
-        EventKind::CommandRejected { command: c, reason } if *c == command => Some(*reason),
-        _ => None,
-    })
-}
-
 #[test]
 fn a_sprite_that_is_gone_cant_be_taken_hold_of() {
-    let mut world = world(&["....."], &[], &[], &[]);
+    let mut world = starters(&["....."], &[], &[], &[]);
     let command = Command::TakeHold {
         sprite: EntityId(99),
     };
-    world.submit(command.clone());
-    let events = world.step();
-    assert_eq!(refused(&events, command), Some(Rejection::Gone));
+    assert_eq!(refusal(&mut world, command), Some(Rejection::Gone));
     assert_eq!(world.cursor().leads(), None);
 }
 
 #[test]
 fn a_cursor_leading_one_sprite_cant_take_hold_of_another() {
-    let mut world = world(&["....."], &[], &[at(0, 0), at(4, 0)], &[]);
+    let mut world = starters(&["....."], &[], &[at(0, 0), at(4, 0)], &[]);
     let (first, second) = (id_at(&world, at(0, 0)), id_at(&world, at(4, 0)));
     let command = Command::TakeHold { sprite: second };
     world.submit(Command::TakeHold { sprite: first });
-    world.submit(command.clone());
-    let events = world.step();
     assert_eq!(
-        refused(&events, command),
+        refusal(&mut world, command),
         Some(Rejection::Busy(Grip::Leads(first)))
     );
     assert_eq!(world.cursor().leads(), Some(first));
@@ -108,7 +81,7 @@ fn a_cursor_leading_one_sprite_cant_take_hold_of_another() {
 
 #[test]
 fn a_led_sprite_walks_to_the_cursor_at_its_own_pace_and_chooses_nothing() {
-    let mut world = world(&["........"], &[], &[at(0, 0)], &[]);
+    let mut world = starters(&["........"], &[], &[at(0, 0)], &[]);
     let id = id_at(&world, at(0, 0));
     world.submit(Command::TakeHold { sprite: id });
     world.submit(Command::MoveCursor { tile: at(5, 0) });
@@ -146,14 +119,14 @@ fn lead(world: &mut World, from: Pos, tile: Pos, ticks: u64) -> Pos {
 
 #[test]
 fn a_led_sprite_goes_as_close_as_it_can_to_a_tile_it_cant_stand_on() {
-    let mut world = world(&["....#"], &[], &[at(0, 0)], &[]);
+    let mut world = starters(&["....#"], &[], &[at(0, 0)], &[]);
     assert_eq!(lead(&mut world, at(0, 0), at(4, 0), 30), at(3, 0));
 }
 
 #[test]
 fn a_led_sprite_stops_beside_a_sprite_on_the_cursors_tile() {
     let rests = [(at(4, 0), ScriptedAction::Rest); 6];
-    let mut world = world(&["......"], &[], &[at(0, 0), at(4, 0)], &rests);
+    let mut world = starters(&["......"], &[], &[at(0, 0), at(4, 0)], &rests);
     assert_eq!(lead(&mut world, at(0, 0), at(4, 0), 30), at(3, 0));
 }
 
@@ -161,13 +134,13 @@ fn a_led_sprite_stops_beside_a_sprite_on_the_cursors_tile() {
 fn a_led_sprite_held_up_by_another_waits_and_never_gives_up() {
     // The sprite resting in the corridor blocks the way to the Cursor.
     let rests = [(at(2, 0), ScriptedAction::Rest); 8];
-    let mut world = world(&["....."], &[], &[at(0, 0), at(2, 0)], &rests);
+    let mut world = starters(&["....."], &[], &[at(0, 0), at(2, 0)], &rests);
     assert_eq!(lead(&mut world, at(0, 0), at(4, 0), 40), at(1, 0));
 }
 
 #[test]
 fn a_pet_reaches_a_led_sprite() {
-    let mut world = world(&["....."], &[], &[at(0, 0)], &[]);
+    let mut world = starters(&["....."], &[], &[at(0, 0)], &[]);
     let id = id_at(&world, at(0, 0));
     world.submit(Command::TakeHold { sprite: id });
     world.step();
@@ -185,7 +158,7 @@ fn a_pet_reaches_a_led_sprite() {
 
 #[test]
 fn let_go_a_sprite_chooses_for_itself_again_at_once() {
-    let mut world = world(&["....."], &[], &[at(0, 0)], &[]);
+    let mut world = starters(&["....."], &[], &[at(0, 0)], &[]);
     let id = id_at(&world, at(0, 0));
     world.submit(Command::TakeHold { sprite: id });
     world.step();
@@ -208,11 +181,9 @@ fn let_go_a_sprite_chooses_for_itself_again_at_once() {
 
 #[test]
 fn letting_go_with_no_sprite_led_is_refused() {
-    let mut world = world(&["....."], &[], &[], &[]);
-    world.submit(Command::LetGo);
-    let events = world.step();
+    let mut world = starters(&["....."], &[], &[], &[]);
     assert_eq!(
-        refused(&events, Command::LetGo),
+        refusal(&mut world, Command::LetGo),
         Some(Rejection::NotLeading)
     );
 }
@@ -258,7 +229,7 @@ fn object_on(world: &World, pos: Pos) -> EntityId {
 
 #[test]
 fn picking_up_an_item_takes_it_off_the_map_into_the_cursor() {
-    let mut world = world(&["....."], &[(at(2, 0), "berry")], &[], &[]);
+    let mut world = starters(&["....."], &[(at(2, 0), "berry")], &[], &[]);
     let berry = object_on(&world, at(2, 0));
     world.submit(Command::PickUp { item: berry });
     let events = world.step();
@@ -278,23 +249,19 @@ fn picking_up_an_item_takes_it_off_the_map_into_the_cursor() {
 
 #[test]
 fn a_fixture_is_rooted_and_cant_be_picked_up() {
-    let mut world = world(&["....."], &[(at(2, 0), "berry_bush")], &[], &[]);
+    let mut world = starters(&["....."], &[(at(2, 0), "berry_bush")], &[], &[]);
     let bush = object_on(&world, at(2, 0));
     let command = Command::PickUp { item: bush };
-    world.submit(command.clone());
-    let events = world.step();
-    assert_eq!(refused(&events, command), Some(Rejection::Rooted));
+    assert_eq!(refusal(&mut world, command), Some(Rejection::Rooted));
     assert_eq!(world.object_at(at(2, 0)).map(|o| o.id()), Some(bush));
     assert!(world.cursor().holds().is_none());
 }
 
 #[test]
 fn an_item_that_is_gone_cant_be_picked_up() {
-    let mut world = world(&["....."], &[], &[], &[]);
+    let mut world = starters(&["....."], &[], &[], &[]);
     let command = Command::PickUp { item: EntityId(99) };
-    world.submit(command.clone());
-    let events = world.step();
-    assert_eq!(refused(&events, command), Some(Rejection::Gone));
+    assert_eq!(refusal(&mut world, command), Some(Rejection::Gone));
 }
 
 /// A world of `rows` and `objects` whose Cursor holds the item on `from`.
@@ -304,7 +271,7 @@ fn holding(
     sprites: &[Pos],
     from: Pos,
 ) -> (World, EntityId) {
-    let mut world = world(rows, objects, sprites, &[]);
+    let mut world = starters(rows, objects, sprites, &[]);
     let item = object_on(&world, from);
     world.submit(Command::PickUp { item });
     world.step();
@@ -333,7 +300,7 @@ fn a_held_item_is_put_down_on_a_tile_at_rest() {
 #[test]
 fn an_item_may_be_put_down_under_a_sprite() {
     let rests = [(at(3, 0), ScriptedAction::Rest); 2];
-    let mut world = world(&["....."], &[(at(0, 0), "berry")], &[at(3, 0)], &rests);
+    let mut world = starters(&["....."], &[(at(0, 0), "berry")], &[at(3, 0)], &rests);
     let berry = object_on(&world, at(0, 0));
     world.submit(Command::PickUp { item: berry });
     world.submit(Command::PutDown { tile: at(3, 0) });
@@ -360,24 +327,20 @@ fn an_item_isnt_put_down_where_it_cant_go_and_the_refusal_names_what_is_in_the_w
     ];
     for (tile, blocker) in cases {
         let command = Command::PutDown { tile };
-        world.submit(command.clone());
-        let events = world.step();
         let reason = Rejection::InTheWay {
             item_type: ball,
             blocker,
         };
-        assert_eq!(refused(&events, command), Some(reason));
+        assert_eq!(refusal(&mut world, command), Some(reason));
         assert!(world.cursor().holds().is_some(), "still held");
     }
 }
 
 #[test]
 fn putting_down_with_nothing_held_is_refused() {
-    let mut world = world(&["....."], &[], &[], &[]);
+    let mut world = starters(&["....."], &[], &[], &[]);
     let command = Command::PutDown { tile: at(1, 0) };
-    world.submit(command.clone());
-    let events = world.step();
-    assert_eq!(refused(&events, command), Some(Rejection::NotHolding));
+    assert_eq!(refusal(&mut world, command), Some(Rejection::NotHolding));
 }
 
 #[test]
@@ -390,7 +353,7 @@ fn a_rolling_ball_picked_up_stops_rolling() {
         (kicker, ScriptedAction::Rest),
     ];
     let lane = ["...........", "...........", "..........."];
-    let mut world = world(&lane, &[(at(2, 1), "ball")], &[kicker], &script);
+    let mut world = starters(&lane, &[(at(2, 1), "ball")], &[kicker], &script);
     let ball = object_on(&world, at(2, 1));
     world.step();
     world.step();
@@ -486,7 +449,7 @@ fn a_held_items_location_conditions_are_false() {
 fn a_sprite_heading_for_an_item_that_is_picked_up_gives_up_as_it_is_gone() {
     let eater = at(0, 0);
     let script = [(eater, ScriptedAction::Eat { at: at(5, 0) })];
-    let mut world = world(&["......"], &[(at(5, 0), "berry")], &[eater], &script);
+    let mut world = starters(&["......"], &[(at(5, 0), "berry")], &[eater], &script);
     let (sprite, berry) = (id_at(&world, eater), object_on(&world, at(5, 0)));
     world.step();
     world.submit(Command::PickUp { item: berry });
@@ -505,7 +468,7 @@ fn a_sprite_heading_for_an_item_that_is_picked_up_gives_up_as_it_is_gone() {
 
 #[test]
 fn a_grab_and_a_let_go_queued_together_both_apply_on_the_next_tick() {
-    let mut world = world(&["....."], &[(at(3, 0), "ball")], &[at(0, 0)], &[]);
+    let mut world = starters(&["....."], &[(at(3, 0), "ball")], &[at(0, 0)], &[]);
     let (sprite, ball) = (id_at(&world, at(0, 0)), object_on(&world, at(3, 0)));
     world.submit(Command::TakeHold { sprite });
     world.submit(Command::LetGo);
@@ -523,18 +486,19 @@ fn a_grab_and_a_let_go_queued_together_both_apply_on_the_next_tick() {
 
 #[test]
 fn the_cursor_cant_be_moved_off_the_map() {
-    let mut world = world(&["....."], &[], &[], &[]);
+    let mut world = starters(&["....."], &[], &[], &[]);
     let command = Command::MoveCursor { tile: at(5, 0) };
-    world.submit(command.clone());
-    let events = world.step();
-    assert_eq!(refused(&events, command), Some(Rejection::OffTheMap));
+    assert_eq!(refusal(&mut world, command), Some(Rejection::OffTheMap));
 }
 
 #[test]
 fn where_the_cursor_is_is_part_of_the_worlds_state() {
     // Saves and replays carry it (design v23 §2.8).
     let rows = ["....."];
-    let (mut moved, mut still) = (world(&rows, &[], &[], &[]), world(&rows, &[], &[], &[]));
+    let (mut moved, mut still) = (
+        starters(&rows, &[], &[], &[]),
+        starters(&rows, &[], &[], &[]),
+    );
     moved.submit(Command::MoveCursor { tile: at(2, 0) });
     moved.step();
     still.step();
