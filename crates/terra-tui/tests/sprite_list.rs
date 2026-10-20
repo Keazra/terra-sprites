@@ -26,6 +26,11 @@ fn starting(chem: &str, value: f32, pack: &DataPack) -> Genome {
 /// drive, wandering to (8, 3); #2 at (110, 55), very hungry; #3 at (6, 1),
 /// thirsty; #4 at (4, 4), a little hungry. #1 is named Zed, and #3 Abel.
 fn field() -> World {
+    field_doing(&[])
+}
+
+/// The field, with these scripted actions as well as #1's.
+fn field_doing(scripts: &[(Pos, ScriptedAction)]) -> World {
     let pack = pack();
     let sprites = vec![
         (at(2, 3), None),
@@ -39,6 +44,7 @@ fn field() -> World {
     WorldBuilder::grass(120, 60)
         .sprites_with(sprites)
         .scripts(&[(at(2, 3), wander)])
+        .scripts(scripts)
         .newborns(&[at(2, 3), at(110, 55), at(6, 1), at(4, 4)])
         .data(pack)
         .seed(7)
@@ -406,7 +412,18 @@ fn slash_starts_a_filter_that_typing_narrows_and_the_title_counts_what_matches()
 
 #[test]
 fn the_filter_matches_any_column_the_row_shows() {
-    let mut world = field();
+    // Each sprite is given what it's doing, so its row doesn't hang on its
+    // brain's choice.
+    let mut world = field_doing(&[
+        (at(110, 55), ScriptedAction::Rest),
+        (
+            at(6, 1),
+            ScriptedAction::Wander {
+                destination: at(12, 1),
+            },
+        ),
+        (at(4, 4), ScriptedAction::Play { at: at(2, 3) }),
+    ]);
     let mut app = named(&mut world);
     app.apply(Action::SpriteList, &world);
     app.apply(Action::FilterList, &world);
