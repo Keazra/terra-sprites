@@ -102,6 +102,8 @@ The owner runs Gemini, and sometimes Codex, on each PR. Gemini's review is one r
 - Reply on every thread, saying what changed (with the commit) or why not, then resolve it. With `gh`: GraphQL `addPullRequestReviewThreadReply` (pass the body with `-F body=@file`), then `resolveReviewThread`.
 - Update the PR description to match.
 
+The owner can also have Claude review a PR, from the Actions tab: `.github/workflows/claude-review.yml` runs Claude Code with an API key, and works in any repository it's copied to. It reads only the checkout and what the workflow fetched, and gets this repository's notes from `.github/claude-review.md`. Its review goes in the run's summary, or as one comment headed "[Review from Claude]" when the owner asks for it to be posted. Its findings carry the same grades and confidence words as Gemini's and are answered the same way, in one reply on the PR that takes each finding in turn, since a comment has no threads.
+
 ## Cloud sessions
 
 - **Update Rust before running the checks:** `rustup update stable`. The container's toolchain can be older than the stable CI uses, and an older clippy flags lints CI doesn't: in slice 9e-b, 1.94 flagged `nonminimal_bool` in `inspector.rs`, on `main` too. Cargo's "requires rustc 1.97.1" error (#171) means run `rustup update stable`, not change the code. Raise `rust-version` when a newer API or dependency needs it (clippy's `incompatible_msrv` says so); it only has to stay at 1.97.1 or above.
