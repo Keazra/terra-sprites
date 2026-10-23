@@ -11,9 +11,11 @@
 #      should know about that repository. It also reads the repository's
 #      CLAUDE.md, AGENTS.md, CONTRIBUTING.md and REVIEW.md, where they exist.
 #
-# Every PR is reviewed once, when it's opened ready for review or marked
-# ready, unless it changes only Markdown files and docs/. That review is
-# posted on the PR as one comment. To review only by hand, comment out the
+# Every PR is reviewed when it's opened ready for review or marked ready,
+# unless it changes only Markdown files and docs/. A push after that doesn't
+# start another review; turning the PR back into a draft and marking it ready
+# again does. The review is posted on the PR as one comment, and a review
+# that didn't finish says so there. To review only by hand, comment out the
 # pull_request trigger below.
 #
 # It also runs from the Actions tab (Claude review > Run workflow) with one or
@@ -425,11 +427,27 @@ jobs:
           REPO: ${{ github.repository }}
           PRS: ${{ needs.plan.outputs.prs }}
           POST: ${{ github.event_name == 'pull_request' || inputs.post }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           python3 - <<'EOF'
           import json, os, subprocess
 
           repo, post = os.environ["REPO"], os.environ["POST"] == "true"
+          # A review that didn't finish still says so on its PR, so nobody
+          # waits for one that isn't coming.
+          retry = (f"\nNo review came of it. [The run]({os.environ['RUN_URL']}) says why; "
+                   "to try again, run Claude review from the Actions tab.\n")
+
+          def comment(pr, body):
+              with open("comment.md", "w") as f:
+                  f.write(body)
+              subprocess.run(
+                  ["gh", "api", f"repos/{repo}/issues/{pr}/comments",
+                   "-F", "body=@comment.md", "--silent"],
+                  check=True,
+              )
+              print(f"Posted on #{pr}")
+
           rows, reviews, total = [], [], 0.0
           for pr in json.loads(os.environ["PRS"]):
               folder = f"reviews/claude-review-{pr}"
@@ -438,6 +456,8 @@ jobs:
                       s = json.load(f)
               except OSError:
                   rows.append(f"| #{pr} | | | | | | | no result: see its job |")
+                  if post:
+                      comment(pr, f"## [Review from Claude] #{pr} didn't run to the end\n{retry}")
                   continue
               total += s.get("cost_usd", 0.0)
               rows.append(
@@ -446,14 +466,10 @@ jobs:
                   f"| ${s.get('cost_usd', 0.0):.2f} | {s['status']} |"
               )
               with open(f"{folder}/review.md") as f:
-                  reviews.append(f.read())
-              if post and s["status"] == "done":
-                  subprocess.run(
-                      ["gh", "api", f"repos/{repo}/issues/{pr}/comments",
-                       "-F", f"body=@{folder}/review.md", "--silent"],
-                      check=True,
-                  )
-                  print(f"Posted the review of #{pr}")
+                  review = f.read()
+              reviews.append(review)
+              if post:
+                  comment(pr, review if s["status"] == "done" else review + retry)
 
           table = [
               "## Claude review", "",
