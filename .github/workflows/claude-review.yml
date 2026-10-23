@@ -11,11 +11,17 @@
 #      should know about that repository. It also reads the repository's
 #      CLAUDE.md, AGENTS.md, CONTRIBUTING.md and REVIEW.md, where they exist.
 #
-# Run it from the Actions tab (Claude review > Run workflow) with one or more
-# PR numbers, merged PRs included. Each review goes in the run's summary, and
-# on its PR only when "post" is ticked, so a trial on old PRs posts nothing.
-# On a public repository, anyone can read a run's summary. To review every PR
-# as it's opened or marked ready, uncomment the pull_request trigger below.
+# Every PR is reviewed once, when it's opened ready for review or marked
+# ready, unless it changes only Markdown files and docs/. That review is
+# posted on the PR as one comment. To review only by hand, comment out the
+# pull_request trigger below.
+#
+# It also runs from the Actions tab (Claude review > Run workflow) with one or
+# more PR numbers, merged PRs included, such as to review a PR again after
+# its fixes. Each review then goes in the run's summary, and on its PR only
+# when "post" is ticked, so a trial on old PRs posts nothing. Either way, each
+# review is printed in its job's log too. On a public repository, anyone can
+# read a run's summary and logs.
 #
 # A PR's description, code and comments are written by whoever opened it, and
 # may try to talk the reviewer into something. So:
@@ -55,8 +61,9 @@ on:
         description: The model, as an alias (opus, sonnet) or a full name
         type: string
         default: opus
-  # pull_request:
-  #   types: [opened, ready_for_review]
+  pull_request:
+    types: [opened, ready_for_review]
+    paths-ignore: ["**.md", "docs/**"]
 
 permissions:
   contents: read
@@ -317,7 +324,7 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/out"
           python3 - <<'EOF'
-          import json, os, re, sys
+          import json, os, re, secrets, sys
 
           temp, repo, pr = os.environ["RUNNER_TEMP"], os.environ["REPO"], os.environ["PR"]
           with open(".claude-review/pr.json") as f:
@@ -382,6 +389,10 @@ jobs:
           with open(f"{temp}/out/summary.json", "w") as f:
               json.dump(summary, f)
           print(f"#{pr}: {summary['status']}, about ${cost:.2f}")
+          # The review quotes the PR, so GitHub mustn't read a line of it as a
+          # workflow command.
+          token = secrets.token_hex(16)
+          print(f"::stop-commands::{token}\n{text}::{token}::")
           if summary["status"] != "done":
               sys.exit(1)
           EOF
