@@ -11,11 +11,19 @@
 #      should know about that repository. It also reads the repository's
 #      CLAUDE.md, AGENTS.md, CONTRIBUTING.md and REVIEW.md, where they exist.
 #
-# Run it from the Actions tab (Claude review > Run workflow) with one or more
-# PR numbers, merged PRs included. Each review goes in the run's summary, and
-# on its PR only when "post" is ticked, so a trial on old PRs posts nothing.
-# On a public repository, anyone can read a run's summary. To review every PR
-# as it's opened or marked ready, uncomment the pull_request trigger below.
+# Every PR is reviewed when it's opened ready for review or marked ready,
+# unless it changes only Markdown files and docs/. A push after that doesn't
+# start another review; turning the PR back into a draft and marking it ready
+# again does. The review is posted on the PR as one comment, and a review
+# that didn't finish says so there. To review only by hand, comment out the
+# pull_request trigger below.
+#
+# It also runs from the Actions tab (Claude review > Run workflow) with one or
+# more PR numbers, merged PRs included, such as to review a PR again after
+# its fixes. Each review then goes in the run's summary, and on its PR only
+# when "post" is ticked, so a trial on old PRs posts nothing. Either way, each
+# review is printed in its job's log too. On a public repository, anyone can
+# read a run's summary and logs.
 #
 # A PR's description, code and comments are written by whoever opened it, and
 # may try to talk the reviewer into something. So:
@@ -55,8 +63,9 @@ on:
         description: The model, as an alias (opus, sonnet) or a full name
         type: string
         default: opus
-  # pull_request:
-  #   types: [opened, ready_for_review]
+  pull_request:
+    types: [opened, ready_for_review]
+    paths-ignore: ["**.md", "docs/**"]
 
 permissions:
   contents: read
@@ -317,7 +326,7 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/out"
           python3 - <<'EOF'
-          import json, os, re, sys
+          import json, os, re, secrets, sys
 
           temp, repo, pr = os.environ["RUNNER_TEMP"], os.environ["REPO"], os.environ["PR"]
           with open(".claude-review/pr.json") as f:
@@ -382,6 +391,10 @@ jobs:
           with open(f"{temp}/out/summary.json", "w") as f:
               json.dump(summary, f)
           print(f"#{pr}: {summary['status']}, about ${cost:.2f}")
+          # The review quotes the PR, so GitHub mustn't read a line of it as a
+          # workflow command.
+          token = secrets.token_hex(16)
+          print(f"::stop-commands::{token}\n{text}::{token}::")
           if summary["status"] != "done":
               sys.exit(1)
           EOF
@@ -414,11 +427,27 @@ jobs:
           REPO: ${{ github.repository }}
           PRS: ${{ needs.plan.outputs.prs }}
           POST: ${{ github.event_name == 'pull_request' || inputs.post }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           python3 - <<'EOF'
           import json, os, subprocess
 
           repo, post = os.environ["REPO"], os.environ["POST"] == "true"
+          # A review that didn't finish still says so on its PR, so nobody
+          # waits for one that isn't coming.
+          retry = (f"\nNo review came of it. [The run]({os.environ['RUN_URL']}) says why; "
+                   "to try again, run Claude review from the Actions tab.\n")
+
+          def comment(pr, body):
+              with open("comment.md", "w") as f:
+                  f.write(body)
+              subprocess.run(
+                  ["gh", "api", f"repos/{repo}/issues/{pr}/comments",
+                   "-F", "body=@comment.md", "--silent"],
+                  check=True,
+              )
+              print(f"Posted on #{pr}")
+
           rows, reviews, total = [], [], 0.0
           for pr in json.loads(os.environ["PRS"]):
               folder = f"reviews/claude-review-{pr}"
@@ -427,6 +456,8 @@ jobs:
                       s = json.load(f)
               except OSError:
                   rows.append(f"| #{pr} | | | | | | | no result: see its job |")
+                  if post:
+                      comment(pr, f"## [Review from Claude] #{pr} didn't run to the end\n{retry}")
                   continue
               total += s.get("cost_usd", 0.0)
               rows.append(
@@ -435,14 +466,10 @@ jobs:
                   f"| ${s.get('cost_usd', 0.0):.2f} | {s['status']} |"
               )
               with open(f"{folder}/review.md") as f:
-                  reviews.append(f.read())
-              if post and s["status"] == "done":
-                  subprocess.run(
-                      ["gh", "api", f"repos/{repo}/issues/{pr}/comments",
-                       "-F", f"body=@{folder}/review.md", "--silent"],
-                      check=True,
-                  )
-                  print(f"Posted the review of #{pr}")
+                  review = f.read()
+              reviews.append(review)
+              if post:
+                  comment(pr, review if s["status"] == "done" else review + retry)
 
           table = [
               "## Claude review", "",
