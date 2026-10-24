@@ -516,12 +516,10 @@ fn draw_cursor(buf: &mut Buffer, app: &App, world: &World) {
     for (dx, dy, glyph) in pieces {
         let x = centre.x.checked_add_signed(dx);
         let y = centre.y.checked_add_signed(dy);
-        if let Some((x, y)) = x.zip(y)
-            && app.tile_at(Position::new(x, y)).is_some()
+        if let Some(cell) = x.zip(y).map(|(x, y)| Position::new(x, y))
+            && app.tile_at(cell).is_some()
         {
-            buf[(x, y)]
-                .set_char(glyph)
-                .set_style(Style::default().fg(mark.fg));
+            put(buf, cell, glyph, mark.fg);
         }
     }
 }
@@ -532,20 +530,9 @@ fn draw_cursor(buf: &mut Buffer, app: &App, world: &World) {
 /// Cursor, it isn't drawn while the Cursor is out of reach in space (M2
 /// design §11.4).
 fn draw_leash(buf: &mut Buffer, app: &App, world: &World) {
-    let Some(led) = app.leash().filter(|_| app.shown_cursor().is_some()) else {
-        return;
-    };
-    let cursor = app.cursor();
-    let dot = app.theme.leash();
-    let items = app.shown_items(world);
-    for tile in line_between(led, cursor) {
-        let by_the_cursor = tile.x.abs_diff(cursor.x) <= 1 && tile.y.abs_diff(cursor.y) <= 1;
-        let empty = empty(world, &items, tile);
-        if let Some(cell) = app.cell_of(tile).filter(|_| empty && !by_the_cursor) {
-            buf[(cell.x, cell.y)]
-                .set_char(dot.symbol)
-                .set_style(Style::default().fg(dot.fg));
-        }
+    if let Some(led) = app.leash().filter(|_| app.shown_cursor().is_some()) {
+        let tiles = line_between(led, app.cursor());
+        draw_dots(buf, app, world, &tiles, app.theme.leash());
     }
 }
 
@@ -554,20 +541,8 @@ fn draw_leash(buf: &mut Buffer, app: &App, world: &World) {
 /// clear of the Cursor (design v25 §6.5). Its end is `draw_aim_end`'s.
 fn draw_aim_line(buf: &mut Buffer, app: &App, world: &World) {
     let line = app.aim_line(world);
-    let cursor = app.cursor();
-    let dot = app.theme.aim();
-    let items = app.shown_items(world);
-    for &tile in line.iter().rev().skip(1) {
-        let by_the_cursor = tile.x.abs_diff(cursor.x) <= 1 && tile.y.abs_diff(cursor.y) <= 1;
-        if let Some(cell) = app
-            .cell_of(tile)
-            .filter(|_| empty(world, &items, tile) && !by_the_cursor)
-        {
-            buf[(cell.x, cell.y)]
-                .set_char(dot.symbol)
-                .set_style(Style::default().fg(dot.fg));
-        }
-    }
+    let path = &line[..line.len().saturating_sub(1)];
+    draw_dots(buf, app, world, path, app.theme.aim());
 }
 
 /// Draws the aim line's end, where the thing would stop if nothing's in the
@@ -579,15 +554,30 @@ fn draw_aim_end(buf: &mut Buffer, app: &App, world: &World) {
         return;
     };
     let mark = app.theme.aim_end();
-    let items = app.shown_items(world);
-    if let Some(cell) = app
-        .cell_of(end)
-        .filter(|_| empty(world, &items, end) && end != app.cursor())
-    {
-        buf[(cell.x, cell.y)]
-            .set_char(mark.symbol)
-            .set_style(Style::default().fg(mark.fg));
+    let clear = empty(world, &app.shown_items(world), end) && end != app.cursor();
+    if let Some(cell) = app.cell_of(end).filter(|_| clear) {
+        put(buf, cell, mark.symbol, mark.fg);
     }
+}
+
+/// Draws `dot` on each of `tiles` in view that's empty ground and clear of
+/// the Cursor's 3×3, as the leash and the aim line are drawn.
+fn draw_dots(buf: &mut Buffer, app: &App, world: &World, tiles: &[Pos], dot: Glyph) {
+    let (cursor, items) = (app.cursor(), app.shown_items(world));
+    for &tile in tiles {
+        let by_the_cursor = tile.x.abs_diff(cursor.x) <= 1 && tile.y.abs_diff(cursor.y) <= 1;
+        let clear = empty(world, &items, tile) && !by_the_cursor;
+        if let Some(cell) = app.cell_of(tile).filter(|_| clear) {
+            put(buf, cell, dot.symbol, dot.fg);
+        }
+    }
+}
+
+/// Draws `symbol` at screen cell `cell`, in `fg`.
+fn put(buf: &mut Buffer, cell: Position, symbol: char, fg: Color) {
+    buf[(cell.x, cell.y)]
+        .set_char(symbol)
+        .set_style(Style::default().fg(fg));
 }
 
 /// Whether `tile` holds no sprite and, as the map shows them, no item.
@@ -673,9 +663,7 @@ fn render_help(buf: &mut Buffer, app: &App, world: &World) {
     };
     let inner = clear_box(buf, area, " Help ", " esc close ");
     let lines = crate::help::lines(app, world, usize::from(inner.width));
-    for (row, line) in (inner.y..inner.bottom()).zip(&lines) {
-        buf.set_line(inner.x, row, line, inner.width);
-    }
+    draw_lines(buf, inner, &lines);
 }
 
 /// Draws the sprite list over everything between the top bar and the
@@ -697,9 +685,7 @@ fn render_sprite_list(buf: &mut Buffer, app: &App, world: &World) {
         app.list_first(world),
         app.list_rows(),
     );
-    for (row, line) in (inner.y..inner.bottom()).zip(&lines) {
-        buf.set_line(inner.x, row, line, inner.width);
-    }
+    draw_lines(buf, inner, &lines);
 }
 
 /// Draws the population graph over everything between the top bar and the
@@ -724,9 +710,7 @@ fn render_population(buf: &mut Buffer, app: &App, world: &World) {
         usize::from(inner.width),
         usize::from(inner.height),
     );
-    for (row, line) in (inner.y..inner.bottom()).zip(&lines) {
-        buf.set_line(inner.x, row, line, inner.width);
-    }
+    draw_lines(buf, inner, &lines);
 }
 
 /// Draws the family tree over everything between the top bar and the
@@ -749,11 +733,8 @@ fn render_family_tree(buf: &mut Buffer, app: &App, world: &World) {
         buf.set_string(inner.x, inner.y, NOTHING_SELECTED, Style::default());
     }
     // Nothing more if the policy hides the sprite in the middle.
-    let Some(tree) = app.tree(world) else {
-        return;
-    };
-    for (row, line) in (inner.y..inner.bottom()).zip(&tree.lines) {
-        buf.set_line(inner.x, row, line, inner.width);
+    if let Some(tree) = app.tree(world) {
+        draw_lines(buf, inner, &tree.lines);
     }
 }
 
@@ -778,6 +759,14 @@ fn render_debug_overlay(buf: &mut Buffer, map_view: Rect, app: &App) {
             usize::from(inside.width),
             Style::default(),
         );
+    }
+}
+
+/// Draws `lines` down `inner` from its top, as many as fit, each cut to its
+/// width.
+fn draw_lines(buf: &mut Buffer, inner: Rect, lines: &[Line]) {
+    for (row, line) in (inner.y..inner.bottom()).zip(lines) {
+        buf.set_line(inner.x, row, line, inner.width);
     }
 }
 
