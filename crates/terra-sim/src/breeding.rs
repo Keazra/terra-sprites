@@ -18,6 +18,7 @@ use crate::map::Dir;
 use crate::mutation::{self, Copied, CopyChange, CopyingError};
 use crate::objects::EntityId;
 use crate::perception::Target;
+use crate::physiology::RoomNearby;
 use crate::random::uniform;
 use crate::registry::Verb;
 use crate::sprites::{Genes, Sprite, check_genes};
@@ -110,23 +111,76 @@ pub(crate) fn room(state: &WorldState) -> bool {
     state.sprites.len() + state.objects.eggs() < usize::from(state.most_sprites)
 }
 
-/// Whether `sprite` is fertile now (M2 design §10): in a pack with
-/// breeding and an egg type, grown up, fed and watered, rested long enough
-/// since its last egg, in a world with `room` for another sprite. A save
-/// from before breeding keeps its pack, which has none.
+/// Whether a sprite can breed now, and if its body could but room stops it,
+/// which room (M2 design §10.2, §10.6).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Fertility {
+    /// It can breed.
+    Fertile,
+    /// Its body could breed, but the world is full (§10.6): no sprite can
+    /// until one dies.
+    WorldFull,
+    /// Its body could breed, and the world has room, but too many other
+    /// grown sprites are near it: it has no room nearby (§10.2, #331).
+    Crowded,
+    /// Its body can't: it's young, hungry, thirsty or resting since its last
+    /// egg, or its pack has no breeding.
+    Infertile,
+}
+
+/// Whether `sprite` is fertile now (M2 design §10): see `fertility`.
 pub(crate) fn fertile(state: &WorldState, sprite: &Sprite, data: &DataPack) -> bool {
+    fertility(state, sprite, data) == Fertility::Fertile
+}
+
+/// Whether `sprite` can breed now (M2 design §10.2). It's fertile in a pack
+/// with breeding and an egg type, grown up, fed and watered, rested long
+/// enough since its last egg, in a world with `room` for another sprite,
+/// and with room nearby. A save from before breeding keeps its pack, which
+/// has none. The world's room is asked first, since only a death makes it,
+/// and the room nearby last, since it's the one that counts other sprites.
+pub(crate) fn fertility(state: &WorldState, sprite: &Sprite, data: &DataPack) -> Fertility {
     let physiology = data.physiology();
     let (breeding, indices) = (&physiology.breeding, physiology.indices);
     let chems = &sprite.body.chems;
-    indices.breeding.is_some()
+    let able = indices.breeding.is_some()
         && data.egg_type().is_some()
-        && room(state)
         && sprite.stage().is_grown()
         && chems[indices.energy] > breeding.fed
         && chems[indices.hydration] > breeding.fed
         && sprite
             .last_bred
-            .is_none_or(|last| state.tick >= last.saturating_add(breeding.rest))
+            .is_none_or(|last| state.tick >= last.saturating_add(breeding.rest));
+    if !able {
+        Fertility::Infertile
+    } else if !room(state) {
+        Fertility::WorldFull
+    } else if breeding
+        .room_nearby
+        .is_some_and(|room| crowded(state, sprite, room))
+    {
+        Fertility::Crowded
+    } else {
+        Fertility::Fertile
+    }
+}
+
+/// Whether `room`'s `fewer_than` or more other grown sprites, adult or old,
+/// a partner included, are within its `within` tiles of `sprite`, as the
+/// crow flies (M2 design §10.2, #331). Young sprites and eggs don't count.
+fn crowded(state: &WorldState, sprite: &Sprite, room: RoomNearby) -> bool {
+    let reach = u64::from(room.within).pow(2);
+    let near = state
+        .sprites
+        .iter()
+        .filter(|&(_, other)| !std::ptr::eq(other, sprite) && other.stage().is_grown())
+        .filter(|(_, other)| {
+            let dx = u64::from(other.pos.x.abs_diff(sprite.pos.x));
+            let dy = u64::from(other.pos.y.abs_diff(sprite.pos.y));
+            dx * dx + dy * dy <= reach
+        })
+        .count();
+    near >= usize::from(room.fewer_than)
 }
 
 /// Sprite `actor`, beside `target`, tries to mate with it, once (M2 design
@@ -348,6 +402,20 @@ mod tests {
         world.step();
         assert!(world.cursor().holds().is_some_and(|held| held.id() == egg));
         assert!(!laid(&mut world), "a second egg while the first is held");
+    }
+
+    #[test]
+    fn a_full_world_says_so_before_room_nearby() {
+        // M2 design §10.2, §10.6: five sprites close together, each with
+        // four others near, are crowded while the world has room, and in a
+        // full world it's the world that's full, since only a death can
+        // make room.
+        let tiles = [at(0, 0), at(2, 0), at(4, 0), at(1, 2), at(3, 2)];
+        let mut world = WorldBuilder::new(&FIELD).starters(&tiles).build();
+        let fertility = |world: &World| world.sprites().map(|s| s.fertility()).collect::<Vec<_>>();
+        assert_eq!(fertility(&world), [Fertility::Crowded; 5]);
+        world.set_most_sprites(5);
+        assert_eq!(fertility(&world), [Fertility::WorldFull; 5]);
     }
 
     #[test]

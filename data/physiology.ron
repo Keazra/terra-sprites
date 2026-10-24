@@ -78,26 +78,28 @@
     ),
     // Having young (M2 design §10). An egg is an item, `egg` in objects.ron,
     // which says when it hatches (M2 design §10.4). It costs its parents
-    // `cost` energy in all, split between them, or all of it for one
-    // breeding alone. An adult is fertile while its energy and hydration are
-    // both above `fed`, and `rest` ticks or more after its last egg, in a
-    // pack with an egg. Every sprite hatches male; an adult male
-    // turns female for good once its `feminiser` hormone is above
-    // `turns_female`. A female can breed alone only after `alone_after`
-    // ticks, an hour at 1x, with no male adult seen or heard (M2 design
-    // §15.7). A pair can mate only once the female's `receptivity` hormone
-    // is at least `receptive` (§15.3). Two sprites that have an egg
-    // together are partners, until one dies or they go `apart` ticks, an
-    // hour at 1x, with neither seeing nor hearing the other (§15.4). The
-    // need `drive` drives breeding: whatever the genes, it works only
-    // between adults, and what easing it teaches is only about the partner
-    // (M2 design §5). A pair's egg takes its genes from one parent in
-    // stretches: at each gene it switches to the other with the chance
-    // `crossover` (M2 design §12).
+    // `cost` energy in all, split between them, or all of it for one breeding
+    // alone. An adult is fertile while its energy and hydration are both
+    // above `fed`, and `rest` ticks or more after its last egg, in a pack
+    // with an egg, and while it has room nearby: fewer than `fewer_than`
+    // other grown sprites, adult or old, within `within` tiles, as the crow
+    // flies (§10.2, #331). Every sprite hatches male; an adult male turns
+    // female for good once its `feminiser` hormone is above `turns_female`. A
+    // female can breed alone only after `alone_after` ticks, an hour at 1x,
+    // with no male adult seen or heard (M2 design §15.7). A pair can mate
+    // only once the female's `receptivity` hormone is at least `receptive`
+    // (§15.3). Two sprites that have an egg together are partners, until one
+    // dies or they go `apart` ticks, an hour at 1x, with neither seeing nor
+    // hearing the other (§15.4). The need `drive` drives breeding: whatever
+    // the genes, it works only between adults, and what easing it teaches is
+    // only about the partner (M2 design §5). A pair's egg takes its genes
+    // from one parent in stretches: at each gene it switches to the other
+    // with the chance `crossover` (M2 design §12).
     breeding: (
         cost: 0.3,
         fed: 0.4,
         rest: 1500,
+        room_nearby: (within: 10, fewer_than: 4),
         turns_female: 0.8,
         alone_after: 4500,
         receptive: 0.5,

@@ -558,6 +558,11 @@ pub(crate) struct Breeding {
     pub(crate) fed: f32,
     /// How many ticks after its last egg an adult is fertile again.
     pub(crate) rest: u64,
+    /// How few other grown sprites must be near an adult for it to be
+    /// fertile (M2 design §10.2, #331). A pack from before room nearby has
+    /// none: only the world's limit holds breeding back.
+    #[serde(default)]
+    pub(crate) room_nearby: Option<RoomNearby>,
     /// The level of the hormone `feminiser` at which a male adult turns
     /// female, for good.
     pub(crate) turns_female: f32,
@@ -592,6 +597,17 @@ pub(crate) struct Breeding {
     pub(crate) crossover: f32,
 }
 
+/// Room nearby (M2 design §10.2, #331): an adult is fertile only while
+/// fewer than `fewer_than` other grown sprites, adult or old, are within
+/// `within` tiles of it, as the crow flies. Young sprites and eggs don't
+/// count.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct RoomNearby {
+    pub(crate) within: u16,
+    pub(crate) fewer_than: u16,
+}
+
 /// The `crossover` of a pack from before stretches: each gene from either
 /// parent, as a coin toss.
 fn gene_by_gene() -> f32 {
@@ -607,6 +623,8 @@ impl Default for Breeding {
             cost: 0.3,
             fed: 0.4,
             rest: 1_500,
+            // From before room nearby too (#331).
+            room_nearby: None,
             turns_female: 0.8,
             breeds_alone: None,
             alone_after: Some(4_500),
@@ -1499,7 +1517,13 @@ mod tests {
             ..physiology.ageing
         };
         assert_eq!(Ageing::default(), ageing);
-        assert_eq!(Breeding::default(), physiology.breeding);
+        // And from before room nearby (#331), so only the world's limit
+        // holds its breeding back.
+        let breeding = Breeding {
+            room_nearby: None,
+            ..physiology.breeding.clone()
+        };
+        assert_eq!(Breeding::default(), breeding);
         assert_eq!(Calls::default(), physiology.calls);
         assert_eq!(grows_up_range(), physiology.traits.grows_up);
     }

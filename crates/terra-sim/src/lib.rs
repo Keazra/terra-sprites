@@ -68,7 +68,7 @@ pub use action::{ActionView, Hurt, Outcome, Progress, ScriptedAction};
 pub use ageing::{LifeStage, Switch};
 pub use biochem::Traits;
 pub use brain::{Contribution, Explanation, Learned, Memory, Part, RememberedPlace, Thing};
-pub use breeding::Sex;
+pub use breeding::{Fertility, Sex};
 pub use command::{Blocker, Command, CursorTouch, PlaceRule, Rejection};
 pub use config::{ConfigError, WorldConfig};
 pub use cp437::is_cp437;

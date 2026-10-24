@@ -10,7 +10,7 @@ use crate::action::{self, ActionView, ScriptedAction, chebyshev};
 use crate::ageing::{LifeStage, Switch};
 use crate::biochem::{self, Senses, Traits};
 use crate::brain::{self, Explanation, Memory, RememberedPlace};
-use crate::breeding::{self, Sex, Unhatched};
+use crate::breeding::{self, Fertility, Sex, Unhatched};
 use crate::command::{self, Command};
 use crate::config::{MOST_SPRITES, WorldConfig};
 use crate::courtship::{self, Company};
@@ -662,10 +662,17 @@ impl<'a> SpriteView<'a> {
     }
 
     /// Whether it's fertile now (M2 design §10): grown up, fed, watered and
-    /// rested since its last egg, in a world with room for another sprite.
+    /// rested since its last egg, in a world with room for another sprite,
+    /// and with room nearby (§10.2).
     pub fn is_fertile(&self) -> bool {
+        self.fertility() == Fertility::Fertile
+    }
+
+    /// Whether it can breed now, and if its body could but room stops it,
+    /// which room (M2 design §10.2, §10.6).
+    pub fn fertility(&self) -> Fertility {
         let state = &self.world.state;
-        breeding::fertile(state, self.sprite, &self.world.data)
+        breeding::fertility(state, self.sprite, &self.world.data)
     }
 
     /// The level of its `feminiser` hormone over the level at which a male
