@@ -1775,28 +1775,22 @@ impl App {
         self.place_at(cell)?.tile()
     }
 
-    /// The tile the pointer on screen cell `cell` points at (design v27 §6.5):
-    /// the one up and to the left of the tile under it, so the pointer's
-    /// arrow rests on the Cursor's corner rather than hiding it. On the map
-    /// view's top row it stays in that row, and on its left column in that
-    /// column; and the border just right of or below the tiles points at the
-    /// last column or row, so every tile in view can be pointed at. Past
-    /// the wall, at the glass or space, it points at no tile (M2 design
-    /// §11.4).
-    pub fn pointed_at(&self, cell: Position) -> Option<Pos> {
-        self.pointed_place(cell)?.tile()
-    }
-
-    /// What the pointer on screen cell `cell` points at, as `pointed_at`
+    /// What the pointer on screen cell `cell` points at, as `pointed_spot`
     /// says, if it's over the map view: a tile, the glass or space.
     fn pointed_place(&self, cell: Position) -> Option<Place> {
         let (x, y) = self.pointed_spot(cell)?;
         Some(Place::at(x, y, self.map_size))
     }
 
-    /// Where the pointer on screen cell `cell` points, as `pointed_at`
-    /// says, in the map's tile coordinates, which run on past the wall, if
-    /// it's over the map view.
+    /// Where the pointer on screen cell `cell` points (design v27 §6.5), in
+    /// the map's tile coordinates, which run on past the wall, if it's over
+    /// the map view: the tile up and to the left of the one under it, so the
+    /// pointer's arrow rests on the Cursor's corner rather than hiding it.
+    /// On the map view's top row it stays in that row, and on its left
+    /// column in that column; and the border just right of or below the
+    /// tiles points at the last column or row, so every tile in view can be
+    /// pointed at. Past the wall, at the glass or space, it points at no
+    /// tile (M2 design §11.4).
     fn pointed_spot(&self, cell: Position) -> Option<(i32, i32)> {
         let area = self.tile_area;
         let reach = Rect::new(
@@ -1844,6 +1838,10 @@ impl App {
             self.debug.toggle();
             return Flow::Continue;
         }
+        // `Ctrl+C` quits at once, whatever is open, as on the title screen.
+        if action == Action::Quit {
+            return Flow::Quit;
+        }
         match self.screen {
             Screen::PlaceMenu | Screen::GenomeMenu | Screen::LoadMenu | Screen::ThemeMenu => {
                 return self.apply_in_menu(action, world);
@@ -1859,7 +1857,7 @@ impl App {
         }
         if self.screen == Screen::QuitPrompt {
             match action {
-                Action::Confirm | Action::Quit => return Flow::Quit,
+                Action::Confirm => return Flow::Quit,
                 // `t`, which tracks a sprite elsewhere, goes back to the
                 // title screen (M2 design §8.4).
                 Action::Track => return Flow::Title,
@@ -2038,13 +2036,13 @@ impl App {
             | Action::AnotherName
             | Action::HelpReleased
             | Action::FilterList
-            | Action::DebugOverlay => {}
+            | Action::DebugOverlay
+            | Action::Quit => {}
             Action::Enter => {
                 if let Some(at) = self.mouse {
                     self.toggle_lesson(at, world);
                 }
             }
-            Action::Quit => return Flow::Quit,
         }
         // Only Grab mode aims.
         if self.mode != CursorMode::Grab {
@@ -2390,7 +2388,6 @@ impl App {
     fn apply_in_help(&mut self, action: Action) -> Flow {
         match action {
             Action::Help | Action::Back => self.screen = Screen::Normal,
-            Action::Quit => return Flow::Quit,
             Action::Point(cell) => self.point(cell),
             _ => {}
         }
@@ -2443,7 +2440,6 @@ impl App {
                 self.screen = Screen::Normal;
                 self.graph_pick = None;
             }
-            Action::Quit => return Flow::Quit,
             _ => {}
         }
         Flow::Continue
@@ -2527,7 +2523,6 @@ impl App {
             Action::SelectNext => self.redraw_tree_along(world, Direction::Next),
             Action::SelectPrevious => self.redraw_tree_along(world, Direction::Previous),
             Action::FamilyTree | Action::Back => self.screen = Screen::Normal,
-            Action::Quit => return Flow::Quit,
             _ => {}
         }
         Flow::Continue
@@ -2663,7 +2658,6 @@ impl App {
             Action::Point(cell) => self.point(cell),
             Action::FilterList => self.list_filter = Some(Draft::offered(String::new())),
             Action::SpriteList | Action::Back => self.screen = Screen::Normal,
-            Action::Quit => return Flow::Quit,
             _ => {}
         }
         Flow::Continue
@@ -2942,7 +2936,6 @@ impl App {
             }
             Action::Point(cell) => self.point(cell),
             Action::Back => self.screen = Screen::Normal,
-            Action::Quit => return Flow::Quit,
             _ => {}
         }
         self.settle_cursor(world);
@@ -3131,7 +3124,6 @@ impl App {
                 self.naming = None;
                 self.screen = Screen::Normal;
             }
-            Action::Quit => return Flow::Quit,
             Action::Point(cell) => self.point(cell),
             _ => {}
         }
@@ -3441,7 +3433,6 @@ impl App {
                 self.save_naming = None;
                 self.screen = Screen::Normal;
             }
-            Action::Quit => return Flow::Quit,
             Action::Point(cell) => self.point(cell),
             _ => {}
         }
@@ -3534,7 +3525,6 @@ impl App {
                     self.load(file);
                 }
             }
-            Action::Quit => return Flow::Quit,
             Action::Point(cell) => self.point(cell),
             _ if action.is_pointer() => {}
             _ => {
