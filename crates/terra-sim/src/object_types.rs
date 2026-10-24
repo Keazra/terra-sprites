@@ -251,12 +251,10 @@ pub(crate) fn object_types(
         .map(|t| t.name.as_str())
         .collect();
     if let [first, second, ..] = hatching[..] {
-        return Err(DataError::Invalid {
-            file: OBJECTS.into(),
-            message: format!(
-                "`{first}` and `{second}` both hatch, but a mother lays one kind of egg"
-            ),
-        });
+        return Err(DataError::invalid(
+            OBJECTS,
+            format!("`{first}` and `{second}` both hatch, but a mother lays one kind of egg"),
+        ));
     }
     let names = Names {
         types: entries
@@ -280,10 +278,9 @@ pub(crate) fn object_types(
         .into_iter()
         .map(|entry| {
             let name = entry.name.clone();
-            entry.resolve(&names).map_err(|problem| DataError::Invalid {
-                file: OBJECTS.into(),
-                message: format!("`{name}`: {problem}"),
-            })
+            entry
+                .resolve(&names)
+                .map_err(|problem| DataError::invalid(OBJECTS, format!("`{name}`: {problem}")))
         })
         .collect()
 }

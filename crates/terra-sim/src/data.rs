@@ -85,6 +85,16 @@ pub enum DataError {
     Invalid { file: String, message: String },
 }
 
+impl DataError {
+    /// `file` parses but breaks a rule of its format, as `message` says.
+    pub(crate) fn invalid(file: impl Into<String>, message: impl Into<String>) -> DataError {
+        DataError::Invalid {
+            file: file.into(),
+            message: message.into(),
+        }
+    }
+}
+
 /// The name of the pack manifest, relative to the pack root.
 const MANIFEST: &str = "pack.ron";
 /// The terrain properties file, relative to the pack root.
@@ -123,10 +133,10 @@ impl Manifest {
     fn validate(&self) -> Result<(), DataError> {
         for (field, value) in [("name", &self.name), ("version", &self.version)] {
             if value.trim().is_empty() {
-                return Err(DataError::Invalid {
-                    file: MANIFEST.into(),
-                    message: format!("`{field}` must not be empty"),
-                });
+                return Err(DataError::invalid(
+                    MANIFEST,
+                    format!("`{field}` must not be empty"),
+                ));
             }
         }
         Ok(())
@@ -161,10 +171,8 @@ fn terrain_table(
         .iter()
         .map(|&terrain| {
             let name = terrain_name(terrain);
-            let invalid = |problem: &str| DataError::Invalid {
-                file: TERRAIN.into(),
-                message: format!("`{name}` {problem}"),
-            };
+            let invalid =
+                |problem: &str| DataError::invalid(TERRAIN, format!("`{name}` {problem}"));
             let entry = entries
                 .remove(&terrain)
                 .ok_or_else(|| invalid("is missing"))?;
@@ -271,12 +279,11 @@ impl DataPack {
         // hatch, and gets an egg type that takes as long (#196).
         if let Some(hatches) = physiology.old_hatches() {
             if has_egg(&entries) {
-                return Err(DataError::Invalid {
-                    file: PHYSIOLOGY.into(),
-                    message: "`breeding.hatches` is from before eggs were items: \
-                              an egg hatches as its type's stages in objects.ron say"
-                        .into(),
-                });
+                return Err(DataError::invalid(
+                    PHYSIOLOGY,
+                    "`breeding.hatches` is from before eggs were items: \
+                     an egg hatches as its type's stages in objects.ron say",
+                ));
             }
             upgrade_old_egg(&mut entries, hatches);
         }
@@ -287,25 +294,14 @@ impl DataPack {
             .iter()
             .map(|&place| brain_io.inputs[place].name.as_str())
             .collect();
-        let indices = Indices::find(&chemicals, &loci, &needs, physiology.drive()).map_err(
-            |(file, message)| DataError::Invalid {
-                file: file.into(),
-                message,
-            },
-        )?;
-        let physiology =
-            physiology
-                .validate(indices, &loci)
-                .map_err(|message| DataError::Invalid {
-                    file: PHYSIOLOGY.into(),
-                    message,
-                })?;
+        let indices = Indices::find(&chemicals, &loci, &needs, physiology.drive())
+            .map_err(|(file, message)| DataError::invalid(file, message))?;
+        let physiology = physiology
+            .validate(indices, &loci)
+            .map_err(|message| DataError::invalid(PHYSIOLOGY, message))?;
         let syllables = parse::<Syllables>(sources, NAMES)?
             .validate()
-            .map_err(|message| DataError::Invalid {
-                file: NAMES.into(),
-                message,
-            })?;
+            .map_err(|message| DataError::invalid(NAMES, message))?;
         let state_places: Vec<usize> = brain_io
             .inputs
             .iter()
@@ -765,10 +761,7 @@ impl DataPack {
 /// Reads the starter genome, which must be clean: a flagged or unknown gene in
 /// it would silently do nothing (design §4.3).
 fn starter_genome(text: &str, data: &DataPack) -> Result<Genome, DataError> {
-    let invalid = |message: String| DataError::Invalid {
-        file: STARTER.into(),
-        message,
-    };
+    let invalid = |message: String| DataError::invalid(STARTER, message);
     let genome = Genome::from_ron(text, data).map_err(|e| match e {
         GenomeError::Parse(message) => DataError::Parse {
             file: STARTER.into(),
@@ -847,10 +840,10 @@ pub(crate) fn check_unique<'a>(
         } else {
             continue;
         };
-        return Err(DataError::Invalid {
-            file: file.into(),
-            message: format!("{duplicate} is used more than once"),
-        });
+        return Err(DataError::invalid(
+            file,
+            format!("{duplicate} is used more than once"),
+        ));
     }
     Ok(())
 }
