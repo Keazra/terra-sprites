@@ -1991,22 +1991,27 @@ mod tests {
     use crate::mutation::{CopyChange, CopyingError};
     use crate::objects::Roll;
     use crate::registry::{ChemId, Verb};
-    use crate::test_util::id_at;
+    use crate::test_util::{
+        WorldBuilder, at, broken_presets, builtin, builtin_changing, id_at, lone, wander_to,
+    };
 
     /// A 7×5 field of grass, with a pool of shallow water at (5, 3), and a
-    /// berry bush at (2, 2), before any step.
+    /// berry bush at (2, 2), made from seed 7, for sprites to be added to.
+    fn field() -> WorldBuilder<'static> {
+        let rows = &[".......", ".......", ".......", ".....~.", "......."];
+        let bush = &[(Pos { x: 2, y: 2 }, "berry_bush")];
+        WorldBuilder::new(rows).objects(bush).seed(7)
+    }
+
+    /// The field with a bush, before any step.
     fn field_with_a_bush() -> World {
-        let data = DataPack::builtin().expect("built-in data pack is valid");
-        let rows = [".......", ".......", ".......", ".....~.", "......."];
-        let map = Map::from_ascii(&rows, &data).expect("valid drawing");
-        let scenario = Scenario {
-            map,
-            objects: &[(Pos { x: 2, y: 2 }, "berry_bush")],
-            sprites: &[],
-            scripted: &[],
-            newborns: &[],
-        };
-        World::from_scenario(scenario, data, 7).expect("valid scenario")
+        field().build()
+    }
+
+    /// A genome of only a speed trait of `value`, read with `data`.
+    fn speed(value: f32, data: &DataPack) -> Genome {
+        let text = format!(r#"(format: 1, genes: [Trait(trait: "speed", value: {value:?})])"#);
+        Genome::from_ron(&text, data).expect("a valid genome")
     }
 
     /// A save whose checksum holds but whose world doesn't fit its pack, as
@@ -2178,14 +2183,11 @@ mod tests {
     /// (design §2.7).
     #[test]
     fn a_save_whose_preset_breaks_a_rule_is_refused() {
-        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let data = builtin();
         let config = WorldConfig::builtin(&data);
         let world = World::new(config.clone(), data, 7);
         assert!(World::load(&world.save()).is_ok());
-        for (n, preset) in crate::test_util::broken_presets(&config)
-            .into_iter()
-            .enumerate()
-        {
+        for (n, preset) in broken_presets(&config).into_iter().enumerate() {
             let bytes = save::write(&save::Contents {
                 seed: world.seed,
                 config: Some(preset),
@@ -2363,17 +2365,7 @@ mod tests {
 
     /// The field with a bush, plus starter sprites at (5, 1) and (5, 2).
     fn field_with_sprites() -> (World, EntityId, EntityId) {
-        let data = DataPack::builtin().expect("built-in data pack is valid");
-        let rows = [".......", ".......", ".......", ".....~.", "......."];
-        let map = Map::from_ascii(&rows, &data).expect("valid drawing");
-        let scenario = Scenario {
-            map,
-            objects: &[(Pos { x: 2, y: 2 }, "berry_bush")],
-            sprites: &[(Pos { x: 5, y: 1 }, None), (Pos { x: 5, y: 2 }, None)],
-            scripted: &[],
-            newborns: &[],
-        };
-        let world = World::from_scenario(scenario, data, 7).expect("valid scenario");
+        let world = field().starters(&[at(5, 1), at(5, 2)]).build();
         let ids: Vec<EntityId> = world.sprites().map(|s| s.id()).collect();
         (world, ids[0], ids[1])
     }
@@ -2668,10 +2660,7 @@ mod tests {
 
     #[test]
     fn nearby_sprites_counts_the_others_within_3_tiles_over_4_capped_at_1() {
-        let data = DataPack::builtin().expect("built-in data pack is valid");
-        let map = Map::from_ascii(&["........."; 9], &data).expect("valid drawing");
-        let at = |x, y| (Pos { x, y }, None);
-        let sprites = [
+        let tiles = [
             at(3, 3),
             at(0, 0),
             at(6, 6),
@@ -2681,14 +2670,9 @@ mod tests {
             at(7, 3),
             at(8, 8),
         ];
-        let scenario = Scenario {
-            map,
-            objects: &[],
-            sprites: &sprites,
-            scripted: &[],
-            newborns: &[],
-        };
-        let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
+        let mut world = WorldBuilder::new(&["........."; 9])
+            .starters(&tiles)
+            .build();
         world.step();
         let index = world.data.physiology().indices.nearby_sprites;
         let reading = |x, y| {
@@ -2714,21 +2698,12 @@ mod tests {
     /// A row of grass `length` tiles long with one walker of speed 10, a
     /// step a tick, at its west end, starting on `scripted`.
     fn row_with_a_walker(length: usize, scripted: &[ScriptedAction]) -> (World, EntityId) {
-        let data = DataPack::builtin().expect("built-in data pack is valid");
         let row = ".".repeat(length);
-        let map = Map::from_ascii(&[row.as_str()], &data).expect("valid drawing");
-        let start = Pos { x: 0, y: 0 };
-        let scripted: Vec<(Pos, ScriptedAction)> = scripted.iter().map(|&a| (start, a)).collect();
-        let genes = r#"(format: 1, genes: [Trait(trait: "speed", value: 10.0)])"#;
-        let genome = Genome::from_ron(genes, &data).expect("a valid genome");
-        let scenario = Scenario {
-            map,
-            objects: &[],
-            sprites: &[(start, Some(genome))],
-            scripted: &scripted,
-            newborns: &[],
-        };
-        let world = World::from_scenario(scenario, data, 1).expect("valid scenario");
+        let start = at(0, 0);
+        let world = WorldBuilder::new(&[row.as_str()])
+            .sprites_made(&[(start, |data| speed(10.0, data))])
+            .script(start, scripted)
+            .build();
         let id = world.sprites().next().expect("the walker").id();
         (world, id)
     }
@@ -2775,22 +2750,11 @@ mod tests {
         // Speed 4: 40 tenths a tick against a diagonal's 140, so neither
         // steps for the first ticks, and both floods still show the diagonal
         // when the bush grows.
-        let data = DataPack::builtin().expect("built-in data pack is valid");
-        let map = Map::from_ascii(&["..", ".."], &data).expect("valid drawing");
-        let genes = r#"(format: 1, genes: [Trait(trait: "speed", value: 4.0)])"#;
-        let genome = Genome::from_ron(genes, &data).expect("a valid genome");
-        let (a, b) = (Pos { x: 0, y: 0 }, Pos { x: 1, y: 1 });
-        let scenario = Scenario {
-            map,
-            objects: &[],
-            sprites: &[(a, Some(genome.clone())), (b, Some(genome))],
-            scripted: &[
-                (a, ScriptedAction::Wander { destination: b }),
-                (b, ScriptedAction::Wander { destination: a }),
-            ],
-            newborns: &[],
-        };
-        let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
+        let (a, b) = (at(0, 0), at(1, 1));
+        let mut world = WorldBuilder::new(&["..", ".."])
+            .sprites_made(&[(a, |data| speed(4.0, data)), (b, |data| speed(4.0, data))])
+            .scripts(&[(a, wander_to(b)), (b, wander_to(a))])
+            .build();
         world.step();
         force_place(&mut world, "thornbush", Pos { x: 1, y: 0 });
         let waiting = |world: &World| -> Vec<(u32, u32)> {
@@ -2826,34 +2790,14 @@ mod tests {
         // Head-on in a corridor. The east sprite (speed 10) banks a step's
         // points on the first tick while the west one (speed 5) can't yet
         // pay for a swap; then the east one starves to death.
-        let data = DataPack::builtin().expect("built-in data pack is valid");
-        let map = Map::from_ascii(&["...."], &data).expect("valid drawing");
-        let speed = |value: f32| {
-            let genes = format!(r#"(format: 1, genes: [Trait(trait: "speed", value: {value:?})])"#);
-            Genome::from_ron(&genes, &data).expect("a valid genome")
-        };
-        let (west, east) = (Pos { x: 1, y: 0 }, Pos { x: 2, y: 0 });
-        let scenario = Scenario {
-            map,
-            objects: &[],
-            sprites: &[(west, Some(speed(5.0))), (east, Some(speed(10.0)))],
-            scripted: &[
-                (
-                    west,
-                    ScriptedAction::Wander {
-                        destination: Pos { x: 3, y: 0 },
-                    },
-                ),
-                (
-                    east,
-                    ScriptedAction::Wander {
-                        destination: Pos { x: 0, y: 0 },
-                    },
-                ),
-            ],
-            newborns: &[],
-        };
-        let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
+        let (west, east) = (at(1, 0), at(2, 0));
+        let mut world = WorldBuilder::new(&["...."])
+            .sprites_made(&[
+                (west, |data| speed(5.0, data)),
+                (east, |data| speed(10.0, data)),
+            ])
+            .scripts(&[(west, wander_to(at(3, 0))), (east, wander_to(at(0, 0)))])
+            .build();
         let ids: Vec<EntityId> = world.sprites().map(|s| s.id()).collect();
         world.step();
         let indices = world.data.physiology().indices;
@@ -2878,20 +2822,16 @@ mod tests {
         // end of the corridor; the only other goal tiles are round the long
         // loop, dearer than the corridor even with its occupied-tile
         // penalty, so the walker heads down the corridor and is blocked.
-        let data = DataPack::builtin().expect("built-in data pack is valid");
         let rows = [".........", ".#######.", ".........", "#########"];
-        let map = Map::from_ascii(&rows, &data).expect("valid drawing");
-        let (walker, rester, bush) = (Pos { x: 0, y: 2 }, Pos { x: 6, y: 2 }, Pos { x: 7, y: 2 });
-        let genes = r#"(format: 1, genes: [Trait(trait: "speed", value: 10.0)])"#;
-        let genome = Genome::from_ron(genes, &data).expect("a valid genome");
-        let scenario = Scenario {
-            map,
-            objects: &[(bush, "berry_bush")],
-            sprites: &[(walker, Some(genome.clone())), (rester, Some(genome))],
-            scripted: &[(rester, ScriptedAction::Rest); 5],
-            newborns: &[],
-        };
-        let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
+        let (walker, rester, bush) = (at(0, 2), at(6, 2), at(7, 2));
+        let mut world = WorldBuilder::new(&rows)
+            .objects(&[(bush, "berry_bush")])
+            .sprites_made(&[
+                (walker, |data| speed(10.0, data)),
+                (rester, |data| speed(10.0, data)),
+            ])
+            .script(rester, &[ScriptedAction::Rest; 5])
+            .build();
         let id = world.sprite_at(walker).expect("the walker").id();
         let target = Target::Object(world.state.objects.at(bush).expect("the bush"));
         world.state.sprites.get_mut(id).expect("the walker").action =
@@ -2923,22 +2863,17 @@ mod tests {
         // be, only what needs no target is offered. A hungry sprite backing
         // away from a bush beyond its reach doesn't change its mind to eat
         // that bush, nor the one in reach beside it.
-        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let data = builtin();
         let starter = include_str!("../../../data/genomes/starter.ron");
         let hungry = r#"        InitialConcentration(chem: "hunger", value: 0.9),"#;
         let text = starter.replace("    ],\n)", &format!("{hungry}\n    ],\n)"));
         let genome = Genome::from_ron(&text, &data).expect("a valid genome");
-        let rows = [".............................."; 3];
-        let map = Map::from_ascii(&rows, &data).expect("valid drawing");
-        let (far, near) = (Pos { x: 28, y: 1 }, Pos { x: 3, y: 0 });
-        let scenario = Scenario {
-            map,
-            objects: &[(far, "berry_bush"), (near, "berry_bush")],
-            sprites: &[(Pos { x: 1, y: 1 }, Some(genome))],
-            scripted: &[],
-            newborns: &[],
-        };
-        let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
+        let (far, near) = (at(28, 1), at(3, 0));
+        let mut world = WorldBuilder::new(&[".............................."; 3])
+            .data(data)
+            .objects(&[(far, "berry_bush"), (near, "berry_bush")])
+            .sprites_with(vec![(at(1, 1), Some(genome))])
+            .build();
         let id = world.sprites().next().expect("the sprite").id();
         let target = Target::Object(world.state.objects.at(far).expect("the far bush"));
         let kind = world.state.type_of(&world.data, target);
@@ -2977,21 +2912,17 @@ mod tests {
     fn with_learning_off_familiarity_still_grows() {
         // Design §5.6: a control run learns no worth or habit, but what a
         // sprite attends to still grows familiar.
-        let data = DataPack::builtin().expect("built-in data pack is valid");
-        let map = Map::from_ascii(&["....."], &data).expect("valid drawing");
+        let data = builtin();
         let genes = r#"(format: 1, genes: [
             AttentionInstinct(input: "always", category: "toy", weight: 1.0),
             Instinct(inputs: [("always", false)], verb: Rest, weight: 1.0),
         ])"#;
         let genome = Genome::from_ron(genes, &data).expect("a valid genome");
-        let scenario = Scenario {
-            map,
-            objects: &[(Pos { x: 3, y: 0 }, "ball")],
-            sprites: &[(Pos { x: 0, y: 0 }, Some(genome))],
-            scripted: &[],
-            newborns: &[],
-        };
-        let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
+        let mut world = WorldBuilder::new(&["....."])
+            .data(data)
+            .objects(&[(at(3, 0), "ball")])
+            .sprites_with(vec![(at(0, 0), Some(genome))])
+            .build();
         world.state.learning = false;
         let id = world.sprites().next().expect("the sprite").id();
         for _ in 0..50 {
@@ -3015,8 +2946,7 @@ mod tests {
         // knows no sprite by sight or by playing with it. With learning on,
         // the same two know each other.
         let knowing = |learning: bool| {
-            let data = DataPack::builtin().expect("built-in data pack is valid");
-            let map = Map::from_ascii(&["....."], &data).expect("valid drawing");
+            let data = builtin();
             let genes = |genes: &str| {
                 let text = format!(
                     r#"(format: 1, genes: [{genes}
@@ -3031,17 +2961,10 @@ mod tests {
             );
             let rester =
                 genes(r#"Instinct(inputs: [("always", false)], verb: Rest, weight: 1.0),"#);
-            let scenario = Scenario {
-                map,
-                objects: &[],
-                sprites: &[
-                    (Pos { x: 0, y: 0 }, Some(player)),
-                    (Pos { x: 1, y: 0 }, Some(rester)),
-                ],
-                scripted: &[],
-                newborns: &[],
-            };
-            let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
+            let mut world = WorldBuilder::new(&["....."])
+                .data(data)
+                .sprites_with(vec![(at(0, 0), Some(player)), (at(1, 0), Some(rester))])
+                .build();
             world.state.learning = learning;
             let [a, b] = [0, 1].map(|x| world.sprite_at(Pos { x, y: 0 }).expect("a sprite").id());
             let mut played = false;
@@ -3072,16 +2995,13 @@ mod tests {
         // type to become, or with an item on the only tile there is, it
         // hatches at once, keeping its ID.
         let hatches = |data: DataPack, objects: &[(Pos, &str)]| {
-            let map = Map::from_ascii(&["."], &data).expect("valid drawing");
-            let at = Pos { x: 0, y: 0 };
-            let scenario = Scenario {
-                map,
-                objects,
-                sprites: &[(at, None)],
-                scripted: &[],
-                newborns: &[at],
-            };
-            let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
+            let tile = at(0, 0);
+            let mut world = WorldBuilder::new(&["."])
+                .data(data)
+                .objects(objects)
+                .starters(&[tile])
+                .newborns(&[tile])
+                .build();
             let id = world.sprites().next().expect("the egg").id();
             let egg = world.state.sprites.get_mut(id).expect("the egg");
             egg.hatches = Some(750);
@@ -3089,12 +3009,12 @@ mod tests {
             let as_egg = world.egg(id).map(|egg| egg.hatches());
             (world.sprite(id).map(|sprite| sprite.age()), as_egg)
         };
-        let builtin = DataPack::builtin().expect("built-in data pack is valid");
-        assert_eq!(hatches(builtin.clone(), &[]), (None, Some(750)), "an egg");
+        let data = builtin();
+        assert_eq!(hatches(data.clone(), &[]), (None, Some(750)), "an egg");
         let berry = [(Pos { x: 0, y: 0 }, "berry")];
-        assert_eq!(hatches(builtin, &berry), (Some(0), None), "nowhere to lie");
+        assert_eq!(hatches(data, &berry), (Some(0), None), "nowhere to lie");
         let changes = [("next: Hatch", "next: Expire")];
-        let no_egg = crate::test_util::builtin_changing("objects.ron", &changes);
+        let no_egg = builtin_changing("objects.ron", &changes);
         assert_eq!(hatches(no_egg, &[]), (Some(0), None), "no egg type");
     }
 
@@ -3144,23 +3064,19 @@ mod tests {
         // something draws its eye to its mother drinking for her thirst,
         // knowing water is good for thirst, before its nearer father, while
         // it doesn't know that; once it does, the nearer parent draws it.
-        let data = DataPack::builtin().expect("built-in data pack is valid");
-        let map = Map::from_ascii(&["~.....", "~....."], &data).expect("valid drawing");
+        let data = builtin();
         let looks =
             looks_to_a_parent_showing(r#"BrainParam(param: "attention_margin", value: 0.0),"#);
-        let (mother, father, young) = (Pos { x: 1, y: 0 }, Pos { x: 5, y: 1 }, Pos { x: 4, y: 1 });
-        let scenario = Scenario {
-            map,
-            objects: &[],
-            sprites: &[
+        let (mother, father, young) = (at(1, 0), at(5, 1), at(4, 1));
+        let mut world = WorldBuilder::new(&["~.....", "~....."])
+            .sprites_with(vec![
                 (mother, Some(genome_of(DRINKS, &data))),
                 (father, Some(genome_of(RESTS, &data))),
                 (young, Some(genome_of(&looks, &data))),
-            ],
-            scripted: &[],
-            newborns: &[young],
-        };
-        let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
+            ])
+            .newborns(&[young])
+            .data(data)
+            .build();
         let [mother_id, father_id, young_id] =
             [mother, father, young].map(|pos| id_at(&world, pos));
         know_water(&mut world, mother_id);
@@ -3185,24 +3101,22 @@ mod tests {
         // her Eat, which ate the berry, is still her latest action, aimed at
         // a berry that's gone. She knows berries, but one that's gone shows
         // it nothing, and isn't looked up.
-        let data = DataPack::builtin().expect("built-in data pack is valid");
-        let map = Map::from_ascii(&["....", "...."], &data).expect("valid drawing");
+        let data = builtin();
         let looks = format!(
             r#"{RESTS}
             AttentionInstinct(input: "always", category: "sprite", whom: Showing, weight: 1.0)"#
         );
-        let (young, mother, berry) = (Pos { x: 3, y: 1 }, Pos { x: 1, y: 0 }, Pos { x: 0, y: 0 });
-        let scenario = Scenario {
-            map,
-            objects: &[(berry, "berry")],
-            sprites: &[
+        let (young, mother, berry) = (at(3, 1), at(1, 0), at(0, 0));
+        let mut world = WorldBuilder::new(&["....", "...."])
+            .objects(&[(berry, "berry")])
+            .sprites_with(vec![
                 (young, Some(genome_of(&looks, &data))),
                 (mother, Some(genome_of(RESTS, &data))),
-            ],
-            scripted: &[(mother, ScriptedAction::Eat { at: berry })],
-            newborns: &[young],
-        };
-        let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
+            ])
+            .scripts(&[(mother, ScriptedAction::Eat { at: berry })])
+            .newborns(&[young])
+            .data(data)
+            .build();
         let (young_id, mother_id) = (id_at(&world, young), id_at(&world, mother));
         let needs = world.data.need_places().len();
         let berry = world.data.real_object_type("berry").expect("berries");
@@ -3247,10 +3161,9 @@ mod tests {
         // out of its sight, and it heard her call: she draws its eye as a
         // call does, but not as showing it something, so the ball it sees
         // draws it more.
-        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let data = builtin();
         let rows = [format!("~{}", ".".repeat(29)), ".".repeat(30)];
         let rows = rows.each_ref().map(String::as_str);
-        let map = Map::from_ascii(&rows, &data).expect("valid drawing");
         let seeing_6 = |genes: &str| {
             let genes = format!(r#"Trait(trait: "sense_radius", value: 6.0), {genes}"#);
             genome_of(&genes, &data)
@@ -3259,19 +3172,16 @@ mod tests {
             r#"AttentionInstinct(input: "always", category: "toy", weight: 0.5),
             BrainParam(param: "salience_gain", value: 0.0),"#,
         );
-        let (mother, young_tile, ball) =
-            (Pos { x: 5, y: 0 }, Pos { x: 20, y: 1 }, Pos { x: 22, y: 1 });
-        let scenario = Scenario {
-            map,
-            objects: &[(ball, "ball")],
-            sprites: &[
+        let (mother, young_tile, ball) = (at(5, 0), at(20, 1), at(22, 1));
+        let mut world = WorldBuilder::new(&rows)
+            .objects(&[(ball, "ball")])
+            .sprites_with(vec![
                 (mother, Some(seeing_6(DRINKS))),
                 (young_tile, Some(seeing_6(&looks))),
-            ],
-            scripted: &[],
-            newborns: &[young_tile],
-        };
-        let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
+            ])
+            .newborns(&[young_tile])
+            .data(data)
+            .build();
         let (mother_id, young_id) = (id_at(&world, mother), id_at(&world, young_tile));
         know_water(&mut world, mother_id);
         let tick = world.state.tick;
@@ -3305,7 +3215,7 @@ mod tests {
         // taught habit, and watching passes one on (M2 design §18.2), so
         // sprites nobody trains that don't learn by watching learn as they
         // did before.
-        let data = crate::test_util::builtin_changing(
+        let data = builtin_changing(
             "physiology.ron",
             &[(
                 r#""watch_rate":        (range: (0.0, 1.0),"#,
@@ -3352,28 +3262,17 @@ mod tests {
     fn a_blocked_sprite_banks_points_only_up_to_its_next_step() {
         // Design §3.7: its next step, onto the shallow water a resting
         // sprite stands on, costs 250.
-        let data = DataPack::builtin().expect("built-in data pack is valid");
-        let map = Map::from_ascii(&[".~.."], &data).expect("valid drawing");
-        let (walker, rester) = (Pos { x: 0, y: 0 }, Pos { x: 1, y: 0 });
-        let genes = r#"(format: 1, genes: [Trait(trait: "speed", value: 10.0)])"#;
-        let genome = Genome::from_ron(genes, &data).expect("a valid genome");
-        let scripted = [
-            (
-                walker,
-                ScriptedAction::Wander {
-                    destination: Pos { x: 3, y: 0 },
-                },
-            ),
-            (rester, ScriptedAction::Rest),
-        ];
-        let scenario = Scenario {
-            map,
-            objects: &[],
-            sprites: &[(walker, Some(genome.clone())), (rester, Some(genome))],
-            scripted: &scripted,
-            newborns: &[],
-        };
-        let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
+        let (walker, rester) = (at(0, 0), at(1, 0));
+        let mut world = WorldBuilder::new(&[".~.."])
+            .sprites_made(&[
+                (walker, |data| speed(10.0, data)),
+                (rester, |data| speed(10.0, data)),
+            ])
+            .scripts(&[
+                (walker, wander_to(at(3, 0))),
+                (rester, ScriptedAction::Rest),
+            ])
+            .build();
         let id = world.sprite_at(walker).expect("the walker").id();
         world
             .state
@@ -3422,21 +3321,15 @@ mod tests {
     /// A sprite of `genes` on (1, 1) of the field with a bush, doing
     /// `script` first.
     fn field_with_one(genes: &str, script: &[ScriptedAction]) -> (World, EntityId) {
-        let data = DataPack::builtin().expect("built-in data pack is valid");
-        let rows = [".......", ".......", ".......", ".....~.", "......."];
-        let map = Map::from_ascii(&rows, &data).expect("valid drawing");
+        let data = builtin();
         let text = format!("(format: 1, genes: [{genes}])");
         let genome = Genome::from_ron(&text, &data).expect("a valid genome");
-        let at = Pos { x: 1, y: 1 };
-        let scripted: Vec<(Pos, ScriptedAction)> = script.iter().map(|&s| (at, s)).collect();
-        let scenario = Scenario {
-            map,
-            objects: &[(Pos { x: 2, y: 2 }, "berry_bush")],
-            sprites: &[(at, Some(genome))],
-            scripted: &scripted,
-            newborns: &[],
-        };
-        let world = World::from_scenario(scenario, data, 7).expect("valid scenario");
+        let tile = at(1, 1);
+        let world = field()
+            .data(data)
+            .sprites_with(vec![(tile, Some(genome))])
+            .script(tile, script)
+            .build();
         let id = world.sprites().next().expect("the sprite").id();
         (world, id)
     }
@@ -3703,17 +3596,11 @@ mod tests {
     /// A world 40 tiles wide whose one sprite remembers water on each tile
     /// of the top row in `xs`, as no limits would stop it.
     fn remembering_water_on(xs: &[u16]) -> World {
-        let data = DataPack::builtin().expect("built-in data pack is valid");
         let (water, land) = ("~".repeat(40), ".".repeat(40));
-        let map = Map::from_ascii(&[&water, &land], &data).expect("valid drawing");
-        let scenario = Scenario {
-            map,
-            objects: &[],
-            sprites: &[(Pos { x: 0, y: 1 }, None)],
-            scripted: &[],
-            newborns: &[],
-        };
-        let mut world = World::from_scenario(scenario, data, 7).expect("valid scenario");
+        let mut world = WorldBuilder::new(&[&water, &land])
+            .starters(&[at(0, 1)])
+            .seed(7)
+            .build();
         let id = world.sprites().next().expect("the sprite").id();
         let water = Subject::Category(world.data.water_category());
         let brain = &mut world.state.sprites.get_mut(id).expect("a sprite").brain;
@@ -3739,14 +3626,13 @@ mod tests {
         genes: &str,
         objects: &[(Pos, &str)],
     ) -> (World, EntityId, EntityId) {
-        let data = DataPack::builtin().expect("built-in data pack is valid");
+        let data = builtin();
         // A wall with a gap that a bush stands in.
         let (wall, gap) = (
             format!("~{}#{}", ".".repeat(19), ".".repeat(19)),
             format!("~{}", ".".repeat(39)),
         );
         let rows = [&wall, &wall, &gap, &wall, &wall].map(String::as_str);
-        let map = Map::from_ascii(&rows, &data).expect("valid drawing");
         let genome = Genome::from_ron(
             &format!(
                 r#"(format: 1, genes: [
@@ -3768,14 +3654,12 @@ mod tests {
             (Pos { x: 20, y: 2 }, "berry_bush"),
             (Pos { x: 36, y: 2 }, "ball"),
         ]);
-        let scenario = Scenario {
-            map,
-            objects: &objects,
-            sprites: &[(Pos { x: 30, y: 2 }, Some(genome))],
-            scripted: &[],
-            newborns: &[],
-        };
-        let mut world = World::from_scenario(scenario, data, 7).expect("valid scenario");
+        let mut world = WorldBuilder::new(&rows)
+            .data(data)
+            .objects(&objects)
+            .sprites_with(vec![(at(30, 2), Some(genome))])
+            .seed(7)
+            .build();
         let id = world.sprites().next().expect("the sprite").id();
         let ball = world.object_at(Pos { x: 36, y: 2 }).expect("the ball").id();
         let ball_type = world.data.object_type_id("ball");
@@ -3935,8 +3819,7 @@ mod tests {
         recall: f32,
         learn: impl Fn(&mut TypeMemory),
     ) -> (World, EntityId) {
-        let data = DataPack::builtin().expect("built-in data pack is valid");
-        let map = Map::from_ascii(&[row; 3], &data).expect("valid drawing");
+        let data = builtin();
         let genome = Genome::from_ron(
             &format!(
                 r#"(format: 1, genes: [
@@ -3949,14 +3832,11 @@ mod tests {
             &data,
         )
         .expect("a valid genome");
-        let scenario = Scenario {
-            map,
-            objects,
-            sprites: &[(Pos { x: 35, y: 1 }, Some(genome))],
-            scripted: &[],
-            newborns: &[],
-        };
-        let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
+        let mut world = WorldBuilder::new(&[row; 3])
+            .data(data)
+            .objects(objects)
+            .sprites_with(vec![(at(35, 1), Some(genome))])
+            .build();
         let id = world.sprites().next().expect("the sprite").id();
         let target = target(&world);
         let (at, _) = world.state.whereabouts(&world.data, target).expect("it");
@@ -4099,7 +3979,6 @@ mod tests {
     /// `length` long, made with `data`, before any step.
     fn resters(data: DataPack, length: usize, tiles: &[u16]) -> (World, Vec<EntityId>) {
         let row = ".".repeat(length);
-        let map = Map::from_ascii(&[row.as_str()], &data).expect("valid drawing");
         let genes = r#"(format: 2, genes: [
             Trait(trait: "speed", value: 10.0),
             Trait(trait: "sense_radius", value: 10.0),
@@ -4107,22 +3986,12 @@ mod tests {
             BrainParam(param: "tau_base", value: 0.02),
         ])"#;
         let genome = Genome::from_ron(genes, &data).expect("a valid genome");
-        let sprites: Vec<(Pos, Option<Genome>)> = tiles
-            .iter()
-            .map(|&x| (Pos { x, y: 0 }, Some(genome.clone())))
-            .collect();
-        let scenario = Scenario {
-            map,
-            objects: &[],
-            sprites: &sprites,
-            scripted: &[],
-            newborns: &[],
-        };
-        let world = World::from_scenario(scenario, data, 1).expect("valid scenario");
-        let ids = tiles
-            .iter()
-            .map(|&x| world.sprite_at(Pos { x, y: 0 }).expect("a sprite").id())
-            .collect();
+        let sprites = tiles.iter().map(|&x| (at(x, 0), Some(genome.clone())));
+        let world = WorldBuilder::new(&[row.as_str()])
+            .sprites_with(sprites.collect())
+            .data(data)
+            .build();
+        let ids = tiles.iter().map(|&x| id_at(&world, at(x, 0))).collect();
         (world, ids)
     }
 
@@ -4137,8 +4006,7 @@ mod tests {
     fn partners_who_go_long_enough_neither_seeing_nor_hearing_the_other_part() {
         // M2 design §15.4, with `breeding.apart` 50 ticks: 50 tiles apart,
         // out of sight, resting and never calling, they part, told once.
-        let data =
-            crate::test_util::builtin_changing("physiology.ron", &[("apart: 4500,", "apart: 50,")]);
+        let data = builtin_changing("physiology.ron", &[("apart: 4500,", "apart: 50,")]);
         let (mut world, ids) = resters(data, 51, &[0, 50]);
         let (a, b) = (ids[0], ids[1]);
         let paired = make_partners(&mut world, a, b);
@@ -4162,8 +4030,7 @@ mod tests {
             assert_eq!(world.sprite(id).unwrap().partner(), None);
         }
         // Side by side, they never part.
-        let data =
-            crate::test_util::builtin_changing("physiology.ron", &[("apart: 4500,", "apart: 50,")]);
+        let data = builtin_changing("physiology.ron", &[("apart: 4500,", "apart: 50,")]);
         let (mut world, ids) = resters(data, 5, &[0, 1]);
         make_partners(&mut world, ids[0], ids[1]);
         for _ in 0..60 {
@@ -4183,8 +4050,7 @@ mod tests {
     #[test]
     fn a_sprite_whose_partner_dies_is_told_and_names_it_until_it_pairs_again() {
         // M2 design §15.4, §15.8.
-        let data = DataPack::builtin().expect("built-in data pack is valid");
-        let (mut world, ids) = resters(data, 5, &[0, 1, 3]);
+        let (mut world, ids) = resters(builtin(), 5, &[0, 1, 3]);
         let (a, b, c) = (ids[0], ids[1], ids[2]);
         make_partners(&mut world, a, b);
         let injury = world.data.physiology().indices.injury;
@@ -4220,8 +4086,7 @@ mod tests {
     fn a_partner_lost_out_of_sight_ends_the_sense_of_it_away_but_is_not_found() {
         // M2 design §15.6: `found_family` is for finding the one it missed,
         // not for losing it.
-        let data = DataPack::builtin().expect("built-in data pack is valid");
-        let (mut world, ids) = resters(data, 30, &[0, 20]);
+        let (mut world, ids) = resters(builtin(), 30, &[0, 20]);
         let (a, b) = (ids[0], ids[1]);
         make_partners(&mut world, a, b);
         world.step();
@@ -4250,11 +4115,7 @@ mod tests {
     fn a_parent_remembers_its_egg_until_it_hatches() {
         // M2 design §15.6: the place an egg lay is forgotten once it has
         // hatched, as well as once it's found gone.
-        let data = crate::test_util::builtin_changing(
-            "physiology.ron",
-            &[("alone_after: 4500,", "alone_after: 0,")],
-        );
-        let map = Map::from_ascii(&["......"], &data).expect("valid drawing");
+        let data = lone();
         let genes = r#"(format: 2, genes: [
             Trait(trait: "speed", value: 10.0),
             Trait(trait: "sense_radius", value: 10.0),
@@ -4263,19 +4124,11 @@ mod tests {
             InitialConcentration(chem: "feminiser", value: 1.0),
         ])"#;
         let genome = Genome::from_ron(genes, &data).expect("a valid genome");
-        let sprites = [(Pos { x: 0, y: 0 }, Some(genome))];
-        let scenario = Scenario {
-            map,
-            objects: &[],
-            sprites: &sprites,
-            scripted: &[],
-            newborns: &[],
-        };
-        let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
-        let mother = world
-            .sprite_at(Pos { x: 0, y: 0 })
-            .expect("the mother")
-            .id();
+        let mut world = WorldBuilder::new(&["......"])
+            .data(data)
+            .sprites_with(vec![(at(0, 0), Some(genome))])
+            .build();
+        let mother = id_at(&world, at(0, 0));
         let remembered = |world: &World| -> Vec<EntityId> {
             let sprite = world.state.sprites.get(mother).expect("the mother");
             sprite.eggs.iter().map(|known| known.egg).collect()

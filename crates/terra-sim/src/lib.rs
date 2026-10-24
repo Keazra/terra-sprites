@@ -3,6 +3,11 @@
 //! This crate has no terminal and no filesystem access: it receives its data
 //! pack as already-read text and is driven one tick at a time.
 
+// The unit tests' `test_util` includes the integration tests' helpers, which
+// name this crate as those tests do (#136).
+#[cfg(test)]
+extern crate self as terra_sim;
+
 mod action;
 mod ageing;
 #[doc(hidden)]
