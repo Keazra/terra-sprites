@@ -1,8 +1,8 @@
 mod common;
 use common::{
-    HURT_ITSELF, HURT_TARGET, LETHAL_THORNS, LONE, UNHURT, WorldBuilder, acted, at_sprite,
-    finished, group, inspector_line, inspector_rows, lines, open, pack, pack_changing, render_on,
-    run, select, sized_app, status_line,
+    HURT_ITSELF, HURT_TARGET, LETHAL_THORNS, LONE, UNHURT, WorldBuilder, acted, at, at_sprite,
+    died, finished, group, inspector_line, inspector_rows, lines, open, pack, pack_changing,
+    render_on, run, select, sized_app, status_line, tick,
 };
 
 use std::time::Duration;
@@ -77,14 +77,14 @@ fn before_hints(status: &str) -> &str {
 /// is drawn in the middle of the map view (M2 design §11.1).
 fn cell(world: &World, x: u16, y: u16) -> Position {
     let app = app_for(world, Theme::cp437(), 100, 30);
-    app.cell_of(Pos { x, y }).expect("in view")
+    app.cell_of(at(x, y)).expect("in view")
 }
 
 /// The screen cell the pointer is on to point at `world`'s map tile (x, y)
 /// on a 100×30 screen, not scrolled, as `cell` places the tile.
 fn pointer_on(world: &World, x: u16, y: u16) -> Position {
     let app = app_for(world, Theme::cp437(), 100, 30);
-    common::pointer_on(&app, Pos { x, y })
+    common::pointer_on(&app, at(x, y))
 }
 
 /// `world`'s map as drawn on `screen`, a row a line, with the glass round it
@@ -184,8 +184,8 @@ fn a_small_map_is_drawn_in_the_middle_of_the_map_view_with_space_round_it() {
     // 8 rows above and 9 below.
     let world = drawn_world(&SMALL_MAP);
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
-    assert_eq!(app.cell_of(Pos { x: 0, y: 0 }), Some(Position::new(22, 10)));
-    assert_eq!(app.cell_of(Pos { x: 9, y: 3 }), Some(Position::new(31, 13)));
+    assert_eq!(app.cell_of(at(0, 0)), Some(Position::new(22, 10)));
+    assert_eq!(app.cell_of(at(9, 3)), Some(Position::new(31, 13)));
     let screen = render(&app, &world, 100, 30);
     let corners = [(21, 9, "╔"), (32, 9, "╗"), (21, 14, "╚"), (32, 14, "╝")];
     for (x, y, pane) in corners {
@@ -198,7 +198,7 @@ fn a_small_map_is_drawn_in_the_middle_of_the_map_view_with_space_round_it() {
     // It doesn't scroll, in any direction.
     for (dx, dy) in [(-5, 0), (5, 0), (0, -5), (0, 5)] {
         app.apply(Action::Scroll { dx, dy }, &world);
-        assert_eq!(app.cell_of(Pos { x: 0, y: 0 }), Some(Position::new(22, 10)));
+        assert_eq!(app.cell_of(at(0, 0)), Some(Position::new(22, 10)));
     }
 }
 
@@ -381,9 +381,9 @@ fn a_flashing_dotted_leash_runs_from_the_cursor_to_the_led_sprite_over_empty_gro
     // Design v23 §6.5. The sprite is on map tile (1, 2) and a berry on
     // (4, 2).
     let world = WorldBuilder::grass(12, 5)
-        .objects(&[(Pos { x: 4, y: 2 }, "berry")])
-        .starters(&[Pos { x: 1, y: 2 }])
-        .scripts(&[(Pos { x: 1, y: 2 }, ScriptedAction::Rest)])
+        .objects(&[(at(4, 2), "berry")])
+        .starters(&[at(1, 2)])
+        .scripts(&[(at(1, 2), ScriptedAction::Rest)])
         .seed(7)
         .build();
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
@@ -460,10 +460,10 @@ fn the_glass_runs_all_round_the_map_one_tile_out() {
     let world = big_world();
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
     for (dx, dy, corner, glass, beside) in [
-        (-200, -200, Pos { x: 0, y: 0 }, "╔", ["═", "║"]),
-        (200, -200, Pos { x: 119, y: 0 }, "╗", ["═", "║"]),
-        (-200, 200, Pos { x: 0, y: 59 }, "╚", ["═", "║"]),
-        (200, 200, Pos { x: 119, y: 59 }, "╝", ["═", "║"]),
+        (-200, -200, at(0, 0), "╔", ["═", "║"]),
+        (200, -200, at(119, 0), "╗", ["═", "║"]),
+        (-200, 200, at(0, 59), "╚", ["═", "║"]),
+        (200, 200, at(119, 59), "╝", ["═", "║"]),
     ] {
         app.apply(Action::Scroll { dx, dy }, &world);
         let screen = render(&app, &world, 100, 30);
@@ -605,16 +605,18 @@ fn a_frame_bigger_than_the_fitted_view_draws_the_glass_and_space_past_the_wall()
     }
 }
 
+/// The garden's objects: a berry bush, a thornbush, a berry and a ball.
+const GARDEN: [(Pos, &str); 4] = [
+    (at(1, 1), "berry_bush"),
+    (at(4, 1), "thornbush"),
+    (at(7, 1), "berry"),
+    (at(6, 3), "ball"),
+];
+
 /// A 10×5 field of grass with a berry bush, a thornbush, a berry and a ball.
 fn garden(pack: DataPack) -> World {
-    let objects = [
-        (terra_sim::Pos { x: 1, y: 1 }, "berry_bush"),
-        (terra_sim::Pos { x: 4, y: 1 }, "thornbush"),
-        (terra_sim::Pos { x: 7, y: 1 }, "berry"),
-        (terra_sim::Pos { x: 6, y: 3 }, "ball"),
-    ];
     WorldBuilder::grass(10, 5)
-        .objects(&objects)
+        .objects(&GARDEN)
         .data(pack)
         .seed(7)
         .build()
@@ -622,15 +624,9 @@ fn garden(pack: DataPack) -> World {
 
 /// The garden, with starter sprites at (2, 3) and on the berry at (7, 1).
 fn garden_with_sprites() -> World {
-    let objects = [
-        (terra_sim::Pos { x: 1, y: 1 }, "berry_bush"),
-        (terra_sim::Pos { x: 4, y: 1 }, "thornbush"),
-        (terra_sim::Pos { x: 7, y: 1 }, "berry"),
-        (terra_sim::Pos { x: 6, y: 3 }, "ball"),
-    ];
     WorldBuilder::grass(10, 5)
-        .objects(&objects)
-        .starters(&[Pos { x: 2, y: 3 }, Pos { x: 7, y: 1 }])
+        .objects(&GARDEN)
+        .starters(&[at(2, 3), at(7, 1)])
         .seed(7)
         .build()
 }
@@ -746,9 +742,7 @@ fn the_status_line_names_the_object_under_the_cursor_with_its_stage() {
 #[test]
 fn the_status_line_shows_a_sprite_under_the_cursor_by_its_id() {
     let world = garden_with_sprites();
-    let sprite = world
-        .sprite_at(terra_sim::Pos { x: 7, y: 1 })
-        .expect("the sprite on the berry");
+    let sprite = world.sprite_at(at(7, 1)).expect("the sprite on the berry");
     let app = pointing_at(&world, Theme::cp437(), 60, 9, 7, 1);
     // Sprites have no names until the player gives them one (design v7 §6.5).
     let expected = format!(
@@ -894,18 +888,6 @@ fn while_the_terminal_is_too_small_the_game_runs_on_and_esc_still_asks_to_quit()
     assert_eq!(app.apply(Action::Confirm, &world), Flow::Quit);
 }
 
-fn died(tick: u64, id: u64, cause: DeathCause, age: u64) -> Event {
-    Event {
-        tick,
-        kind: EventKind::Died {
-            id: EntityId(id),
-            name: None,
-            cause,
-            age,
-        },
-    }
-}
-
 /// The text inside a bordered row, without the borders or trailing spaces.
 fn inside(row: &str) -> &str {
     row.trim_start_matches('│').trim_end_matches('│').trim()
@@ -915,7 +897,8 @@ fn inside(row: &str) -> &str {
 fn the_event_log_lists_deaths_newest_first_under_the_map() {
     let world = garden(pack());
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
-    app.record(&[died(4_012, 31, DeathCause::Dehydration, 4_012)], &world);
+    let id = EntityId(31);
+    app.record(&[died(4_012, id, DeathCause::Dehydration, 4_012)], &world);
     app.record(
         &[
             Event {
@@ -926,8 +909,8 @@ fn the_event_log_lists_deaths_newest_first_under_the_map() {
                     reason: Removal::Expired,
                 },
             },
-            died(4_100, 12, DeathCause::Starvation, 3_900),
-            died(4_100, 13, DeathCause::OldAge, 66_000),
+            died(4_100, EntityId(12), DeathCause::Starvation, 3_900),
+            died(4_100, EntityId(13), DeathCause::OldAge, 66_000),
         ],
         &world,
     );
@@ -953,8 +936,9 @@ fn a_line_that_repeats_in_the_event_log_counts_up_within_cp437() {
     let world = garden(pack());
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
     // Two lines that read the same, in a row.
-    app.record(&[died(4_012, 31, DeathCause::Dehydration, 4_012)], &world);
-    app.record(&[died(4_100, 31, DeathCause::Dehydration, 4_012)], &world);
+    let id = EntityId(31);
+    app.record(&[died(4_012, id, DeathCause::Dehydration, 4_012)], &world);
+    app.record(&[died(4_100, id, DeathCause::Dehydration, 4_012)], &world);
     let screen = lines(&render(&app, &world, 100, 30));
     assert_eq!(
         inside(&screen[25]),
@@ -972,7 +956,7 @@ fn the_event_log_leaves_object_and_action_events_out_and_keeps_the_latest_100() 
         kind: EventKind::ObjectSpawned {
             id: EntityId(9),
             object_type: "berry".into(),
-            pos: terra_sim::Pos { x: 1, y: 1 },
+            pos: at(1, 1),
         },
     };
     app.record(&[spawned], &world);
@@ -992,7 +976,8 @@ fn the_event_log_leaves_object_and_action_events_out_and_keeps_the_latest_100() 
     );
     assert_eq!(app.event_log().count(), 0, "nor action events");
     for tick in 0..150 {
-        app.record(&[died(tick, tick, DeathCause::Starvation, tick)], &world);
+        let starved = died(tick, EntityId(tick), DeathCause::Starvation, tick);
+        app.record(&[starved], &world);
     }
     let ticks: Vec<u64> = app.event_log().map(|(event, _)| event.tick).collect();
     assert_eq!(ticks.len(), 100);
@@ -1216,6 +1201,13 @@ fn inspector_on(app: &App, world: &World, height: u16) -> (String, Vec<String>) 
     (title, text)
 }
 
+/// Where in `text` the first row that reads `heading` is.
+fn row_of(text: &[String], heading: &str) -> usize {
+    text.iter()
+        .position(|row| row == heading)
+        .unwrap_or_else(|| panic!("no {heading:?} in {text:?}"))
+}
+
 #[test]
 fn the_sprite_tabs_say_how_to_select_a_sprite_when_none_is() {
     let world = garden_with_sprites();
@@ -1263,7 +1255,7 @@ fn when_the_selected_sprite_dies_its_tabs_say_how_and_at_what_age() {
     let id = world.sprites().next().expect("a sprite").id();
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
     app.apply(Action::SelectNext, &world);
-    app.record(&[died(4_012, id.0, DeathCause::Dehydration, 4_012)], &world);
+    app.record(&[died(4_012, id, DeathCause::Dehydration, 4_012)], &world);
     for tab in ["Body", "Brain", "Chem", "Genome"] {
         let (top, text) = inspector(&app, &world);
         assert!(
@@ -1286,7 +1278,7 @@ fn a_sprite_hurt_to_death_by_an_object_is_named_after_its_type() {
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
     app.apply(Action::SelectNext, &world);
     // The thornbush is object type 3.
-    app.record(&[died(4_012, id.0, DeathCause::HurtBy(3), 4_012)], &world);
+    app.record(&[died(4_012, id, DeathCause::HurtBy(3), 4_012)], &world);
     let (_, text) = inspector(&app, &world);
     assert_eq!(
         text[..2].join(" "),
@@ -1332,7 +1324,7 @@ fn one_sprite_in(
     scripted: &[ScriptedAction],
     ticks: u64,
 ) -> (World, App) {
-    let start = Pos { x: 2, y: 3 };
+    let start = at(2, 3);
     let scripted: Vec<(Pos, ScriptedAction)> = scripted.iter().map(|&a| (start, a)).collect();
     let mut world = WorldBuilder::grass(10, 5)
         .objects(objects)
@@ -1416,7 +1408,7 @@ fn the_body_tab_says_when_the_young_grow_up_and_the_old_are_old() {
             ])"#
         )
     };
-    let (young, grown) = (Pos { x: 2, y: 3 }, Pos { x: 6, y: 1 });
+    let (young, grown) = (at(2, 3), at(6, 1));
     let mut world = WorldBuilder::grass(10, 5)
         .genes(&[
             (young, &genes(4500.0, 13500.0)),
@@ -1498,7 +1490,7 @@ const SPEED_10: &str = r#"(format: 1, genes: [Trait(trait: "speed", value: 10.0)
 #[test]
 fn the_body_tab_starts_with_what_the_sprite_is_doing_in_plain_words() {
     let wander = ScriptedAction::Wander {
-        destination: Pos { x: 7, y: 3 },
+        destination: at(7, 3),
     };
     let (world, app) = one_sprite_doing(SPEED_10, &[wander], 1);
     assert_eq!(
@@ -1519,9 +1511,9 @@ fn a_sprite_with_nothing_to_do_shows_how_its_action_ended_then_what_it_watches()
         BrainParam(param: "act_threshold", value: 0.25),
     ])"#;
     let wander = ScriptedAction::Wander {
-        destination: Pos { x: 7, y: 3 },
+        destination: at(7, 3),
     };
-    let bush = Pos { x: 5, y: 1 };
+    let bush = at(5, 1);
     let (mut world, mut app) = one_sprite_among(genome, &[(bush, "berry_bush")], &[wander], 5);
     assert_eq!(inspector(&app, &world).1[0], "Arrived");
     world.step();
@@ -1544,9 +1536,7 @@ fn the_body_tab_says_a_led_sprite_is_being_led_and_how_far_behind() {
     let (mut world, mut app) = one_sprite_doing(SPEED_10, &[], 0);
     let sprite = world.sprites().next().expect("the sprite").id();
     world.submit(Command::TakeHold { sprite });
-    world.submit(Command::MoveCursor {
-        tile: Pos { x: 7, y: 3 },
-    });
+    world.submit(Command::MoveCursor { tile: at(7, 3) });
     world.step();
     assert_eq!(inspector(&app, &world).1[0], "Being led · 4 tiles behind");
     app.apply(Action::ToggleDetail, &world);
@@ -1563,19 +1553,19 @@ fn the_body_tab_says_a_led_sprite_is_being_led_and_how_far_behind() {
 #[test]
 fn a_led_sprite_as_close_as_it_can_get_to_the_cursor_has_caught_up() {
     // Design v23 §6.1: the Cursor is on a bush, which it can't stand on.
-    let bush = Pos { x: 7, y: 3 };
+    let bush = at(7, 3);
     let (mut world, app) = one_sprite_among(SPEED_10, &[(bush, "berry_bush")], &[], 0);
     let sprite = world.sprites().next().expect("the sprite").id();
     world.submit(Command::TakeHold { sprite });
     world.submit(Command::MoveCursor { tile: bush });
     run(&mut world, 6);
-    assert_eq!(world.sprite(sprite).expect("it").pos(), Pos { x: 6, y: 3 });
+    assert_eq!(world.sprite(sprite).expect("it").pos(), at(6, 3));
     assert_eq!(inspector(&app, &world).1[0], "Being led");
 }
 
 #[test]
 fn the_decision_marker_flashes_an_x_where_the_selected_sprite_is_heading() {
-    let destination = Pos { x: 7, y: 3 };
+    let destination = at(7, 3);
     let wander = ScriptedAction::Wander { destination };
     let (world, mut app) = one_sprite_doing(SPEED_10, &[wander], 1);
     let cell = app.cell_of(destination).expect("in view");
@@ -1624,10 +1614,7 @@ const HUNGRY_GENOME: &str = r#"(format: 1, genes: [
 
 #[test]
 fn the_brain_tab_shows_attention_scores_and_what_adds_most_to_the_decision() {
-    let objects = [
-        (Pos { x: 8, y: 3 }, "berry_bush"),
-        (Pos { x: 6, y: 1 }, "berry"),
-    ];
+    let objects = [(at(8, 3), "berry_bush"), (at(6, 1), "berry")];
     let (world, mut app) = one_sprite_among(HUNGRY_GENOME, &objects, &[], 1);
     open(&mut app, &world, Tab::Brain);
     let (top, text) = inspector(&app, &world);
@@ -1688,14 +1675,11 @@ const EVERY_NEED_GENOME: &str = r#"(format: 1, genes: [
 fn the_brain_tab_shows_what_the_sprite_has_learned_as_memory() {
     // It eats the berry beside it at tick 0; at tick 1 its hunger falls by
     // .5, and it learns berries are good for hunger: .5 × .5.
-    let objects = [(Pos { x: 3, y: 3 }, "berry")];
+    let objects = [(at(3, 3), "berry")];
     let (world, mut app) = one_sprite_among(BERRY_GENOME, &objects, &[], 2);
     open(&mut app, &world, Tab::Brain);
     let (_, text) = inspector(&app, &world);
-    let at = text
-        .iter()
-        .position(|row| row == "BERRIES")
-        .unwrap_or_else(|| panic!("{text:?}"));
+    let at = row_of(&text, "BERRIES");
     assert_eq!(text[at - 1], "", "a blank row before it");
     assert!(
         text[at + 1].starts_with("good for hunger") && text[at + 1].ends_with("+.25"),
@@ -1716,6 +1700,16 @@ fn brain_lines(app: &App, world: &World) -> Vec<String> {
                 .to_string()
         })
         .collect()
+}
+
+/// The Brain tab's lines, keeping their indent, for `world`'s first sprite
+/// once `world` has run `ticks` ticks.
+fn brain_after(mut world: World, ticks: u64) -> Vec<String> {
+    run(&mut world, ticks);
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
+    app.apply(Action::SelectNext, &world);
+    open(&mut app, &world, Tab::Brain);
+    brain_lines(&app, &world)
 }
 
 /// A left click on the inspector row that contains `needle`.
@@ -1740,7 +1734,7 @@ fn brain_cell(app: &App, world: &World, needle: &str) -> Position {
 fn the_brain_tab_opens_the_rest_of_a_things_lessons() {
     // Six lessons about berries, all the same size, so the old list of five
     // would have dropped the last. Three show until the player opens them.
-    let objects = [(Pos { x: 3, y: 3 }, "berry")];
+    let objects = [(at(3, 3), "berry")];
     let (world, mut app) = one_sprite_among(EVERY_NEED_GENOME, &objects, &[], 2);
     open(&mut app, &world, Tab::Brain);
     let text = brain_lines(&app, &world);
@@ -1789,8 +1783,8 @@ fn the_brain_tab_opens_the_rest_of_a_things_lessons() {
 #[test]
 fn choosing_another_sprite_shuts_lessons_that_were_open() {
     let neighbor = "(format: 1, genes: [])";
-    let (eater, bystander) = (Pos { x: 2, y: 3 }, Pos { x: 8, y: 1 });
-    let objects = [(Pos { x: 3, y: 3 }, "berry")];
+    let (eater, bystander) = (at(2, 3), at(8, 1));
+    let objects = [(at(3, 3), "berry")];
     let mut world = WorldBuilder::grass(10, 5)
         .objects(&objects)
         .genes(&[(eater, EVERY_NEED_GENOME), (bystander, neighbor)])
@@ -1827,34 +1821,26 @@ fn sprites_in_general_sit_above_the_sprites_it_remembers() {
     // Two bullies, each a punishment of 1, so each is frightening at -1.
     // Sprites in general are half that average until it knows three: -.50,
     // and that line comes before either of them.
-    let walker = r#"(format: 1, genes: [Trait(trait: "speed", value: 10.0)])"#;
-    let (me, first, second) = (Pos { x: 2, y: 3 }, Pos { x: 3, y: 3 }, Pos { x: 1, y: 3 });
-    let sprites = [(me, SKITTISH_GENOME), (first, walker), (second, walker)];
+    let (me, first, second) = (at(2, 3), at(3, 3), at(1, 3));
+    let sprites = [(me, SKITTISH_GENOME), (first, SPEED_10), (second, SPEED_10)];
     let scripted = [
         (me, ScriptedAction::Rest),
         (first, ScriptedAction::Hit { at: me }),
         (
             second,
             ScriptedAction::Wander {
-                destination: Pos { x: 0, y: 3 },
+                destination: at(0, 3),
             },
         ),
         (second, ScriptedAction::Hit { at: me }),
     ];
-    let mut world = WorldBuilder::grass(10, 5)
+    let world = WorldBuilder::grass(10, 5)
         .genes(&sprites)
         .scripts(&scripted)
         .seed(7)
         .build();
-    run(&mut world, 8);
-    let mut app = app_for(&world, Theme::cp437(), 100, 30);
-    app.apply(Action::SelectNext, &world);
-    open(&mut app, &world, Tab::Brain);
-    let text = brain_lines(&app, &world);
-    let sprites_at = text
-        .iter()
-        .position(|row| row == " SPRITES")
-        .unwrap_or_else(|| panic!("{text:?}"));
+    let text = brain_after(world, 8);
+    let sprites_at = row_of(&text, " SPRITES");
     let general = text[sprites_at + 1].as_str();
     assert!(
         general.starts_with("   frightening") && general.ends_with("-.50"),
@@ -1879,16 +1865,13 @@ fn the_brain_tab_groups_what_it_thinks_of_new_things() {
     let genome = r#"(format: 1, genes: [
         Emitter(locus: Locus("pricked"), mode: Level, gain: 1.0, chem: "punishment"),
     ])"#;
-    let thornbush = Pos { x: 3, y: 3 };
+    let thornbush = at(3, 3);
     let objects = [(thornbush, "thornbush")];
     let scripted = [ScriptedAction::Eat { at: thornbush }, ScriptedAction::Rest];
     let (world, mut app) = one_sprite_among(genome, &objects, &scripted, 2);
     open(&mut app, &world, Tab::Brain);
     let text = brain_lines(&app, &world);
-    let at = text
-        .iter()
-        .position(|row| row == " NEW THINGS")
-        .unwrap_or_else(|| panic!("{text:?}"));
+    let at = row_of(&text, " NEW THINGS");
     assert!(
         text[at + 1].starts_with("   bad") && text[at + 1].contains("-"),
         "{text:?}"
@@ -1906,18 +1889,13 @@ fn the_brain_tab_lists_the_cursor_on_its_own() {
         BrainParam(param: "tau_base", value: 0.05),
     ])"#;
     let (mut world, mut app) = one_sprite(genome, 0);
-    world.submit(Command::MoveCursor {
-        tile: Pos { x: 3, y: 3 },
-    });
+    world.submit(Command::MoveCursor { tile: at(3, 3) });
     world.submit(Command::ShowCursor { visible: true });
     world.step();
     world.step();
     open(&mut app, &world, Tab::Brain);
     let text = brain_lines(&app, &world);
-    let at = text
-        .iter()
-        .position(|row| row == " THE CURSOR")
-        .unwrap_or_else(|| panic!("{text:?}"));
+    let at = row_of(&text, " THE CURSOR");
     assert!(
         text[at + 1].starts_with("   eating it") && text[at + 1].contains("-"),
         "{text:?}"
@@ -1948,20 +1926,13 @@ fn a_habit_about_sprites_sits_with_what_it_thinks_of_them_in_general() {
         AttentionInstinct(input: "always", category: "sprite", weight: 1.0),
         Instinct(inputs: [("always", false)], verb: Hit, weight: 1.0),
     ])"#;
-    let (me, first, second) = (Pos { x: 2, y: 3 }, Pos { x: 3, y: 3 }, Pos { x: 1, y: 3 });
-    let mut world = WorldBuilder::grass(10, 5)
+    let (me, first, second) = (at(2, 3), at(3, 3), at(1, 3));
+    let world = WorldBuilder::grass(10, 5)
         .genes(&[(me, hitter), (first, bully), (second, bully)])
         .seed(7)
         .build();
-    run(&mut world, 16);
-    let mut app = app_for(&world, Theme::cp437(), 100, 30);
-    app.apply(Action::SelectNext, &world);
-    open(&mut app, &world, Tab::Brain);
-    let text = brain_lines(&app, &world);
-    let sprites_at = text
-        .iter()
-        .position(|row| row == " SPRITES")
-        .unwrap_or_else(|| panic!("{text:?}"));
+    let text = brain_after(world, 16);
+    let sprites_at = row_of(&text, " SPRITES");
     let individual = text[sprites_at + 1..]
         .iter()
         .position(|row| row.starts_with("   #"))
@@ -1985,7 +1956,7 @@ fn the_brain_tab_leaves_out_what_rounds_to_nothing() {
         "])",
         "    BrainParam(param: \"worth_rate_good\", value: 0.004),\n])",
     );
-    let objects = [(Pos { x: 3, y: 3 }, "berry")];
+    let objects = [(at(3, 3), "berry")];
     let (world, mut app) = one_sprite_among(&genome, &objects, &[], 2);
     let memory = world.sprites().next().expect("the sprite").memory();
     assert!(
@@ -2014,7 +1985,7 @@ fn the_brain_tab_leaves_memory_out_until_it_has_learned_something() {
 #[test]
 fn the_attention_marker_shades_the_one_thing_the_selected_sprite_attends_to() {
     // Away from the cursor, which starts on the map's centre, (5, 2).
-    let (berry, bush) = (Pos { x: 0, y: 1 }, Pos { x: 8, y: 4 });
+    let (berry, bush) = (at(0, 1), at(8, 4));
     let objects = [(bush, "berry_bush"), (berry, "berry")];
     let (world, mut app) = one_sprite_among(HUNGRY_GENOME, &objects, &[], 1);
     let (berry_cell, bush_cell) = (
@@ -2041,7 +2012,7 @@ fn the_attention_marker_shades_the_one_thing_the_selected_sprite_attends_to() {
 fn a_led_sprite_shows_no_attention_marker() {
     // Design v23 §6.5: led, it attends to nothing, so the mark from before
     // would be stale.
-    let (berry, bush) = (Pos { x: 0, y: 1 }, Pos { x: 8, y: 4 });
+    let (berry, bush) = (at(0, 1), at(8, 4));
     let objects = [(bush, "berry_bush"), (berry, "berry")];
     let (mut world, app) = one_sprite_among(HUNGRY_GENOME, &objects, &[], 1);
     let berry_cell = app.cell_of(berry).expect("in view");
@@ -2059,13 +2030,8 @@ fn a_led_sprite_shows_no_attention_marker() {
 fn the_brain_tab_shows_memory_before_the_first_decision() {
     // Design v17 §6.1. A scripted bite at tick 0 hurts; at tick 1, still on
     // its scripted rest, it learns thornbushes are bad: .8 × a punishment of 1.
-    let objects = [(Pos { x: 3, y: 3 }, "thornbush")];
-    let scripted = [
-        ScriptedAction::Eat {
-            at: Pos { x: 3, y: 3 },
-        },
-        ScriptedAction::Rest,
-    ];
+    let objects = [(at(3, 3), "thornbush")];
+    let scripted = [ScriptedAction::Eat { at: at(3, 3) }, ScriptedAction::Rest];
     let (world, mut app) = one_sprite_among(THORN_GENOME, &objects, &scripted, 2);
     open(&mut app, &world, Tab::Brain);
     let (_, text) = inspector(&app, &world);
@@ -2088,8 +2054,8 @@ fn the_brain_tab_lists_the_places_the_sprite_remembers() {
         InitialConcentration(chem: "thirst", value: 1.0),
         Emitter(locus: Locus("drank"), mode: Level, gain: -0.5, chem: "thirst"),
     ])"#;
-    let start = Pos { x: 1, y: 3 };
-    let water = Pos { x: 0, y: 3 };
+    let start = at(1, 3);
+    let water = at(0, 3);
     let scripted = [
         (start, ScriptedAction::Drink { at: water }),
         (start, ScriptedAction::Rest),
@@ -2104,10 +2070,7 @@ fn the_brain_tab_lists_the_places_the_sprite_remembers() {
     app.apply(Action::SelectNext, &world);
     open(&mut app, &world, Tab::Brain);
     let (_, text) = inspector(&app, &world);
-    let at = text
-        .iter()
-        .position(|row| row.starts_with("PLACES"))
-        .unwrap_or_else(|| panic!("{text:?}"));
+    let at = row_of(&text, "PLACES");
     assert_eq!(
         text[at..at + 2],
         ["PLACES", "water · 1 tile W                    1.00"]
@@ -2126,7 +2089,7 @@ fn the_brain_tab_lists_the_places_best_remembered_first_below_what_it_has_learne
         Emitter(locus: Locus("ate"), mode: Level, gain: -0.5, chem: "hunger"),
         BrainParam(param: "place_fade", value: 0.01),
     ])"#;
-    let (start, water, bush) = (Pos { x: 1, y: 3 }, Pos { x: 0, y: 3 }, Pos { x: 4, y: 3 });
+    let (start, water, bush) = (at(1, 3), at(0, 3), at(4, 3));
     let scripted = [
         (start, ScriptedAction::Drink { at: water }),
         (start, ScriptedAction::Eat { at: bush }),
@@ -2166,7 +2129,7 @@ fn the_brain_tab_shows_what_the_sprite_thinks_of_a_category_once_it_counts() {
     // bite of a berry bush with no fruit teaches nothing, but the sprite
     // knows both types of bush now: bushes are the mean, −.4, at half
     // strength, −.2. A category reads as its own plural.
-    let (thornbush, bush) = (Pos { x: 3, y: 3 }, Pos { x: 1, y: 3 });
+    let (thornbush, bush) = (at(3, 3), at(1, 3));
     let objects = [(thornbush, "thornbush"), (bush, "berry_bush")];
     let scripted = [
         ScriptedAction::Eat { at: thornbush },
@@ -2312,7 +2275,7 @@ fn the_brain_tab_names_a_thing_s_worth_neutrally_whatever_its_sign() {
     // Its bite at tick 0 pricks, and at tick 1 it learns thornbushes are bad;
     // so hungry, it bites again, and that worth takes from biting. The row
     // reads "worth: thornbush" whatever its sign, beside "habit: …".
-    let objects = [(Pos { x: 3, y: 3 }, "thornbush")];
+    let objects = [(at(3, 3), "thornbush")];
     let (world, mut app) = one_sprite_among(THORN_GENOME, &objects, &[], 2);
     open(&mut app, &world, Tab::Brain);
     let (_, text) = inspector(&app, &world);
@@ -2326,7 +2289,7 @@ fn the_brain_tab_names_a_thing_s_worth_neutrally_whatever_its_sign() {
 #[test]
 fn the_chem_tab_shows_what_was_felt_on_the_reward_line() {
     // The bite at tick 0 pricks; at tick 1 learning uses up a punishment of 1.
-    let objects = [(Pos { x: 3, y: 3 }, "thornbush")];
+    let objects = [(at(3, 3), "thornbush")];
     let (world, mut app) = one_sprite_among(THORN_GENOME, &objects, &[], 2);
     open(&mut app, &world, Tab::Chem);
     let (_, text) = inspector(&app, &world);
@@ -2624,7 +2587,7 @@ fn the_wheel_over_the_inspector_scrolls_3_lines_a_notch_and_elsewhere_does_not()
     );
     assert_eq!(
         app.cursor(),
-        terra_sim::Pos { x: 2, y: 1 },
+        at(2, 1),
         "a wheel event points, like every mouse event"
     );
 }
@@ -2646,10 +2609,7 @@ fn a_tab_goes_back_to_the_top_when_the_tab_or_the_selection_changes() {
 #[test]
 fn selecting_another_sprite_starts_its_tab_from_the_top_and_the_same_one_again_does_not() {
     let genome = long_genome();
-    let sprites = [
-        (terra_sim::Pos { x: 2, y: 3 }, genome.as_str()),
-        (terra_sim::Pos { x: 6, y: 1 }, genome.as_str()),
-    ];
+    let sprites = [(at(2, 3), genome.as_str()), (at(6, 1), genome.as_str())];
     let world = WorldBuilder::grass(10, 5).genes(&sprites).seed(7).build();
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
     app.apply(Action::SelectNext, &world);
@@ -2745,7 +2705,6 @@ fn the_world_tab_shows_the_population_and_the_deaths_by_cause() {
             ("dehydration: 0.0011", "dehydration: 0.5"),
         ],
     )]);
-    let at = |x, y| Pos { x, y };
     let mut world = WorldBuilder::grass(10, 5)
         .starters(&[at(1, 1), at(4, 2), at(8, 3)])
         .data(pack)
@@ -2785,7 +2744,7 @@ fn a_death_message_too_long_for_one_line_wraps() {
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
     app.apply(Action::SelectNext, &world);
     app.record(
-        &[died(4_012, id.0, DeathCause::Dehydration, 12_345_678)],
+        &[died(4_012, id, DeathCause::Dehydration, 12_345_678)],
         &world,
     );
     let (_, text) = inspector(&app, &world);
@@ -2848,7 +2807,7 @@ fn chemical_names_show_with_spaces_for_underscores() {
         ("genomes/starter.ron", renamed),
     ]);
     let world = WorldBuilder::grass(10, 5)
-        .starters(&[Pos { x: 2, y: 3 }])
+        .starters(&[at(2, 3)])
         .data(pack)
         .seed(7)
         .build();
@@ -2872,10 +2831,7 @@ fn observed_section(app: &App, world: &World) -> Vec<String> {
             inner.trim_end().to_string()
         })
         .collect();
-    let start = text
-        .iter()
-        .position(|t| t == " Observed")
-        .expect("the section");
+    let start = row_of(&text, " Observed");
     let end = text[start..]
         .iter()
         .position(|t| t.is_empty() || t.starts_with('└'))
@@ -2925,11 +2881,11 @@ fn a_hurt_sprite_takes_turns_with_a_red_bang_for_a_second() {
     for theme in [Theme::cp437(), Theme::ascii()] {
         let world = garden_with_sprites();
         let mut app = app_for(&world, theme, 100, 30);
-        let biter = world.sprite_at(Pos { x: 2, y: 3 }).expect("a sprite");
-        let other = world.sprite_at(Pos { x: 7, y: 1 }).expect("a sprite");
+        let biter = world.sprite_at(at(2, 3)).expect("a sprite");
+        let other = world.sprite_at(at(7, 1)).expect("a sprite");
         let (biter, other) = (biter.id(), other.id());
-        let biter_cell = app.cell_of(Pos { x: 2, y: 3 }).expect("in view");
-        let other_cell = app.cell_of(Pos { x: 7, y: 1 }).expect("in view");
+        let biter_cell = app.cell_of(at(2, 3)).expect("in view");
+        let other_cell = app.cell_of(at(7, 1)).expect("in view");
         let sprite_glyph = render(&app, &world, 100, 30)[biter_cell]
             .symbol()
             .to_string();
@@ -2990,14 +2946,13 @@ const SKITTISH_GENOME: &str = r#"(format: 1, genes: [
 /// A skittish sprite, #1, hit by a bully, #2, that then rests beside it,
 /// `ticks` ticks on, with an app that logged every tick and selects #1.
 fn hit_by_a_bully(ticks: u32) -> (World, App) {
-    let walker = r#"(format: 1, genes: [Trait(trait: "speed", value: 10.0)])"#;
-    let (me, bully) = (Pos { x: 2, y: 3 }, Pos { x: 3, y: 3 });
+    let (me, bully) = (at(2, 3), at(3, 3));
     let scripted = [
         (bully, ScriptedAction::Hit { at: me }),
         (bully, ScriptedAction::Rest),
     ];
     let mut world = WorldBuilder::grass(10, 5)
-        .genes(&[(me, SKITTISH_GENOME), (bully, walker)])
+        .genes(&[(me, SKITTISH_GENOME), (bully, SPEED_10)])
         .scripts(&scripted)
         .seed(7)
         .build();
@@ -3083,7 +3038,7 @@ fn the_event_log_says_when_sprites_in_general_turn_frightening() {
 fn the_status_line_names_train_mode_and_what_the_cursor_follows() {
     // Design v21 §6.1: tiles are drawn from screen cell (1, 2).
     let world = garden_with_sprites();
-    let id = world.sprite_at(Pos { x: 2, y: 3 }).expect("a sprite").id();
+    let id = world.sprite_at(at(2, 3)).expect("a sprite").id();
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
     let on_it = pointer_on(&world, 2, 3);
     app.apply(Action::left_click(on_it), &world);
@@ -3101,10 +3056,7 @@ fn the_status_line_names_train_mode_and_what_the_cursor_follows() {
 fn the_status_line_says_what_the_cursor_holds_or_leads_in_every_mode() {
     // Design v23 §6.1. The sprite is on map tile (2, 3), the ball on (6, 3).
     let world = garden_with_sprites();
-    let sprite = world
-        .sprite_at(terra_sim::Pos { x: 2, y: 3 })
-        .expect("a sprite")
-        .id();
+    let sprite = world.sprite_at(at(2, 3)).expect("a sprite").id();
     let cases = [
         (
             pointer_on(&world, 2, 3),
@@ -3279,7 +3231,7 @@ fn the_event_log_tells_the_player_what_they_grabbed_and_let_go() {
         EventKind::PutDown {
             item: ball,
             object_type: "ball".into(),
-            pos: Pos { x: 1, y: 1 },
+            pos: at(1, 1),
         },
         EventKind::CursorEmptied {
             reason: Emptied::Removed {
@@ -3308,9 +3260,7 @@ fn the_event_log_says_why_a_grab_was_refused() {
     let world = garden(pack());
     let (sprite, other) = (EntityId(12), EntityId(13));
     let refused = |command, reason| EventKind::CommandRejected { command, reason };
-    let put_down = Command::PutDown {
-        tile: Pos { x: 1, y: 1 },
-    };
+    let put_down = Command::PutDown { tile: at(1, 1) };
     let blocked = |blocker| Rejection::InTheWay {
         item_type: 4,
         blocker,
@@ -3368,7 +3318,7 @@ fn a_pet_shows_a_heart_and_a_zap_a_yellow_double_bang_for_a_second() {
     for (theme, heart, bang) in [(Theme::cp437(), "♥", "‼"), (Theme::ascii(), "+", "/")] {
         let world = garden_with_sprites();
         let mut app = app_for(&world, theme, 100, 30);
-        let (petted, zapped) = (Pos { x: 2, y: 3 }, Pos { x: 7, y: 1 });
+        let (petted, zapped) = (at(2, 3), at(7, 1));
         let ids = |pos| world.sprite_at(pos).expect("a sprite").id();
         let cells = |pos| app.cell_of(pos).expect("in view");
         let (petted_cell, zapped_cell) = (cells(petted), cells(zapped));
@@ -3491,11 +3441,7 @@ fn holding_world(objects: &[(Pos, &str)], held: Pos) -> (World, App) {
         Action::left_click(pointer_on(&world, held.x, held.y)),
         &world,
     );
-    for command in app.take_commands() {
-        world.submit(command.clone());
-    }
-    let events = world.step();
-    app.record(&events, &world);
+    tick(&mut app, &mut world);
     assert!(world.cursor().holds().is_some());
     (world, app)
 }
@@ -3505,10 +3451,7 @@ fn a_steady_aim_line_runs_the_way_the_thing_will_go_as_far_as_it_can_over_empty_
     // Design v25 §6.5. A ball held on (12, 2) is pulled 7 tiles east: it'll
     // go west, but a ball goes at most 6 tiles. The berry on its way shows,
     // and the ball under the Cursor, where it'll be thrown from.
-    let (world, mut app) = holding_world(
-        &[(Pos { x: 12, y: 2 }, "ball"), (Pos { x: 8, y: 2 }, "berry")],
-        Pos { x: 12, y: 2 },
-    );
+    let (world, mut app) = holding_world(&[(at(12, 2), "ball"), (at(8, 2), "berry")], at(12, 2));
     app.apply(Action::right_click(pointer_on(&world, 12, 2)), &world);
     app.apply(Action::Point(pointer_on(&world, 19, 2)), &world);
     let row = |app: &App| -> String {
@@ -3529,7 +3472,7 @@ fn a_steady_aim_line_runs_the_way_the_thing_will_go_as_far_as_it_can_over_empty_
 fn while_aiming_a_held_item_it_is_drawn_under_the_cursor_where_it_will_be_thrown_from() {
     // Design v25 §6.5: held in place while aimed, rather than gone from the
     // map, and in reverse video, as the Cursor's target.
-    let (world, mut app) = holding_world(&[(Pos { x: 12, y: 2 }, "ball")], Pos { x: 12, y: 2 });
+    let (world, mut app) = holding_world(&[(at(12, 2), "ball")], at(12, 2));
     let under_the_cursor = |app: &App| {
         let cell = render(app, &world, 100, 30)[cell(&world, 12, 2)].clone();
         (
@@ -3546,7 +3489,7 @@ fn while_aiming_a_held_item_it_is_drawn_under_the_cursor_where_it_will_be_thrown
 
 #[test]
 fn while_aiming_the_hints_say_how_to_send_it_or_cancel() {
-    let (world, mut app) = holding_world(&[(Pos { x: 12, y: 2 }, "ball")], Pos { x: 12, y: 2 });
+    let (world, mut app) = holding_world(&[(at(12, 2), "ball")], at(12, 2));
     app.apply(Action::right_click(pointer_on(&world, 12, 2)), &world);
     let status = lines(&render(&app, &world, 100, 30))[29].clone();
     assert!(
@@ -3555,11 +3498,9 @@ fn while_aiming_the_hints_say_how_to_send_it_or_cancel() {
     );
 }
 
-#[test]
-fn the_body_tab_says_a_shoved_sprite_slides_and_how_far_it_has_to_go() {
-    // Design v25 §6.1. It's shoved 3 tiles east from (2, 3), and slides a
-    // tile a tick.
-    let (mut world, mut app) = one_sprite_doing(SPEED_10, &[], 0);
+/// The player takes hold of `world`'s first sprite on one tick, and shoves it
+/// 3 tiles east on the next (design v25 §6.1).
+fn shove_east(world: &mut World) {
     let sprite = world.sprites().next().expect("the sprite").id();
     world.submit(Command::TakeHold { sprite });
     world.step();
@@ -3568,6 +3509,14 @@ fn the_body_tab_says_a_shoved_sprite_slides_and_how_far_it_has_to_go() {
         tiles: 3,
     });
     world.step();
+}
+
+#[test]
+fn the_body_tab_says_a_shoved_sprite_slides_and_how_far_it_has_to_go() {
+    // Design v25 §6.1. It's shoved 3 tiles east from (2, 3), and slides a
+    // tile a tick.
+    let (mut world, mut app) = one_sprite_doing(SPEED_10, &[], 0);
+    shove_east(&mut world);
     assert_eq!(inspector(&app, &world).1[0], "Shoved · 2 tiles to go");
     app.apply(Action::ToggleDetail, &world);
     assert_eq!(inspector(&app, &world).1[0], "SHOVED → E · 2 tiles left");
@@ -3577,14 +3526,7 @@ fn the_body_tab_says_a_shoved_sprite_slides_and_how_far_it_has_to_go() {
 fn the_brain_tab_says_a_sliding_sprite_decides_nothing() {
     let (mut world, mut app) = one_sprite(HUNGRY_GENOME, 1);
     open(&mut app, &world, Tab::Brain);
-    let sprite = world.sprites().next().expect("the sprite").id();
-    world.submit(Command::TakeHold { sprite });
-    world.step();
-    world.submit(Command::Shove {
-        toward: terra_sim::Dir::E,
-        tiles: 3,
-    });
-    world.step();
+    shove_east(&mut world);
     assert_eq!(inspector(&app, &world).1[0], "Shoved: it decides nothing");
 }
 
@@ -3624,7 +3566,7 @@ fn the_event_log_tells_of_throws_shoves_and_crashes_that_hurt() {
 fn a_short_aim_s_end_shows_even_beside_the_cursor() {
     // Design v25 §6.5: a ball pulled one tile east goes one tile west, onto
     // the Cursor's left arm; the end mark shows there, so it isn't lost.
-    let (world, mut app) = holding_world(&[(Pos { x: 12, y: 2 }, "ball")], Pos { x: 12, y: 2 });
+    let (world, mut app) = holding_world(&[(at(12, 2), "ball")], at(12, 2));
     app.apply(Action::right_click(pointer_on(&world, 12, 2)), &world);
     app.apply(Action::Point(pointer_on(&world, 13, 2)), &world);
     let row: String = map_rows(&render(&app, &world, 100, 30), &world)[2 + 1]
@@ -3698,7 +3640,7 @@ fn the_event_log_says_who_laid_an_egg_hatched_and_turned_female() {
         // An egg is never thrown (§10.4): 103 is its type.
         EventKind::CommandRejected {
             command: Command::Throw {
-                from: Pos { x: 1, y: 1 },
+                from: at(1, 1),
                 toward: terra_sim::Dir::E,
                 tiles: 3,
             },
@@ -3774,22 +3716,15 @@ fn an_egg_held_past_its_time_waits_and_its_hatchling_stays_selected() {
     let (mut world, egg) = a_lone_egg(&[]);
     let at = egg_tile(&world, egg);
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
-    let frame = |app: &mut App, world: &mut World| {
-        for command in app.take_commands() {
-            world.submit(command);
-        }
-        let events = world.step();
-        app.record(&events, world);
-    };
     app.apply(Action::left_click(pointer_on(&world, at.x, at.y)), &world);
     app.apply(Action::Mode(CursorMode::Grab), &world);
     app.apply(Action::left_click(pointer_on(&world, at.x, at.y)), &world);
-    frame(&mut app, &mut world);
+    tick(&mut app, &mut world);
     let held = world.cursor().holds().map(|held| held.id());
     assert_eq!(held, Some(egg), "picked up");
     let due = world.egg(egg).expect("the egg").hatches();
     while world.tick() <= due {
-        frame(&mut app, &mut world);
+        tick(&mut app, &mut world);
     }
     assert!(world.egg(egg).is_some(), "it waits");
     let text = lines(&render(&app, &world, 100, 30)).join("\n");
@@ -3803,7 +3738,7 @@ fn an_egg_held_past_its_time_waits_and_its_hatchling_stays_selected() {
         Action::left_click(pointer_on(&world, free.x, free.y)),
         &world,
     );
-    frame(&mut app, &mut world);
+    tick(&mut app, &mut world);
     let hatchling = world.sprite(egg).expect("it hatched");
     assert_eq!(hatchling.pos(), free);
     assert_eq!(app.selection(), Some(Selection::Living(egg)));
@@ -3852,7 +3787,7 @@ fn the_body_tab_says_how_near_a_male_is_to_turning_female_once_grown() {
     let genome = r#"(format: 1, genes: [
         InitialConcentration(chem: "feminiser", value: 0.4),
     ])"#;
-    let (grown, young) = (Pos { x: 2, y: 3 }, Pos { x: 6, y: 1 });
+    let (grown, young) = (at(2, 3), at(6, 1));
     let world = WorldBuilder::grass(10, 5)
         .genes(&[(grown, genome), (young, genome)])
         .newborns(&[young])
@@ -3888,11 +3823,7 @@ fn paused_an_item_picked_up_leaves_the_map_and_one_put_down_shows_where_it_lands
     let status = status_line(&app, &world);
     assert!(before_hints(&status).contains("· egg (laid)"), "{status}");
     // When time moves, the world does what the map showed.
-    for command in app.take_commands() {
-        world.submit(command);
-    }
-    let events = world.step();
-    app.record(&events, &world);
+    tick(&mut app, &mut world);
     assert_eq!(world.egg(egg).and_then(|egg| egg.pos()), Some(to));
     let screen = render(&app, &world, 100, 30);
     assert_eq!(screen[cell(&world, to.x, to.y)].symbol(), "o");
@@ -3941,7 +3872,7 @@ fn paused_a_click_acts_on_an_item_where_the_map_shows_it() {
 fn paused_a_thrown_item_shows_where_it_s_thrown_from() {
     // Design §2.5, §6.5: a throw puts the item down where it's thrown from,
     // and it rolls on from there when time moves.
-    let (world, mut app) = holding_world(&[(Pos { x: 12, y: 2 }, "ball")], Pos { x: 12, y: 2 });
+    let (world, mut app) = holding_world(&[(at(12, 2), "ball")], at(12, 2));
     app.apply(Action::right_click(pointer_on(&world, 12, 2)), &world);
     app.apply(Action::Point(pointer_on(&world, 15, 2)), &world);
     app.apply(
@@ -3962,9 +3893,9 @@ fn paused_the_leash_runs_over_ground_as_the_map_shows_it() {
     // (4, 2), both waiting, then the sprite on (1, 2) taken hold of. The
     // leash's dots run over (3, 2) and stop at the berry on (4, 2).
     let world = WorldBuilder::grass(12, 5)
-        .objects(&[(Pos { x: 3, y: 2 }, "berry")])
-        .starters(&[Pos { x: 1, y: 2 }])
-        .scripts(&[(Pos { x: 1, y: 2 }, ScriptedAction::Rest)])
+        .objects(&[(at(3, 2), "berry")])
+        .starters(&[at(1, 2)])
+        .scripts(&[(at(1, 2), ScriptedAction::Rest)])
         .seed(7)
         .build();
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
@@ -3986,15 +3917,15 @@ fn leading_a_young_sprite_the_cursor_s_mark_shows_it_small() {
     // M2 design §9.6: the bottom left mark shows what the Cursor has hold
     // of, as the map draws it. Away from the map's edges, so the marks are
     // drawn.
-    let at = Pos { x: 4, y: 2 };
+    let tile = at(4, 2);
     let world = WorldBuilder::grass(10, 5)
-        .starters(&[at])
-        .newborns(&[at])
+        .starters(&[tile])
+        .newborns(&[tile])
         .seed(7)
         .build();
     for (theme, glyph) in [(Theme::cp437(), "ö"), (Theme::ascii(), "a")] {
         let mut app = app_for(&world, theme, 100, 30);
-        let on = pointer_on(&world, at.x, at.y);
+        let on = pointer_on(&world, tile.x, tile.y);
         app.apply(Action::Mode(CursorMode::Grab), &world);
         app.apply(Action::Point(on), &world);
         app.apply(Action::left_click(on), &world);
@@ -4018,7 +3949,7 @@ fn a_lone_egg(changes: &[(&str, &str)]) -> (World, EntityId) {
         Instinct(inputs: [("always", false)], verb: BreedAlone, weight: 1.0),
     ])"#;
     let mut world = WorldBuilder::grass(10, 5)
-        .genes(&[(Pos { x: 1, y: 4 }, genome)])
+        .genes(&[(at(1, 4), genome)])
         .data(pack_changing(&[LONE, ("physiology.ron", changes)]))
         .seed(7)
         .build();
@@ -4050,11 +3981,8 @@ fn a_pair(pack: DataPack, his: &str) -> (World, EntityId, EntityId) {
     };
     let hers = r#"InitialConcentration(chem: "feminiser", value: 1.0),"#;
     let mut world = WorldBuilder::grass(6, 2)
-        .objects(&[(Pos { x: 4, y: 1 }, "thornbush")])
-        .genes(&[
-            (Pos { x: 1, y: 0 }, &keen(hers)),
-            (Pos { x: 2, y: 0 }, &keen(his)),
-        ])
+        .objects(&[(at(4, 1), "thornbush")])
+        .genes(&[(at(1, 0), &keen(hers)), (at(2, 0), &keen(his))])
         .data(pack)
         .seed(7)
         .build();
@@ -4111,6 +4039,13 @@ fn the_body_tab_says_when_a_sprite_s_partner_has_died() {
 const COPY_AND_CHANGE: &str =
     "copy_and_change: (doubled: 0.00029, lost: 0.00029, changed: 0.00029,";
 
+/// How many genes `listed` names after `label`: one, and one more for each
+/// `·` before the next label's colon.
+fn named_after(listed: &str, label: &str) -> usize {
+    let rest = listed.split(label).nth(1).unwrap_or_default();
+    rest.split(':').next().unwrap_or(rest).matches('·').count() + 1
+}
+
 #[test]
 fn the_genome_tab_of_a_sprite_with_parents_says_first_what_s_new_in_it() {
     // M2 design §12: a lone egg, every gene value copied wrongly and each
@@ -4149,23 +4084,8 @@ fn the_genome_tab_of_a_sprite_with_parents_says_first_what_s_new_in_it() {
     let broken = flaws.iter().filter(|&&flawed| flawed == 2).count();
     let carried = flaws.iter().filter(|&&flawed| flawed == 1).count();
     assert!(broken > 0 && carried > 0, "{flaws:?}");
-    let after = |label: &str| {
-        listed
-            .split(label)
-            .nth(1)
-            .map(|rest| rest.split(':').next().unwrap_or(rest).to_string())
-            .unwrap_or_default()
-    };
-    assert_eq!(
-        after("broken: ").matches('·').count() + 1,
-        broken,
-        "{listed}"
-    );
-    assert_eq!(
-        after("carries flaws: ").matches('·').count() + 1,
-        carried,
-        "{listed}"
-    );
+    assert_eq!(named_after(&listed, "broken: "), broken, "{listed}");
+    assert_eq!(named_after(&listed, "carries flaws: "), carried, "{listed}");
     for name in ["speed", "low energy → hunger", "always → breed_alone"] {
         assert!(listed.contains(name), "{name:?} in {listed:?}");
     }
@@ -4211,19 +4131,8 @@ fn the_genome_tab_lists_the_genes_copying_changed_doubled_and_lost() {
         changed - copies,
         "{listed}"
     );
-    let after = |label: &str| {
-        listed
-            .split(label)
-            .nth(1)
-            .map(|rest| rest.split(':').next().unwrap_or(rest).to_string())
-            .unwrap_or_default()
-    };
-    assert_eq!(
-        after("doubled: ").matches('·').count() + 1,
-        doubled,
-        "{listed}"
-    );
-    assert_eq!(after("lost: ").matches('·').count() + 1, lost, "{listed}");
+    assert_eq!(named_after(&listed, "doubled: "), doubled, "{listed}");
+    assert_eq!(named_after(&listed, "lost: "), lost, "{listed}");
 }
 
 /// What's new in `id`, a hatchling selected with `Tab`, as the top of its

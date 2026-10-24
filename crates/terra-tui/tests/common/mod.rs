@@ -29,7 +29,7 @@ pub fn pack() -> DataPack {
 }
 
 /// A position at `(x, y)`.
-pub fn at(x: u16, y: u16) -> Pos {
+pub const fn at(x: u16, y: u16) -> Pos {
     Pos { x, y }
 }
 
