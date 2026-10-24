@@ -1032,7 +1032,7 @@ fn median_of(values: &[f64]) -> Option<f64> {
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use super::*;
     use std::collections::BTreeMap;
     use terra_sim::{Childhood, DeathCause, LifeStage, Verb};
@@ -1519,8 +1519,9 @@ mod tests {
     }
 
     /// A report of ten seeds, one of which lost an adult to thirst, whose
-    /// unattended newborns grew up 6 in 30 on each seed.
-    fn sample() -> Report {
+    /// unattended newborns grew up 6 in 30 on each seed. It measured commit
+    /// abc1234 at 2026-10-01 09:00.
+    pub fn sample() -> Report {
         let data = data();
         let mut deaths: [&Dying; 10] = [&[]; 10];
         deaths[0] = &[(LifeStage::Adult, DeathCause::Dehydration, 1)];
