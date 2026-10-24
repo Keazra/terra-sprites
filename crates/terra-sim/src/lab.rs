@@ -20,17 +20,12 @@ use crate::objects::EntityId;
 use crate::registry::Verb;
 use crate::world::{Scenario, ScenarioError, World};
 
-/// A lab scenario, checked.
+/// A lab scenario, checked: its file, and its trainer, checked against the
+/// data pack.
 #[derive(Debug, Clone)]
 pub struct LabScenario {
-    world: LabWorld,
-    grows_old: Option<f32>,
-    most_sprites: Option<u16>,
-    ticks: u64,
-    windows: Vec<(u64, u64)>,
-    control: Control,
+    file: LabFile,
     trainer: Option<Trainer>,
-    young: Option<Young>,
 }
 
 /// Young for a scenario's sprites (M2 design §18.6): on the tick `at`, each
@@ -216,7 +211,7 @@ impl std::fmt::Display for LabError {
 impl std::error::Error for LabError {}
 
 /// What one seed's run counted in each window.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct LabRun {
     pub windows: Vec<Window>,
     /// The control run's windows, if the scenario asks for one.
@@ -226,7 +221,7 @@ pub struct LabRun {
 }
 
 /// What happened in one window of a run.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Window {
     pub from: u64,
     pub to: u64,
@@ -370,16 +365,17 @@ impl LabScenario {
         }
         let trainer = file
             .trainer
+            .as_ref()
             .map(|trainer| {
                 if trainer.give.corrects() && trainer.reach_back.is_some() {
                     return Err(LabError::ReachBackOnCorrect);
                 }
-                let (verb, name) = trainer.on;
+                let (verb, name) = &trainer.on;
                 let index = data
-                    .object_type_named(&name)
-                    .ok_or(LabError::UnknownTarget(name))?;
+                    .object_type_named(name)
+                    .ok_or_else(|| LabError::UnknownTarget(name.clone()))?;
                 Ok(Trainer {
-                    verb,
+                    verb: *verb,
                     target: data.object_types()[index].id,
                     give: trainer.give,
                     delay: trainer.delay,
@@ -397,16 +393,7 @@ impl LabScenario {
         if let Some(young) = file.young.filter(|young| young.at >= file.ticks) {
             return Err(LabError::LateYoung(young.at));
         }
-        let lab = LabScenario {
-            world: file.world,
-            grows_old: file.grows_old,
-            most_sprites: file.most_sprites,
-            ticks: file.ticks,
-            windows: file.windows,
-            control: file.control,
-            trainer,
-            young: file.young,
-        };
+        let lab = LabScenario { file, trainer };
         // Building it once finds anything that can't go where it's drawn.
         lab.world(data.clone(), 0)?;
         Ok(lab)
@@ -414,27 +401,23 @@ impl LabScenario {
 
     /// Runs the scenario for `seed`, counting each window.
     pub fn run(&self, data: DataPack, seed: u64) -> LabRun {
-        let (control, without) = match self.control {
+        let fresh = || self.world(data.clone(), seed).expect("checked when read");
+        let (control, without) = match self.file.control {
             Control::Off => (None, None),
             Control::NoLearning => {
-                let mut world = self.world(data.clone(), seed).expect("checked when read");
+                let mut world = fresh();
                 world.switch_off_learning();
                 let windows = self.count(world, self.trainer);
                 (Some(windows), Some(Without::Learning))
             }
-            Control::NoTrainer => {
-                let world = self.world(data.clone(), seed).expect("checked when read");
-                (Some(self.count(world, None)), Some(Without::Trainer))
-            }
+            Control::NoTrainer => (Some(self.count(fresh(), None)), Some(Without::Trainer)),
             Control::Orphans => {
-                let world = self.world(data.clone(), seed).expect("checked when read");
-                let windows = self.counting(world, self.trainer, true);
+                let windows = self.counting(fresh(), self.trainer, true);
                 (Some(windows), Some(Without::Parents))
             }
         };
-        let world = self.world(data, seed).expect("checked when read");
         LabRun {
-            windows: self.count(world, self.trainer),
+            windows: self.count(fresh(), self.trainer),
             control,
             without,
         }
@@ -451,20 +434,13 @@ impl LabScenario {
     /// and their parents taken away as they appear if `orphans`.
     fn counting(&self, mut world: World, trainer: Option<Trainer>, orphans: bool) -> Vec<Window> {
         let mut windows: Vec<Window> = self
+            .file
             .windows
             .iter()
             .map(|&(from, to)| Window {
                 from,
                 to,
-                applied: BTreeMap::new(),
-                deaths: BTreeMap::new(),
-                touches: BTreeMap::new(),
-                lessons: BTreeMap::new(),
-                young: None,
-                first: Childhood::default(),
-                later: Childhood::default(),
-                stage_deaths: BTreeMap::new(),
-                first_died: 0,
+                ..Default::default()
             })
             .collect();
         // The world's first sprites, and each sprite's life stage, to count
@@ -481,12 +457,12 @@ impl LabScenario {
         let mut learned: BTreeMap<(EntityId, (Learned, bool)), u64> = BTreeMap::new();
         // The trainer's commands, each with the tick it's submitted before.
         let mut due: Vec<(u64, Command)> = Vec::new();
-        for _ in 0..self.ticks {
+        for _ in 0..self.file.ticks {
             let tick = world.tick();
             for (_, command) in due.extract_if(.., |(at, _)| *at == tick) {
                 world.submit(command);
             }
-            if self.young.is_some_and(|young| young.at == tick) {
+            if self.file.young.is_some_and(|young| young.at == tick) {
                 let grown: Vec<EntityId> = world.sprites().map(|sprite| sprite.id()).collect();
                 let given = world.give_young();
                 stages.extend(given.iter().map(|&id| (id, LifeStage::Young)));
@@ -530,21 +506,32 @@ impl LabScenario {
                 .iter_mut()
                 .filter(|w| (w.from..w.to).contains(&tick))
             {
+                // What the scenario's young did, once they've appeared.
+                let mut counts = (!young.is_empty())
+                    .then(|| window.young.get_or_insert_with(YoungCounts::default));
                 for event in &events {
                     match &event.kind {
                         EventKind::ActionEnded {
+                            id,
                             verb,
                             outcome: Outcome::Applied,
                             action,
-                            ..
                         } => {
-                            *window
-                                .applied
-                                .entry((*verb, action.target_type))
-                                .or_insert(0) += 1
+                            let key = (*verb, action.target_type);
+                            *window.applied.entry(key).or_insert(0) += 1;
+                            if young.contains_key(id)
+                                && let Some(counts) = &mut counts
+                            {
+                                *counts.applied.entry(key).or_insert(0) += 1;
+                            }
                         }
-                        EventKind::Died { cause, .. } => {
+                        EventKind::Died { id, cause, .. } => {
                             *window.deaths.entry(*cause).or_insert(0) += 1;
+                            if young.contains_key(id)
+                                && let Some(counts) = &mut counts
+                            {
+                                *counts.deaths.entry(*cause).or_insert(0) += 1;
+                            }
                         }
                         EventKind::LearnedMilestone { learned, good, .. } => {
                             *window.lessons.entry((learned.clone(), *good)).or_insert(0) += 1;
@@ -559,28 +546,6 @@ impl LabScenario {
                 for &fate in &fates {
                     window.record(fate);
                 }
-                if !young.is_empty() {
-                    let counts = window.young.get_or_insert_with(YoungCounts::default);
-                    for event in &events {
-                        match &event.kind {
-                            EventKind::ActionEnded {
-                                id,
-                                verb,
-                                outcome: Outcome::Applied,
-                                action,
-                            } if young.contains_key(id) => {
-                                *counts
-                                    .applied
-                                    .entry((*verb, action.target_type))
-                                    .or_insert(0) += 1
-                            }
-                            EventKind::Died { id, cause, .. } if young.contains_key(id) => {
-                                *counts.deaths.entry(*cause).or_insert(0) += 1;
-                            }
-                            _ => {}
-                        }
-                    }
-                }
             }
         }
         for window in &mut windows {
@@ -594,7 +559,7 @@ impl LabScenario {
     /// The scenario's world for `seed`. A drawn one gets its objects in
     /// reading order, then its sprites.
     fn world(&self, data: DataPack, seed: u64) -> Result<World, LabError> {
-        let mut world = match &self.world {
+        let mut world = match &self.file.world {
             LabWorld::Generated => {
                 let config = WorldConfig::builtin(&data);
                 World::new(config, data, seed)
@@ -605,10 +570,10 @@ impl LabScenario {
             }
             LabWorld::Drawn { rows, key } => drawn(rows, key, data, seed)?,
         };
-        if let Some(age) = self.grows_old {
+        if let Some(age) = self.file.grows_old {
             world.set_grows_old(age);
         }
-        if let Some(most) = self.most_sprites {
+        if let Some(most) = self.file.most_sprites {
             world.set_most_sprites(most);
         }
         Ok(world)
@@ -967,8 +932,9 @@ fn applied_name((verb, target): (Verb, Option<u16>), data: &DataPack) -> String 
     }
 }
 
-/// A cause of death by name: "hurt by thornbush" names the object type.
-fn cause_name(cause: DeathCause, data: &DataPack) -> String {
+/// A cause of death by name, as the lab runner writes it: "hurt by
+/// thornbush" names the object type.
+pub fn cause_name(cause: DeathCause, data: &DataPack) -> String {
     match cause {
         DeathCause::Starvation => "starvation".into(),
         DeathCause::Dehydration => "dehydration".into(),
@@ -977,8 +943,8 @@ fn cause_name(cause: DeathCause, data: &DataPack) -> String {
     }
 }
 
-/// `5000` → `"5,000"`.
-fn thousands(n: u64) -> String {
+/// A whole number with commas between its thousands: "1,000,000".
+pub fn thousands(n: u64) -> String {
     let digits = n.to_string();
     let mut out = String::new();
     for (i, c) in digits.chars().enumerate() {
@@ -999,15 +965,7 @@ mod tests {
         Window {
             from: 0,
             to: 2,
-            applied: BTreeMap::new(),
-            deaths: BTreeMap::new(),
-            touches: BTreeMap::new(),
-            lessons: BTreeMap::new(),
-            young: None,
-            first: Childhood::default(),
-            later: Childhood::default(),
-            stage_deaths: BTreeMap::new(),
-            first_died: 0,
+            ..Default::default()
         }
     }
 

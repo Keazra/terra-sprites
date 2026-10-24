@@ -73,10 +73,7 @@ pub(crate) fn tags(
         .into_iter()
         .map(|entry| {
             let name = entry.name.clone();
-            let invalid = |message: String| DataError::Invalid {
-                file: TAGS.into(),
-                message,
-            };
+            let invalid = |message: String| DataError::invalid(TAGS, message);
             if is_built_in(&name) {
                 return Err(invalid(format!(
                     "`{name}` is built in, as physics, so it isn't defined here"
@@ -88,10 +85,7 @@ pub(crate) fn tags(
             seen.push(name.clone());
             entry
                 .resolve(chemicals, loci)
-                .map_err(|problem| DataError::Invalid {
-                    file: TAGS.into(),
-                    message: format!("`{name}`: {problem}"),
-                })
+                .map_err(|problem| invalid(format!("`{name}`: {problem}")))
         })
         .collect()
 }

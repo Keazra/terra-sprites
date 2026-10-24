@@ -2,12 +2,15 @@
 //! and Follow.
 
 mod common;
-use common::{WorldBuilder, app, apply, at, click, field, pointing_at, sprite_on, touched};
+use common::{
+    E, Q, WorldBuilder, app, apply, at, click, died, field, follow as middle_click, pointing_at,
+    sprite_on, touched,
+};
 
 use std::time::Duration;
 
 use ratatui::layout::Position;
-use terra_sim::{Command, DeathCause, EntityId, Event, EventKind, Pos, ScriptedAction, World};
+use terra_sim::{Command, DeathCause, EntityId, Pos, ScriptedAction, World};
 use terra_tui::app::{App, CursorMode, Screen, StatusMark};
 use terra_tui::input::{Action, Button};
 
@@ -172,13 +175,6 @@ fn a_pet_reaches_back_two_seconds_of_the_player_s_time() {
 /// `F`: Follow, where the Cursor is (design v26 §6.5).
 const F: Action = Action::Follow { at: None };
 
-/// A middle click on `tile`: what `F` does, where it points (design v26
-/// §6.5).
-fn middle_click(app: &mut App, world: &World, tile: Pos) {
-    let at = pointing_at(tile);
-    apply(app, world, Action::middle_click(at));
-}
-
 /// Has the Cursor follow the sprite on `tile`: points there, then `F`.
 fn follow(app: &mut App, world: &World, tile: Pos) {
     apply(app, world, Action::Point(pointing_at(tile)));
@@ -273,11 +269,7 @@ fn in_select_mode_a_right_click_or_e_activates_and_nothing_can_be_activated_yet(
     assert_eq!(app.refusal(), Some("Nothing here to activate"));
     follow(&mut app, &world, at(4, 2));
     click(&mut app, &world, at(4, 2), Button::Right);
-    let e = Action::Press {
-        button: Button::Right,
-        amplified: false,
-    };
-    apply(&mut app, &world, e);
+    apply(&mut app, &world, E);
     assert_eq!((app.selection(), app.followed()), (None, Some(id)));
     assert_eq!(app.refusal(), Some("Nothing here to activate"));
 }
@@ -353,18 +345,10 @@ fn the_followed_sprite_s_death_ends_follow_and_no_other_does() {
     let mut app = app(&world);
     click(&mut app, &world, at(7, 2), Button::Left);
     follow(&mut app, &world, at(4, 2));
-    let died = |id| Event {
-        tick: 0,
-        kind: EventKind::Died {
-            id,
-            name: None,
-            cause: DeathCause::Starvation,
-            age: 5,
-        },
-    };
-    app.record(&[died(other)], &world);
+    let starved = |id| died(0, id, DeathCause::Starvation, 5);
+    app.record(&[starved(other)], &world);
     assert_eq!(app.followed(), Some(id), "the selected sprite died");
-    app.record(&[died(id)], &world);
+    app.record(&[starved(id)], &world);
     assert_eq!(app.followed(), None);
     apply(&mut app, &world, Action::Point(pointing_at(at(8, 5))));
     assert_eq!(app.cursor(), at(8, 5), "it follows the pointer again");
@@ -380,11 +364,7 @@ fn in_train_mode_the_followed_sprite_is_the_target_wherever_the_click_or_key_is(
     apply(&mut app, &world, Action::Mode(CursorMode::Train));
     click(&mut app, &world, at(6, 2), Button::Left);
     click(&mut app, &world, at(9, 5), Button::Right);
-    let q = Action::Press {
-        button: Button::Left,
-        amplified: false,
-    };
-    apply(&mut app, &world, q);
+    apply(&mut app, &world, Q);
     assert_eq!(
         app.take_commands(),
         [pet(first, 3), zap(first), pet(first, 3)]
@@ -401,11 +381,7 @@ fn q_and_f_act_where_the_cursor_is() {
     apply(&mut app, &world, F);
     assert_eq!(app.followed(), Some(id), "F followed it");
     apply(&mut app, &world, Action::Point(pointing_at(at(7, 2))));
-    let q = Action::Press {
-        button: Button::Left,
-        amplified: false,
-    };
-    apply(&mut app, &world, q);
+    apply(&mut app, &world, Q);
     assert_eq!(
         app.followed(),
         Some(id),

@@ -6,13 +6,11 @@
 
 mod common;
 use common::{
-    ALONE, FEMALE, LONE, NO_COPYING_ERRORS, at, builtin_changing, family, family_in, hatch, laid,
+    LONE, NO_COPYING_ERRORS, at, builtin_changing, family, hatch, laid, lone_mother_in, replayed,
     until,
 };
 
-use terra_sim::{
-    Command, DeathCause, EntityId, EventKind, LifeStage, Origin, Playback, Sex, World,
-};
+use terra_sim::{Command, DeathCause, EntityId, EventKind, LifeStage, Origin, Sex, World};
 
 /// The changes to `physiology.ron` that make thirst kill within a few
 /// dozen ticks, so a sprite with no water dies soon after it hatches.
@@ -31,8 +29,7 @@ fn mother_of(seed: u64) -> (World, EntityId) {
         .chain([LONE])
         .collect();
     let data = builtin_changing("physiology.ron", &changes);
-    let mother = format!("{ALONE}{FEMALE}");
-    let world = family_in(data, &[(at(2, 1), &mother)], &[], seed);
+    let world = lone_mother_in(data, seed);
     let id = world.sprite_at(at(2, 1)).expect("the mother").id();
     (world, id)
 }
@@ -189,12 +186,7 @@ fn the_dead_replay_exactly() {
             .count();
     }
     assert!(deaths >= 1, "a hatchling died");
-    let mut playback = Playback::new(&world.replay().unwrap()).expect("the replay plays");
-    while playback.world().tick() < playback.end() {
-        playback.step();
-    }
-    assert_eq!(playback.divergence(), None);
-    assert_eq!(playback.world().state_hash(), world.state_hash());
+    let playback = replayed(&world);
     let remembered = |world: &World| world.dead_sprites().map(|d| d.id()).collect::<Vec<_>>();
     assert_eq!(remembered(playback.world()), remembered(&world));
 }

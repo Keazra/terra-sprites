@@ -1,3 +1,6 @@
+mod common;
+use common::{builtin_with, default_world, run_for};
+
 use proptest::prelude::*;
 use terra_sim::{DataPack, Dir, EventKind, Map, Pos, Removal, Terrain, World, WorldConfig};
 
@@ -31,26 +34,9 @@ fn walkable_and_reachable(map: &Map) -> (usize, usize) {
             if map.step_cost(pos, dir).is_none() {
                 continue;
             }
-            let (dx, dy) = match dir {
-                Dir::N => (0, -1),
-                Dir::NE => (1, -1),
-                Dir::E => (1, 0),
-                Dir::SE => (1, 1),
-                Dir::S => (0, 1),
-                Dir::SW => (-1, 1),
-                Dir::W => (-1, 0),
-                Dir::NW => (-1, -1),
-            };
-            let next = Pos {
-                x: pos
-                    .x
-                    .checked_add_signed(dx)
-                    .expect("legal steps stay on the map"),
-                y: pos
-                    .y
-                    .checked_add_signed(dy)
-                    .expect("legal steps stay on the map"),
-            };
+            let next = map
+                .neighbour(pos, dir)
+                .expect("legal steps stay on the map");
             if !seen[index(next)] {
                 seen[index(next)] = true;
                 stack.push(next);
@@ -109,12 +95,6 @@ fn maps_at_the_size_limits_are_one_region() {
     }
 }
 
-/// A new world from the built-in preset and pack.
-fn default_world(seed: u64) -> World {
-    let data = DataPack::builtin().expect("valid pack");
-    World::new(WorldConfig::builtin(&data), data, seed)
-}
-
 /// How many objects of each type the world has, by type name.
 fn census(world: &World) -> std::collections::BTreeMap<String, usize> {
     let mut counts = std::collections::BTreeMap::new();
@@ -166,9 +146,7 @@ fn generated_objects_start_partway_through_their_lives() {
     );
 
     // Mature bushes gain fruit every 200 ticks, so the world has food at once.
-    for _ in 0..200 {
-        world.step();
-    }
+    run_for(&mut world, 200);
     let fruiting = world
         .objects()
         .filter(|o| o.counter("fruit").is_some_and(|fruit| fruit > 0))
@@ -212,7 +190,7 @@ fn a_generated_object_gets_no_on_stage_enter_for_the_stage_it_starts_in() {
         rules: [(trigger: OnStageEnter("a"), do: [AddCounter("entered", 1)]),
                 (trigger: OnStageEnter("b"), do: [AddCounter("entered", 1)])])"#;
     let objects = format!("[{herb}]");
-    let data = DataPack::from_sources(&builtin_with("objects.ron", &objects)).expect("valid pack");
+    let data = builtin_with("objects.ron", &objects);
     let preset = r#"(width: 64, height: 64, objects: {"herb": 20}, per_tiles: 4096)"#;
     let config = WorldConfig::from_ron(preset, &data).expect("valid preset");
     let mut world = World::new(config, data, 9);
@@ -245,19 +223,10 @@ fn open_regions(world: &World) -> usize {
         let mut stack = vec![start];
         while let Some(pos) = stack.pop() {
             for dir in [Dir::N, Dir::E, Dir::S, Dir::W] {
-                let (dx, dy) = match dir {
-                    Dir::N => (0, -1),
-                    Dir::E => (1, 0),
-                    Dir::S => (0, 1),
-                    _ => (-1, 0),
-                };
-                let (Some(x), Some(y)) =
-                    (pos.x.checked_add_signed(dx), pos.y.checked_add_signed(dy))
-                else {
-                    continue;
-                };
-                let next = Pos { x, y };
-                if x < map.width() && y < map.height() && open(next) && !seen[index(next)] {
+                if let Some(next) = map.neighbour(pos, dir)
+                    && open(next)
+                    && !seen[index(next)]
+                {
                     seen[index(next)] = true;
                     stack.push(next);
                 }
@@ -280,14 +249,6 @@ fn generation_never_splits_the_open_ground() {
         let world = World::new(config, data.clone(), seed);
         assert_eq!(open_regions(&world), 1, "crowded, seed {seed}");
     }
-}
-
-/// The built-in pack's files with `file` replaced by `text`.
-fn builtin_with<'a>(file: &str, text: &'a str) -> Vec<(&'static str, &'a str)> {
-    DataPack::builtin_sources()
-        .iter()
-        .map(|&(path, builtin)| (path, if path == file { text } else { builtin }))
-        .collect()
 }
 
 /// A world from the built-in pack with `preset`'s text as its preset.

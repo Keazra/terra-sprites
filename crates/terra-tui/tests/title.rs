@@ -10,7 +10,7 @@ use ratatui::{Terminal, backend::TestBackend};
 use terra_sim::{DataPack, Map, Mode, Pos, World};
 use terra_tui::args::Args;
 use terra_tui::cp437;
-use terra_tui::input::{Action, Button};
+use terra_tui::input::Action;
 use terra_tui::saves::SaveFile;
 use terra_tui::start::{self, Preset};
 use terra_tui::theme::{SemanticTile, Theme};
@@ -364,11 +364,7 @@ fn any_key_or_click_skips_the_scene_and_does_nothing_else() {
 
 fn title_fresh_clicked() -> Title {
     let mut title = title();
-    let click = Action::Click {
-        at: Position::new(3, 3),
-        button: Button::Left,
-        amplified: false,
-    };
+    let click = Action::left_click(Position::new(3, 3));
     // Pointing isn't a key or a click.
     assert_eq!(
         title.apply(Action::Point(Position::new(3, 3))),
@@ -495,12 +491,7 @@ fn the_wheel_moves_through_the_menu() {
 fn a_click_on_a_choice_picks_it() {
     let mut title = after_the_scene();
     let at = find(&render(&title), "Quit").expect("Quit shows");
-    let click = Action::Click {
-        at,
-        button: Button::Left,
-        amplified: false,
-    };
-    assert_eq!(title.apply(click), TitleFlow::Quit);
+    assert_eq!(title.apply(Action::left_click(at)), TitleFlow::Quit);
 }
 
 #[test]
@@ -508,12 +499,7 @@ fn a_click_finds_the_menu_where_it_s_drawn_after_the_terminal_grows() {
     let mut title = after_the_scene();
     title.resize(Size::new(140, 45));
     let at = find(&render_at(&title, 140, 45), "Quit").expect("Quit shows");
-    let click = Action::Click {
-        at,
-        button: Button::Left,
-        amplified: false,
-    };
-    assert_eq!(title.apply(click), TitleFlow::Quit);
+    assert_eq!(title.apply(Action::left_click(at)), TitleFlow::Quit);
 }
 
 #[test]

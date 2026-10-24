@@ -3,17 +3,13 @@
 //! with scripted kicks.
 
 mod common;
-use common::{at, builtin_with, walkers, walkers_in};
+use common::{at, builtin_source, builtin_with, run_for, walkers, walkers_in, wander_to};
 
 use terra_sim::{DataPack, EventKind, Outcome, Pos, Removal, ScriptedAction, Verb, World};
 
 /// The built-in pack, with the object types `extra` added.
 fn builtin_and(extra: &str) -> DataPack {
-    let objects = DataPack::builtin_sources()
-        .iter()
-        .find(|&&(path, _)| path == "objects.ron")
-        .expect("the built-in objects")
-        .1;
+    let objects = builtin_source("objects.ron");
     let body = objects.trim_end().strip_suffix(']').expect("a list");
     let body = body.trim_end().trim_end_matches(',');
     builtin_with("objects.ron", &format!("{body}, {extra}]"))
@@ -61,7 +57,7 @@ fn all_rolls(world: &mut World, ticks: usize) -> Vec<Vec<Pos>> {
 fn kick_and_leave(pos: Pos, away: Pos) -> [ScriptedAction; 3] {
     [
         ScriptedAction::Play { at: pos },
-        ScriptedAction::Wander { destination: away },
+        wander_to(away),
         ScriptedAction::Rest,
     ]
 }
@@ -76,7 +72,7 @@ fn rolls(world: &mut World, ticks: usize) -> Vec<Pos> {
         .collect()
 }
 
-const LANE: [&str; 3] = ["...........", "...........", "..........."];
+const LANE: [&str; 3] = ["..........."; 3];
 
 #[test]
 fn a_kicked_ball_rolls_four_tiles_away_from_the_kicker_one_a_tick() {
@@ -87,15 +83,7 @@ fn a_kicked_ball_rolls_four_tiles_away_from_the_kicker_one_a_tick() {
     assert_eq!(path, expected.map(|(x, y)| at(x, y)));
 }
 
-const FIELD: [&str; 7] = [
-    "...........",
-    "...........",
-    "...........",
-    "...........",
-    "...........",
-    "...........",
-    "...........",
-];
+const FIELD: [&str; 7] = ["..........."; 7];
 
 #[test]
 fn a_ball_kicked_from_its_own_tile_rolls_the_way_the_kicker_last_stepped() {
@@ -105,9 +93,7 @@ fn a_ball_kicked_from_its_own_tile_rolls_the_way_the_kicker_last_stepped() {
         &[(
             at(1, 3),
             &[
-                ScriptedAction::Wander {
-                    destination: at(3, 3),
-                },
+                wander_to(at(3, 3)),
                 ScriptedAction::Play { at: at(3, 3) },
                 ScriptedAction::Rest,
                 ScriptedAction::Rest,
@@ -224,9 +210,7 @@ fn a_ball_with_no_way_back_stops_for_good() {
             at(1, 1),
             &[
                 ScriptedAction::Play { at: at(2, 1) },
-                ScriptedAction::Wander {
-                    destination: at(8, 2),
-                },
+                wander_to(at(8, 2)),
                 ScriptedAction::Rest,
             ],
         )],
@@ -454,9 +438,7 @@ fn a_ball_knocks_on_a_smaller_harder_item_rather_than_crushing_it() {
         &[(at(2, 1), "ball"), (at(4, 1), "pebble")],
         &[(at(1, 1), &kick(at(2, 1)))],
     );
-    for _ in 0..6 {
-        world.step();
-    }
+    run_for(&mut world, 6);
     assert_eq!(ball(&world), at(3, 1));
     assert_eq!(tiles_of(&world, "pebble"), [at(6, 1)]);
 }

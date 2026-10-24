@@ -123,18 +123,17 @@ pub(crate) struct Regions {
 impl Regions {
     pub(crate) fn find(map: &Map) -> Regions {
         let mut of_tile: Vec<Option<usize>> = vec![None; map.tile_count()];
-        let mut sizes = Vec::new();
+        let mut count = 0;
         let mut stack = Vec::new();
         for start in map.positions() {
             if !map.is_walkable(start) || of_tile[map.index(start)].is_some() {
                 continue;
             }
-            let region = sizes.len();
-            let mut size = 0;
+            let region = count;
+            count += 1;
             of_tile[map.index(start)] = Some(region);
             stack.push(start);
             while let Some(pos) = stack.pop() {
-                size += 1;
                 for dir in Dir::ALL {
                     if map.step_cost(pos, dir).is_none() {
                         continue;
@@ -149,9 +148,8 @@ impl Regions {
                     }
                 }
             }
-            sizes.push(size);
         }
-        let mut members = vec![Vec::new(); sizes.len()];
+        let mut members = vec![Vec::new(); count];
         for (index, region) in of_tile.iter().enumerate() {
             if let Some(region) = *region {
                 members[region].push(index);

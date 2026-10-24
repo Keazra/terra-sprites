@@ -87,15 +87,16 @@ mod evolution;
 mod genes;
 #[path = "common/lasting.rs"]
 mod lasting;
+#[path = "common/parallel.rs"]
+mod parallel;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::process::ExitCode;
-use std::sync::Mutex;
 
 use lasting::{Census, HOUR, LATE_HOURS};
 use terra_sim::{
     DataPack, DeathCause, EntityId, EventKind, GeneView, LifeStage, Outcome, Pos, Verb, World,
-    WorldConfig,
+    WorldConfig, cause_name,
 };
 
 /// The longest the lone newborns run, in ticks: a sprite whose genes take
@@ -338,9 +339,7 @@ fn main() -> ExitCode {
     let Some(options) = args::parse(usage, parse) else {
         return ExitCode::FAILURE;
     };
-    if cfg!(debug_assertions) {
-        eprintln!("warning: this is a debug build; add --release, or it will take a long time");
-    }
+    args::warn_if_debug(", or it will take a long time");
     let data = DataPack::builtin().expect("the built-in data pack is valid");
     let starter = Starter {
         genes: starter_genes(&data),
@@ -388,25 +387,13 @@ struct Starter {
 /// Runs the seeds' worlds, `options.jobs` at a time, printing each one's
 /// table as it finishes, and returns them in seed order.
 fn in_parallel(data: &DataPack, starter: &Starter, options: &Options) -> Vec<Run> {
-    let todo = Mutex::new(options.seeds.clone().into_iter());
-    let done = Mutex::new(Vec::new());
-    std::thread::scope(|scope| {
-        for _ in 0..options.jobs {
-            scope.spawn(|| {
-                loop {
-                    let next = todo.lock().expect("no thread panicked").next();
-                    let Some(seed) = next else {
-                        break;
-                    };
-                    let run = run(data, starter, seed, options);
-                    let mut done = done.lock().expect("no thread panicked");
-                    print_run(&run);
-                    done.push(run);
-                }
-            });
-        }
+    let mut done = parallel::in_parallel(options.seeds.clone(), options.jobs, |seed| {
+        let run = run(data, starter, seed, options);
+        // Its table printed whole, before another run's.
+        let _whole = std::io::stdout().lock();
+        print_run(&run);
+        run
     });
-    let mut done = done.into_inner().expect("no thread panicked");
     done.sort_by_key(|run| run.seed);
     done
 }
@@ -531,16 +518,6 @@ fn bush_count(world: &World) -> usize {
         .objects()
         .filter(|object| object.type_name() == "berry_bush")
         .count()
-}
-
-/// What a death was of, by name.
-fn cause_name(cause: DeathCause, data: &DataPack) -> String {
-    match cause {
-        DeathCause::Starvation => "starvation".into(),
-        DeathCause::Dehydration => "dehydration".into(),
-        DeathCause::OldAge => "old age".into(),
-        DeathCause::HurtBy(id) => format!("hurt by {}", data.object_type_name(id).unwrap_or("?")),
-    }
 }
 
 /// The starter's genes, by what each does and when it works (M2 design

@@ -6,13 +6,14 @@
 //! small.
 
 mod common;
-use common::{ALONE, FEMALE, WorldBuilder, at, builtin, family_in, laid, lone, until};
+use common::{
+    ALONE, FEMALE, WorldBuilder, at, default_world, family_in, laid, lone, replayed, run_for, until,
+};
 
 use std::collections::BTreeMap;
 
 use terra_sim::{
-    Command, EventKind, Generations, LifeStage, Playback, PopulationChanges, PopulationCount,
-    World, WorldConfig,
+    Command, EventKind, Generations, LifeStage, PopulationChanges, PopulationCount, World,
 };
 
 /// The eggs and sprites in `world` now, by life stage, in the order a count
@@ -71,8 +72,7 @@ fn doomed_sprite() -> World {
 
 #[test]
 fn a_new_world_counts_its_first_sprites_then_every_100_ticks() {
-    let data = builtin();
-    let mut world = World::new(WorldConfig::builtin(&data), data, 7);
+    let mut world = default_world(7);
     assert!(
         world.population().is_empty(),
         "nothing counted before it steps"
@@ -217,9 +217,7 @@ fn a_replay_plays_the_record_back_with_its_generations() {
     // replay checks them with the rest of it (design §2.7).
     let mut world = mother();
     world.start_recording();
-    for _ in 0..3_000 {
-        world.step();
-    }
+    run_for(&mut world, 3_000);
     assert!(
         world
             .population()
@@ -227,11 +225,7 @@ fn a_replay_plays_the_record_back_with_its_generations() {
             .any(|count| count.generations == generations(1, 2)),
         "her hatchling was counted"
     );
-    let mut playback = Playback::new(&world.replay().unwrap()).expect("the replay plays");
-    while playback.world().tick() < playback.end() {
-        playback.step();
-    }
-    assert_eq!(playback.divergence(), None);
+    let playback = replayed(&world);
     assert_eq!(playback.world().population(), world.population());
 }
 
@@ -250,11 +244,8 @@ fn a_sprite_the_cursor_spawned_is_counted_as_spawned() {
 
 #[test]
 fn a_save_keeps_the_record() {
-    let data = builtin();
-    let mut world = World::new(WorldConfig::builtin(&data), data, 3);
-    for _ in 0..350 {
-        world.step();
-    }
+    let mut world = default_world(3);
+    run_for(&mut world, 350);
     let mut loaded = World::load(&world.save()).expect("the save loads");
     assert_eq!(loaded.population(), world.population());
     assert_eq!(loaded.population_now(), world.population_now());
@@ -276,9 +267,7 @@ fn a_save_from_before_the_record_begins_it_where_it_was_loaded() {
     world.step();
     assert_eq!(ticks(&world), [61]);
     assert_eq!(stages_of(&world.population()[0]), sprites);
-    for _ in 0..100 {
-        world.step();
-    }
+    run_for(&mut world, 100);
     assert_eq!(ticks(&world), [61, 100]);
 }
 
@@ -315,9 +304,7 @@ fn a_long_run_squeezes_the_record_and_keeps_the_whole_run() {
     // 512 counts take it to tick 51,100, where it keeps every other one and
     // counts every 200 ticks; at 512 again, at tick 102,200, every 400.
     let mut world = empty_world();
-    for _ in 0..110_000 {
-        world.step();
-    }
+    run_for(&mut world, 110_000);
     assert_eq!(world.population_every(), 400);
     let ticks = ticks(&world);
     assert!(ticks.len() < 512, "{} counts", ticks.len());

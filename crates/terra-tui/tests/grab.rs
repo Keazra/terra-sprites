@@ -4,7 +4,7 @@
 
 mod common;
 use common::{
-    WorldBuilder, apply, at, click, field, follow, grab_app, object_on, point, sprite_on, tick,
+    Q, WorldBuilder, apply, at, click, field, follow, grab_app, object_on, point, sprite_on, tick,
 };
 
 use terra_sim::{Command, Grip, ScriptedAction, World};
@@ -150,14 +150,6 @@ fn not_leading_the_cursor_moves_without_telling_the_world() {
     assert_eq!(app.take_commands(), vec![Command::PickUp { item }]);
 }
 
-fn press(app: &mut App, world: &World) {
-    let action = Action::Press {
-        button: Button::Left,
-        amplified: false,
-    };
-    apply(app, world, action);
-}
-
 #[test]
 fn leading_the_followed_sprite_the_cursor_follows_the_pointer_and_follow_comes_back_after() {
     let mut world = field(&[], &[at(4, 2)]);
@@ -165,7 +157,7 @@ fn leading_the_followed_sprite_the_cursor_follows_the_pointer_and_follow_comes_b
     let sprite = sprite_on(&world, at(4, 2));
     follow(&mut app, &world, at(4, 2));
     point(&mut app, &world, at(0, 0));
-    press(&mut app, &world);
+    apply(&mut app, &world, Q);
     let commands = app.take_commands();
     let to_the_pointer = Command::MoveCursor { tile: at(0, 0) };
     assert_eq!(commands, vec![Command::TakeHold { sprite }, to_the_pointer]);
@@ -179,7 +171,7 @@ fn leading_the_followed_sprite_the_cursor_follows_the_pointer_and_follow_comes_b
         (at(8, 5), None),
         "Follow waits"
     );
-    press(&mut app, &world);
+    apply(&mut app, &world, Q);
     tick(&mut app, &mut world);
     let there = world.sprite(sprite).expect("the sprite").pos();
     assert_eq!(
@@ -268,7 +260,7 @@ fn taking_hold_of_the_followed_sprite_puts_the_cursor_on_the_pointer_at_once() {
     follow(&mut app, &world, at(4, 2));
     point(&mut app, &world, at(8, 5));
     assert_eq!(app.cursor(), at(4, 2), "following");
-    press(&mut app, &world);
+    apply(&mut app, &world, Q);
     assert_eq!(app.cursor(), at(8, 5));
 }
 
@@ -284,7 +276,7 @@ fn holding_an_item_while_following_a_sprite_a_click_puts_it_at_its_feet() {
     follow(&mut app, &world, at(4, 2));
     point(&mut app, &world, at(8, 5));
     assert_eq!(app.cursor(), at(4, 2), "on the followed sprite");
-    press(&mut app, &world);
+    apply(&mut app, &world, Q);
     assert_eq!(
         app.take_commands(),
         vec![Command::PutDown { tile: at(4, 2) }]
@@ -313,7 +305,7 @@ fn leading_the_followed_sprite_follow_steps_aside_in_every_mode() {
     let mut app = grab_app(&world);
     let sprite = sprite_on(&world, at(4, 2));
     follow(&mut app, &world, at(4, 2));
-    press(&mut app, &world);
+    apply(&mut app, &world, Q);
     apply(&mut app, &world, Action::Mode(CursorMode::Train));
     point(&mut app, &world, at(7, 4));
     assert_eq!((app.cursor(), app.followed()), (at(7, 4), None));

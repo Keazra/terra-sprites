@@ -8,24 +8,16 @@
 
 mod common;
 use common::{
-    ALONE, FEMALE, KEEN, LONE, WorldBuilder, at, builtin, builtin_changing, builtin_changing_files,
-    hatch, id_at, laid, pulse_in_h1, until, world_in,
+    ALONE, FEMALE, KEEN, LONE, RESTER, WorldBuilder, at, builtin, builtin_changing,
+    builtin_changing_files, grass, hatch, id_at, laid, pulse_in_h1, run_for, until, wander_to,
+    world_in,
 };
 
-use terra_sim::{
-    Command, DataPack, EntityId, EventKind, Outcome, Pos, Progress, ScriptedAction, Sex, Verb,
-    World,
-};
+use terra_sim::{Command, DataPack, EntityId, EventKind, Outcome, Pos, Progress, Sex, Verb, World};
 
 /// Calls all the time, and does nothing else.
 const CALLER: &str = r#"
     Instinct(inputs: [("always", false)], verb: Call, weight: 1.0),
-    BrainParam(param: "tau_base", value: 0.02),
-"#;
-
-/// Rests all the time, and does nothing else.
-const RESTER: &str = r#"
-    Instinct(inputs: [("always", false)], verb: Rest, weight: 1.0),
     BrainParam(param: "tau_base", value: 0.02),
 "#;
 
@@ -40,16 +32,10 @@ fn heard(world: &World, id: EntityId, caller: EntityId, from: Pos) -> bool {
     sprite.heard().contains(&(caller, from))
 }
 
-/// A row of grass `width` tiles long.
-fn row(width: usize) -> String {
-    ".".repeat(width)
-}
-
 #[test]
 fn a_call_carries_30_tiles_over_grass_and_no_further() {
     // M2 design §15.1: grass soaks up 10 a tile and a call carries 300.
-    let field = row(40);
-    let rows = [field.as_str()];
+    let rows = grass(40, 1);
     let (caller, near, far) = (at(0, 0), at(30, 0), at(31, 0));
     let mut world = world(&rows, &[(caller, CALLER), (near, RESTER), (far, RESTER)]);
     let (caller, near, far) = (
@@ -65,8 +51,7 @@ fn a_call_carries_30_tiles_over_grass_and_no_further() {
 #[test]
 fn a_call_carries_21_tiles_on_the_diagonal() {
     // A diagonal step costs 14/10 of a straight one, as walking does.
-    let rows: Vec<String> = (0..23).map(|_| row(23)).collect();
-    let rows: Vec<&str> = rows.iter().map(String::as_str).collect();
+    let rows = grass(23, 23);
     let (caller, near, far) = (at(0, 0), at(21, 21), at(22, 22));
     let mut world = world(&rows, &[(caller, CALLER), (near, RESTER), (far, RESTER)]);
     let (caller, near, far) = (
@@ -155,8 +140,7 @@ fn a_caller_calls_once_and_stands_listening_10_ticks_in_all() {
     // M2 design §15.1: one call, on the action's first tick, heard on the
     // next; the action, call and listening, takes `calls.listen` ticks in
     // all, where it stands.
-    let field = row(10);
-    let rows = [field.as_str()];
+    let rows = grass(10, 1);
     let hears = format!("{RESTER}{}", pulse_in_h1("heard"));
     let mut world = world(&rows, &[(at(0, 0), CALLER), (at(5, 0), &hears)]);
     let (caller, hearer) = (id_at(&world, at(0, 0)), id_at(&world, at(5, 0)));
@@ -195,8 +179,7 @@ fn a_caller_calls_once_and_stands_listening_10_ticks_in_all() {
 fn a_heard_call_is_known_for_150_ticks_and_then_forgotten() {
     // M2 design §15.1: `calls.heard_for`. The caller calls once, and the
     // Cursor then holds it where it stands, so it calls no more.
-    let field = row(10);
-    let rows = [field.as_str()];
+    let rows = grass(10, 1);
     let mut world = world(&rows, &[(at(0, 0), CALLER), (at(5, 0), RESTER)]);
     let (caller, hearer) = (id_at(&world, at(0, 0)), id_at(&world, at(5, 0)));
     world.step();
@@ -225,8 +208,7 @@ const OTHER_SEX: &str = r#"
 fn a_caller_heard_but_out_of_sight_shows_its_body_language() {
     // M2 design §15.1: read as if in sight, so he goes to her call, 20
     // tiles off, as she's of the other sex, and not to a male's.
-    let field = row(30);
-    let rows = [field.as_str()];
+    let rows = grass(30, 1);
     let goes = |caller: &str| {
         let mut world = world(&rows, &[(at(0, 0), caller), (at(20, 0), OTHER_SEX)]);
         let hearer = id_at(&world, at(20, 0));
@@ -242,8 +224,8 @@ fn a_caller_heard_but_out_of_sight_shows_its_body_language() {
 
 /// A row of grass 30 tiles long and 5 deep, with berry bushes across it
 /// on the tenth column, all but one if `gap`.
-fn walled(gap: bool) -> (Vec<String>, Vec<(Pos, &'static str)>) {
-    let rows = (0..5).map(|_| row(30)).collect();
+fn walled(gap: bool) -> (Vec<&'static str>, Vec<(Pos, &'static str)>) {
+    let rows = grass(30, 5);
     let skip = usize::from(gap);
     let bushes = (0..5)
         .skip(skip)
@@ -260,7 +242,6 @@ fn a_sprite_with_no_way_to_a_call_never_sets_off_and_forgets_it() {
     // sets off. The caller calls once.
     let trip = |gap: bool| {
         let (rows, bushes) = walled(gap);
-        let rows: Vec<&str> = rows.iter().map(String::as_str).collect();
         let mut world = WorldBuilder::new(&rows)
             .objects(&bushes)
             .sprites(&[(at(1, 2), CALLER), (at(25, 2), ANSWERS)])
@@ -295,8 +276,7 @@ fn a_sprite_with_no_way_to_a_call_never_sets_off_and_forgets_it() {
 fn a_caller_that_calls_again_from_elsewhere_turns_the_trip_there() {
     // M2 design §15.1: on the way to the call, the Cursor leads the caller
     // off, out of sight, and lets it go to call again from there.
-    let field = row(30);
-    let rows = vec![field.as_str(); 16];
+    let rows = grass(30, 16);
     let (first, second) = (at(1, 1), at(1, 14));
     let mut world = world(&rows, &[(first, CALLER), (at(28, 1), ANSWERS)]);
     let (caller, answerer) = (id_at(&world, first), id_at(&world, at(28, 1)));
@@ -304,9 +284,7 @@ fn a_caller_that_calls_again_from_elsewhere_turns_the_trip_there() {
         let action = world.sprite(answerer).unwrap().action();
         action.filter(|a| a.remembered).and_then(|a| a.heard)
     };
-    for _ in 0..3 {
-        world.step();
-    }
+    run_for(&mut world, 3);
     assert_eq!(heading(&world), Some(first), "on its way by ear");
     world.submit(Command::TakeHold { sprite: caller });
     world.submit(Command::MoveCursor { tile: second });
@@ -339,8 +317,7 @@ fn a_sprite_that_hears_a_call_out_of_sight_goes_to_where_it_came_from() {
     // M2 design §15.1: the caller is offered at the edge of sight, and
     // going to it is a trip to the call's tile; once the caller is in
     // sight, 10 tiles off, it's an ordinary action aimed at it.
-    let field = row(30);
-    let rows = [field.as_str(); 3];
+    let rows = grass(30, 3);
     let (from, start) = (at(1, 1), at(25, 1));
     let mut world = world(&rows, &[(from, CALLER), (start, ANSWERS)]);
     let (caller, answerer) = (id_at(&world, from), id_at(&world, start));
@@ -370,8 +347,7 @@ fn a_sprite_that_finds_no_caller_where_the_call_came_from_forgets_the_call() {
     // M2 design §15.1: got there with the caller still out of sight, it
     // has lost the trail. The call is known long enough to get there.
     let data = builtin_changing("physiology.ron", &[("heard_for: 150,", "heard_for: 1000,")]);
-    let rows: Vec<String> = (0..30).map(|_| row(31)).collect();
-    let rows: Vec<&str> = rows.iter().map(String::as_str).collect();
+    let rows = grass(31, 30);
     let (from, start) = (at(1, 1), at(30, 1));
     let mut world = world_in(data, &rows, &[(from, CALLER), (start, ANSWERS)]);
     let (caller, answerer) = (id_at(&world, from), id_at(&world, start));
@@ -408,15 +384,12 @@ fn a_male_that_hears_a_female_call_counts_her_near_and_stays_male() {
         Emitter(locus: Locus("female_near"), mode: Level, gain: -0.01, chem: "feminiser"),
         HalfLife(chem: "feminiser", ticks: 600),
     "#;
-    let field = row(30);
-    let rows = [field.as_str()];
+    let rows = grass(30, 1);
     let sex_after = |her_genes: &str| {
         let female = format!("{FEMALE}{her_genes}");
         let mut world = world(&rows, &[(at(0, 0), &female), (at(25, 0), turning)]);
         let him = id_at(&world, at(25, 0));
-        for _ in 0..2_000 {
-            world.step();
-        }
+        run_for(&mut world, 2_000);
         world.sprite(him).expect("him").sex()
     };
     assert_eq!(sex_after(CALLER), Sex::Male, "he heard her");
@@ -435,8 +408,7 @@ fn a_female_that_hears_a_male_call_cannot_breed_alone() {
         "physiology.ron",
         &[("alone_after: 4500,", "alone_after: 1000,")],
     );
-    let field = row(30);
-    let rows = [field.as_str()];
+    let rows = grass(30, 1);
     let female = format!("{ALONE}{FEMALE}");
     let first_alone = |his_genes: &str| {
         let sprites = [(at(0, 0), female.as_str()), (at(25, 0), his_genes)];
@@ -452,14 +424,11 @@ fn a_sprite_gets_to_know_one_it_sees_and_better_one_it_plays_with() {
     // M2 design §15.2: `befriend_rate` (0.0013) a tick in sight, from
     // `forget_below` (0.01) on the first; a play adds `befriend_play` (0.1)
     // to both. Out of sight, it never knows the other.
-    let field = row(30);
-    let rows = [field.as_str()];
+    let rows = grass(30, 1);
     let sprites = [(at(0, 0), RESTER), (at(3, 0), RESTER), (at(25, 0), RESTER)];
     let mut seeing = world(&rows, &sprites);
     let [a, b, far] = [at(0, 0), at(3, 0), at(25, 0)].map(|pos| id_at(&seeing, pos));
-    for _ in 0..100 {
-        seeing.step();
-    }
+    run_for(&mut seeing, 100);
     let knows =
         |world: &World, id: EntityId, other: EntityId| world.sprite(id).unwrap().familiarity(other);
     let seen = knows(&seeing, a, b);
@@ -505,17 +474,9 @@ fn a_sprite_known_only_by_sight_is_forgotten_once_out_of_sight_it_fades() {
         BrainParam(param: "tau_base", value: 0.02),
         BrainParam(param: "befriend_fade", value: 0.01),
     "#;
-    let field = row(30);
-    let rows = [field.as_str()];
+    let rows = grass(30, 1);
     // It walks off in legs it can see the end of.
-    let away = [12, 21, 29].map(|x| {
-        (
-            at(3, 0),
-            ScriptedAction::Wander {
-                destination: at(x, 0),
-            },
-        )
-    });
+    let away = [12, 21, 29].map(|x| (at(3, 0), wander_to(at(x, 0))));
     let mut world = WorldBuilder::new(&rows)
         .sprites(&[(at(0, 0), fading), (at(3, 0), RESTER)])
         .scripts(&away)
@@ -523,9 +484,7 @@ fn a_sprite_known_only_by_sight_is_forgotten_once_out_of_sight_it_fades() {
     let (a, b) = (id_at(&world, at(0, 0)), id_at(&world, at(3, 0)));
     world.step();
     assert!(world.sprite(a).unwrap().familiarity(b) > 0.0, "seen");
-    for _ in 0..200 {
-        world.step();
-    }
+    run_for(&mut world, 200);
     assert_eq!(world.sprite(b).unwrap().pos(), at(29, 0), "it walked off");
     assert_eq!(world.sprite(a).unwrap().familiarity(b), 0.0, "forgotten");
 }
@@ -728,7 +687,7 @@ fn partners_saved_and_loaded_are_the_same_world() {
 fn a_mother_her_young_and_their_brothers_and_sisters_are_kin() {
     // M2 design §15.5.
     let female = format!("{ALONE}{FEMALE}");
-    let rows = ["........", "........", "........", "........"];
+    let rows = ["........"; 4];
     let mut world = world_in(often(), &rows, &[(at(2, 1), &female), (at(6, 3), RESTER)]);
     let (mother, stranger) = (id_at(&world, at(2, 1)), id_at(&world, at(6, 3)));
     let first = laid(&mut world, 50).expect("an egg").egg;
@@ -846,7 +805,7 @@ fn a_pack_from_before_courtship_lays_with_no_dance_and_has_no_partners_nor_calls
 #[test]
 fn a_pack_from_before_courtship_lets_a_longing_female_breed_alone_with_a_male_in_sight() {
     // M2 design §10.3: such a pack gates breeding alone on longing.
-    let rows = ["........", "........", "........", "........"];
+    let rows = ["........"; 4];
     let female = format!("{ALONE}{FEMALE}");
     let mut world = world_in(
         before_courtship(),

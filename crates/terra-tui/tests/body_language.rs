@@ -2,15 +2,17 @@
 //! the map how a sprite is.
 
 mod common;
-use common::{WorldBuilder, app_in, app_on, at, pack, pointer_on, render};
+use common::{
+    HURT_ITSELF, HURT_TARGET, UNHURT, WorldBuilder, acted, app_in, app_on, at, at_sprite, finished,
+    pack, pointer_on, render, run,
+};
 
 use std::time::Duration;
 
 use ratatui::layout::Position;
 use ratatui::style::{Color, Modifier};
 use terra_sim::{
-    ActionView, EntityId, Event, EventKind, Genome, Hurt, Outcome, Pos, Progress, ScriptedAction,
-    Target, Thing, Verb, World,
+    EntityId, Event, EventKind, Genome, Outcome, Pos, ScriptedAction, Thing, Verb, World,
 };
 use terra_tui::app::{App, ColourMode, PLEASED_AT, Selection, Ticks};
 use terra_tui::clock::Speed;
@@ -200,32 +202,6 @@ fn one_sprite() -> (World, EntityId, App) {
     (world, id, app)
 }
 
-/// What sprite `id`'s `verb`, aimed at `target`, did when it ended on `tick`.
-fn ended(tick: u64, id: EntityId, verb: Verb, outcome: Outcome, target: Option<Target>) -> Event {
-    let action = ActionView {
-        verb,
-        destination: None,
-        target,
-        target_type: target.map(|_| 101),
-        attempted: outcome == Outcome::Applied,
-        target_gone: false,
-        hurt: Hurt::default(),
-        progress: Progress::Ended(outcome),
-        remembered: false,
-        heard: None,
-        egg_at: None,
-    };
-    Event {
-        tick,
-        kind: EventKind::ActionEnded {
-            id,
-            verb,
-            outcome,
-            action,
-        },
-    }
-}
-
 fn started(tick: u64, id: EntityId, verb: Verb) -> Event {
     Event {
         tick,
@@ -246,7 +222,7 @@ fn a_sprite_that_gives_up_shows_a_question_mark_for_a_second() {
     // being taken hold of.
     for outcome in [Outcome::Failed, Outcome::Blocked, Outcome::TimedOut] {
         let (world, id, mut app) = one_sprite();
-        app.record(&[ended(1, id, Verb::Wander, outcome, None)], &world);
+        app.record(&[finished(1, id, Verb::Wander, outcome)], &world);
         assert_eq!(glyph(&app, &world), "?", "{outcome:?}");
         app.animate(QUARTER);
         assert_eq!(glyph(&app, &world), "☺", "taking turns with the sprite");
@@ -257,7 +233,7 @@ fn a_sprite_that_gives_up_shows_a_question_mark_for_a_second() {
     }
     for outcome in [Outcome::Applied, Outcome::Interrupted, Outcome::PulledAway] {
         let (world, id, mut app) = one_sprite();
-        app.record(&[ended(1, id, Verb::Wander, outcome, None)], &world);
+        app.record(&[finished(1, id, Verb::Wander, outcome)], &world);
         assert_eq!(glyph(&app, &world), "☺", "{outcome:?}");
     }
 }
@@ -268,7 +244,7 @@ fn a_sprite_that_dances_or_calls_shows_a_note_for_a_second() {
     // calls, in arousal's light magenta; `^` and `"` in ASCII. A dance
     // that didn't happen shows the question mark instead.
     for (theme, dance, call) in [(Theme::cp437(), "♫", "♪"), (Theme::ascii(), "^", "\"")] {
-        let other = Some(Target::Sprite(EntityId(99)));
+        let other = at_sprite(EntityId(99));
         let world = field(&[(at(2, 3), feeling(&[]))]);
         let id = world.sprites().next().expect("a sprite").id();
         let sprite = theme.glyph(SemanticTile::Sprite).symbol.to_string();
@@ -283,7 +259,7 @@ fn a_sprite_that_dances_or_calls_shows_a_note_for_a_second() {
             app.animate(QUARTER * 3);
             (first, then, glyph(&app, &world))
         };
-        let danced = ended(1, id, Verb::Court, Outcome::Applied, other);
+        let danced = acted(1, id, Verb::Court, other, Outcome::Applied, UNHURT);
         let magenta = Color::LightMagenta;
         assert_eq!(
             shows(&[danced]),
@@ -293,7 +269,7 @@ fn a_sprite_that_dances_or_calls_shows_a_note_for_a_second() {
             shows(&[started(1, id, Verb::Call)]),
             ((call.into(), magenta), sprite.clone(), sprite.clone())
         );
-        let gave_up = ended(1, id, Verb::Court, Outcome::Failed, other);
+        let gave_up = acted(1, id, Verb::Court, other, Outcome::Failed, UNHURT);
         assert_eq!(shows(&[gave_up]).0.0, "?");
     }
 }
@@ -302,10 +278,7 @@ fn a_sprite_that_dances_or_calls_shows_a_note_for_a_second() {
 fn giving_up_on_an_action_that_hurt_shows_hurt_not_the_question_mark() {
     // Design §6.3: being hurt matters more than giving up.
     let (world, id, mut app) = one_sprite();
-    let mut event = ended(1, id, Verb::Eat, Outcome::Failed, None);
-    if let EventKind::ActionEnded { action, .. } = &mut event.kind {
-        action.hurt.actor = true;
-    }
+    let event = acted(1, id, Verb::Eat, None, Outcome::Failed, HURT_ITSELF);
     app.record(&[event], &world);
     assert_eq!(glyph(&app, &world), "!");
 }
@@ -340,7 +313,7 @@ fn a_resting_sprite_shows_a_z_while_the_rest_lasts() {
         assert_eq!(glyph(&app, &world), "☺");
         app.animate(QUARTER);
     }
-    app.record(&[ended(10, id, Verb::Rest, Outcome::Applied, None)], &world);
+    app.record(&[finished(10, id, Verb::Rest, Outcome::Applied)], &world);
     assert_eq!(glyph(&app, &world), "☺", "rested");
     app.animate(QUARTER);
     assert_eq!(glyph(&app, &world), "☺");
@@ -354,7 +327,7 @@ fn a_rest_over_in_a_blink_still_shows_its_z_for_a_second() {
     app.record(
         &[
             started(1, id, Verb::Rest),
-            ended(10, id, Verb::Rest, Outcome::Applied, None),
+            finished(10, id, Verb::Rest, Outcome::Applied),
         ],
         &world,
     );
@@ -374,16 +347,14 @@ fn resting_gives_way_to_any_other_emote_and_comes_back_after() {
     let (world, id, mut app) = one_sprite();
     app.record(&[started(1, id, Verb::Rest)], &world);
     app.animate(QUARTER * 4);
-    let mut hit = ended(
+    let hit = acted(
         5,
         EntityId(99),
         Verb::Hit,
+        at_sprite(id),
         Outcome::Applied,
-        Some(Target::Sprite(id)),
+        HURT_TARGET,
     );
-    if let EventKind::ActionEnded { action, .. } = &mut hit.kind {
-        action.hurt.target = true;
-    }
     app.record(&[hit], &world);
     assert_eq!(glyph(&app, &world), "!", "hurt, while resting");
     app.animate(QUARTER * 2);
@@ -395,7 +366,7 @@ fn resting_gives_way_to_any_other_emote_and_comes_back_after() {
 #[test]
 fn the_newest_emote_wins() {
     let (world, id, mut app) = one_sprite();
-    app.record(&[ended(1, id, Verb::Wander, Outcome::Failed, None)], &world);
+    app.record(&[finished(1, id, Verb::Wander, Outcome::Failed)], &world);
     app.animate(QUARTER * 2);
     let pet = Event {
         tick: 2,
@@ -443,10 +414,8 @@ fn emotes_last_a_second_of_real_time_at_any_speed() {
     // Design §6.3: many ticks a frame, as at Max, still show the emote for
     // a second, and frames with no ticks don't end it sooner.
     let (mut world, id, mut app) = one_sprite();
-    let frame = |app: &mut App, world: &mut World, ticks: u32, events: Vec<Event>| {
-        for _ in 0..ticks {
-            world.step();
-        }
+    let frame = |app: &mut App, world: &mut World, ticks: u64, events: Vec<Event>| {
+        run(world, ticks);
         app.animate(Duration::from_millis(33));
         app.record(&events, world);
     };
@@ -454,7 +423,7 @@ fn emotes_last_a_second_of_real_time_at_any_speed() {
         &mut app,
         &mut world,
         50,
-        vec![ended(1, id, Verb::Wander, Outcome::Blocked, None)],
+        vec![finished(1, id, Verb::Wander, Outcome::Blocked)],
     );
     let mut shown = Duration::ZERO;
     for _ in 0..40 {
@@ -475,17 +444,15 @@ fn the_resting_emote_shows_for_a_second_at_16x_and_at_max_through_the_frame_loop
     // Design §6.3: emotes are driven by the sim's events, a frame's ticks
     // taken in through `Ticks`, so a rest over in a blink still shows.
     for speed in [Speed::X16, Speed::Max] {
-        let pack = pack();
         // It never calls, whose emote would take the rest's place (M2
         // design §15.8).
         let quiet = r#"(format: 1, genes: [
             Instinct(inputs: [("always", false)], verb: Call, weight: -5.0),
         ])"#;
-        let quiet = Genome::from_ron(quiet, &pack).expect("a valid genome");
         // Young, so it can't try breeding alone, fail and show that instead
         // (M2 design §10).
         let mut world = WorldBuilder::grass(10, 5)
-            .sprites_with(vec![(at(2, 3), Some(quiet))])
+            .genes(&[(at(2, 3), quiet)])
             .scripts(&[(at(2, 3), ScriptedAction::Rest)])
             .newborns(&[at(2, 3)])
             .seed(7)
@@ -536,7 +503,7 @@ fn ascii_draws_failed_and_resting_with_the_same_letters() {
     let mut app = app_for(&world, Theme::ascii());
     app.record(
         &[
-            ended(1, ids[0], Verb::Wander, Outcome::Failed, None),
+            finished(1, ids[0], Verb::Wander, Outcome::Failed),
             started(1, ids[1], Verb::Rest),
         ],
         &world,

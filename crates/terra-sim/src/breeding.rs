@@ -13,6 +13,7 @@ use crate::events::{Event, EventKind};
 use crate::genome::Genome;
 use crate::inheritance;
 use crate::lineage;
+use crate::listed::listed_enum;
 use crate::map::Dir;
 use crate::mutation::{self, Copied, CopyChange, CopyingError};
 use crate::objects::EntityId;
@@ -22,26 +23,24 @@ use crate::registry::Verb;
 use crate::sprites::{Genes, Sprite, check_genes};
 use crate::world::WorldState;
 
-/// A sprite's sex (M2 design §10). Every sprite hatches male; an adult male
-/// turns female for good once its genes have it feel no female near for
-/// long enough. Only a female lays eggs.
-#[derive(
-    Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
-)]
-pub enum Sex {
-    #[default]
-    Male,
-    Female,
-}
-
-impl Sex {
-    /// The sex's name, as the player sees it.
-    pub fn name(self) -> &'static str {
-        match self {
-            Sex::Male => "male",
-            Sex::Female => "female",
-        }
+listed_enum! {
+    /// A sprite's sex (M2 design §10). Every sprite hatches male; an adult male
+    /// turns female for good once its genes have it feel no female near for
+    /// long enough. Only a female lays eggs.
+    #[derive(
+        Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
+    )]
+    pub enum Sex {
+        #[default]
+        Male => "male",
+        Female => "female",
     }
+
+    /// Both sexes, male first.
+    pub const ALL;
+
+    /// The sex's name, as the player sees it.
+    pub fn name(self) -> &'static str;
 }
 
 /// The sprite an egg holds until it hatches (M2 design §10.4, #196): its
@@ -300,17 +299,18 @@ fn lay(
 mod tests {
     use super::*;
     use crate::command::Command;
-    use crate::map::Map;
-    use crate::test_util::{at, builtin, builtin_changing};
-    use crate::world::{Scenario, World};
+    use crate::test_util::{WorldBuilder, at, lone};
+    use crate::world::World;
+
+    /// The drawing of a small field of grass, 5 by 3 tiles.
+    const FIELD: [&str; 3] = [".....", ".....", "....."];
 
     #[test]
     fn a_full_world_is_infertile_and_lays_nothing() {
         // M2 design §10.4: the limit counts eggs, and a sprite in a full
         // world isn't fertile. In a pack that lets a female breed alone at
         // once (§15.7).
-        let changes = [("alone_after: 4500,", "alone_after: 0,")];
-        let data = builtin_changing("physiology.ron", &changes);
+        let data = lone();
         let genome = Genome::from_ron(
             r#"(format: 1, genes: [
                 InitialConcentration(chem: "feminiser", value: 1.0),
@@ -320,16 +320,13 @@ mod tests {
             &data,
         )
         .expect("a valid genome");
-        let map = Map::from_ascii(&[".....", ".....", "....."], &data).expect("valid drawing");
-        let sprites = [(at(1, 1), Some(genome.clone())), (at(3, 1), Some(genome))];
-        let scenario = Scenario {
-            map,
-            objects: &[],
-            sprites: &sprites,
-            scripted: &[],
-            newborns: &[],
-        };
-        let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
+        let mut world = WorldBuilder::new(&FIELD)
+            .data(data)
+            .sprites_with(vec![
+                (at(1, 1), Some(genome.clone())),
+                (at(3, 1), Some(genome)),
+            ])
+            .build();
         world.set_most_sprites(2);
         let laid = |world: &mut World| {
             (0..50).any(|_| {
@@ -358,17 +355,9 @@ mod tests {
         // M2 design §10.6: most sprites is the sprites' glass, not the
         // player's. In a full world the Cursor still places a sprite, and
         // none is fertile.
-        let data = builtin();
-        let map = Map::from_ascii(&[".....", ".....", "....."], &data).expect("valid drawing");
-        let sprites = [(at(1, 1), None), (at(3, 1), None)];
-        let scenario = Scenario {
-            map,
-            objects: &[],
-            sprites: &sprites,
-            scripted: &[],
-            newborns: &[],
-        };
-        let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
+        let mut world = WorldBuilder::new(&FIELD)
+            .starters(&[at(1, 1), at(3, 1)])
+            .build();
         world.set_most_sprites(2);
         world.submit(Command::SpawnSprite {
             tile: at(2, 2),
@@ -385,17 +374,9 @@ mod tests {
     fn a_partner_keeps_the_touch_of_its_mate_whatever_it_touches_later_that_tick() {
         // M2 design §10: each learns about the other, even when the one
         // mated with acts after, on the same tick.
-        let data = builtin();
-        let map = Map::from_ascii(&[".....", ".....", "....."], &data).expect("valid drawing");
-        let sprites = [(at(1, 1), None), (at(2, 1), None), (at(3, 1), None)];
-        let scenario = Scenario {
-            map,
-            objects: &[],
-            sprites: &sprites,
-            scripted: &[],
-            newborns: &[],
-        };
-        let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
+        let mut world = WorldBuilder::new(&FIELD)
+            .starters(&[at(1, 1), at(2, 1), at(3, 1)])
+            .build();
         let (state, data) = world.parts();
         let ids: Vec<EntityId> = state.sprites.iter().map(|(id, _)| id).collect();
         let (she, he, other) = (ids[0], ids[1], ids[2]);

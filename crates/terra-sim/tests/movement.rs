@@ -2,7 +2,7 @@
 //! re-planning, driven through hand-made worlds.
 
 mod common;
-use common::{WorldBuilder, at, builtin, id_at, traits_only};
+use common::{WorldBuilder, at, builtin, id_at, run_for, traits_only, wander_to};
 
 use terra_sim::{
     ActionView, Command, DataPack, EntityId, Event, EventKind, Genome, Hurt, Outcome, Pos,
@@ -90,9 +90,7 @@ fn run(world: &mut World, id: EntityId, ticks: usize) -> (Vec<Event>, Vec<Pos>) 
 #[test]
 fn a_sprite_told_to_wander_to_a_spot_walks_there_a_step_at_a_time_and_arrives() {
     // Speed 10 on grass: 100 tenths a tick, and a grass step costs 100.
-    let wander = ScriptedAction::Wander {
-        destination: at(5, 0),
-    };
+    let wander = wander_to(at(5, 0));
     let mut world = world(&["........"], 10.0, &[at(0, 0)], &[(at(0, 0), wander)]);
     let id = id_at(&world, at(0, 0));
 
@@ -156,9 +154,7 @@ fn a_sprite_told_to_wander_to_a_spot_walks_there_a_step_at_a_time_and_arrives() 
 /// wandering east along a row of `rows` from (0, 0) to the row's far end.
 fn walk_east(rows: &[&str], speed: f32, ticks: usize) -> Vec<u16> {
     let far = rows[0].chars().count() as u16 - 1;
-    let wander = ScriptedAction::Wander {
-        destination: at(far, 0),
-    };
+    let wander = wander_to(at(far, 0));
     let mut world = world(rows, speed, &[at(0, 0)], &[(at(0, 0), wander)]);
     let id = id_at(&world, at(0, 0));
     let (_, tiles) = run(&mut world, id, ticks);
@@ -220,7 +216,7 @@ fn a_step_costs_what_the_terrain_it_lands_on_costs() {
 /// The tiles a lone walker of speed 10 steps through, from `from` to `to`,
 /// on a world drawn from `rows` holding `objects`.
 fn route(rows: &[&str], objects: &[(Pos, &str)], from: Pos, to: Pos) -> Vec<Pos> {
-    let wander = ScriptedAction::Wander { destination: to };
+    let wander = wander_to(to);
     let mut world = world_with(rows, objects, 10.0, &[from], &[(from, wander)]);
     let id = id_at(&world, from);
     let (tiles, outcome) = first_action(&mut world, id, 30);
@@ -237,9 +233,7 @@ fn route(rows: &[&str], objects: &[(Pos, &str)], from: Pos, to: Pos) -> Vec<Pos>
 #[test]
 fn a_diagonal_step_costs_14_tenths_of_an_orthogonal_one() {
     let rows = ["...."; 4];
-    let wander = ScriptedAction::Wander {
-        destination: at(3, 3),
-    };
+    let wander = wander_to(at(3, 3));
     let mut world = world(&rows, 10.0, &[at(0, 0)], &[(at(0, 0), wander)]);
     let id = id_at(&world, at(0, 0));
     let (_, tiles) = run(&mut world, id, 5);
@@ -274,9 +268,7 @@ fn wander_east(distance: u16, sense_radius: f32) -> Outcome {
     let data = builtin();
     let row = ".".repeat(usize::from(distance) + 1);
     let sprites = vec![(at(0, 0), Some(traits_only(10.0, sense_radius, &data)))];
-    let wander = ScriptedAction::Wander {
-        destination: at(distance, 0),
-    };
+    let wander = wander_to(at(distance, 0));
     let mut world = WorldBuilder::new(&[row.as_str()])
         .sprites_with(sprites)
         .script(at(0, 0), &[wander])
@@ -343,9 +335,7 @@ fn a_rest_lasts_10_ticks_and_ends_applied() {
 fn walking_tires_a_sprite_and_resting_restores_it() {
     // 14 steps east, one a tick, then a rest.
     let start = at(0, 0);
-    let wander = ScriptedAction::Wander {
-        destination: at(14, 0),
-    };
+    let wander = wander_to(at(14, 0));
     let scripted = [(start, wander), (start, ScriptedAction::Rest)];
     let mut world = world(&["..............."], 10.0, &[start], &scripted);
     let id = id_at(&world, start);
@@ -368,9 +358,7 @@ fn walking_tires_a_sprite_and_resting_restores_it() {
 fn a_sprite_walks_around_another_when_that_costs_less_than_3_grass_steps_more() {
     // Straight through the resting sprite would cost 60 + 30; around it, 68.
     let (walker, rester) = (at(0, 1), at(3, 1));
-    let wander = ScriptedAction::Wander {
-        destination: at(6, 1),
-    };
+    let wander = wander_to(at(6, 1));
     let scripted = [(walker, wander), (rester, ScriptedAction::Rest)];
     let mut world = world(&["......."; 3], 10.0, &[walker, rester], &scripted);
     let id = id_at(&world, walker);
@@ -437,10 +425,6 @@ fn a_sprite_with_nowhere_to_go_gives_up_each_wander_at_once() {
     }
 }
 
-fn wander_to(destination: Pos) -> ScriptedAction {
-    ScriptedAction::Wander { destination }
-}
-
 #[test]
 fn a_swap_ends_both_sprites_walking_for_the_tick() {
     // At speed 12 they meet in the fifth tick with points for two steps
@@ -452,9 +436,7 @@ fn a_swap_ends_both_sprites_walking_for_the_tick() {
         let scripted = [(west, wander_to(east)), (east, wander_to(west))];
         let mut world = seeded(&["..........."], &[], 12.0, &[west, east], &scripted, seed);
         let (a, b) = (id_at(&world, west), id_at(&world, east));
-        for _ in 0..5 {
-            world.step();
-        }
+        run_for(&mut world, 5);
         let x = |id| world.sprite(id).expect("alive").pos().x;
         assert_eq!(x(a), x(b) + 1, "just past each other, seed {seed}");
     }

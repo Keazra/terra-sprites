@@ -20,8 +20,8 @@ use crate::listed::listed_enum;
 use crate::policy::{Panel, Subject};
 use crate::text;
 use crate::text::{
-    ROOTED, Words, cause_name, change, display_name, group_thousands, level, signed, signed_level,
-    significant, terrain_name, whole,
+    BOUND, ROOTED, Words, cause_name, change, display_name, level, signed, signed_level,
+    significant, terrain_name, thousands, unbroken, whole, wrap,
 };
 
 /// The inspector's width, in columns, border included (design §6.1).
@@ -118,7 +118,7 @@ fn shown(app: &App, world: &World) -> Vec<(Line<'static>, Option<MemoryOpen>)> {
                 "{} died {} at age{BOUND}{}",
                 unbroken(&app.names().label(id)),
                 unbroken(&how),
-                group_thousands(age)
+                thousands(age)
             );
             bare(wrapped(&text, 1, Style::default()))
         }
@@ -167,7 +167,7 @@ fn body_tab(sprite: &SpriteView, app: &App, world: &World) -> Vec<Line<'static>>
     let doing = doing_line(sprite, app, world).map(|line| format!(" {line}"));
     let mut lines: Vec<String> = doing.into_iter().collect();
     lines.extend([
-        format!(" age {} · {}", group_thousands(sprite.age()), {
+        format!(" age {} · {}", thousands(sprite.age()), {
             let stage = sprite.life_stage();
             match stage {
                 LifeStage::Young => {
@@ -389,7 +389,7 @@ fn observed_lines(app: &App, now: u64) -> Vec<String> {
             let ago = match now.saturating_sub(o.tick + 1) {
                 0 => "just now".to_string(),
                 1 => "1 tick ago".to_string(),
-                n => format!("{} ticks ago", group_thousands(n)),
+                n => format!("{} ticks ago", thousands(n)),
             };
             let times = if o.count > 1 {
                 // An x: CP437 has no × (design §6.2).
@@ -406,30 +406,10 @@ fn observed_lines(app: &App, now: u64) -> Vec<String> {
     let width = entries.iter().map(|(ago, _)| ago.chars().count()).max();
     for (ago, text) in &entries {
         let head = format!(" {ago:>width$} · ", width = width.unwrap_or(0));
-        lines.extend(hanging(&head, text));
+        // Each later line is indented to where the text began.
+        let indent = " ".repeat(head.chars().count());
+        lines.extend(wrap(&head, &indent, text, WIDTH));
     }
-    lines
-}
-
-/// `text` after `head`, wrapped to the inspector's width with each later
-/// line indented to where the text began.
-fn hanging(head: &str, text: &str) -> Vec<String> {
-    let indent = " ".repeat(head.chars().count());
-    let mut lines = Vec::new();
-    let mut line = head.to_string();
-    let mut empty = true;
-    for word in text.split(' ') {
-        if !empty && line.chars().count() + 1 + word.chars().count() > WIDTH {
-            lines.push(std::mem::replace(&mut line, indent.clone()));
-            empty = true;
-        }
-        if !empty {
-            line.push(' ');
-        }
-        line.push_str(word);
-        empty = false;
-    }
-    lines.push(line);
     lines
 }
 
@@ -1782,7 +1762,7 @@ fn numbers(gene: &GeneView) -> Vec<String> {
         GeneView::HalfLife { ticks: 1, .. } => vec![format!("every{BOUND}tick")],
         GeneView::HalfLife { ticks, .. } => vec![format!(
             "every{BOUND}{}{BOUND}ticks",
-            group_thousands(u64::from(ticks))
+            thousands(u64::from(ticks))
         )],
         GeneView::Reaction { rate, .. } => vec![format!("rate{BOUND}{}", significant(rate))],
         GeneView::Emitter {
@@ -1883,9 +1863,6 @@ fn switch_text(switch: Switch) -> String {
         }
     }
 }
-
-/// Keeps a word with the number after it when a line wraps.
-const BOUND: char = '\u{a0}';
 
 /// A gene as a plain line: `low energy → hunger +.00428 past .5`.
 fn gene_text(gene: &GeneView) -> String {
@@ -1993,11 +1970,6 @@ fn emitter_source(locus: &str, mode: EmitterMode, invert: bool) -> String {
     }
 }
 
-/// `text` with its spaces kept together when a line wraps.
-fn unbroken(text: &str) -> String {
-    text.replace(' ', &BOUND.to_string())
-}
-
 /// `items` as one line, `a · b · c`, which wraps only after a dot, never
 /// inside an item.
 fn listed(items: &[String]) -> String {
@@ -2008,24 +1980,7 @@ fn listed(items: &[String]) -> String {
 /// `text` wrapped at word boundaries to fit the inspector, its first line
 /// indented `indent` columns and the rest 3, all in `style`.
 fn wrapped(text: &str, indent: usize, style: Style) -> Vec<Line<'static>> {
-    let mut lines: Vec<String> = Vec::new();
-    let mut line = " ".repeat(indent);
-    let mut empty = true;
-    for word in text.split(' ') {
-        // A word after another needs a space before it. The first word on a
-        // line goes there whether it fits or not.
-        if !empty && line.chars().count() + 1 + word.chars().count() > WIDTH {
-            lines.push(std::mem::replace(&mut line, " ".repeat(3)));
-            empty = true;
-        }
-        if !empty {
-            line.push(' ');
-        }
-        line.push_str(word);
-        empty = false;
-    }
-    lines.push(line);
-    lines
+    wrap(&" ".repeat(indent), "   ", text, WIDTH)
         .into_iter()
         .map(|line| Line::styled(line.replace(BOUND, " "), style))
         .collect()
@@ -2055,7 +2010,7 @@ fn world_tab(app: &App, world: &World) -> Vec<Line<'static>> {
         .iter()
         .map(|&cause| {
             let n = world.deaths(cause);
-            format!("{} {}", cause_name(cause, data), group_thousands(n))
+            format!("{} {}", cause_name(cause, data), thousands(n))
         })
         .collect();
     let total: u64 = world.deaths_by_cause().map(|(_, n)| n).sum();
@@ -2075,14 +2030,14 @@ fn world_tab(app: &App, world: &World) -> Vec<Line<'static>> {
         Line::from(format!(
             " {:<12}{:>7}",
             "sprites",
-            group_thousands(world.sprites().count() as u64)
+            thousands(world.sprites().count() as u64)
         )),
     ]);
     lines.extend(generations_line(world));
     lines.push(Line::from(format!(
         " {:<12}{:>7}",
         "deaths",
-        group_thousands(total)
+        thousands(total)
     )));
     lines.extend(wrapped(&listed(&deaths), 3, plain));
     for object_type in data.object_type_names() {
@@ -2093,7 +2048,7 @@ fn world_tab(app: &App, world: &World) -> Vec<Line<'static>> {
         lines.push(Line::from(format!(
             " {:<12}{:>7}",
             display_name(object_type),
-            group_thousands(objects.len() as u64)
+            thousands(objects.len() as u64)
         )));
         let stages = data.stage_names(object_type);
         if stages.len() > 1 {
@@ -2101,7 +2056,7 @@ fn world_tab(app: &App, world: &World) -> Vec<Line<'static>> {
                 .iter()
                 .map(|&stage| {
                     let n = objects.iter().filter(|o| o.stage() == Some(stage)).count();
-                    format!("{stage} {}", group_thousands(n as u64))
+                    format!("{stage} {}", thousands(n as u64))
                 })
                 .collect();
             lines.extend(wrapped(&listed(&counts), 3, plain));
@@ -2114,7 +2069,7 @@ fn world_tab(app: &App, world: &World) -> Vec<Line<'static>> {
                     .iter()
                     .map(|o| u64::from(o.counter(counter).unwrap_or(0)))
                     .sum();
-                format!("{counter} {}", group_thousands(total))
+                format!("{counter} {}", thousands(total))
             })
             .collect();
         if !totals.is_empty() {
@@ -2218,7 +2173,7 @@ pub(crate) fn event_line(event: &Event, data: &Words) -> Option<String> {
             name.as_deref()
                 .map_or_else(|| data.label(*id), |name| text::label(*id, Some(name))),
             cause_name(*cause, data),
-            group_thousands(*age)
+            thousands(*age)
         )),
         EventKind::ActionEnded { id, action, .. } => logged_line(*id, action, data),
         // Life stages (M2 design §9.6).

@@ -77,15 +77,7 @@ fn started(events: &[Event], id: EntityId) -> Vec<Verb> {
         .collect()
 }
 
-const FIELD: [&str; 7] = [
-    "...........",
-    "...........",
-    "...........",
-    "...........",
-    "...........",
-    "...........",
-    "...........",
-];
+const FIELD: [&str; 7] = ["..........."; 7];
 
 #[test]
 fn instincts_naming_a_category_the_world_lacks_are_unmatched_and_change_nothing() {

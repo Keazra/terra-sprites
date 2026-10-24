@@ -23,9 +23,7 @@ fn main() -> ExitCode {
     let Some((ticks, seed)) = args::parse("speed [--ticks N] [--seed N]", parse) else {
         return ExitCode::FAILURE;
     };
-    if cfg!(debug_assertions) {
-        eprintln!("warning: this is a debug build; add --release for a fair measure");
-    }
+    args::warn_if_debug(" for a fair measure");
     println!("default world, 100 sprites, seed {seed}, settled for a few hundred ticks");
     let mut world = crowded_world(seed);
     let start = Instant::now();
@@ -54,13 +52,10 @@ fn parse(args: &[String]) -> Result<(u64, u64), String> {
     let mut args = args.iter();
     while let Some(flag) = args.next() {
         match flag.as_str() {
-            "--ticks" => ticks = args::number("--ticks", &mut args)?,
+            "--ticks" => ticks = args::positive("--ticks", &mut args)?,
             "--seed" => seed = args::number("--seed", &mut args)?,
             _ => return Err(format!("unknown argument {flag}")),
         }
-    }
-    if ticks == 0 {
-        return Err("--ticks needs a number above 0".to_string());
     }
     Ok((ticks, seed))
 }

@@ -3,8 +3,8 @@
 
 mod common;
 use common::{
-    AGES_AT_ONCE, OLD, WorldBuilder, at, builtin, builtin_changing, close, id_at, value_of,
-    world_in,
+    AGES_AT_ONCE, OLD, WorldBuilder, at, builtin, builtin_changing, close, id_at, pet, run_for,
+    shock, value_of, world_in,
 };
 
 use terra_sim::{
@@ -355,9 +355,7 @@ fn a_sprite_that_watches_another_eased_at_water_remembers_the_place() {
         ],
     );
     let id = id_at(&world, at(5, 1));
-    for _ in 0..5 {
-        world.step();
-    }
+    run_for(&mut world, 5);
     let places: Vec<(Thing, Pos)> = world
         .sprite(id)
         .expect("the sprite watching")
@@ -428,11 +426,7 @@ fn a_pet_for_what_the_watched_sprite_tried_passes_on_as_a_taught_habit() {
     while world.tick() < 6 {
         world.step();
     }
-    world.submit(Command::Reward {
-        sprite: kicker,
-        amplified: false,
-        reach_back: 10,
-    });
+    world.submit(pet(kicker, 10));
     world.step();
     let balls_good = Learned::Worth {
         thing: "ball".into(),
@@ -587,10 +581,7 @@ fn a_sprite_that_watches_the_cursor_correct_another_learns_to_fear_the_cursor() 
     world.submit(Command::MoveCursor { tile: other });
     world.submit(Command::ShowCursor { visible: true });
     world.step();
-    world.submit(Command::Correct {
-        sprite: shocked,
-        amplified: true,
-    });
+    world.submit(shock(shocked));
     world.step();
     let fears_the_cursor = Learned::Fear {
         thing: Thing::Cursor,

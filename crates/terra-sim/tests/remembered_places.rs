@@ -2,7 +2,7 @@
 //! something that stays put eased a need, and goes back to it out of sight.
 
 mod common;
-use common::{WorldBuilder, at, builtin, builtin_changing};
+use common::{WorldBuilder, at, builtin, builtin_changing, run_for, wander_to};
 
 use terra_sim::{
     Command, DataPack, EventKind, Genome, Outcome, Pos, RememberedPlace, ScriptedAction, Target,
@@ -28,13 +28,7 @@ fn thirsty(data: &DataPack) -> Genome {
 }
 
 /// A room 40 tiles long with water along its west wall.
-const ROOM: [&str; 5] = [
-    "~.......................................",
-    "~.......................................",
-    "~.......................................",
-    "~.......................................",
-    "~.......................................",
-];
+const ROOM: [&str; 5] = ["~......................................."; 5];
 
 /// A thirsty sprite in `ROOM` on `start`, doing `script` first.
 fn room(start: Pos, script: &[ScriptedAction]) -> World {
@@ -78,20 +72,24 @@ fn along(from: u16, to: u16) -> Vec<ScriptedAction> {
         } else {
             x.saturating_sub(5).max(to)
         };
-        hops.push(ScriptedAction::Wander {
-            destination: at(x, 2),
-        });
+        hops.push(wander_to(at(x, 2)));
     }
     hops
+}
+
+/// Rests, drinks at the west wall, and wanders to the far end of the room,
+/// out of sight of the water.
+fn drink_and_wander_off() -> Vec<ScriptedAction> {
+    let mut script = vec![ScriptedAction::Rest; 10];
+    script.push(ScriptedAction::Drink { at: at(0, 2) });
+    script.extend(along(1, 36));
+    script
 }
 
 /// A thirsty sprite drinks at the west wall, and wanders to the far end of
 /// the room, out of sight of the water.
 fn drank_and_wandered_off() -> World {
-    let mut script = vec![ScriptedAction::Rest; 10];
-    script.push(ScriptedAction::Drink { at: at(0, 2) });
-    script.extend(along(1, 36));
-    room(at(1, 2), &script)
+    room(at(1, 2), &drink_and_wander_off())
 }
 
 #[test]
@@ -206,33 +204,41 @@ fn resting(data: &DataPack) -> Genome {
     )
 }
 
-/// The thirsty sprite of `drank_and_wandered_off` in `rows`, run until it
-/// sets off back to the water, when a resting sprite is put down in the gap
-/// on row 2, in its way. Then up to `ticks` more, until a trip ends, with
-/// how it ended and the most ticks in a row the trip stood still.
-fn held_up_in(rows: &[String], ticks: u64) -> (World, Vec<Outcome>, u32) {
+/// A thirsty sprite in `rows` that has drunk at the west wall and is
+/// wandering off along row 2, as in `drank_and_wandered_off`, and with
+/// nothing pressing does `idle`. Its eye isn't caught by a sprite in its
+/// way, so it keeps heading for the water.
+fn drank_in(rows: &[String], idle: Verb) -> World {
     let data = builtin();
-    // Its eye isn't caught by the sprite in its way, so its mind stays on
-    // the water.
     let thirsty = genome(
         10.0,
-        r#"Emitter(locus: Locus("always"), mode: Level, gain: 0.004, chem: "thirst"),
-           Emitter(locus: Locus("drank"), mode: Level, gain: -0.5, chem: "thirst"),
-           Instinct(inputs: [("thirst", false)], verb: Drink, weight: 1.0),
-           Instinct(inputs: [("always", false)], verb: Wander, weight: 0.3),
-           BrainParam(param: "tau_base", value: 0.05),
-           BrainParam(param: "salience_gain", value: 0.0),
-           BrainParam(param: "curiosity", value: 0.0),
-           BrainParam(param: "vigilance", value: 0.0),"#,
+        &format!(
+            r#"Emitter(locus: Locus("always"), mode: Level, gain: 0.004, chem: "thirst"),
+               Emitter(locus: Locus("drank"), mode: Level, gain: -0.5, chem: "thirst"),
+               Instinct(inputs: [("thirst", false)], verb: Drink, weight: 1.0),
+               Instinct(inputs: [("always", false)], verb: {idle:?}, weight: 0.3),
+               BrainParam(param: "tau_base", value: 0.05),
+               BrainParam(param: "salience_gain", value: 0.0),
+               BrainParam(param: "curiosity", value: 0.0),
+               BrainParam(param: "vigilance", value: 0.0),"#
+        ),
         &data,
     );
-    let resting = resting(&data);
-    let mut script = vec![ScriptedAction::Rest; 10];
-    script.push(ScriptedAction::Drink { at: at(0, 2) });
-    script.extend(along(1, 36));
     let rows: Vec<&str> = rows.iter().map(String::as_str).collect();
+    let script = drink_and_wander_off();
     let mut world = world_in(data, &rows, &[], at(1, 2), thirsty, &script);
     assert_eq!(first_drink(&mut world, 200), Some(at(1, 2)));
+    world
+}
+
+/// The thirsty sprite of `drank_in` in `rows`, wandering when it has
+/// nothing pressing, run until it sets off back to the water, when a
+/// resting sprite is put down in the gap on row 2, in its way. Then up to
+/// `ticks` more, until a trip ends, with how it ended and the most ticks
+/// in a row the trip stood still.
+fn held_up_in(rows: &[String], ticks: u64) -> (World, Vec<Outcome>, u32) {
+    let mut world = drank_in(rows, Verb::Wander);
+    let resting = resting(world.data());
     let on_a_trip = |world: &World| {
         let sprite = world.sprites().next().expect("the sprite");
         sprite.action().is_some_and(|a| a.remembered)
@@ -325,27 +331,8 @@ fn winding() -> Vec<String> {
 fn a_trip_has_the_time_it_had_when_it_set_off_however_it_finds_the_way_again() {
     // M2 design §7.4: held up at the gap, it finds the long way round, but
     // still gives up at the timeout (60 ticks) plus the walk it set off on.
-    let data = builtin();
-    let thirsty = genome(
-        10.0,
-        r#"Emitter(locus: Locus("always"), mode: Level, gain: 0.004, chem: "thirst"),
-           Emitter(locus: Locus("drank"), mode: Level, gain: -0.5, chem: "thirst"),
-           Instinct(inputs: [("thirst", false)], verb: Drink, weight: 1.0),
-           Instinct(inputs: [("always", false)], verb: Rest, weight: 0.3),
-           BrainParam(param: "tau_base", value: 0.05),
-           BrainParam(param: "salience_gain", value: 0.0),
-           BrainParam(param: "curiosity", value: 0.0),
-           BrainParam(param: "vigilance", value: 0.0),"#,
-        &data,
-    );
-    let resting = resting(&data);
-    let mut script = vec![ScriptedAction::Rest; 10];
-    script.push(ScriptedAction::Drink { at: at(0, 2) });
-    script.extend(along(1, 36));
-    let rows = winding();
-    let rows: Vec<&str> = rows.iter().map(String::as_str).collect();
-    let mut world = world_in(data, &rows, &[], at(1, 2), thirsty, &script);
-    assert_eq!(first_drink(&mut world, 200), Some(at(1, 2)));
+    let mut world = drank_in(&winding(), Verb::Rest);
+    let resting = resting(world.data());
     let first = world.sprites().next().expect("the sprite").id();
     let mut set_off = None;
     for _ in 0..1_000 {
@@ -442,13 +429,6 @@ fn places(world: &World) -> Vec<RememberedPlace> {
         .remembered_places()
 }
 
-/// Steps `world` `ticks` times.
-fn run(world: &mut World, ticks: u64) {
-    for _ in 0..ticks {
-        world.step();
-    }
-}
-
 /// Rests, to grow hungry or thirsty, then does `then`.
 fn after_a_while(then: &[ScriptedAction]) -> Vec<ScriptedAction> {
     let mut script = vec![ScriptedAction::Rest; 10];
@@ -474,7 +454,7 @@ fn a_bush_that_eased_hunger_is_remembered_where_it_stands_but_a_berry_on_the_gro
         hungry.clone(),
         &eat(berry),
     );
-    run(&mut world, 120);
+    run_for(&mut world, 120);
     assert_eq!(
         places(&world),
         [],
@@ -491,7 +471,7 @@ fn a_bush_that_eased_hunger_is_remembered_where_it_stands_but_a_berry_on_the_gro
     world
         .start_object(bush, "mature", &[("fruit", 6)])
         .expect("the bush");
-    run(&mut world, 120);
+    run_for(&mut world, 120);
     let remembered = places(&world);
     assert_eq!(remembered.len(), 1, "{remembered:?}");
     assert_eq!(remembered[0].thing, Thing::from("berry_bush"));
@@ -505,7 +485,7 @@ fn a_drink_that_eases_nothing_leaves_no_place() {
     let never_thirsty = genome(10.0, "", &data);
     let drink = [ScriptedAction::Drink { at: at(0, 2) }, ScriptedAction::Rest];
     let mut world = world_in(data, &ROOM, &[], at(1, 2), never_thirsty, &drink);
-    run(&mut world, 20);
+    run_for(&mut world, 20);
     assert_eq!(places(&world), []);
 }
 
@@ -540,10 +520,10 @@ fn a_sprite_sees_a_remembered_bush_is_gone_and_forgets_it() {
     world
         .start_object(tree, "fruiting", &[("fruit", 6)])
         .expect("the tree");
-    run(&mut world, 200);
+    run_for(&mut world, 200);
     assert!(world.object_at(tree).is_none(), "the tree has died");
     assert_eq!(places(&world).len(), 1, "it hasn't seen it's gone");
-    run(&mut world, 100);
+    run_for(&mut world, 100);
     assert_eq!(places(&world), []);
 }
 
@@ -572,7 +552,7 @@ fn a_sprite_drinks_at_water_in_sight_rather_than_walk_to_water_it_remembers() {
     script.extend([ScriptedAction::Rest; 7]);
     let mut world = world_in(data, &rows, &[], at(1, 2), thirsty, &script);
     assert_eq!(first_drink(&mut world, 200), Some(at(1, 2)));
-    run(&mut world, 100);
+    run_for(&mut world, 100);
     let here = world.sprites().next().expect("the sprite").pos();
     assert!(here.x >= 24, "{here:?} is out of sight of the east end");
     let mut drank_at = None;
@@ -628,7 +608,7 @@ fn remembered_places_are_saved_and_loaded() {
     let mut world = drank_and_wandered_off();
     first_drink(&mut world, 200);
     // The relief is learned the tick after the drink.
-    run(&mut world, 5);
+    run_for(&mut world, 5);
     let loaded = World::load(&world.save()).expect("the save loads");
     assert_eq!(places(&loaded), places(&world));
     assert_eq!(places(&loaded).len(), 1);

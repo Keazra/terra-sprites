@@ -5,25 +5,34 @@
 use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::genome::Gene;
+use crate::listed::listed_enum;
 use crate::registry::Trait;
 
-/// A phase of a sprite's life (M2 design §9.1). Objects have stages of their
-/// own; a sprite's are life stages. They come in this order.
-#[derive(
-    Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
-)]
-pub enum LifeStage {
-    /// From hatching, or for a sprite placed young, being born, until it
-    /// grows up. An egg is an item until it hatches (M2 design §10.4, #196),
-    /// so a save or genome file from before that may say `Egg`, which reads
-    /// as young: an egg's genes were expressed as a young sprite's.
-    #[default]
-    #[serde(alias = "Egg")]
-    Young,
-    /// From growing up until it grows old.
-    Adult,
-    /// From growing old until it dies.
-    Old,
+listed_enum! {
+    /// A sprite's life stage (M2 design §9.1). Objects have stages of their
+    /// own; a sprite's are life stages. They come in this order.
+    #[derive(
+        Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
+    )]
+    pub enum LifeStage {
+        /// From hatching, or for a sprite placed young, being born, until it
+        /// grows up. An egg is an item until it hatches (M2 design §10.4, #196),
+        /// so a save or genome file from before that may say `Egg`, which reads
+        /// as young: an egg's genes were expressed as a young sprite's.
+        #[default]
+        #[serde(alias = "Egg")]
+        Young => "young",
+        /// From growing up until it grows old.
+        Adult => "adult",
+        /// From growing old until it dies.
+        Old => "old",
+    }
+
+    /// Every life stage, in the order they come.
+    pub const ALL;
+
+    /// The stage's name, as genome files and the player see it.
+    pub fn name(self) -> &'static str;
 }
 
 impl LifeStage {
@@ -31,15 +40,6 @@ impl LifeStage {
     /// still counts as one for mating (M2 design §5, §9.1).
     pub fn is_grown(self) -> bool {
         matches!(self, LifeStage::Adult | LifeStage::Old)
-    }
-
-    /// The stage's name, as genome files and the player see it.
-    pub fn name(self) -> &'static str {
-        match self {
-            LifeStage::Young => "young",
-            LifeStage::Adult => "adult",
-            LifeStage::Old => "old",
-        }
     }
 }
 
@@ -147,7 +147,7 @@ mod tests {
         assert!(!adult_only.is_on(LifeStage::Old));
         let always = Switch::default();
         assert!(always.is_always());
-        for stage in [LifeStage::Young, LifeStage::Adult, LifeStage::Old] {
+        for stage in LifeStage::ALL {
             assert!(always.is_on(stage));
         }
     }

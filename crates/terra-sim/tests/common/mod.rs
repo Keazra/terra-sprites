@@ -1,13 +1,15 @@
-//! Shared helpers for terra-sim integration tests.
+//! Shared helpers for terra-sim's tests.
 //!
-//! Each test file is its own crate, so it `mod common;` and uses only the
-//! pieces it needs. Helpers a given file never calls are allowed here so the
-//! shared API stays one place (#155).
+//! Each integration test file is its own crate, so it `mod common;` and uses
+//! only the pieces it needs. The crate's own unit tests have them too,
+//! through `src/test_util.rs`, which includes this file. Helpers a given
+//! file never calls are allowed here so the shared API stays one place
+//! (#155).
 #![allow(dead_code)]
 
 use terra_sim::{
-    DataPack, EntityId, Event, EventKind, Genome, Learned, Map, Outcome, Pos, Scenario,
-    ScenarioError, ScriptedAction, Verb, World,
+    Command, DataPack, EntityId, Event, EventKind, Genome, Learned, Map, Outcome, Playback, Pos,
+    Rejection, Scenario, ScenarioError, ScriptedAction, Verb, World, WorldConfig,
 };
 
 /// The built-in data pack.
@@ -461,3 +463,171 @@ pub const NO_COPYING_ERRORS: [(&str, &str); 2] = [
     ("mutation: (chance: 0.01,", "mutation: (chance: 0.0,"),
     ("flaws: (arise: 0.004,", "flaws: (arise: 0.0,"),
 ];
+
+/// Steps `world` `ticks` times.
+pub fn run_for(world: &mut World, ticks: u64) {
+    for _ in 0..ticks {
+        world.step();
+    }
+}
+
+/// The Cursor's pet for `sprite` (design v21 §4.6), its feeling looking
+/// `reach_back` ticks back for the sprite's latest attempt (§5.6).
+pub fn pet(sprite: EntityId, reach_back: u64) -> Command {
+    Command::Reward {
+        sprite,
+        amplified: false,
+        reach_back,
+    }
+}
+
+/// The Cursor's hug for `sprite`: an amplified pet (design v21 §4.6).
+pub fn hug(sprite: EntityId, reach_back: u64) -> Command {
+    Command::Reward {
+        sprite,
+        amplified: true,
+        reach_back,
+    }
+}
+
+/// The Cursor's zap for `sprite` (design v21 §4.6). Its feeling looks back
+/// only the touch window (§5.6).
+pub fn zap(sprite: EntityId) -> Command {
+    Command::Correct {
+        sprite,
+        amplified: false,
+    }
+}
+
+/// The Cursor's shock for `sprite`: an amplified zap (design v21 §4.6).
+pub fn shock(sprite: EntityId) -> Command {
+    Command::Correct {
+        sprite,
+        amplified: true,
+    }
+}
+
+/// A world drawn from `rows`, with `objects`, and a starter sprite on each
+/// of `sprites`, doing `script`, by the tile it starts on.
+pub fn starters(
+    rows: &[&str],
+    objects: &[(Pos, &str)],
+    sprites: &[Pos],
+    script: &[(Pos, ScriptedAction)],
+) -> World {
+    starters_in(builtin(), rows, objects, sprites, script)
+}
+
+/// The same, made with `data`.
+pub fn starters_in(
+    data: DataPack,
+    rows: &[&str],
+    objects: &[(Pos, &str)],
+    sprites: &[Pos],
+    script: &[(Pos, ScriptedAction)],
+) -> World {
+    WorldBuilder::new(rows)
+        .data(data)
+        .objects(objects)
+        .starters(sprites)
+        .scripts(script)
+        .build()
+}
+
+/// The reason the world gave in `events` for refusing `command`, if it did.
+pub fn refusal_in(events: &[Event], command: &Command) -> Option<Rejection> {
+    events.iter().find_map(|e| match &e.kind {
+        EventKind::CommandRejected { command: c, reason } if c == command => Some(*reason),
+        _ => None,
+    })
+}
+
+/// Submits `command` and steps `world` a tick, then gives the reason the
+/// world gave for refusing it, if it did.
+pub fn refusal(world: &mut World, command: Command) -> Option<Rejection> {
+    world.submit(command.clone());
+    refusal_in(&world.step(), &command)
+}
+
+/// The built-in text of the data pack's `file`.
+pub fn builtin_source(file: &str) -> &'static str {
+    DataPack::builtin_sources()
+        .iter()
+        .find(|&&(path, _)| path == file)
+        .unwrap_or_else(|| panic!("the built-in pack has no {file}"))
+        .1
+}
+
+/// A scripted walk to `destination`.
+pub fn wander_to(destination: Pos) -> ScriptedAction {
+    ScriptedAction::Wander { destination }
+}
+
+/// The default world, from the built-in preset and pack, made from `seed`.
+pub fn default_world(seed: u64) -> World {
+    let data = builtin();
+    World::new(WorldConfig::builtin(&data), data, seed)
+}
+
+/// A field of grass `width` by `height` tiles, as a drawing's rows, at most
+/// 64 tiles wide.
+pub fn grass(width: usize, height: usize) -> Vec<&'static str> {
+    const ROW: &str = "................................................................";
+    assert!(width <= ROW.len(), "{width} tiles is too wide a field");
+    vec![&ROW[..width]; height]
+}
+
+/// A world drawn from `rows`, with `objects`, and `sprites` with genomes
+/// made as given, each starting on the scripted actions given for its tile.
+pub fn scene(
+    rows: &[&str],
+    objects: &[(Pos, &str)],
+    sprites: &[(Pos, MakeGenome)],
+    scripted: &[(Pos, ScriptedAction)],
+) -> World {
+    seeded_scene(rows, objects, sprites, scripted, 1)
+}
+
+/// [`scene`], with the world's RNG seeded with `seed`.
+pub fn seeded_scene(
+    rows: &[&str],
+    objects: &[(Pos, &str)],
+    sprites: &[(Pos, MakeGenome)],
+    scripted: &[(Pos, ScriptedAction)],
+    seed: u64,
+) -> World {
+    WorldBuilder::new(rows)
+        .objects(objects)
+        .sprites_made(sprites)
+        .scripts(scripted)
+        .seed(seed)
+        .build()
+}
+
+/// Rests all the time, and does nothing else.
+pub const RESTER: &str = r#"
+    Instinct(inputs: [("always", false)], verb: Rest, weight: 1.0),
+    BrainParam(param: "tau_base", value: 0.02),
+"#;
+
+/// Plays the recording of `world` back to its end, checking that it never
+/// parted from the world and ends in the world's state, and gives the
+/// playback (design §2.7).
+pub fn replayed(world: &World) -> Playback {
+    let replay = world.replay().expect("the world records");
+    let mut playback = Playback::new(&replay).expect("the replay plays");
+    while playback.world().tick() < playback.end() {
+        playback.step();
+    }
+    assert_eq!(playback.divergence(), None);
+    assert_eq!(playback.world().state_hash(), world.state_hash());
+    playback
+}
+
+/// A small field of grass with one grown female on (2, 1) who breeds alone
+/// whenever she can (M2 design §15.7), made with `data` and `seed`: for
+/// tests of the eggs she lays.
+pub fn lone_mother_in(data: DataPack, seed: u64) -> World {
+    let mother = format!("{ALONE}{FEMALE}");
+    family_in(data, &[(at(2, 1), &mother)], &[], seed)
+}

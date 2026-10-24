@@ -2,27 +2,12 @@
 //! new object or spawns a new sprite, and the player names sprites.
 
 mod common;
-use common::{WorldBuilder, at, builtin};
+use common::{at, builtin, builtin_source, builtin_with, refusal, starters, starters_in};
 
 use terra_sim::{
-    Blocker, Command, DataPack, EntityId, Event, EventKind, Genome, NameProblem, PlaceRule, Pos,
-    Rejection, Terrain, World,
+    Blocker, Command, EntityId, Event, EventKind, Genome, NameProblem, PlaceRule, Pos, Rejection,
+    Terrain, World,
 };
-
-/// A world drawn from `rows`, with `objects`, and a starter sprite on each
-/// of `sprites`.
-fn world(rows: &[&str], objects: &[(Pos, &str)], sprites: &[Pos]) -> World {
-    world_in(builtin(), rows, objects, sprites)
-}
-
-/// `world`, made with `data`.
-fn world_in(data: DataPack, rows: &[&str], objects: &[(Pos, &str)], sprites: &[Pos]) -> World {
-    WorldBuilder::new(rows)
-        .data(data)
-        .objects(objects)
-        .starters(sprites)
-        .build()
-}
 
 /// The stable ID of the object type called `name`.
 fn type_id(world: &World, name: &str) -> u16 {
@@ -37,14 +22,6 @@ fn place(world: &World, tile: Pos, name: &str) -> Command {
         tile,
         object_type: type_id(world, name),
     }
-}
-
-/// The reason the world gave for refusing `command`, if it did.
-fn refused(events: &[Event], command: &Command) -> Option<Rejection> {
-    events.iter().find_map(|e| match &e.kind {
-        EventKind::CommandRejected { command: c, reason } if c == command => Some(*reason),
-        _ => None,
-    })
 }
 
 /// Submits `command`, runs a tick, and returns its events.
@@ -69,7 +46,7 @@ fn the_place_menu_lists_the_types_the_data_lets_the_cursor_place() {
 
 #[test]
 fn a_placed_item_appears_on_the_tile_new() {
-    let mut world = world(&["....."], &[], &[]);
+    let mut world = starters(&["....."], &[], &[], &[]);
     let events = {
         let command = place(&world, at(2, 0), "berry");
         run(&mut world, command)
@@ -87,7 +64,7 @@ fn a_placed_item_appears_on_the_tile_new() {
 
 #[test]
 fn a_placed_bush_starts_as_a_seedling() {
-    let mut world = world(&["....."], &[], &[]);
+    let mut world = starters(&["....."], &[], &[], &[]);
     {
         let command = place(&world, at(2, 0), "berry_bush");
         run(&mut world, command)
@@ -102,10 +79,9 @@ fn a_placed_bush_may_wall_off_a_corridor() {
     // The owner's choice (design v28 change 2): the built-in bush asks nothing of
     // its tile, so the player may pen sprites in on purpose.
     let rows = ["#####", ".....", "#####"];
-    let mut world = world(&rows, &[], &[]);
+    let mut world = starters(&rows, &[], &[], &[]);
     let command = place(&world, at(2, 1), "berry_bush");
-    let events = run(&mut world, command.clone());
-    assert_eq!(refused(&events, &command), None);
+    assert_eq!(refusal(&mut world, command), None);
     assert!(world.object_at(at(2, 1)).is_some());
 }
 
@@ -115,17 +91,16 @@ fn a_placement_rule_in_the_data_can_keep_paths_open() {
         r#"place: (label: "berry bush seedling"),"#,
         r#"place: (label: "berry bush seedling", if: [KeepsPathsOpen]),"#,
     );
-    let data = pack_with("objects.ron", &objects);
+    let data = builtin_with("objects.ron", &objects);
     let rows = ["#####", ".....", "#####"];
-    let mut world = world_in(data, &rows, &[], &[]);
+    let mut world = starters_in(data, &rows, &[], &[], &[]);
     let bush = type_id(&world, "berry_bush");
     let command = Command::Place {
         tile: at(2, 1),
         object_type: bush,
     };
-    let events = run(&mut world, command.clone());
     assert_eq!(
-        refused(&events, &command),
+        refusal(&mut world, command),
         Some(Rejection::PlaceRule {
             object_type: bush,
             rule: PlaceRule::KeepsPathsOpen,
@@ -137,7 +112,7 @@ fn a_placement_rule_in_the_data_can_keep_paths_open() {
 #[test]
 fn placing_is_refused_where_the_thing_cant_go() {
     let rows = ["..#..", "....."];
-    let mut world = world(&rows, &[(at(0, 0), "berry")], &[at(4, 1)]);
+    let mut world = starters(&rows, &[(at(0, 0), "berry")], &[at(4, 1)], &[]);
     // The sprite first, before it walks off.
     for (tile, name, blocker) in [
         (at(4, 1), "berry_bush", Blocker::Sprite),
@@ -145,10 +120,9 @@ fn placing_is_refused_where_the_thing_cant_go() {
         (at(2, 0), "ball", Blocker::Terrain(Terrain::Rock)),
     ] {
         let command = place(&world, tile, name);
-        let events = run(&mut world, command.clone());
         let item_type = type_id(&world, name);
         assert_eq!(
-            refused(&events, &command),
+            refusal(&mut world, command),
             Some(Rejection::InTheWay { item_type, blocker }),
             "{name} on {tile:?}"
         );
@@ -156,15 +130,14 @@ fn placing_is_refused_where_the_thing_cant_go() {
     // An item may go under a sprite (design §3.4).
     let under = world.sprites().next().expect("the sprite").pos();
     let command = place(&world, under, "ball");
-    let events = run(&mut world, command.clone());
-    assert_eq!(refused(&events, &command), None);
+    assert_eq!(refusal(&mut world, command), None);
 }
 
 #[test]
 fn placement_rules_in_the_data_refuse_with_the_rule_they_name() {
     // Dirt's fertility is 0.5, and a berry lies within two tiles.
     let rows = [",....", "....."];
-    let berry = type_id(&world(&rows, &[], &[]), "berry");
+    let berry = type_id(&starters(&rows, &[], &[], &[]), "berry");
     for (condition, rule) in [
         ("Fertility(Ge, 0.75)", PlaceRule::Fertility),
         (
@@ -178,12 +151,11 @@ fn placement_rules_in_the_data_refuse_with_the_rule_they_name() {
             r#"place: (label: "berry bush seedling"),"#,
             &format!(r#"place: (label: "berry bush seedling", if: [{condition}]),"#),
         );
-        let data = pack_with("objects.ron", &objects);
-        let mut world = world_in(data, &rows, &[(at(2, 1), "berry")], &[]);
+        let data = builtin_with("objects.ron", &objects);
+        let mut world = starters_in(data, &rows, &[(at(2, 1), "berry")], &[], &[]);
         let command = place(&world, at(0, 0), "berry_bush");
-        let events = run(&mut world, command.clone());
         assert_eq!(
-            refused(&events, &command),
+            refusal(&mut world, command),
             Some(Rejection::PlaceRule {
                 object_type: type_id(&world, "berry_bush"),
                 rule,
@@ -196,11 +168,10 @@ fn placement_rules_in_the_data_refuse_with_the_rule_they_name() {
 
 #[test]
 fn a_bush_cant_be_placed_where_the_ground_allows_no_fixtures() {
-    let mut world = world(&["~...."], &[], &[]);
+    let mut world = starters(&["~...."], &[], &[], &[]);
     let command = place(&world, at(0, 0), "berry_bush");
-    let events = run(&mut world, command.clone());
     assert_eq!(
-        refused(&events, &command),
+        refusal(&mut world, command),
         Some(Rejection::InTheWay {
             item_type: type_id(&world, "berry_bush"),
             blocker: Blocker::Terrain(Terrain::ShallowWater),
@@ -208,21 +179,18 @@ fn a_bush_cant_be_placed_where_the_ground_allows_no_fixtures() {
     );
     // An item may lie in shallow water.
     let command = place(&world, at(0, 0), "berry");
-    let events = run(&mut world, command.clone());
-    assert_eq!(refused(&events, &command), None);
+    assert_eq!(refusal(&mut world, command), None);
 }
 
 #[test]
 fn placing_is_refused_off_the_map_and_for_a_type_the_data_doesnt_let_be_placed() {
-    let mut world = world(&["....."], &[], &[]);
+    let mut world = starters(&["....."], &[], &[], &[]);
     let command = place(&world, at(9, 0), "berry");
-    let events = run(&mut world, command.clone());
-    assert_eq!(refused(&events, &command), Some(Rejection::OffTheMap));
+    assert_eq!(refusal(&mut world, command), Some(Rejection::OffTheMap));
     for name in ["thornbush", "water", "sprite"] {
         let command = place(&world, at(1, 0), name);
-        let events = run(&mut world, command.clone());
         assert_eq!(
-            refused(&events, &command),
+            refusal(&mut world, command),
             Some(Rejection::NotPlaceable),
             "{name}"
         );
@@ -231,13 +199,12 @@ fn placing_is_refused_off_the_map_and_for_a_type_the_data_doesnt_let_be_placed()
         tile: at(1, 0),
         object_type: 9999,
     };
-    let events = run(&mut world, command.clone());
-    assert_eq!(refused(&events, &command), Some(Rejection::NotPlaceable));
+    assert_eq!(refusal(&mut world, command), Some(Rejection::NotPlaceable));
 }
 
 #[test]
 fn placing_leaves_what_the_cursor_has_hold_of_alone() {
-    let mut world = world(&["....."], &[], &[at(0, 0)]);
+    let mut world = starters(&["....."], &[], &[at(0, 0)], &[]);
     let led = world.sprite_at(at(0, 0)).unwrap().id();
     run(&mut world, Command::TakeHold { sprite: led });
     {
@@ -250,7 +217,7 @@ fn placing_leaves_what_the_cursor_has_hold_of_alone() {
 
 #[test]
 fn a_spawned_sprite_is_a_newborn_from_the_starter_genome_with_variation() {
-    let mut world = world(&["....."], &[], &[at(0, 0)]);
+    let mut world = starters(&["....."], &[], &[at(0, 0)], &[]);
     let first = world.sprite_at(at(0, 0)).unwrap();
     let first_genome = first.genome().to_ron(world.data());
     let events = run(
@@ -277,8 +244,8 @@ fn a_spawned_sprite_is_a_newborn_from_the_starter_genome_with_variation() {
 fn a_sprite_spawned_from_a_genome_carries_that_genome_exactly() {
     let data = builtin();
     let text = builtin_source("genomes/starter.ron");
-    let genome = Genome::from_ron(&text, &data).expect("the starter genome");
-    let mut world = world(&["....."], &[], &[]);
+    let genome = Genome::from_ron(text, &data).expect("the starter genome");
+    let mut world = starters(&["....."], &[], &[], &[]);
     run(
         &mut world,
         Command::SpawnSprite {
@@ -292,7 +259,7 @@ fn a_sprite_spawned_from_a_genome_carries_that_genome_exactly() {
 
 #[test]
 fn an_exported_genome_reimports_identically() {
-    let world = world(&["....."], &[], &[at(0, 0)]);
+    let world = starters(&["....."], &[], &[at(0, 0)], &[]);
     let sprite = world.sprite_at(at(0, 0)).unwrap();
     let written = sprite.genome().to_ron(world.data());
     let again = Genome::from_ron(&written, world.data()).expect("it reads back");
@@ -303,10 +270,11 @@ fn an_exported_genome_reimports_identically() {
 #[test]
 fn spawning_is_refused_where_a_sprite_cant_stand() {
     let rows = ["..#..", "....."];
-    let mut world = world(
+    let mut world = starters(
         &rows,
         &[(at(0, 1), "berry_bush"), (at(1, 1), "ball")],
         &[at(4, 1)],
+        &[],
     );
     let bush = type_id(&world, "berry_bush");
     for (tile, blocker) in [
@@ -315,9 +283,8 @@ fn spawning_is_refused_where_a_sprite_cant_stand() {
         (at(2, 0), Blocker::Terrain(Terrain::Rock)),
     ] {
         let command = Command::SpawnSprite { tile, genome: None };
-        let events = run(&mut world, command.clone());
         assert_eq!(
-            refused(&events, &command),
+            refusal(&mut world, command),
             Some(Rejection::NoRoom(blocker)),
             "{tile:?}"
         );
@@ -326,15 +293,13 @@ fn spawning_is_refused_where_a_sprite_cant_stand() {
         tile: at(9, 9),
         genome: None,
     };
-    let events = run(&mut world, command.clone());
-    assert_eq!(refused(&events, &command), Some(Rejection::OffTheMap));
+    assert_eq!(refusal(&mut world, command), Some(Rejection::OffTheMap));
     // A sprite may stand on an item (design §3.4).
     let command = Command::SpawnSprite {
         tile: at(1, 1),
         genome: None,
     };
-    let events = run(&mut world, command.clone());
-    assert_eq!(refused(&events, &command), None);
+    assert_eq!(refusal(&mut world, command), None);
 }
 
 #[test]
@@ -344,22 +309,21 @@ fn a_genome_from_another_pack_that_doesnt_fit_this_world_is_refused() {
         r#"    (id: 47, name: "h15", class: Hormone),"#,
         "    (id: 47, name: \"h15\", class: Hormone),\n    (id: 60, name: \"zest\", class: Hormone),",
     );
-    let other = pack_with("chemicals.ron", &chemicals);
+    let other = builtin_with("chemicals.ron", &chemicals);
     let text = builtin_source("genomes/starter.ron").replace(r#""h0""#, r#""zest""#);
     let genome = Genome::from_ron(&text, &other).expect("it fits the other pack");
-    let mut world = world(&["....."], &[], &[]);
+    let mut world = starters(&["....."], &[], &[], &[]);
     let command = Command::SpawnSprite {
         tile: at(1, 0),
         genome: Some(genome),
     };
-    let events = run(&mut world, command.clone());
-    assert_eq!(refused(&events, &command), Some(Rejection::BadGenome));
+    assert_eq!(refusal(&mut world, command), Some(Rejection::BadGenome));
     assert!(world.sprite_at(at(1, 0)).is_none());
 }
 
 #[test]
 fn a_renamed_sprite_shows_its_name_and_dies_with_it() {
-    let mut world = world(&["....."], &[], &[at(0, 0)]);
+    let mut world = starters(&["....."], &[], &[at(0, 0)], &[]);
     let id = world.sprite_at(at(0, 0)).unwrap().id();
     let events = run(
         &mut world,
@@ -390,7 +354,7 @@ fn a_renamed_sprite_shows_its_name_and_dies_with_it() {
 
 #[test]
 fn a_name_must_be_one_to_sixteen_cp437_characters() {
-    let mut world = world(&["....."], &[], &[at(0, 0)]);
+    let mut world = starters(&["....."], &[], &[at(0, 0)], &[]);
     let id = world.sprite_at(at(0, 0)).unwrap().id();
     for (name, problem) in [
         ("", NameProblem::Empty),
@@ -402,9 +366,8 @@ fn a_name_must_be_one_to_sixteen_cp437_characters() {
             sprite: id,
             name: name.into(),
         };
-        let events = run(&mut world, command.clone());
         assert_eq!(
-            refused(&events, &command),
+            refusal(&mut world, command),
             Some(Rejection::BadName(problem)),
             "{name:?}"
         );
@@ -421,14 +384,13 @@ fn a_name_must_be_one_to_sixteen_cp437_characters() {
         sprite: EntityId(999),
         name: "Mira".into(),
     };
-    let events = run(&mut world, command.clone());
-    assert_eq!(refused(&events, &command), Some(Rejection::Gone));
+    assert_eq!(refusal(&mut world, command), Some(Rejection::Gone));
 }
 
 #[test]
 fn naming_never_touches_the_worlds_randomness() {
-    let mut named = world(&["....."], &[], &[at(0, 0)]);
-    let mut unnamed = world(&["....."], &[], &[at(0, 0)]);
+    let mut named = starters(&["....."], &[], &[at(0, 0)], &[]);
+    let mut unnamed = starters(&["....."], &[], &[at(0, 0)], &[]);
     let id = named.sprite_at(at(0, 0)).unwrap().id();
     named.submit(Command::Rename {
         sprite: id,
@@ -465,22 +427,6 @@ fn a_random_name_is_made_of_the_datas_syllables_and_is_always_a_valid_name() {
     assert!(distinct.len() > 150, "only {} distinct", distinct.len());
 }
 
-fn builtin_source(path: &str) -> String {
-    DataPack::builtin_sources()
-        .iter()
-        .find(|(name, _)| *name == path)
-        .map(|(_, text)| text.to_string())
-        .expect("a built-in file")
-}
-
-fn pack_with(path: &str, text: &str) -> DataPack {
-    let sources: Vec<(&str, &str)> = DataPack::builtin_sources()
-        .iter()
-        .map(|&(name, original)| (name, if name == path { text } else { original }))
-        .collect();
-    DataPack::from_sources(&sources).expect("a valid pack")
-}
-
 #[test]
 fn a_new_objects_look_is_its_first_stages() {
     let data = builtin();
@@ -498,16 +444,11 @@ fn a_placed_object_takes_its_first_turn_in_the_tick_it_is_placed() {
         stages: [(name: "only", ticks: (100, 100), next: Expire)],
         rules: [(trigger: OnStageEnter("only"), do: [AddCounter("turns", 1)])],
         place: (label: "counted"))]"#;
-    let sources: Vec<(&str, &str)> = DataPack::builtin_sources()
-        .iter()
-        .map(|&(path, text)| (path, if path == "objects.ron" { counted } else { text }))
-        .collect();
-    let data = DataPack::from_sources(&sources).expect("a valid pack");
-    let mut world = world_in(data, &["....."], &[], &[]);
+    let data = builtin_with("objects.ron", counted);
+    let mut world = starters_in(data, &["....."], &[], &[], &[]);
     let tile = at(2, 0);
     let command = place(&world, tile, "counted");
-    let events = run(&mut world, command.clone());
-    assert_eq!(refused(&events, &command), None);
+    assert_eq!(refusal(&mut world, command), None);
     let object = world.object_at(tile).expect("placed");
     assert_eq!(object.counter("turns"), Some(1), "its first turn ran");
 }

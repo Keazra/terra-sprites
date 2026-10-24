@@ -7,13 +7,11 @@
 
 mod common;
 use common::{
-    AGES_AT_ONCE, ALONE, FEMALE, LONE, Laying, OLD, at, builtin, builtin_changing, family_in,
-    hatch, laid,
+    AGES_AT_ONCE, ALONE, FEMALE, LONE, Laying, OLD, at, builtin_changing, default_world, family_in,
+    hatch, laid, lone_mother_in, replayed,
 };
 
-use terra_sim::{
-    Command, CopyChangeView, DataPack, EventKind, GeneView, LifeStage, Playback, World, WorldConfig,
-};
+use terra_sim::{Command, CopyChangeView, DataPack, EventKind, GeneView, LifeStage, World};
 
 /// The change to the built-in physiology that copies every gene value
 /// wrongly.
@@ -69,8 +67,7 @@ fn what_it_does(gene: &GeneView) -> String {
 
 #[test]
 fn a_lone_egg_s_genes_are_its_mother_s_with_copying_errors_in_their_values() {
-    let female = format!("{ALONE}{FEMALE}");
-    let mut world = family_in(always_wrong(), &[(at(2, 1), &female)], &[], 1);
+    let mut world = lone_mother_in(always_wrong(), 1);
     let Laying { egg, by, .. } = laid(&mut world, 50).expect("she laid an egg");
     hatch(&mut world, egg);
     let (egg, mother) = (world.sprite(egg).unwrap(), world.sprite(by).unwrap());
@@ -90,8 +87,7 @@ fn a_lone_egg_s_genes_are_its_mother_s_with_copying_errors_in_their_values() {
 #[test]
 fn an_egg_knows_which_genes_copying_changed_and_what_each_was() {
     // M2 design §12: for the Genome tab's list of what's new.
-    let female = format!("{ALONE}{FEMALE}");
-    let mut world = family_in(always_wrong(), &[(at(2, 1), &female)], &[], 1);
+    let mut world = lone_mother_in(always_wrong(), 1);
     let Laying { egg, by, .. } = laid(&mut world, 50).expect("she laid an egg");
     hatch(&mut world, egg);
     let (egg, mother) = (world.sprite(egg).unwrap(), world.sprite(by).unwrap());
@@ -114,9 +110,8 @@ fn an_egg_knows_which_genes_copying_changed_and_what_each_was() {
 fn a_gene_flawed_in_both_copies_is_born_broken_at_half_health_and_brings_old_age_sooner() {
     // M2 design §12: with every copy flawed as it's copied, each of the
     // egg's genes that can weaken is broken.
-    let female = format!("{ALONE}{FEMALE}");
     let data = with_flaws("arise: 1.0, founders: 0.035,");
-    let mut world = family_in(data, &[(at(2, 1), &female)], &[], 1);
+    let mut world = lone_mother_in(data, 1);
     let Laying { egg, by, .. } = laid(&mut world, 50).expect("she laid an egg");
     hatch(&mut world, egg);
     let (egg, mother) = (world.sprite(egg).unwrap(), world.sprite(by).unwrap());
@@ -171,9 +166,7 @@ fn what_age_did_to_a_mother_s_genes_isn_t_passed_on() {
 #[test]
 fn the_first_sprites_carry_a_few_hidden_flaws_and_none_broken() {
     // M2 design §12: as wild animals do, about three each.
-    let data = builtin();
-    let config = WorldConfig::builtin(&data);
-    let world = World::new(config, data, 7);
+    let world = default_world(7);
     let mut carried = 0;
     let mut sprites = 0;
     for sprite in world.sprites() {
@@ -211,10 +204,9 @@ fn a_lone_egg_s_genes_are_now_and_then_doubled_lost_or_changed() {
     // M2 design §13: a doubled gene or a changed copy sits next to its
     // original, and the egg remembers what it lost and what a changed gene
     // was.
-    let female = format!("{ALONE}{FEMALE}");
     let (from, to) = whole_genes("doubled: 0.1, lost: 0.1, changed: 0.1");
     let data = builtin_changing("physiology.ron", &[(from, &to), LONE]);
-    let mut world = family_in(data, &[(at(2, 1), &female)], &[], 1);
+    let mut world = lone_mother_in(data, 1);
     let Laying { egg, by, .. } = laid(&mut world, 50).expect("she laid an egg");
     hatch(&mut world, egg);
     let (egg, mother) = (world.sprite(egg).unwrap(), world.sprite(by).unwrap());
@@ -259,11 +251,10 @@ fn a_lone_egg_s_genes_are_now_and_then_doubled_lost_or_changed() {
     assert!(mother.copy_changes().is_empty(), "she has no parents");
 }
 
-#[test]
-fn copying_errors_flaws_and_copy_changes_are_saved_and_hashed_in_the_egg_and_the_hatchling() {
-    // M2 design §12.1, §12.3, §13.1: they're world state, saved and in the
-    // state hash, while the egg lies and once it has hatched.
-    let female = format!("{ALONE}{FEMALE}");
+/// A lone mother, from seed 3, in a pack that copies every gene value
+/// wrongly, gives half of what it copies a new flaw, and doubles, loses or
+/// changes a whole gene a tenth of the time each.
+fn erring_mother() -> World {
     let (from, to) = whole_genes("doubled: 0.1, lost: 0.1, changed: 0.1");
     let data = builtin_changing(
         "physiology.ron",
@@ -274,7 +265,14 @@ fn copying_errors_flaws_and_copy_changes_are_saved_and_hashed_in_the_egg_and_the
             LONE,
         ],
     );
-    let mut world = family_in(data, &[(at(2, 1), &female)], &[], 3);
+    lone_mother_in(data, 3)
+}
+
+#[test]
+fn copying_errors_flaws_and_copy_changes_are_saved_and_hashed_in_the_egg_and_the_hatchling() {
+    // M2 design §12.1, §12.3, §13.1: they're world state, saved and in the
+    // state hash, while the egg lies and once it has hatched.
+    let mut world = erring_mother();
     let Laying { egg, .. } = laid(&mut world, 50).expect("she laid an egg");
     let mut from_the_egg = World::load(&world.save()).expect("the save loads");
     assert_eq!(from_the_egg.state_hash(), world.state_hash());
@@ -298,18 +296,7 @@ fn copying_errors_flaws_and_copy_changes_are_saved_and_hashed_in_the_egg_and_the
 
 #[test]
 fn copying_errors_flaws_and_copy_changes_load_and_replay_the_same() {
-    let female = format!("{ALONE}{FEMALE}");
-    let (from, to) = whole_genes("doubled: 0.1, lost: 0.1, changed: 0.1");
-    let data = builtin_changing(
-        "physiology.ron",
-        &[
-            EVERY_VALUE_WRONG,
-            ("flaws: (arise: 0.004,", "flaws: (arise: 0.5,"),
-            (from, &to),
-            LONE,
-        ],
-    );
-    let mut world = family_in(data, &[(at(2, 1), &female)], &[], 3);
+    let mut world = erring_mother();
     world.start_recording();
     let mut loaded = World::load(&world.save()).expect("the save loads");
     let mut eggs = 0;
@@ -323,10 +310,5 @@ fn copying_errors_flaws_and_copy_changes_load_and_replay_the_same() {
     }
     assert!(eggs >= 1, "an egg was laid");
     assert_eq!(loaded.state_hash(), world.state_hash());
-    let mut playback = Playback::new(&world.replay().unwrap()).expect("the replay plays");
-    while playback.world().tick() < playback.end() {
-        playback.step();
-    }
-    assert_eq!(playback.divergence(), None);
-    assert_eq!(playback.world().state_hash(), world.state_hash());
+    replayed(&world);
 }

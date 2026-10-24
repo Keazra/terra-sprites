@@ -3,39 +3,15 @@
 //! and may crash into what stops it.
 
 mod common;
-use common::{WorldBuilder, at, builtin, builtin_changing, builtin_changing_files, close};
+use common::{
+    at, builtin, builtin_changing, builtin_changing_files, close, id_at, refusal, refusal_in,
+    run_for, starters, starters_in,
+};
 
 use terra_sim::{
     Command, DataPack, DeathCause, Dir, EntityId, Event, EventKind, Pos, Rejection, ScriptedAction,
     Thing, World,
 };
-
-/// A world drawn from `rows`, with `objects`, and a starter sprite on each
-/// of `sprites`, doing `script`, by the tile it starts on.
-fn world(
-    rows: &[&str],
-    objects: &[(Pos, &str)],
-    sprites: &[Pos],
-    script: &[(Pos, ScriptedAction)],
-) -> World {
-    world_in(builtin(), rows, objects, sprites, script)
-}
-
-/// A world like `world`'s, made with `data`.
-fn world_in(
-    data: DataPack,
-    rows: &[&str],
-    objects: &[(Pos, &str)],
-    sprites: &[Pos],
-    script: &[(Pos, ScriptedAction)],
-) -> World {
-    WorldBuilder::new(rows)
-        .data(data)
-        .objects(objects)
-        .starters(sprites)
-        .scripts(script)
-        .build()
-}
 
 /// The object on `pos`.
 fn object_on(world: &World, pos: Pos) -> Option<EntityId> {
@@ -44,20 +20,12 @@ fn object_on(world: &World, pos: Pos) -> Option<EntityId> {
 
 /// A world of `rows` and `objects` whose Cursor holds the item on `from`.
 fn holding(rows: &[&str], objects: &[(Pos, &str)], from: Pos) -> (World, EntityId) {
-    let mut world = world(rows, objects, &[], &[]);
+    let mut world = starters(rows, objects, &[], &[]);
     let item = object_on(&world, from).expect("an item there");
     world.submit(Command::PickUp { item });
     world.step();
     assert_eq!(world.cursor().holds().map(|h| h.id()), Some(item));
     (world, item)
-}
-
-/// The reason the world gave for refusing `command`, if it did.
-fn refused(events: &[Event], command: Command) -> Option<Rejection> {
-    events.iter().find_map(|e| match &e.kind {
-        EventKind::CommandRejected { command: c, reason } if *c == command => Some(*reason),
-        _ => None,
-    })
 }
 
 #[test]
@@ -95,9 +63,7 @@ fn a_throw_goes_at_least_a_tile_and_no_further_than_its_size_allows() {
             toward: Dir::E,
             tiles,
         });
-        for _ in 0..10 {
-            world.step();
-        }
+        run_for(&mut world, 10);
         assert_eq!(object_on(&world, lands), Some(ball), "thrown {tiles}");
     }
 }
@@ -114,8 +80,9 @@ fn a_throw_is_refused_where_the_item_cant_go_and_with_nothing_held() {
         };
         world.submit(command.clone());
         let events = world.step();
+        let reason = refusal_in(&events, &command);
         assert!(
-            matches!(refused(&events, command), Some(Rejection::InTheWay { .. })),
+            matches!(reason, Some(Rejection::InTheWay { .. })),
             "{events:?}"
         );
         assert_eq!(
@@ -130,27 +97,20 @@ fn a_throw_is_refused_where_the_item_cant_go_and_with_nothing_held() {
         toward: Dir::E,
         tiles: 3,
     };
-    empty.submit(command.clone());
-    let events = empty.step();
-    assert_eq!(refused(&events, command), Some(Rejection::NotHolding));
+    assert_eq!(refusal(&mut empty, command), Some(Rejection::NotHolding));
 }
 
 /// A plain world whose Cursor holds nothing.
 fn world_without_hold() -> World {
-    world(&["....."], &[], &[], &[])
-}
-
-/// The sprite on `pos`.
-fn sprite_on(world: &World, pos: Pos) -> EntityId {
-    world.sprite_at(pos).expect("a sprite there").id()
+    starters(&["....."], &[], &[], &[])
 }
 
 /// A world of `rows` and `objects` whose Cursor leads the sprite on `from`,
 /// which rests whenever it chooses.
 fn leading(rows: &[&str], objects: &[(Pos, &str)], from: Pos) -> (World, EntityId) {
     let rests = [(from, ScriptedAction::Rest); 20];
-    let mut world = world(rows, objects, &[from], &rests);
-    let sprite = sprite_on(&world, from);
+    let mut world = starters(rows, objects, &[from], &rests);
+    let sprite = id_at(&world, from);
     world.submit(Command::TakeHold { sprite });
     world.step();
     assert_eq!(world.cursor().leads(), Some(sprite));
@@ -189,9 +149,9 @@ fn a_slide_moves_after_the_rolling_items_so_a_ball_gets_there_first() {
     // rolls onto the tile first, and the sprite slides onto it, standing on
     // the ball; were it the other way round, the ball would bounce off it.
     let rests = [(at(0, 0), ScriptedAction::Rest); 20];
-    let mut world = world(&["......"], &[(at(5, 0), "ball")], &[at(0, 0)], &rests);
+    let mut world = starters(&["......"], &[(at(5, 0), "ball")], &[at(0, 0)], &rests);
     let (sprite, ball) = (
-        sprite_on(&world, at(0, 0)),
+        id_at(&world, at(0, 0)),
         object_on(&world, at(5, 0)).unwrap(),
     );
     world.submit(Command::PickUp { item: ball });
@@ -270,8 +230,8 @@ fn shoved_in(
         .iter()
         .flat_map(|&pos| [(pos, ScriptedAction::Rest); 20])
         .collect();
-    let mut world = world_in(data, rows, objects, sprites, &rests);
-    let sprite = sprite_on(&world, from);
+    let mut world = starters_in(data, rows, objects, sprites, &rests);
+    let sprite = id_at(&world, from);
     world.submit(Command::TakeHold { sprite });
     world.step();
     world.submit(Command::Shove { toward, tiles });
@@ -318,7 +278,7 @@ fn a_sprite_or_a_bush_ahead_stops_a_slide_with_a_crash() {
     assert_eq!(crashes(&events, sprite), [into_bush]);
 
     let (world, sprite, events) = shoved(&lane, &[], &[at(1, 0), at(3, 0)], at(1, 0), Dir::E, 3);
-    let other = sprite_on(&world, at(3, 0));
+    let other = id_at(&world, at(3, 0));
     assert_eq!(where_is(&world, sprite), at(2, 0));
     assert_eq!(crashes(&events, sprite), [(Thing::Sprite(other), false)]);
 }
@@ -353,9 +313,7 @@ fn a_shove_with_no_sprite_led_is_refused() {
         toward: Dir::E,
         tiles: 3,
     };
-    world.submit(command.clone());
-    let events = world.step();
-    assert_eq!(refused(&events, command), Some(Rejection::NotLeading));
+    assert_eq!(refusal(&mut world, command), Some(Rejection::NotLeading));
     assert!(world.cursor().holds().is_some(), "the ball is still held");
 }
 
@@ -377,9 +335,7 @@ fn a_sprite_taken_hold_of_mid_slide_slides_on_to_the_end_and_then_follows() {
     assert_eq!(where_is(&world, sprite), at(3, 0), "still sliding");
     world.step();
     assert_eq!(where_is(&world, sprite), at(4, 0), "to the end");
-    for _ in 0..20 {
-        world.step();
-    }
+    run_for(&mut world, 20);
     assert_eq!(where_is(&world, sprite), at(0, 1), "then after the Cursor");
 }
 
@@ -492,9 +448,7 @@ fn a_sliding_sprite_shoved_again_starts_a_fresh_slide() {
         toward: Dir::W,
         tiles: 2,
     });
-    for _ in 0..4 {
-        world.step();
-    }
+    run_for(&mut world, 4);
     assert_eq!(where_is(&world, sprite), at(1, 0), "2 back west, no more");
 }
 

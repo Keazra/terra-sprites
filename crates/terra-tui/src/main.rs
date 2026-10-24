@@ -3,6 +3,7 @@
 //! All logic worth testing lives in the `terra_tui` library.
 
 use std::cell::Cell;
+use std::fmt::Display;
 use std::io::{self, IsTerminal, Write, stdout};
 use std::path::Path;
 use std::process::ExitCode;
@@ -38,10 +39,7 @@ const FRAME: Duration = Duration::from_millis(33);
 fn main() -> ExitCode {
     let args = match Args::parse(std::env::args().skip(1)) {
         Ok(args) => args,
-        Err(err) => {
-            eprintln!("terra-sprites: {err}\n{USAGE}");
-            return ExitCode::FAILURE;
-        }
+        Err(err) => return fail(format!("{err}\n{USAGE}")),
     };
     if args.version {
         println!("terra-sprites {VERSION}");
@@ -55,28 +53,20 @@ fn main() -> ExitCode {
     // otherwise the game opens on the title screen. What the flags get
     // wrong stops the game here, before the terminal is taken.
     let first = if start::skips_title(&args) {
-        let opening = match (&args.replay, &args.load) {
+        match (&args.replay, &args.load) {
             (Some(path), _) => replay_from(path),
             (None, Some(name)) => load_from(name),
             (None, None) => {
                 start::new_world(&args, args.seed.unwrap_or_else(time_seed)).map(Opening::live)
             }
-        };
-        match opening {
-            Ok(opening) => Next::World(opening),
-            Err(err) => {
-                eprintln!("terra-sprites: {err}");
-                return ExitCode::FAILURE;
-            }
         }
+        .map(Next::World)
     } else {
-        match title_world(&args) {
-            Ok(world) => Next::title(world),
-            Err(err) => {
-                eprintln!("terra-sprites: {err}");
-                return ExitCode::FAILURE;
-            }
-        }
+        title_world(&args).map(Next::title)
+    };
+    let first = match first {
+        Ok(first) => first,
+        Err(err) => return fail(err),
     };
     let data = match &first {
         Next::World(opening) => opening.session.world().data(),
@@ -84,19 +74,13 @@ fn main() -> ExitCode {
     };
     let theme = match start::theme(&args, data) {
         Ok(theme) => theme,
-        Err(err) => {
-            eprintln!("terra-sprites: {err}");
-            return ExitCode::FAILURE;
-        }
+        Err(err) => return fail(err),
     };
 
     // Installs a panic hook that restores the terminal before the panic is reported.
     let mut terminal = match ratatui::try_init() {
         Ok(terminal) => terminal,
-        Err(err) => {
-            eprintln!("terra-sprites: could not set up the terminal: {err}");
-            return ExitCode::FAILURE;
-        }
+        Err(err) => return fail(format!("could not set up the terminal: {err}")),
     };
     // Where the terminal supports the kitty keyboard protocol, it reports
     // repeats and releases too, so held keys can be told from presses (design
@@ -185,11 +169,14 @@ fn main() -> ExitCode {
 
     match result {
         Ok(()) => ExitCode::SUCCESS,
-        Err(err) => {
-            eprintln!("terra-sprites: {err}");
-            ExitCode::FAILURE
-        }
+        Err(err) => fail(err),
     }
+}
+
+/// Says what went wrong, after the game's name, and fails.
+fn fail(why: impl Display) -> ExitCode {
+    eprintln!("terra-sprites: {why}");
+    ExitCode::FAILURE
 }
 
 /// What the game shows next: the title screen, or a world.
@@ -226,6 +213,14 @@ impl Opening {
             session: Session::live(world),
             replay: None,
             loaded: None,
+        }
+    }
+
+    /// The world in the save called `name`, played live.
+    fn loaded(world: World, name: String) -> Opening {
+        Opening {
+            loaded: Some(name),
+            ..Opening::live(world)
         }
     }
 }
@@ -289,13 +284,7 @@ fn run_title(
                     }
                 }
                 TitleFlow::Load(save) => match saves::load(&save) {
-                    Ok(world) => {
-                        return Ok(Some(Opening {
-                            session: Session::live(world),
-                            replay: None,
-                            loaded: Some(save.name),
-                        }));
-                    }
+                    Ok(world) => return Ok(Some(Opening::loaded(world, save.name))),
                     Err(why) => title.refuse(why),
                 },
             }
@@ -327,12 +316,7 @@ fn replay_from(path: &Path) -> Result<Opening, String> {
 fn load_from(name: &str) -> Result<Opening, String> {
     let file = saves::named(name, files::save_folder().as_deref())
         .map_err(|why| format!("can't load {name}: {why}"))?;
-    let world = saves::load(&file)?;
-    Ok(Opening {
-        session: Session::live(world),
-        replay: None,
-        loaded: Some(file.name),
-    })
+    Ok(Opening::loaded(saves::load(&file)?, file.name))
 }
 
 /// How many ticks a fast-forward runs between looks at `Ctrl+C` and the
@@ -348,12 +332,8 @@ const PROGRESS_EVERY: Duration = Duration::from_millis(500);
 /// yet (M2 design §16). `Ctrl+C` stops it early and saves what has run; a
 /// second one stops at once.
 fn fast_forward(args: &Args, hours: u64) -> ExitCode {
-    let fail = |why: String| {
-        eprintln!("terra-sprites: {why}");
-        ExitCode::FAILURE
-    };
     let Some(folder) = files::save_folder() else {
-        return fail("can't tell where the saves folder is, so there's nowhere to save".into());
+        return fail("can't tell where the saves folder is, so there's nowhere to save");
     };
     let seed = args.seed.unwrap_or_else(time_seed);
     let (world, from) = match start::fast_forward_world(args, seed, Some(&folder)) {

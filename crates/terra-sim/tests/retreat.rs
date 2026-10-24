@@ -3,7 +3,7 @@
 //! cornered. Driven through hand-made worlds with scripted actions.
 
 mod common;
-use common::{MakeGenome, WorldBuilder, at, endings, walker};
+use common::{MakeGenome, at, endings, scene, walker, wander_to};
 
 use terra_sim::{
     DataPack, Event, EventKind, Genome, Outcome, Pos, Progress, ScriptedAction, Verb, World,
@@ -40,21 +40,6 @@ fn retreating_with(
 ) -> World {
     let script = [(sprite, ScriptedAction::Retreat { at: from })];
     scene(rows, objects, &[(sprite, genome)], &script)
-}
-
-/// A world drawn from `rows`, with `objects`, and `sprites` with genomes
-/// made as given, each starting on the scripted actions given for its tile.
-fn scene(
-    rows: &[&str],
-    objects: &[(Pos, &str)],
-    sprites: &[(Pos, MakeGenome)],
-    scripted: &[(Pos, ScriptedAction)],
-) -> World {
-    WorldBuilder::new(rows)
-        .objects(objects)
-        .sprites_made(sprites)
-        .scripts(scripted)
-        .build()
 }
 
 /// Where the one sprite stands, or the first placed, if there are more.
@@ -204,12 +189,7 @@ fn a_retreat_held_up_by_a_sprite_goes_on_once_it_moves_off() {
     let (me, other) = (at(1, 0), at(2, 0));
     let script = [
         (me, ScriptedAction::Retreat { at: at(0, 0) }),
-        (
-            other,
-            ScriptedAction::Wander {
-                destination: at(5, 0),
-            },
-        ),
+        (other, wander_to(at(5, 0))),
     ];
     let mut world = scene(
         &["......"],

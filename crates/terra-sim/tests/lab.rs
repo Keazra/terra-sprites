@@ -86,6 +86,14 @@ fn tally(events: &[Event], window: &mut Window) {
     }
 }
 
+/// A seed's run that counted `windows`, with no control run.
+fn counted(windows: Vec<Window>) -> LabRun {
+    LabRun {
+        windows,
+        ..Default::default()
+    }
+}
+
 #[test]
 fn a_run_counts_applied_actions_and_deaths_in_each_window() {
     let data = builtin();
@@ -104,15 +112,7 @@ fn a_run_counts_applied_actions_and_deaths_in_each_window() {
     let mut windows = [(0, 1000), (1000, 3000)].map(|(from, to)| Window {
         from,
         to,
-        applied: BTreeMap::new(),
-        deaths: BTreeMap::new(),
-        touches: BTreeMap::new(),
-        lessons: BTreeMap::new(),
-        young: None,
-        first: Childhood::default(),
-        later: Childhood::default(),
-        stage_deaths: BTreeMap::new(),
-        first_died: 0,
+        ..Default::default()
     });
     for _ in 0..3000 {
         let events = world.step();
@@ -123,14 +123,7 @@ fn a_run_counts_applied_actions_and_deaths_in_each_window() {
             }
         }
     }
-    assert_eq!(
-        run,
-        LabRun {
-            windows: windows.to_vec(),
-            control: None,
-            without: None,
-        }
-    );
+    assert_eq!(run, counted(windows.to_vec()));
     assert!(
         run.windows[0].applied.values().sum::<u64>() > 0,
         "the sprite did something"
@@ -153,40 +146,11 @@ fn the_report_lists_each_window_with_a_column_per_seed_and_the_median() {
             ((Verb::Wander, None), wanders),
         ]),
         deaths: BTreeMap::from([(DeathCause::HurtBy(3), thorn_deaths)]),
-        touches: BTreeMap::new(),
-        lessons: BTreeMap::new(),
-        young: None,
-        first: Childhood::default(),
-        later: Childhood::default(),
-        stage_deaths: BTreeMap::new(),
-        first_died: 0,
+        ..Default::default()
     };
-    let runs = [
-        (
-            1,
-            LabRun {
-                windows: vec![window(23, 40, 1)],
-                control: None,
-                without: None,
-            },
-        ),
-        (
-            2,
-            LabRun {
-                windows: vec![window(9, 38, 0)],
-                control: None,
-                without: None,
-            },
-        ),
-        (
-            3,
-            LabRun {
-                windows: vec![window(12, 51, 0)],
-                control: None,
-                without: None,
-            },
-        ),
-    ];
+    // Each seed's eats, wanders and deaths.
+    let runs = [(1, 23, 40, 1), (2, 9, 38, 0), (3, 12, 51, 0)]
+        .map(|(seed, eats, wanders, deaths)| (seed, counted(vec![window(eats, wanders, deaths)])));
     assert_eq!(
         report(&runs, &data),
         "\
@@ -205,33 +169,17 @@ fn the_report_lists_the_control_runs_after_the_learning_runs() {
         from: 0,
         to: 5000,
         applied: BTreeMap::from([((Verb::Eat, Some(3)), eats)]),
-        deaths: BTreeMap::new(),
-        touches: BTreeMap::new(),
-        lessons: BTreeMap::new(),
-        young: None,
-        first: Childhood::default(),
-        later: Childhood::default(),
-        stage_deaths: BTreeMap::new(),
-        first_died: 0,
+        ..Default::default()
     };
-    let runs = [
-        (
-            1,
-            LabRun {
-                windows: vec![window(3)],
-                control: Some(vec![window(30)]),
-                without: Some(Without::Learning),
-            },
-        ),
-        (
-            2,
-            LabRun {
-                windows: vec![window(5)],
-                control: Some(vec![window(24)]),
-                without: Some(Without::Learning),
-            },
-        ),
-    ];
+    // Each seed's eats, then its control run's.
+    let runs = [(1, 3, 30), (2, 5, 24)].map(|(seed, eats, control_eats)| {
+        let run = LabRun {
+            windows: vec![window(eats)],
+            control: Some(vec![window(control_eats)]),
+            without: Some(Without::Learning),
+        };
+        (seed, run)
+    });
     assert_eq!(
         report(&runs, &data),
         "ticks 0 to 5,000              seed 1    seed 2    median
@@ -357,7 +305,6 @@ fn the_report_counts_the_cursor_s_touches_and_lessons_and_names_the_control() {
         from: 0,
         to: 5000,
         applied: BTreeMap::from([((Verb::Play, Some(4)), 7)]),
-        deaths: BTreeMap::new(),
         touches: if pets > 0 {
             BTreeMap::from([(CursorTouch::Pet, pets)])
         } else {
@@ -372,11 +319,7 @@ fn the_report_counts_the_cursor_s_touches_and_lessons_and_names_the_control() {
         } else {
             BTreeMap::new()
         },
-        young: None,
-        first: Childhood::default(),
-        later: Childhood::default(),
-        stage_deaths: BTreeMap::new(),
-        first_died: 0,
+        ..Default::default()
     };
     let runs = [(
         1,
@@ -545,37 +488,18 @@ fn the_report_counts_who_grew_up_and_deaths_by_life_stage() {
     let window = |grew_up: u64, died_young: u64| Window {
         from: 0,
         to: 6000,
-        applied: BTreeMap::new(),
         deaths: BTreeMap::from([(DeathCause::Dehydration, died_young)]),
-        touches: BTreeMap::new(),
-        lessons: BTreeMap::new(),
-        young: None,
         first: Childhood {
             grew_up,
             died_young,
         },
-        later: Childhood::default(),
         stage_deaths: BTreeMap::from([((LifeStage::Young, DeathCause::Dehydration), died_young)]),
         first_died: died_young,
+        ..Default::default()
     };
-    let runs = [
-        (
-            1,
-            LabRun {
-                windows: vec![window(6, 24)],
-                control: None,
-                without: None,
-            },
-        ),
-        (
-            2,
-            LabRun {
-                windows: vec![window(4, 26)],
-                control: None,
-                without: None,
-            },
-        ),
-    ];
+    // Each seed's first sprites that grew up and that died young.
+    let runs = [(1, 6, 24), (2, 4, 26)]
+        .map(|(seed, grew_up, died_young)| (seed, counted(vec![window(grew_up, died_young)])));
     assert_eq!(
         report(&runs, &data),
         "\

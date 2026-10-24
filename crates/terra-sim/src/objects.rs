@@ -452,6 +452,7 @@ mod tests {
 
     use super::*;
     use crate::data::DataPack;
+    use crate::ecology::new_object;
     use crate::map::{Dir, Map, Pos};
 
     /// A drawn map with a store of objects on it, and the built-in pack's types.
@@ -480,6 +481,11 @@ mod tests {
             self.data.object_type_named(name).expect("a built-in type")
         }
 
+        /// A new object called `name` on `pos`, as the world makes one.
+        fn object(&self, name: &str, pos: Pos) -> Object {
+            new_object(&self.data, self.kind(name), pos)
+        }
+
         fn can_place(&self, name: &str, pos: Pos) -> bool {
             self.objects
                 .can_place(&self.map, &self.data, self.kind(name), pos)
@@ -490,16 +496,12 @@ mod tests {
             assert!(self.can_place(name, pos), "{name} at {pos:?}");
             let id = EntityId(self.next_id);
             self.next_id += 1;
+            // With no stage or counters, past its first turn.
             let object = Object {
-                kind: self.kind(name),
-                pos,
                 stage: None,
-                stage_ends: 0,
                 counters: Vec::new(),
                 fresh: false,
-                roll: None,
-                held: false,
-                unhatched: None,
+                ..self.object(name, pos)
             };
             self.objects.place(id, object, &self.data, 0);
             id
@@ -711,22 +713,12 @@ mod tests {
         // A fresh object is due on the tick it is scheduled from.
         let berry = EntityId(scene.next_id);
         scene.next_id += 1;
-        scene.objects.place(
-            berry,
-            Object {
-                kind: scene.kind("berry"),
-                pos: at(1, 0),
-                stage: Some(0),
-                stage_ends: 500,
-                counters: Vec::new(),
-                fresh: true,
-                roll: None,
-                held: false,
-                unhatched: None,
-            },
-            &scene.data,
-            10,
-        );
+        let object = Object {
+            stage_ends: 500,
+            fresh: true,
+            ..scene.object("berry", at(1, 0))
+        };
+        scene.objects.place(berry, object, &scene.data, 10);
         assert_eq!(scene.objects.take_due(10), vec![berry]);
 
         // Once no longer fresh, a berry (stages only, no Every rule) is due
@@ -741,22 +733,12 @@ mod tests {
         let bush = EntityId(scene.next_id);
         scene.next_id += 1;
         assert_eq!(bush, EntityId(3));
-        scene.objects.place(
-            bush,
-            Object {
-                kind: scene.kind("berry_bush"),
-                pos: at(2, 0),
-                stage: Some(0),
-                stage_ends: 800,
-                counters: vec![0],
-                fresh: false,
-                roll: None,
-                held: false,
-                unhatched: None,
-            },
-            &scene.data,
-            1,
-        );
+        let object = Object {
+            stage_ends: 800,
+            fresh: false,
+            ..scene.object("berry_bush", at(2, 0))
+        };
+        scene.objects.place(bush, object, &scene.data, 1);
         assert_eq!(scene.objects.next_due.get(&bush), Some(&47));
         assert_eq!(scene.objects.check(&scene.map, &scene.data, 1), Ok(()));
     }

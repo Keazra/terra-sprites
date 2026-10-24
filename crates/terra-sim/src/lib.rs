@@ -3,6 +3,11 @@
 //! This crate has no terminal and no filesystem access: it receives its data
 //! pack as already-read text and is driven one tick at a time.
 
+// The unit tests' `test_util` includes the integration tests' helpers, which
+// name this crate as those tests do (#136).
+#[cfg(test)]
+extern crate self as terra_sim;
+
 mod action;
 mod ageing;
 #[doc(hidden)]
@@ -74,7 +79,8 @@ pub use expression::Expression;
 pub use gene_values::{Drift, drift, gene_values, middle_values};
 pub use genome::{EmitterMode, GeneView, Genome, GenomeError, Whom};
 pub use lab::{
-    Childhood, LabError, LabRun, LabScenario, Window, Without, YoungCounts, median, report,
+    Childhood, LabError, LabRun, LabScenario, Window, Without, YoungCounts, cause_name, median,
+    report, thousands,
 };
 pub use lineage::Origin;
 pub use map::{Dir, Map, MapError, Pos};
@@ -90,6 +96,6 @@ pub use save::{LoadError, SCHEMA_VERSION};
 pub use soak::{Soak, SoakRun};
 pub use terrain::{Terrain, TerrainProps};
 pub use world::{
-    ChemicalLevel, CursorView, DeadView, EggView, HeldView, InvariantViolation, ObjectView,
-    Scenario, ScenarioError, SpriteView, World,
+    ChemicalLevel, CursorView, DeadView, EggView, InvariantViolation, ObjectView, Scenario,
+    ScenarioError, SpriteView, World,
 };

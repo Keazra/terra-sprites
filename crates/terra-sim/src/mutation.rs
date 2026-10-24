@@ -308,12 +308,11 @@ fn changed(
             *whom = *pick(&others, rng)?;
         }
         (Aspect::Switch, _) => {
-            let stages = [LifeStage::Young, LifeStage::Adult, LifeStage::Old];
-            let others: Vec<Switch> = stages
+            let others: Vec<Switch> = LifeStage::ALL
                 .into_iter()
                 .flat_map(|from| {
                     once(None)
-                        .chain(stages.map(Some))
+                        .chain(LifeStage::ALL.map(Some))
                         .map(move |until| Switch { from, until })
                 })
                 .filter(|other| other.ever_on() && *other != switch)
@@ -890,7 +889,7 @@ mod tests {
             let flagged = Genome::from_ron(FLAGGED, &data).expect("a valid genome");
             for genome in [data.starter().clone(), every_kind(&data), flagged] {
                 let copy = copy(&genome, &data, &mut ChaCha8Rng::seed_from_u64(seed)).genome;
-                for stage in [LifeStage::Young, LifeStage::Adult, LifeStage::Old] {
+                for stage in LifeStage::ALL {
                     prop_assert_eq!(
                         expressions(&copy, &data, stage),
                         expressions(&genome, &data, stage)
@@ -912,7 +911,7 @@ mod tests {
             let genome = Genome::from_ron(&file, &data).expect("a valid genome");
             let rng = &mut ChaCha8Rng::seed_from_u64(seed);
             let copy = copy(&genome, &data, rng);
-            for stage in [LifeStage::Young, LifeStage::Adult, LifeStage::Old] {
+            for stage in LifeStage::ALL {
                 prop_assert_eq!(
                     expressions(&copy.genome, &data, stage),
                     expressions(&genome, &data, stage)

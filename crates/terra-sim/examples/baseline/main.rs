@@ -16,6 +16,8 @@ mod report;
 
 #[path = "../common/args.rs"]
 mod args;
+#[path = "../common/parallel.rs"]
+mod parallel;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -203,37 +205,21 @@ fn run_all(
                 .unwrap_or_else(|e| panic!("scenarios/{name}.ron: {e}"))
         })
         .collect();
-    // Jobs are taken from the end, so the soak's, the longest, goes first,
-    // then the viability run's.
-    let mut jobs: Vec<Job> = (0..labs.len())
-        .rev()
-        .flat_map(|lab| (1..=seeds).rev().map(move |seed| Job::Lab(lab, seed)))
-        .collect();
-    jobs.push(Job::Soak);
-    let jobs = Mutex::new(jobs);
+    // The soak's, the longest, goes first, then the viability run's.
+    let labs_seeds =
+        (0..labs.len()).flat_map(|lab| (1..=seeds).map(move |seed| Job::Lab(lab, seed)));
+    let jobs = std::iter::once(Job::Soak).chain(labs_seeds);
     let results = Mutex::new((0..labs.len()).map(|_| Vec::new()).collect::<Vec<_>>());
     let soaked = Mutex::new(None);
     let workers = std::thread::available_parallelism().map_or(4, |n| n.get());
-    std::thread::scope(|scope| {
-        for _ in 0..workers {
-            scope.spawn(|| {
-                loop {
-                    // Taken on a line of its own, so the lock isn't held
-                    // while the job runs.
-                    let job = jobs.lock().expect("no worker panics").pop();
-                    match job {
-                        None => break,
-                        Some(Job::Lab(lab, seed)) => {
-                            let run = caught(|| labs[lab].run(data.clone(), seed));
-                            results.lock().expect("no worker panics")[lab].push((seed, run));
-                        }
-                        Some(Job::Soak) => {
-                            let run = caught(|| Soak::run(data.clone(), soak_seed, soak_ticks));
-                            *soaked.lock().expect("no worker panics") = Some(run);
-                        }
-                    }
-                }
-            });
+    parallel::in_parallel(jobs, workers as u64, |job| match job {
+        Job::Lab(lab, seed) => {
+            let run = caught(|| labs[lab].run(data.clone(), seed));
+            results.lock().expect("no worker panics")[lab].push((seed, run));
+        }
+        Job::Soak => {
+            let run = caught(|| Soak::run(data.clone(), soak_seed, soak_ticks));
+            *soaked.lock().expect("no worker panics") = Some(run);
         }
     });
     let mut results = results.into_inner().expect("no worker panics");
@@ -292,33 +278,7 @@ fn save(dir: &Path, report: &Report, page: &str) -> Result<(PathBuf, PathBuf), S
 #[cfg(test)]
 mod tests {
     use super::*;
-    use report::{Behaviour, Unattended, Verdict, Viability};
-
-    fn report() -> Report {
-        let none = || Behaviour {
-            finished: 0,
-            median: None,
-            control_median: None,
-            verdict: Verdict::NoData,
-        };
-        let data = terra_sim::DataPack::builtin().expect("the built-in data pack is valid");
-        let viability: Viability = report::viability(&[], 30, &data);
-        Report {
-            commit: "abc1234".into(),
-            compared_with: None,
-            measured: "2026-10-01 09:00".into(),
-            seconds: 900,
-            seeds: 10,
-            sprites: 30,
-            unattended: Unattended::default(),
-            viability,
-            a1: none(),
-            a2: none(),
-            a3: none(),
-            soak: None,
-            broken: Vec::new(),
-        }
-    }
+    use report::tests::sample;
 
     #[test]
     #[expect(
@@ -328,7 +288,7 @@ mod tests {
     fn a_report_is_saved_as_a_page_and_as_ron_named_by_day_and_commit() {
         let dir = std::env::temp_dir().join(format!("baseline-test-{}", std::process::id()));
         std::fs::create_dir_all(&dir).expect("a scratch folder");
-        let (md, ron) = save(&dir, &report(), "the page").expect("written");
+        let (md, ron) = save(&dir, &sample(), "the page").expect("written");
         assert_eq!(md, dir.join("2026-10-01-abc1234-report.md"));
         assert_eq!(ron, dir.join("2026-10-01-abc1234-report.ron"));
         let (page, text) = (
@@ -336,14 +296,14 @@ mod tests {
             std::fs::read_to_string(&ron).expect("the RON"),
         );
         assert_eq!(page, "the page");
-        assert_eq!(Report::from_ron(&text), Ok(report()));
+        assert_eq!(Report::from_ron(&text), Ok(sample()));
         std::fs::remove_dir_all(&dir).expect("cleaned up");
     }
 
     #[test]
     fn a_report_that_cant_be_written_says_where() {
         let missing = std::env::temp_dir().join("baseline-test-no-such-folder/inside");
-        let error = save(&missing, &report(), "the page").expect_err("no folder to write in");
+        let error = save(&missing, &sample(), "the page").expect_err("no folder to write in");
         assert!(error.contains("2026-10-01-abc1234-report.md"), "{error}");
     }
 }

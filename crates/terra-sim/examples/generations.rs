@@ -44,10 +44,11 @@ mod evolution;
 mod genes;
 #[path = "common/lasting.rs"]
 mod lasting;
+#[path = "common/parallel.rs"]
+mod parallel;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::process::ExitCode;
-use std::sync::Mutex;
 
 use evolution::{evolution, middles, starter_numbers};
 use genes::{counted, counted_where};
@@ -205,9 +206,7 @@ fn main() -> ExitCode {
     let Some(options) = args::parse(usage, parse) else {
         return ExitCode::FAILURE;
     };
-    if cfg!(debug_assertions) {
-        eprintln!("warning: this is a debug build; add --release, or it will take a long time");
-    }
+    args::warn_if_debug(", or it will take a long time");
     let data = DataPack::builtin().expect("the built-in data pack is valid");
     let config = WorldConfig::builtin(&data);
     let limit = config.most_sprites();
@@ -296,28 +295,9 @@ fn in_parallel(
     options: &Options,
 ) -> Vec<(u64, Run)> {
     let (first, last) = options.seeds;
-    let next = Mutex::new(first);
-    let done = Mutex::new(Vec::new());
-    std::thread::scope(|scope| {
-        for _ in 0..options.jobs {
-            scope.spawn(|| {
-                loop {
-                    let seed = {
-                        let mut next = next.lock().expect("no thread panicked");
-                        let seed = *next;
-                        *next += 1;
-                        seed
-                    };
-                    if seed > last {
-                        break;
-                    }
-                    let run = run(data, config, starter, genes, seed, options.ticks);
-                    done.lock().expect("no thread panicked").push((seed, run));
-                }
-            });
-        }
+    let mut done = parallel::in_parallel(first..=last, options.jobs, |seed| {
+        (seed, run(data, config, starter, genes, seed, options.ticks))
     });
-    let mut done = done.into_inner().expect("no thread panicked");
     done.sort_by_key(|&(seed, _)| seed);
     done
 }

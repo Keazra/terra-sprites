@@ -3,7 +3,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
-use terra_sim::{DataPack, DeathCause, LabRun, LifeStage, SoakRun, Verb, Window};
+use terra_sim::{
+    DataPack, DeathCause, LabRun, LifeStage, SoakRun, Verb, Window, cause_name, thousands,
+};
 
 /// How many grown-up deaths, over all the seeds, A4 needs before it judges
 /// what share hunger and thirst caused (design v37 §7.4).
@@ -928,19 +930,6 @@ pub fn broken_soak(soak: &Soak, run: &Result<SoakRun, String>) -> Option<Broken>
     })
 }
 
-/// A whole number with commas between its thousands: "1,000,000".
-fn thousands(n: u64) -> String {
-    let digits = n.to_string();
-    let mut out = String::new();
-    for (i, digit) in digits.chars().enumerate() {
-        if i > 0 && (digits.len() - i).is_multiple_of(3) {
-            out.push(',');
-        }
-        out.push(digit);
-    }
-    out
-}
-
 /// The run's window over ticks 0 to `to`, as `scenarios/viability.ron` and
 /// `scenarios/unattended.ron` set them.
 fn window(run: &LabRun, to: u64) -> &Window {
@@ -953,17 +942,6 @@ fn window(run: &LabRun, to: u64) -> &Window {
 /// A verb by name, as the lab runner writes it: "eat".
 fn verb_name(verb: Verb) -> String {
     format!("{verb:?}").to_lowercase()
-}
-
-/// A cause of death by name, as the lab runner writes it: "hurt by
-/// thornbush" names the object type.
-fn cause_name(cause: DeathCause, data: &DataPack) -> String {
-    match cause {
-        DeathCause::Starvation => "starvation".into(),
-        DeathCause::Dehydration => "dehydration".into(),
-        DeathCause::OldAge => "old age".into(),
-        DeathCause::HurtBy(id) => format!("hurt by {}", data.object_type_name(id).unwrap_or("?")),
-    }
 }
 
 impl std::fmt::Display for Verdict {
@@ -1032,7 +1010,7 @@ fn median_of(values: &[f64]) -> Option<f64> {
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use super::*;
     use std::collections::BTreeMap;
     use terra_sim::{Childhood, DeathCause, LifeStage, Verb};
@@ -1046,15 +1024,8 @@ mod tests {
         Window {
             from,
             to,
-            applied: BTreeMap::new(),
             deaths: deaths.iter().copied().collect(),
-            touches: BTreeMap::new(),
-            lessons: BTreeMap::new(),
-            young: None,
-            first: Childhood::default(),
-            later: Childhood::default(),
-            stage_deaths: BTreeMap::new(),
-            first_died: 0,
+            ..Default::default()
         }
     }
 
@@ -1080,8 +1051,7 @@ mod tests {
                 deaths_window(0, 30_000, by_30k),
                 dying_window(0, 50_000, by_50k),
             ],
-            control: None,
-            without: None,
+            ..Default::default()
         }
     }
 
@@ -1105,8 +1075,7 @@ mod tests {
         };
         LabRun {
             windows: vec![window],
-            control: None,
-            without: None,
+            ..Default::default()
         }
     }
 
@@ -1528,8 +1497,9 @@ mod tests {
     }
 
     /// A report of ten seeds, one of which lost an adult to thirst, whose
-    /// unattended newborns grew up 6 in 30 on each seed.
-    fn sample() -> Report {
+    /// unattended newborns grew up 6 in 30 on each seed. It measured commit
+    /// abc1234 at 2026-10-01 09:00.
+    pub fn sample() -> Report {
         let data = data();
         let mut deaths: [&Dying; 10] = [&[]; 10];
         deaths[0] = &[(LifeStage::Adult, DeathCause::Dehydration, 1)];

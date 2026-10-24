@@ -13,6 +13,38 @@ pub(crate) fn display_name(name: &str) -> String {
 /// Why a fixture can't be grabbed (design v23 §6.1).
 pub(crate) const ROOTED: &str = "it's rooted to the ground";
 
+/// A space that never breaks a line: between the words of a name, or a
+/// word and the number after it.
+pub(crate) const BOUND: char = '\u{a0}';
+
+/// `text` as one word, its spaces kept together when a line wraps.
+pub(crate) fn unbroken(text: &str) -> String {
+    text.replace(' ', &BOUND.to_string())
+}
+
+/// `text` after `first`, wrapped at its spaces to lines of at most `width`
+/// columns, each later line after `later`. A word after another needs a
+/// space before it; the first word on a line goes there whether it fits or
+/// not.
+pub(crate) fn wrap(first: &str, later: &str, text: &str, width: usize) -> Vec<String> {
+    let mut lines = Vec::new();
+    let mut line = first.to_string();
+    let mut empty = true;
+    for word in text.split(' ') {
+        if !empty && line.chars().count() + 1 + word.chars().count() > width {
+            lines.push(std::mem::replace(&mut line, later.to_string()));
+            empty = true;
+        }
+        if !empty {
+            line.push(' ');
+        }
+        line.push_str(word);
+        empty = false;
+    }
+    lines.push(line);
+    lines
+}
+
 /// A terrain's name on screen: `deep water`.
 pub(crate) fn terrain_name(terrain: Terrain) -> &'static str {
     match terrain {
@@ -109,24 +141,14 @@ pub(crate) fn generations_words(generations: Generations) -> (&'static str, Stri
     }
 }
 
-/// `1234567` → `"1,234,567"`.
-pub(crate) fn group_thousands(n: u64) -> String {
-    let digits = n.to_string();
-    let mut out = String::with_capacity(digits.len() + digits.len() / 3);
-    for (i, c) in digits.chars().enumerate() {
-        if i > 0 && (digits.len() - i).is_multiple_of(3) {
-            out.push(',');
-        }
-        out.push(c);
-    }
-    out
-}
+/// `1234567` → `"1,234,567"`, as the simulation's own reports write it.
+pub(crate) use terra_sim::thousands;
 
 /// `value` rounded to a whole number, with its sign, grouped in thousands:
 /// `-1,235`.
 pub(crate) fn whole(value: f64) -> String {
     let sign = if value.round() < 0.0 { "-" } else { "" };
-    format!("{sign}{}", group_thousands(value.abs().round() as u64))
+    format!("{sign}{}", thousands(value.abs().round() as u64))
 }
 
 /// A level: two decimals, with no leading zero: `.42`, `1.00`.

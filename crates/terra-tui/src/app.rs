@@ -8,8 +8,8 @@ use ratatui::layout::{Margin, Position, Rect, Size};
 use serde::Deserialize;
 use terra_sim::{
     ActionView, ChemicalKind, ChemicalLevel, Command, CursorTouch, DeathCause, Dir, Divergence,
-    EntityId, Event, EventKind, Genome, Grip, HeldView, MAX_NAME_CHARS, Map, Mode, ObjectView,
-    Outcome, Playback, Pos, Progress, SpriteView, Target, Thing, Verb, World,
+    EntityId, Event, EventKind, Genome, Grip, MAX_NAME_CHARS, Map, Mode, ObjectView, Outcome,
+    Playback, Pos, Progress, SpriteView, Target, Thing, Verb, World,
 };
 
 use crate::clock::{Clock, Speed};
@@ -24,7 +24,7 @@ use crate::policy::{InfoPolicy, Omniscient, Panel, Subject};
 use crate::saves::{self, MAX_SAVE_NAME_CHARS, QUICKSAVE, SaveFile};
 use crate::space::Place;
 use crate::sprite_list::{self, SortBy};
-use crate::text::{Names, ROOTED, Words, display_name, group_thousands};
+use crate::text::{Names, ROOTED, Words, display_name, thousands};
 use crate::theme::{Emote, Theme};
 
 /// Whether the game carries on after an action.
@@ -720,7 +720,8 @@ pub(crate) struct ItemLook<'w> {
 }
 
 impl<'w> ItemLook<'w> {
-    fn on_map(object: &ObjectView<'w>) -> ItemLook<'w> {
+    /// How the screen shows `object`, on the map or held.
+    fn of(object: &ObjectView<'w>) -> ItemLook<'w> {
         ItemLook {
             id: object.id(),
             type_name: object.type_name(),
@@ -731,28 +732,14 @@ impl<'w> ItemLook<'w> {
             throwable: object.is_throwable(),
         }
     }
-
-    fn held(held: &HeldView<'w>) -> ItemLook<'w> {
-        ItemLook {
-            id: held.id(),
-            type_name: held.type_name(),
-            visual_state: held.visual_state(),
-            stage: held.stage(),
-            solid: false,
-            egg: held.is_egg(),
-            throwable: held.is_throwable(),
-        }
-    }
 }
 
 /// The item `id`, held by the Cursor or, while a pick-up waits in the queue,
 /// still on the map (design §6.5).
 pub(crate) fn item_look(world: &World, id: EntityId) -> Option<ItemLook<'_>> {
-    if let Some(held) = world.cursor().holds().filter(|held| held.id() == id) {
-        return Some(ItemLook::held(&held));
-    }
-    let object = world.objects().find(|object| object.id() == id)?;
-    Some(ItemLook::on_map(&object))
+    let held = world.cursor().holds().filter(|held| held.id() == id);
+    let object = held.or_else(|| world.objects().find(|object| object.id() == id))?;
+    Some(ItemLook::of(&object))
 }
 
 /// Where a Grab-mode command waiting for the next tick leaves an item it
@@ -780,7 +767,7 @@ impl<'w> ShownItems<'w> {
     pub(crate) fn at(&self, tile: Pos) -> Option<ItemLook<'w>> {
         let on_map = self.world.object_at(tile);
         let stays = on_map.filter(|object| !self.moved.contains_key(&object.id()));
-        stays.map(|object| ItemLook::on_map(&object)).or_else(|| {
+        stays.map(|object| ItemLook::of(&object)).or_else(|| {
             let (_, look) = self.put_down.iter().find(|&&(at, _)| at == tile)?;
             Some(*look)
         })
@@ -1775,28 +1762,22 @@ impl App {
         self.place_at(cell)?.tile()
     }
 
-    /// The tile the pointer on screen cell `cell` points at (design v27 §6.5):
-    /// the one up and to the left of the tile under it, so the pointer's
-    /// arrow rests on the Cursor's corner rather than hiding it. On the map
-    /// view's top row it stays in that row, and on its left column in that
-    /// column; and the border just right of or below the tiles points at the
-    /// last column or row, so every tile in view can be pointed at. Past
-    /// the wall, at the glass or space, it points at no tile (M2 design
-    /// §11.4).
-    pub fn pointed_at(&self, cell: Position) -> Option<Pos> {
-        self.pointed_place(cell)?.tile()
-    }
-
-    /// What the pointer on screen cell `cell` points at, as `pointed_at`
+    /// What the pointer on screen cell `cell` points at, as `pointed_spot`
     /// says, if it's over the map view: a tile, the glass or space.
     fn pointed_place(&self, cell: Position) -> Option<Place> {
         let (x, y) = self.pointed_spot(cell)?;
         Some(Place::at(x, y, self.map_size))
     }
 
-    /// Where the pointer on screen cell `cell` points, as `pointed_at`
-    /// says, in the map's tile coordinates, which run on past the wall, if
-    /// it's over the map view.
+    /// Where the pointer on screen cell `cell` points (design v27 §6.5), in
+    /// the map's tile coordinates, which run on past the wall, if it's over
+    /// the map view: the tile up and to the left of the one under it, so the
+    /// pointer's arrow rests on the Cursor's corner rather than hiding it.
+    /// On the map view's top row it stays in that row, and on its left
+    /// column in that column; and the border just right of or below the
+    /// tiles points at the last column or row, so every tile in view can be
+    /// pointed at. Past the wall, at the glass or space, it points at no
+    /// tile (M2 design §11.4).
     fn pointed_spot(&self, cell: Position) -> Option<(i32, i32)> {
         let area = self.tile_area;
         let reach = Rect::new(
@@ -1844,6 +1825,11 @@ impl App {
             self.debug.toggle();
             return Flow::Continue;
         }
+        // `Ctrl+C` quits at once, whatever is open, as on the title screen
+        // (design §6.6).
+        if action == Action::Quit {
+            return Flow::Quit;
+        }
         match self.screen {
             Screen::PlaceMenu | Screen::GenomeMenu | Screen::LoadMenu | Screen::ThemeMenu => {
                 return self.apply_in_menu(action, world);
@@ -1859,7 +1845,7 @@ impl App {
         }
         if self.screen == Screen::QuitPrompt {
             match action {
-                Action::Confirm | Action::Quit => return Flow::Quit,
+                Action::Confirm => return Flow::Quit,
                 // `t`, which tracks a sprite elsewhere, goes back to the
                 // title screen (M2 design §8.4).
                 Action::Track => return Flow::Title,
@@ -2038,13 +2024,13 @@ impl App {
             | Action::AnotherName
             | Action::HelpReleased
             | Action::FilterList
-            | Action::DebugOverlay => {}
+            | Action::DebugOverlay
+            | Action::Quit => {}
             Action::Enter => {
                 if let Some(at) = self.mouse {
                     self.toggle_lesson(at, world);
                 }
             }
-            Action::Quit => return Flow::Quit,
         }
         // Only Grab mode aims.
         if self.mode != CursorMode::Grab {
@@ -2390,7 +2376,6 @@ impl App {
     fn apply_in_help(&mut self, action: Action) -> Flow {
         match action {
             Action::Help | Action::Back => self.screen = Screen::Normal,
-            Action::Quit => return Flow::Quit,
             Action::Point(cell) => self.point(cell),
             _ => {}
         }
@@ -2443,7 +2428,6 @@ impl App {
                 self.screen = Screen::Normal;
                 self.graph_pick = None;
             }
-            Action::Quit => return Flow::Quit,
             _ => {}
         }
         Flow::Continue
@@ -2527,7 +2511,6 @@ impl App {
             Action::SelectNext => self.redraw_tree_along(world, Direction::Next),
             Action::SelectPrevious => self.redraw_tree_along(world, Direction::Previous),
             Action::FamilyTree | Action::Back => self.screen = Screen::Normal,
-            Action::Quit => return Flow::Quit,
             _ => {}
         }
         Flow::Continue
@@ -2663,7 +2646,6 @@ impl App {
             Action::Point(cell) => self.point(cell),
             Action::FilterList => self.list_filter = Some(Draft::offered(String::new())),
             Action::SpriteList | Action::Back => self.screen = Screen::Normal,
-            Action::Quit => return Flow::Quit,
             _ => {}
         }
         Flow::Continue
@@ -2942,7 +2924,6 @@ impl App {
             }
             Action::Point(cell) => self.point(cell),
             Action::Back => self.screen = Screen::Normal,
-            Action::Quit => return Flow::Quit,
             _ => {}
         }
         self.settle_cursor(world);
@@ -3131,7 +3112,6 @@ impl App {
                 self.naming = None;
                 self.screen = Screen::Normal;
             }
-            Action::Quit => return Flow::Quit,
             Action::Point(cell) => self.point(cell),
             _ => {}
         }
@@ -3194,11 +3174,11 @@ impl App {
         let from = if playback.started_fresh() {
             "a new world".to_string()
         } else {
-            format!("a save at tick {}", group_thousands(playback.start()))
+            format!("a save at tick {}", thousands(playback.start()))
         };
         self.tell_player(format!(
             "Replaying {name}: from {from} to tick {}",
-            group_thousands(playback.end())
+            thousands(playback.end())
         ));
         self.take_in_replay(playback);
     }
@@ -3234,7 +3214,7 @@ impl App {
         self.settle_cursor(world);
         self.tell_player(format!(
             "You took over the replay at tick {}: it's your world now",
-            group_thousands(world.tick())
+            thousands(world.tick())
         ));
     }
 
@@ -3278,7 +3258,7 @@ impl App {
             self.clock.pause();
             self.tell_player(format!(
                 "The replay ends here, at tick {}: time can run on, with nothing more done",
-                group_thousands(replay.end)
+                thousands(replay.end)
             ));
         }
         if replay.divergence.is_none()
@@ -3296,12 +3276,9 @@ impl App {
     pub fn replay_status(&self) -> Option<String> {
         let replay = self.replay?;
         Some(match replay.divergence {
-            Some(divergence) => format!(
-                "replay diverged by tick {}",
-                group_thousands(divergence.tick)
-            ),
+            Some(divergence) => format!("replay diverged by tick {}", thousands(divergence.tick)),
             None if replay.ended => "replay ended".into(),
-            None => format!("replay to tick {}", group_thousands(replay.end)),
+            None => format!("replay to tick {}", thousands(replay.end)),
         })
     }
 
@@ -3441,7 +3418,6 @@ impl App {
                 self.save_naming = None;
                 self.screen = Screen::Normal;
             }
-            Action::Quit => return Flow::Quit,
             Action::Point(cell) => self.point(cell),
             _ => {}
         }
@@ -3534,7 +3510,6 @@ impl App {
                     self.load(file);
                 }
             }
-            Action::Quit => return Flow::Quit,
             Action::Point(cell) => self.point(cell),
             _ if action.is_pointer() => {}
             _ => {
@@ -3614,7 +3589,7 @@ impl App {
         fresh.saved_now(&world);
         fresh.tell_player(format!(
             "Loaded {name}, at tick {}",
-            group_thousands(world.tick())
+            thousands(world.tick())
         ));
         *self = fresh;
         // Its names show at once, paused, before any tick is taken in, and
@@ -3895,11 +3870,11 @@ fn changes_the_world(action: &Action, wheel_on_map: bool) -> bool {
 /// What the status line says when playback first finds the world different
 /// from the recording (design §2.7).
 fn diverged(divergence: Divergence) -> String {
-    let by = group_thousands(divergence.tick);
+    let by = thousands(divergence.tick);
     match divergence.matched {
         Some(matched) => format!(
             "The replay parted from its recording between ticks {} and {by}",
-            group_thousands(matched)
+            thousands(matched)
         ),
         None => format!("The replay was different from its recording from tick {by}"),
     }

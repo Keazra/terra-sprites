@@ -3,7 +3,9 @@
 //! away, and some hits are hit back. Driven through hand-made worlds.
 
 mod common;
-use common::{MakeGenome, WorldBuilder, at, builtin, id_at, walker};
+use common::{
+    MakeGenome, WorldBuilder, at, builtin, id_at, run_for, scene, seeded_scene, walker, wander_to,
+};
 
 use terra_sim::{
     DataPack, EntityId, EventKind, Genome, Outcome, Pos, ScriptedAction, Target, Verb, World,
@@ -27,32 +29,6 @@ fn watcher(data: &DataPack) -> Genome {
         Instinct(inputs: [("always", false)], verb: Rest, weight: 1.0),
     ])"#;
     Genome::from_ron(text, data).expect("a valid genome")
-}
-
-/// A world drawn from `rows`, with `sprites` made as given, placed in the
-/// order given, each starting on the scripted actions given for its tile.
-fn scene(
-    rows: &[&str],
-    sprites: &[(Pos, MakeGenome)],
-    scripted: &[(Pos, ScriptedAction)],
-) -> World {
-    scene_with(rows, &[], sprites, scripted, 1)
-}
-
-/// `scene`, with `objects`, and the world's RNG seeded with `seed`.
-fn scene_with(
-    rows: &[&str],
-    objects: &[(Pos, &str)],
-    sprites: &[(Pos, MakeGenome)],
-    scripted: &[(Pos, ScriptedAction)],
-    seed: u64,
-) -> World {
-    WorldBuilder::new(rows)
-        .objects(objects)
-        .sprites_made(sprites)
-        .scripts(scripted)
-        .seed(seed)
-        .build()
 }
 
 /// The verb and target of the first action sprite `id` starts in the next
@@ -92,7 +68,7 @@ fn a_hit_sprite_turns_to_its_attacker_while_it_feels_the_hit() {
         (me, watcher),
         (attacker, walker),
     ];
-    let mut world = scene(&["....."], &sprites, &script);
+    let mut world = scene(&["....."], &[], &sprites, &script);
     let me = id_at(&world, me);
     world.step();
     assert_eq!(
@@ -115,7 +91,7 @@ fn a_sprite_pricked_by_a_thornbush_backs_away_from_it() {
     for seed in 0..10 {
         let script = [(me, ScriptedAction::Eat { at: thornbush })];
         let sprites = [(me, starter as MakeGenome)];
-        let mut world = scene_with(&rows, &[(thornbush, "thornbush")], &sprites, &script, seed);
+        let mut world = seeded_scene(&rows, &[(thornbush, "thornbush")], &sprites, &script, seed);
         let id = id_at(&world, me);
         let bush = world.object_at(thornbush).expect("the thornbush").id();
         world.step();
@@ -258,7 +234,7 @@ fn a_sprite_cornered_by_its_attacker_turns_on_it() {
             (attacker, ScriptedAction::Rest),
         ];
         let sprites = [(me, starter as MakeGenome), (attacker, walker)];
-        let mut world = scene_with(&["......"], &[], &sprites, &script, seed);
+        let mut world = seeded_scene(&["......"], &[], &sprites, &script, seed);
         let (id, them) = (id_at(&world, me), id_at(&world, attacker));
         // What the sprite does next, once a retreat of its has been cornered.
         let mut cornered = false;
@@ -313,12 +289,7 @@ fn a_feared_sprite_catches_the_eye_over_a_nearer_stranger() {
     let script = [
         (stranger, ScriptedAction::Rest),
         (bully, ScriptedAction::Hit { at: me }),
-        (
-            bully,
-            ScriptedAction::Wander {
-                destination: at(4, 0),
-            },
-        ),
+        (bully, wander_to(at(4, 0))),
         (bully, ScriptedAction::Rest),
     ];
     let sprites = [
@@ -326,11 +297,9 @@ fn a_feared_sprite_catches_the_eye_over_a_nearer_stranger() {
         (me, fearful_watcher),
         (bully, walker),
     ];
-    let mut world = scene(&["......."], &sprites, &script);
+    let mut world = scene(&["......."], &[], &sprites, &script);
     let (me, bully) = (id_at(&world, me), id_at(&world, bully));
-    for _ in 0..12 {
-        world.step();
-    }
+    run_for(&mut world, 12);
     let bully_at = world.sprite(bully).expect("the bully").pos();
     assert_eq!(bully_at, at(4, 0), "the bully has walked off");
     assert_eq!(attends(&world, me), Some(bully_at));
@@ -362,7 +331,7 @@ fn a_sprite_backs_away_from_one_it_fears_once_the_hit_is_no_longer_felt() {
         (bully, ScriptedAction::Rest),
     ];
     let sprites = [(me, skittish as MakeGenome), (bully, walker)];
-    let mut world = scene(&["......"], &sprites, &script);
+    let mut world = scene(&["......"], &[], &sprites, &script);
     let (me, bully) = (id_at(&world, me), id_at(&world, bully));
     world.step();
     world.step();
@@ -382,21 +351,14 @@ fn a_sprite_does_not_back_away_from_one_it_fears_that_is_far_off() {
     let (me, bully) = (at(1, 0), at(2, 0));
     let mut script = vec![
         (bully, ScriptedAction::Hit { at: me }),
-        (
-            bully,
-            ScriptedAction::Wander {
-                destination: at(8, 0),
-            },
-        ),
+        (bully, wander_to(at(8, 0))),
     ];
     // It stays there for the rest of the test.
     script.extend(vec![(bully, ScriptedAction::Rest); 5]);
     let sprites = [(me, skittish as MakeGenome), (bully, walker)];
-    let mut world = scene(&[".........."], &sprites, &script);
+    let mut world = scene(&[".........."], &[], &sprites, &script);
     let me = id_at(&world, me);
-    for _ in 0..12 {
-        world.step();
-    }
+    run_for(&mut world, 12);
     assert_eq!(world.sprite(me).expect("me").pos(), at(1, 0), "still there");
     let choice = next_choice(&mut world, me, 20).map(|(verb, _)| verb);
     assert_eq!(choice, Some(Verb::Rest));
@@ -420,7 +382,7 @@ fn a_starter_sprite_hit_by_a_bully_backs_away_from_it_far_more_than_from_a_stran
             (bully, starter),
             (stranger, starter),
         ];
-        let mut world = scene_with(&["............"; 8], &[], &sprites, &script, seed);
+        let mut world = seeded_scene(&["............"; 8], &[], &sprites, &script, seed);
         let (id, them, other) = (
             id_at(&world, me),
             id_at(&world, bully),
@@ -466,15 +428,13 @@ fn hurt_by(bullies: usize) -> (Option<(Verb, Option<Target>)>, EntityId) {
     for (i, (&bully, &away)) in spots.iter().zip(&far).enumerate().take(bullies) {
         script.extend(vec![(bully, ScriptedAction::Rest); i]);
         script.push((bully, ScriptedAction::Hit { at: me }));
-        script.push((bully, ScriptedAction::Wander { destination: away }));
+        script.push((bully, wander_to(away)));
         script.extend(vec![(bully, ScriptedAction::Rest); 10]);
         sprites.push((bully, walker));
     }
-    let mut world = scene(&[".............."; 3], &sprites, &script);
+    let mut world = scene(&[".............."; 3], &[], &sprites, &script);
     let (me, stranger) = (id_at(&world, me), id_at(&world, stranger));
-    for _ in 0..59 {
-        world.step();
-    }
+    run_for(&mut world, 59);
     (next_choice(&mut world, me, 5), stranger)
 }
 

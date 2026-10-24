@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use terra_sim::Mode;
 
 use crate::fast_forward::MOST_HOURS;
-use crate::text::group_thousands;
+use crate::text::thousands;
 
 /// What the player asked for on the command line.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -86,7 +86,7 @@ impl Args {
                     parsed.fast_forward = Some(hours.ok_or_else(|| {
                         format!(
                             "`{value}` is not a number of hours to fast-forward: use a whole number from 1 to {}",
-                            group_thousands(MOST_HOURS)
+                            thousands(MOST_HOURS)
                         )
                     })?);
                 }

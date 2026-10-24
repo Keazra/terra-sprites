@@ -3,17 +3,18 @@
 //! build, or a damaged one, is refused rather than crashing.
 
 mod common;
-use common::{WorldBuilder, at, builtin, builtin_changing};
+use common::{
+    WorldBuilder, at, builtin, builtin_changing, builtin_source, default_world, pet, run_for,
+};
 
 use terra_sim::{
-    Command, DataPack, EntityId, EventKind, Genome, LoadError, SCHEMA_VERSION, World, WorldConfig,
+    Command, EntityId, EventKind, Genome, LoadError, SCHEMA_VERSION, World, WorldConfig,
 };
 
 /// The default world, with the Cursor busy: it leads a sprite for a while,
 /// lets go, then picks up a ball and holds it.
 fn busy_world(seed: u64, ticks: u64) -> World {
-    let data = builtin();
-    let mut world = World::new(WorldConfig::builtin(&data), data, seed);
+    let mut world = default_world(seed);
     for _ in 0..ticks {
         match world.tick() {
             40 => {
@@ -49,11 +50,7 @@ fn a_loaded_world_carries_on_exactly_as_one_never_saved() {
     );
     // A pet waits for the next tick, as a click made while paused does.
     let sprite = original.sprites().next().expect("a sprite").id();
-    original.submit(Command::Reward {
-        sprite,
-        amplified: false,
-        reach_back: 3,
-    });
+    original.submit(pet(sprite, 3));
 
     let mut loaded = World::load(&original.save()).expect("the save loads");
     assert_eq!(loaded.tick(), original.tick());
@@ -134,9 +131,7 @@ fn a_loaded_world_uses_the_pack_its_save_embeds_not_the_built_in_one() {
     let name = data.name().to_string();
     assert!(name.starts_with("Modded "), "{name}");
     let mut original = World::new(WorldConfig::builtin(&data), data, 9);
-    for _ in 0..20 {
-        original.step();
-    }
+    run_for(&mut original, 20);
 
     let mut loaded = World::load(&original.save()).expect("the save loads");
     assert_eq!(loaded.data().name(), name);
@@ -151,7 +146,7 @@ fn a_loaded_world_uses_the_pack_its_save_embeds_not_the_built_in_one() {
 #[test]
 fn an_unknown_gene_survives_a_save_and_load_byte_for_byte() {
     let data = builtin();
-    let starter = data_starter_ron();
+    let starter = builtin_source("genomes/starter.ron");
     let unknown = starter.replace(
         "genes: [",
         "genes: [\n        Gene(type: 900, version: 3, payload: \"c0ffee\"),",
@@ -169,16 +164,6 @@ fn an_unknown_gene_survives_a_save_and_load_byte_for_byte() {
         genome.to_ron(world.data())
     );
     assert!(sprite.genome().to_ron(loaded.data()).contains("c0ffee"));
-}
-
-/// The built-in starter genome's file.
-fn data_starter_ron() -> String {
-    DataPack::builtin_sources()
-        .iter()
-        .find(|(path, _)| *path == "genomes/starter.ron")
-        .expect("the starter genome")
-        .1
-        .to_string()
 }
 
 #[test]
@@ -266,9 +251,7 @@ fn golden_world() -> World {
         sprite: first,
         name: "Mira".into(),
     });
-    for _ in 0..60 {
-        world.step();
-    }
+    run_for(&mut world, 60);
     let ball = world.object_at(at(10, 5)).expect("the ball").id();
     world.submit(Command::PickUp { item: ball });
     world.step();
@@ -309,9 +292,7 @@ fn golden_the_first_save_still_loads_and_carries_on() {
         )),
         "{events:?}"
     );
-    for _ in 0..50 {
-        world.step();
-    }
+    run_for(&mut world, 50);
 }
 
 /// A save of schema 1 from before eggs were items (#196), written by the

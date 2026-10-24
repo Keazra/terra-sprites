@@ -6,7 +6,7 @@
 //! terra-tui --test snapshots`, and the new files reviewed like code.
 
 mod common;
-use common::{WorldBuilder, app_in, at, lines, pairs, render, tree_of};
+use common::{WorldBuilder, app_in, at, lines, pairs, render, run, tree_of};
 
 use std::path::Path;
 
@@ -45,9 +45,7 @@ fn field() -> World {
         .scripts(&[(at(3, 5), wander)])
         .seed(7)
         .build();
-    for _ in 0..3 {
-        world.step();
-    }
+    run(&mut world, 3);
     world
 }
 

@@ -282,24 +282,15 @@ fn trimmed(whole: u128, thousandths: u128) -> String {
 
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
-
-    use ratatui::buffer::Buffer;
-    use ratatui::layout::Rect;
-    use ratatui::style::{Color, Style};
+    use ratatui::style::Color;
 
     use super::*;
     use crate::clip::Frame;
-    use crate::test_util::glyphs;
+    use crate::test_util::{self, glyphs};
 
     /// A frame of four 10×20 cells, `text` in green, for `millis`.
     fn frame(text: &str, millis: u64) -> Frame {
-        let mut screen = Buffer::empty(Rect::new(0, 0, 4, 1));
-        screen.set_string(0, 0, text, Style::default().fg(Color::Green));
-        Frame {
-            screen,
-            shows_for: Duration::from_millis(millis),
-        }
+        test_util::frame(4, text, Color::Green, millis)
     }
 
     fn svg_of(clip: &Clip) -> String {

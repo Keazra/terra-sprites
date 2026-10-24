@@ -16,9 +16,9 @@ use std::time::Duration;
 
 use ratatui::layout::{Margin, Position, Size};
 use ratatui::style::{Color, Modifier};
-use terra_sim::{Command, DeathCause, EntityId, Genome, World};
+use terra_sim::{Command, DeathCause, EntityId, World};
 use terra_tui::app::{App, ColourMode, Screen, Selection, Tab};
-use terra_tui::input::{Action, Button};
+use terra_tui::input::Action;
 use terra_tui::policy::{InfoPolicy, Panel, Subject};
 use terra_tui::ui;
 
@@ -266,14 +266,7 @@ fn a_sprite_the_policy_hides_is_a_blank_card_that_leads_nowhere() {
         twenty_five,
         "#19 keeps its place"
     );
-    app.apply(
-        Action::Click {
-            at: nineteen,
-            button: Button::Left,
-            amplified: false,
-        },
-        &world,
-    );
+    app.apply(Action::left_click(nineteen), &world);
     assert_eq!(app.selection(), Some(Selection::Living(EntityId(14))));
 }
 
@@ -546,14 +539,7 @@ fn pointing_at_a_card_chooses_it_and_clicking_walks_to_it() {
     // Anywhere on a card: here, the last line of a young one's text.
     let young = label_at(&app, &world, YOUNG, "Sprite #25");
     let below = Position::new(young.x + 4, young.y + 2);
-    app.apply(
-        Action::Click {
-            at: below,
-            button: Button::Left,
-            amplified: false,
-        },
-        &world,
-    );
+    app.apply(Action::left_click(below), &world);
     assert_eq!(app.selection(), Some(Selection::Living(EntityId(25))));
     assert_eq!(
         said(&tree(&app, &world)[CENTRE + 1]),
@@ -580,14 +566,7 @@ fn the_pointer_on_the_tree_leaves_the_cursor_where_it_is_on_the_map() {
         assert_eq!(app.shown_cursor(), Some(tile), "pointing at {label}");
     }
     let young = label_at(&app, &world, YOUNG, "Sprite #25");
-    app.apply(
-        Action::Click {
-            at: young,
-            button: Button::Left,
-            amplified: false,
-        },
-        &world,
-    );
+    app.apply(Action::left_click(young), &world);
     assert_eq!(app.selection(), Some(Selection::Living(EntityId(25))));
     assert_eq!(app.shown_cursor(), Some(tile), "walking by a click");
     app.apply(Action::FamilyTree, &world);
@@ -712,7 +691,6 @@ fn a_sprite_hurt_to_death_died_hurt_by_what_hurt_it() {
     // once; her young hatches, does as she did, and dies before it grows
     // up.
     let [quick, eggs] = QUICK;
-    let pack = pack_changing(&[quick, eggs, LONE, LETHAL_THORNS]);
     let genes = changed(
         LONE_MOTHER,
         "])",
@@ -720,11 +698,10 @@ fn a_sprite_hurt_to_death_died_hurt_by_what_hurt_it() {
     Instinct(inputs: [("always", false), ("attended_bush", false)], verb: Hit, weight: 0.5),
 ])"#,
     );
-    let mother = Genome::from_ron(&genes, &pack).expect("valid genes");
     let mut world = WorldBuilder::grass(12, 6)
         .objects(&[(at(2, 4), "thornbush")])
-        .sprites_with(vec![(at(1, 4), Some(mother))])
-        .data(pack)
+        .data(pack_changing(&[quick, eggs, LONE, LETHAL_THORNS]))
+        .genes(&[(at(1, 4), &genes)])
         .seed(7)
         .build();
     let mother = world.sprites().next().expect("the mother").id();
@@ -786,9 +763,7 @@ fn a_dead_sprite_keeps_its_name_through_a_save_and_a_load() {
         sprite: EntityId(1),
         name: "Bramble".into(),
     });
-    for _ in 0..140 {
-        world.step();
-    }
+    common::run(&mut world, 140);
     // A screen that never saw it named, as after a load, names it from
     // what the world remembers.
     let mut app = app_on(&world);
@@ -838,9 +813,7 @@ fn after_a_load_the_log_names_a_dead_sprite_as_she_was_named() {
         sprite: EntityId(1),
         name: "Bramble".into(),
     });
-    for _ in 0..40 {
-        world.step();
-    }
+    common::run(&mut world, 40);
     assert!(world.dead(EntityId(1)).is_some(), "she died");
     let mut app = app_on(&world);
     app.set_save_folder(scratch_folder("log"));

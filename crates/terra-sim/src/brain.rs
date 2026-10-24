@@ -1717,20 +1717,6 @@ impl Brain {
             .collect()
     }
 
-    /// `attention_scores_with`, working out sprites in general itself.
-    #[cfg(test)]
-    pub(crate) fn attention_scores(
-        &self,
-        inputs: &[f32],
-        candidates: &BTreeMap<CategoryId, Seen>,
-        curiosity_mod: f32,
-        scoring: SpriteScoring,
-        data: &DataPack,
-    ) -> BTreeMap<CategoryId, f32> {
-        let general = self.sprites_in_general(data);
-        self.attention_scores_with(inputs, candidates, curiosity_mod, scoring, &general, data)
-    }
-
     /// Each candidate category's attention score (design §5.3): the State
     /// inputs through the attention links, plus salience for nearness.
     /// `candidates` gives what each category's candidate is learned about as,
@@ -1932,20 +1918,6 @@ impl Brain {
             }
         }
         self.attended
-    }
-
-    /// `scores_with`, working out sprites in general itself.
-    #[cfg(test)]
-    pub(crate) fn scores(
-        &self,
-        activations: &[f32],
-        inputs: &[f32],
-        aimed: Option<Subject>,
-        scoring: SpriteScoring,
-        data: &DataPack,
-    ) -> [f32; VERBS.len()] {
-        let general = self.sprites_in_general(data);
-        self.scores_with(activations, inputs, aimed, scoring, &general, data)
     }
 
     /// Each verb's score (design §5.5), in `VERBS` order: the concepts'
@@ -2459,6 +2431,35 @@ mod tests {
         x
     }
 
+    /// Each candidate category's attention score from `brain` (design
+    /// §5.3), with the inputs `x` and curiosity scaled by `curiosity_mod`,
+    /// no sprite standing for sprites.
+    fn attention_scores(
+        brain: &Brain,
+        x: &[f32],
+        candidates: &BTreeMap<CategoryId, Seen>,
+        curiosity_mod: f32,
+        data: &DataPack,
+    ) -> BTreeMap<CategoryId, f32> {
+        let general = brain.sprites_in_general(data);
+        let scoring = SpriteScoring::default();
+        brain.attention_scores_with(x, candidates, curiosity_mod, scoring, &general, data)
+    }
+
+    /// Each verb's score from `brain` (design §5.5), in `VERBS` order, its
+    /// concepts as the inputs `x` make them, aimed at `aimed`, no sprite
+    /// standing for sprites.
+    fn verb_scores(
+        brain: &Brain,
+        x: &[f32],
+        aimed: Option<Subject>,
+        data: &DataPack,
+    ) -> [f32; VERBS.len()] {
+        let general = brain.sprites_in_general(data);
+        let scoring = SpriteScoring::default();
+        brain.scores_with(&brain.activations(x), x, aimed, scoring, &general, data)
+    }
+
     #[test]
     fn a_brain_parameter_is_clamped_to_physiology_s_range() {
         let params = params(&[
@@ -2525,13 +2526,7 @@ mod tests {
             r#"Instinct(inputs: [("always", false)], verb: Wander, weight: 0.3)"#,
         ]);
         let x = inputs(&[("hunger", 0.6), ("always", 1.0)]);
-        let scores = brain.scores(
-            &brain.activations(&x),
-            &x,
-            None,
-            SpriteScoring::default(),
-            &data,
-        );
+        let scores = verb_scores(&brain, &x, None, &data);
         assert_eq!(scores[column(Verb::Eat)], 0.6);
         assert_eq!(scores[column(Verb::Wander)], 0.3);
         assert_eq!(scores[column(Verb::Drink)], 0.0);
@@ -2585,19 +2580,12 @@ mod tests {
             ("target_distance", 1.0),
             ("target_adjacent", 1.0),
         ]);
-        let scores =
-            brain.attention_scores(&hungry, &candidates, 0.0, SpriteScoring::default(), &data);
+        let scores = attention_scores(&brain, &hungry, &candidates, 0.0, &data);
         // 0.5 × 0.8 learned, plus 0.5 × (1 − 0.4) salience.
         assert_eq!(scores[&BUSH], 0.4 + 0.3);
         assert_eq!(scores[&WATER], 0.5, "salience alone");
         assert_eq!(
-            brain.attention_scores(
-                &also_aimed,
-                &candidates,
-                0.0,
-                SpriteScoring::default(),
-                &data
-            ),
+            attention_scores(&brain, &also_aimed, &candidates, 0.0, &data),
             scores
         );
     }
@@ -3361,22 +3349,10 @@ mod tests {
             (FRUIT, Seen::in_sight(types::BERRY, 1.0)),
             (BUSH, Seen::in_sight(types::THORNBUSH, 1.0)),
         ]);
-        let full = brain.attention_scores(
-            &inputs(&[]),
-            &candidates,
-            0.0,
-            SpriteScoring::default(),
-            &data,
-        );
+        let full = attention_scores(&brain, &inputs(&[]), &candidates, 0.0, &data);
         assert_eq!(full[&FRUIT], 0.0, "no hunger, no pull");
         assert_eq!(full[&BUSH], -0.4, "bad counts always");
-        let hungry = brain.attention_scores(
-            &inputs(&[("hunger", 0.8)]),
-            &candidates,
-            0.0,
-            SpriteScoring::default(),
-            &data,
-        );
+        let hungry = attention_scores(&brain, &inputs(&[("hunger", 0.8)]), &candidates, 0.0, &data);
         assert!(close(hungry[&FRUIT], 0.4), "{hungry:?}");
     }
 
@@ -3393,9 +3369,7 @@ mod tests {
             ..Seen::in_sight(types::WATER, 1.0)
         };
         let candidates = BTreeMap::from([(WATER, half_remembered)]);
-        let none = SpriteScoring::default();
-        let scores =
-            brain.attention_scores(&inputs(&[("thirst", 0.8)]), &candidates, 0.0, none, &data);
+        let scores = attention_scores(&brain, &inputs(&[("thirst", 0.8)]), &candidates, 0.0, &data);
         assert!(close(scores[&WATER], 0.8 * 0.5 * 0.5), "{scores:?}");
         let draw = brain.draw(
             half_remembered,
@@ -3466,8 +3440,7 @@ mod tests {
             (FRUIT, Seen::in_sight(types::BERRY, 1.0)),
         ]);
         let scores = |needs: &[(&str, f32)]| {
-            let none = SpriteScoring::default();
-            brain.attention_scores(&inputs(needs), &candidates, 0.0, none, &data)
+            attention_scores(&brain, &inputs(needs), &candidates, 0.0, &data)
         };
         assert_eq!(scores(&[])[&TOY], 0.5, "content, a like counts in full");
         let thirsty = scores(&[("thirst", 0.5)]);
@@ -3490,11 +3463,8 @@ mod tests {
         let mut brain = brain(&[]);
         teach(&mut brain, types::BALL).habits[column(Play)] = 0.5;
         teach(&mut brain, types::BALL).habits[column(Hit)] = -0.5;
-        let scores = |needs: &[(&str, f32)]| {
-            let x = inputs(needs);
-            let none = SpriteScoring::default();
-            brain.scores(&brain.activations(&x), &x, Some(types::BALL), none, &data)
-        };
+        let scores =
+            |needs: &[(&str, f32)]| verb_scores(&brain, &inputs(needs), Some(types::BALL), &data);
         let content = scores(&[]);
         assert_eq!((content[column(Play)], content[column(Hit)]), (0.5, -0.5));
         let desperate = scores(&[("thirst", 1.0)]);
@@ -3596,14 +3566,7 @@ mod tests {
         teach(&mut brain, types::BALL).habits[column(Verb::Eat)] = -0.4;
         teach(&mut brain, types::BALL).taught_habits[column(Verb::Eat)] = -0.9;
         teach(&mut brain, types::BALL).taught_habits[column(Verb::Play)] = 0.3;
-        let x = inputs(&[]);
-        let scores = brain.scores(
-            &brain.activations(&x),
-            &x,
-            Some(types::BALL),
-            SpriteScoring::default(),
-            &data,
-        );
+        let scores = verb_scores(&brain, &inputs(&[]), Some(types::BALL), &data);
         assert_eq!(scores[column(Verb::Eat)], -1.0);
         assert!(close(scores[column(Verb::Play)], 0.3));
     }
@@ -3622,16 +3585,14 @@ mod tests {
                 teach(&mut brain, types::BALL).bad = worth;
             }
             let x = inputs(&[]);
-            let none = SpriteScoring::default();
-            let ball = Some(types::BALL);
-            let scores = brain.scores(&brain.activations(&x), &x, ball, none, &data);
+            let scores = verb_scores(&brain, &x, Some(types::BALL), &data);
             for verb in [Approach, Eat, Drink, Hit, Play] {
                 assert_eq!(scores[column(verb)], worth, "{verb:?}");
             }
             for verb in [Retreat, Rest, Wander] {
                 assert_eq!(scores[column(verb)], 0.0, "{verb:?}");
             }
-            let unaimed = brain.scores(&brain.activations(&x), &x, None, none, &data);
+            let unaimed = verb_scores(&brain, &x, None, &data);
             assert_eq!(unaimed, [0.0; VERBS.len()], "nothing attended, no worth");
         }
     }
@@ -3650,8 +3611,7 @@ mod tests {
                 ..Seen::in_sight(types::SPRITE, 1.0)
             };
             let candidates = BTreeMap::from([(data.sprite_category(), seen)]);
-            let scores =
-                brain.attention_scores(&aroused, &candidates, 1.0, SpriteScoring::default(), &data);
+            let scores = attention_scores(&brain, &aroused, &candidates, 1.0, &data);
             scores[&data.sprite_category()]
         };
         assert!(
@@ -3742,9 +3702,7 @@ mod tests {
                 ("attended_sprite", 1.0),
                 ("target_family", family),
             ]);
-            let sprite = Some(types::SPRITE);
-            let scoring = SpriteScoring::default();
-            brain.scores(&brain.activations(&x), &x, sprite, scoring, &data)[column(Verb::Hit)]
+            verb_scores(&brain, &x, Some(types::SPRITE), &data)[column(Verb::Hit)]
         };
         let (stranger, family) = (hit(0.0), hit(1.0));
         assert!(stranger > 0.0, "a stranger: {stranger}");
@@ -3770,8 +3728,8 @@ mod tests {
         };
         let scores = |distance: f32, scoring: SpriteScoring| {
             let x = inputs(&[("target_distance", distance)]);
-            let sprite = Some(types::SPRITE);
-            brain.scores(&brain.activations(&x), &x, sprite, scoring, &data)
+            let (sprite, general) = (Some(types::SPRITE), brain.sprites_in_general(&data));
+            brain.scores_with(&brain.activations(&x), &x, sprite, scoring, &general, &data)
         };
         let near = scores(0.0, scoring);
         assert!(close(near[column(Retreat)], 0.4), "{near:?}");
@@ -3828,22 +3786,10 @@ mod tests {
         let mut brain = brain(&[]);
         teach(&mut brain, types::BALL).habits[column(Verb::Eat)] = -0.4;
         let x = inputs(&[]);
-        let scores = brain.scores(
-            &brain.activations(&x),
-            &x,
-            Some(types::BALL),
-            SpriteScoring::default(),
-            &data,
-        );
+        let scores = verb_scores(&brain, &x, Some(types::BALL), &data);
         assert_eq!(scores[column(Verb::Eat)], -0.4);
         assert_eq!(scores[column(Verb::Play)], 0.0);
-        let at_a_berry = brain.scores(
-            &brain.activations(&x),
-            &x,
-            Some(types::BERRY),
-            SpriteScoring::default(),
-            &data,
-        );
+        let at_a_berry = verb_scores(&brain, &x, Some(types::BERRY), &data);
         assert_eq!(at_a_berry[column(Verb::Eat)], 0.0);
     }
 
@@ -3979,9 +3925,8 @@ mod tests {
             (TOY, Seen::in_sight(types::BALL, 1.0)),
         ]);
         let x = inputs(&[]);
-        let score = |brain: &Brain, mood: f32| {
-            brain.attention_scores(&x, &candidates, mood, SpriteScoring::default(), &data)
-        };
+        let score =
+            |brain: &Brain, mood: f32| attention_scores(brain, &x, &candidates, mood, &data);
         let calm = score(&brain, 1.0);
         assert!(close(calm[&FRUIT], 0.3), "{calm:?}");
         assert!(close(calm[&TOY], 0.15), "half familiar, half the pull");

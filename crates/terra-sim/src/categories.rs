@@ -32,10 +32,7 @@ pub(crate) struct Category {
 /// The categories `categories.ron` lists, in ascending ID order, each
 /// plural without spaces at either end.
 pub(crate) fn categories(mut entries: Vec<Category>) -> Result<Vec<Category>, DataError> {
-    let invalid = |message: String| DataError::Invalid {
-        file: CATEGORIES.into(),
-        message,
-    };
+    let invalid = |message: String| DataError::invalid(CATEGORIES, message);
     check_unique(
         CATEGORIES,
         entries.iter().map(|c| (c.id.0, c.name.as_str())),

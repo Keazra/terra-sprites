@@ -5,35 +5,12 @@
 //! before its fenced block, so the reference can't drift from the formats.
 
 mod common;
-use common::builtin;
+use common::{builtin, builtin_source};
+#[path = "common/reference_example.rs"]
+mod reference_example;
+use reference_example::example;
 
 use terra_sim::{DataError, DataPack, Genome, LabScenario, WorldConfig};
-
-/// The example `name` from a reference page: the fenced block after its
-/// marker, without the fences.
-fn example(page: &str, name: &str) -> String {
-    let marker = format!("<!-- example: {name} -->");
-    let after = page
-        .split_once(&marker)
-        .unwrap_or_else(|| panic!("no example `{name}` in the page"))
-        .1;
-    let block = after
-        .trim_start()
-        .strip_prefix("```ron\n")
-        .unwrap_or_else(|| panic!("example `{name}` isn't a ```ron block"));
-    let end = block
-        .find("\n```")
-        .unwrap_or_else(|| panic!("example `{name}` isn't closed"));
-    block[..end].to_string()
-}
-
-fn builtin_source(file: &str) -> &'static str {
-    DataPack::builtin_sources()
-        .iter()
-        .find(|&&(path, _)| path == file)
-        .unwrap_or_else(|| panic!("the built-in pack has no {file}"))
-        .1
-}
 
 /// Loads the built-in pack with each of `files` replaced by its text.
 fn builtin_with(files: &[(&str, &str)]) -> Result<DataPack, DataError> {

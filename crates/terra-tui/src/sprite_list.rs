@@ -11,7 +11,7 @@ use crate::app::{App, strongest_drive};
 use crate::inspector;
 use crate::listed::listed_enum;
 use crate::policy::{Panel, Subject};
-use crate::text::{display_name, group_thousands};
+use crate::text::{display_name, thousands};
 
 listed_enum! {
     /// What the sprite list is sorted by.
@@ -55,7 +55,7 @@ impl<'a> Row<'a> {
         Row {
             id: sprite.id(),
             label: app.names().label(sprite.id()),
-            age: group_thousands(sprite.age()),
+            age: thousands(sprite.age()),
             stage: sprite.life_stage().name(),
             drive: strongest_drive(sprite).map(|drive| drive.name),
             generation: sprite.generation(),
@@ -204,39 +204,16 @@ pub(crate) fn lines(
     let shown = ids
         .iter()
         .filter_map(|&id| every_row.iter().find(|row| row.id == id));
-    let label_width = every_row
-        .iter()
-        .map(|row| row.label.chars().count())
-        .chain(["Sprite".len()])
-        .max()
-        .unwrap_or(0);
-    let age_width = every_row
-        .iter()
-        .map(|row| row.age.chars().count())
-        .chain(["Age".len()])
-        .max()
-        .unwrap_or(0);
-    let drive_width = world
-        .data()
-        .drives()
-        .map(|drive| display_name(drive).chars().count())
-        .chain(["Drive".len()])
-        .max()
-        .unwrap_or(0);
+    let label_width = widest("Sprite", every_row.iter().map(|row| &row.label));
+    let age_width = widest("Age", every_row.iter().map(|row| &row.age));
+    let drive_width = widest("Drive", world.data().drives().map(display_name));
     // Each sprite's life stage after its age (M2 design §9.6).
-    let stage_width = [LifeStage::Young, LifeStage::Adult, LifeStage::Old]
-        .iter()
-        .map(|stage| stage.name().len())
-        .chain(["Life stage".len()])
-        .max()
-        .unwrap_or(0);
+    let stage_width = widest("Life stage", LifeStage::ALL.map(LifeStage::name));
     // Each sprite's generation after its drive (M2 design §17.1, #313).
-    let generation_width = every_row
-        .iter()
-        .map(|row| row.generation.to_string().len())
-        .chain(["Generation".len()])
-        .max()
-        .unwrap_or(0);
+    let generation_width = widest(
+        "Generation",
+        every_row.iter().map(|row| row.generation.to_string()),
+    );
     let heading = format!(
         " {:<label_width$}  {:>age_width$}  {:<stage_width$}  {:<drive_width$}  \
          {:>generation_width$}  Doing",
@@ -279,6 +256,13 @@ pub(crate) fn lines(
         lines.push(line);
     }
     lines
+}
+
+/// How wide a column headed `heading` is: as wide as the widest of it and
+/// `texts`, in characters.
+fn widest<T: AsRef<str>>(heading: &str, texts: impl IntoIterator<Item = T>) -> usize {
+    let widths = texts.into_iter().map(|text| text.as_ref().chars().count());
+    widths.fold(heading.chars().count(), usize::max)
 }
 
 /// The first `width` characters of `text`.

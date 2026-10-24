@@ -253,25 +253,16 @@ fn level(k: u32, steps: u32) -> u8 {
 
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
-
     use gif::{ColorOutput, DecodeOptions, Repeat};
-    use ratatui::buffer::Buffer;
-    use ratatui::layout::Rect;
-    use ratatui::style::{Color, Style};
+    use ratatui::style::Color;
 
     use super::*;
     use crate::clip::Frame;
-    use crate::test_util::glyphs;
+    use crate::test_util::{self, glyphs};
 
     /// A frame of three 10×20 cells, `text` in red, for `millis`.
     fn frame(text: &str, millis: u64) -> Frame {
-        let mut screen = Buffer::empty(Rect::new(0, 0, 3, 1));
-        screen.set_string(0, 0, text, Style::default().fg(Color::Red));
-        Frame {
-            screen,
-            shows_for: Duration::from_millis(millis),
-        }
+        test_util::frame(3, text, Color::Red, millis)
     }
 
     fn gif_of(clip: &Clip) -> Vec<u8> {

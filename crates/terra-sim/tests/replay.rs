@@ -4,19 +4,17 @@
 //! another build, or with the wrong data pack, is refused, never a crash.
 
 mod common;
-use common::{WorldBuilder, at, builtin};
+use common::{WorldBuilder, at, default_world, hug, run_for, zap};
 
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use terra_sim::{
     CHECKPOINT_EVERY, Command, Dir, Divergence, EventKind, Playback, ReplayError, World,
-    WorldConfig,
 };
 
 /// The default world, recording from its first tick.
 fn recorded_world(seed: u64) -> World {
-    let data = builtin();
-    let mut world = World::new(WorldConfig::builtin(&data), data, seed);
+    let mut world = default_world(seed);
     world.start_recording();
     world
 }
@@ -56,11 +54,7 @@ fn play(world: &mut World, until: u64) -> Vec<Vec<terra_sim::Event>> {
             }
             120 => {
                 let sprite = world.sprites().last().expect("a sprite").id();
-                world.submit(Command::Reward {
-                    sprite,
-                    amplified: true,
-                    reach_back: 5,
-                });
+                world.submit(hug(sprite, 5));
             }
             _ => {}
         }
@@ -106,15 +100,11 @@ fn replaying_a_recorded_session_reproduces_every_checkpoint() {
 
 #[test]
 fn a_session_started_from_a_save_replays_from_it() {
-    let data = builtin();
-    let mut world = World::new(WorldConfig::builtin(&data), data, 3);
+    let mut world = default_world(3);
     play(&mut world, 300);
     // A click made while paused waits in the save, for the next tick.
     let sprite = world.sprites().next().expect("a sprite").id();
-    world.submit(Command::Correct {
-        sprite,
-        amplified: false,
-    });
+    world.submit(zap(sprite));
     let mut world = World::load(&world.save()).expect("the save loads");
     world.start_recording();
     play(&mut world, 2_100);
@@ -140,9 +130,7 @@ fn a_hand_made_world_replays_from_its_save() {
     world.start_recording();
     let item = world.objects().next().unwrap().id();
     world.submit(Command::PickUp { item });
-    for _ in 0..1_200 {
-        world.step();
-    }
+    run_for(&mut world, 1_200);
     let mut playback = Playback::new(&world.replay().unwrap()).unwrap();
     assert!(
         !playback.started_fresh(),
@@ -155,8 +143,7 @@ fn a_hand_made_world_replays_from_its_save() {
 
 #[test]
 fn a_world_that_has_run_records_from_its_save_not_its_seed() {
-    let data = builtin();
-    let mut world = World::new(WorldConfig::builtin(&data), data, 4);
+    let mut world = default_world(4);
     world.step();
     world.start_recording();
     let playback = Playback::new(&world.replay().unwrap()).unwrap();
@@ -212,8 +199,7 @@ fn a_session_that_ends_in_a_panic_still_leaves_a_valid_replay() {
 
 #[test]
 fn a_world_not_recording_has_no_replay() {
-    let data = builtin();
-    let world = World::new(WorldConfig::builtin(&data), data, 1);
+    let world = default_world(1);
     assert!(world.replay().is_none());
 }
 
@@ -285,8 +271,7 @@ fn a_replay_naming_another_data_pack_is_refused_saying_so() {
         let mut world = if fresh {
             recorded_world(1)
         } else {
-            let data = builtin();
-            let mut world = World::new(WorldConfig::builtin(&data), data, 1);
+            let mut world = default_world(1);
             world.step();
             world.start_recording();
             world
@@ -314,8 +299,7 @@ fn a_replay_naming_another_data_pack_is_refused_saying_so() {
 
 #[test]
 fn what_isnt_a_replay_is_refused() {
-    let data = builtin();
-    let save = World::new(WorldConfig::builtin(&data), data, 1).save();
+    let save = default_world(1).save();
     for bytes in [&b""[..], b"hello", b"TSRP", &save] {
         assert!(
             matches!(Playback::new(bytes), Err(ReplayError::NotAReplay)),

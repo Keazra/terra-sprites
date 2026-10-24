@@ -1,13 +1,11 @@
 //! The default world's ecology over thousands of ticks (design §3.5.3).
 
+mod common;
+use common::default_world;
+
 use std::collections::BTreeMap;
 
-use terra_sim::{DataPack, EventKind, Removal, World, WorldConfig};
-
-fn default_world(seed: u64) -> World {
-    let data = DataPack::builtin().expect("built-in data pack is valid");
-    World::new(WorldConfig::builtin(&data), data, seed)
-}
+use terra_sim::{DataPack, EventKind, Removal};
 
 /// What the ecology did: counts of `(object type, what happened)`.
 type Tally = BTreeMap<(String, &'static str), usize>;

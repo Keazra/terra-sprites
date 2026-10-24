@@ -11,21 +11,31 @@ use ratatui::text::{Line, Span};
 use terra_sim::{DataPack, PopulationChanges, PopulationCount, World};
 
 use crate::app::App;
-use crate::text::{cause_name, generations_words, group_thousands};
+use crate::listed::listed_enum;
+use crate::text::{cause_name, generations_words, thousands};
 use crate::theme::PopulationLook;
 
 /// The ticks a column stands for while the run is too short to fill the
 /// graph: as often as the world counts at first (M2 design §14).
 const TICKS_PER_COLUMN: u64 = terra_sim::FIRST_COUNT_EVERY;
 
-/// What the graph stacks (M2 design §14.2): the eggs, which are items
-/// until they hatch (§10.4), then the sprites at each life stage.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Band {
-    Eggs,
-    Young,
-    Adults,
-    Old,
+listed_enum! {
+    /// What the graph stacks (M2 design §14.2): the eggs, which are items
+    /// until they hatch (§10.4), then the sprites at each life stage.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub(crate) enum Band {
+        Eggs => "eggs",
+        Young => "young",
+        Adults => "adults",
+        Old => "old",
+    }
+
+    /// The bands, stacked from the bottom, youngest first (M2 design
+    /// §14.2).
+    const ALL;
+
+    /// The band's name, as the legend says it.
+    fn plural(self) -> &'static str;
 }
 
 impl Band {
@@ -39,16 +49,6 @@ impl Band {
         }
     }
 
-    /// The band's name, as the legend says it.
-    fn plural(self) -> &'static str {
-        match self {
-            Band::Eggs => "eggs",
-            Band::Young => "young",
-            Band::Adults => "adults",
-            Band::Old => "old",
-        }
-    }
-
     /// The band's name for `n` of them.
     fn name(self, n: u32) -> &'static str {
         match (self, n) {
@@ -58,9 +58,6 @@ impl Band {
         }
     }
 }
-
-/// The bands, stacked from the bottom, youngest first (M2 design §14.2).
-const STACK: [Band; 4] = [Band::Eggs, Band::Young, Band::Adults, Band::Old];
 
 /// Rows the full graph keeps for what's under it: the axis, its ticks, a
 /// blank line, the legend and the three lines that read a moment.
@@ -264,10 +261,10 @@ impl Plot {
                 text.push_str(&label);
             }
         };
-        put(gutter - 1, group_thousands(self.start));
+        put(gutter - 1, thousands(self.start));
         for j in self.marks() {
             let tick = self.boundary(j + 1);
-            put(gutter + j, group_thousands((tick + 50) / 100 * 100));
+            put(gutter + j, thousands((tick + 50) / 100 * 100));
         }
         Line::from(text)
     }
@@ -287,7 +284,7 @@ impl Plot {
     /// with shares, that they're shares.
     fn legend(&self, look: &PopulationLook) -> Line<'static> {
         let mut spans = vec![Span::raw(" ")];
-        for band in STACK {
+        for band in Band::ALL {
             spans.push(Span::styled(
                 look.full.to_string(),
                 Style::default().fg(look.colour(band)),
@@ -316,9 +313,9 @@ impl Plot {
         };
         let count = &self.points[shown];
         let when = if shown + 1 == self.points.len() {
-            format!("now, tick {}", group_thousands(count.tick))
+            format!("now, tick {}", thousands(count.tick))
         } else {
-            format!("tick {}", group_thousands(count.tick))
+            format!("tick {}", thousands(count.tick))
         };
         let sprites = count.sprites();
         let mut first = format!(
@@ -333,7 +330,7 @@ impl Plot {
         }
         // With shares, each band's share of the column, eggs included.
         let column = count.with_eggs();
-        let stages = STACK.map(|band| {
+        let stages = Band::ALL.map(|band| {
             let n = band.of(count);
             if self.shares && column > 0 {
                 let percent = (200 * n + column) / (2 * column);
@@ -359,7 +356,7 @@ impl Plot {
             for point in &self.points[before + 1..=shown] {
                 changes.add(&point.since);
             }
-            let since = group_thousands(self.points[before].tick);
+            let since = thousands(self.points[before].tick);
             format!(" since tick {since}: {}", changed(&changes, data))
         } else {
             " the first count".to_string()
@@ -379,7 +376,7 @@ fn label_width(top: u32, shares: bool) -> usize {
 /// remainder, and at least one for each band with any in it, room allowing,
 /// so a small one is never lost (M2 design §14.2).
 fn share_stack(count: &PopulationCount, halves: usize) -> Vec<Option<Band>> {
-    let n = STACK.map(|band| i64::from(band.of(count)));
+    let n = Band::ALL.map(|band| i64::from(band.of(count)));
     let total: i64 = n.iter().sum();
     if total == 0 {
         return vec![None; halves];
@@ -417,7 +414,7 @@ fn share_stack(count: &PopulationCount, halves: usize) -> Vec<Option<Band>> {
             break;
         }
     }
-    STACK
+    Band::ALL
         .iter()
         .zip(given)
         .flat_map(|(&band, given)| std::iter::repeat_n(Some(band), given as usize))
@@ -436,7 +433,7 @@ fn band_at(count: &PopulationCount, half: usize, step: f64) -> Option<Band> {
     }
     let at = (bottom + step / 2.0).min(total - 0.5);
     let mut below = 0.0;
-    STACK.into_iter().find(|&band| {
+    Band::ALL.into_iter().find(|&band| {
         below += f64::from(band.of(count));
         at < below
     })
@@ -539,11 +536,7 @@ pub(crate) fn covers(world: &World) -> String {
         .population()
         .first()
         .map_or(world.tick(), |count| count.tick);
-    format!(
-        "ticks {} to {}",
-        group_thousands(first),
-        group_thousands(world.tick())
-    )
+    format!("ticks {} to {}", thousands(first), thousands(world.tick()))
 }
 
 #[cfg(test)]
@@ -562,7 +555,7 @@ mod tests {
 
     /// How many halves each band takes in `stack`.
     fn halves_of(stack: &[Option<Band>]) -> [usize; 4] {
-        STACK.map(|band| stack.iter().filter(|&&b| b == Some(band)).count())
+        Band::ALL.map(|band| stack.iter().filter(|&&b| b == Some(band)).count())
     }
 
     #[test]

@@ -16,7 +16,7 @@ use ratatui::layout::{Position, Rect, Size};
 use ratatui::{Terminal, backend::TestBackend};
 use terra_sim::{
     ActionView, Command, DataPack, EntityId, Event, EventKind, Genome, Hurt, Map, Outcome, Pos,
-    Progress, Rejection, Scenario, ScriptedAction, Verb, World,
+    Progress, Rejection, Scenario, ScriptedAction, Target, Verb, World,
 };
 use terra_tui::app::{App, Areas, CursorMode, Flow, Screen, Selection, Tab};
 use terra_tui::input::{Action, Button};
@@ -29,7 +29,7 @@ pub fn pack() -> DataPack {
 }
 
 /// A position at `(x, y)`.
-pub fn at(x: u16, y: u16) -> Pos {
+pub const fn at(x: u16, y: u16) -> Pos {
     Pos { x, y }
 }
 
@@ -41,11 +41,23 @@ pub fn at(x: u16, y: u16) -> Pos {
 pub struct WorldBuilder<'a> {
     rows: Vec<String>,
     objects: &'a [(Pos, &'a str)],
-    sprites: Vec<(Pos, Option<Genome>)>,
+    sprites: Vec<(Pos, SpriteGenome<'a>)>,
     scripted: Vec<(Pos, ScriptedAction)>,
     newborns: Vec<Pos>,
     data: Option<DataPack>,
     seed: u64,
+}
+
+/// Where the genome of a [`WorldBuilder`] sprite comes from. Genes written
+/// out are read with the world's data pack once the world is built, so the
+/// pack can be given before or after them.
+enum SpriteGenome<'a> {
+    /// The starter genome, with spawn variation.
+    Starter,
+    /// A genome already made.
+    Made(Genome),
+    /// Genes written as in a genome file.
+    Genes(&'a str),
 }
 
 impl<'a> WorldBuilder<'a> {
@@ -77,14 +89,30 @@ impl<'a> WorldBuilder<'a> {
     /// A sprite of the starter genome, with spawn variation, on each of
     /// `tiles` (appends).
     pub fn starters(mut self, tiles: &[Pos]) -> Self {
-        self.sprites.extend(tiles.iter().map(|&tile| (tile, None)));
+        let genomes = tiles.iter().map(|&tile| (tile, SpriteGenome::Starter));
+        self.sprites.extend(genomes);
         self
     }
 
     /// Sprites as `(tile, genes)`, the starter genome where there are none
     /// (appends).
     pub fn sprites_with(mut self, sprites: Vec<(Pos, Option<Genome>)>) -> Self {
-        self.sprites.extend(sprites);
+        let genomes = sprites.into_iter().map(|(tile, genome)| {
+            let genome = genome.map_or(SpriteGenome::Starter, SpriteGenome::Made);
+            (tile, genome)
+        });
+        self.sprites.extend(genomes);
+        self
+    }
+
+    /// Sprites as `(tile, genes)`, the genes written as in a genome file and
+    /// read with the world's data pack, the built-in one or [`Self::data`]'s,
+    /// once the world is built (appends).
+    pub fn genes(mut self, sprites: &[(Pos, &'a str)]) -> Self {
+        let genomes = sprites
+            .iter()
+            .map(|&(tile, genes)| (tile, SpriteGenome::Genes(genes)));
+        self.sprites.extend(genomes);
         self
     }
 
@@ -118,10 +146,22 @@ impl<'a> WorldBuilder<'a> {
         let data = self.data.unwrap_or_else(pack);
         let rows: Vec<&str> = self.rows.iter().map(String::as_str).collect();
         let map = Map::from_ascii(&rows, &data).expect("valid drawing");
+        let sprites: Vec<(Pos, Option<Genome>)> = self
+            .sprites
+            .into_iter()
+            .map(|(tile, source)| match source {
+                SpriteGenome::Starter => (tile, None),
+                SpriteGenome::Made(genome) => (tile, Some(genome)),
+                SpriteGenome::Genes(genes) => {
+                    let genome = Genome::from_ron(genes, &data).expect("valid genes");
+                    (tile, Some(genome))
+                }
+            })
+            .collect();
         let scenario = Scenario {
             map,
             objects: self.objects,
-            sprites: &self.sprites,
+            sprites: &sprites,
             scripted: &self.scripted,
             newborns: &self.newborns,
         };
@@ -314,14 +354,52 @@ pub fn tick(app: &mut App, world: &mut World) {
 
 /// Sprite `id` finished `verb`, aimed at nothing, with `outcome`, on `tick`.
 pub fn finished(tick: u64, id: EntityId, verb: Verb, outcome: Outcome) -> Event {
+    acted(tick, id, verb, None, outcome, UNHURT)
+}
+
+/// Nobody hurt.
+pub const UNHURT: Hurt = Hurt {
+    actor: false,
+    target: false,
+};
+
+/// The actor hurt, by what it did.
+pub const HURT_ITSELF: Hurt = Hurt {
+    actor: true,
+    target: false,
+};
+
+/// The sprite it was aimed at hurt, by what was done to it.
+pub const HURT_TARGET: Hurt = Hurt {
+    actor: false,
+    target: true,
+};
+
+/// Aimed at sprite `id`: the target, and its type, a sprite's pseudo type
+/// 101, for [`acted`].
+pub fn at_sprite(id: EntityId) -> Option<(Target, u16)> {
+    Some((Target::Sprite(id), 101))
+}
+
+/// Sprite `id` finished `verb` on `tick`, with `outcome`, aimed at
+/// `target` of the object type given, if at anything, its attempt hurting
+/// whom `hurt` says. An aimed action that applied made its attempt.
+pub fn acted(
+    tick: u64,
+    id: EntityId,
+    verb: Verb,
+    target: Option<(Target, u16)>,
+    outcome: Outcome,
+    hurt: Hurt,
+) -> Event {
     let action = ActionView {
         verb,
         destination: None,
-        target: None,
-        target_type: None,
-        attempted: false,
+        target: target.map(|(target, _)| target),
+        target_type: target.map(|(_, target_type)| target_type),
+        attempted: target.is_some() && outcome == Outcome::Applied,
         target_gone: false,
-        hurt: Hurt::default(),
+        hurt,
         progress: Progress::Ended(outcome),
         remembered: false,
         heard: None,
@@ -482,6 +560,14 @@ pub const LETHAL_THORNS: Changes = (
     )],
 );
 
+/// Genes for a sprite that turns female and lays alone whenever it can (M2
+/// design §10.4).
+pub const LAYS_ALONE: &str = r#"(format: 1, genes: [
+    InitialConcentration(chem: "feminiser", value: 1.0),
+    InitialConcentration(chem: "longing", value: 1.0),
+    Instinct(inputs: [("always", false)], verb: BreedAlone, weight: 1.0),
+])"#;
+
 /// Genes for a sprite that grows up 10 ticks after it hatches, turns
 /// female and lays alone whenever it can.
 pub const LONE_MOTHER: &str = r#"(format: 1, genes: [
@@ -545,19 +631,9 @@ pub fn grow(
     sprites: &[(Pos, &str)],
     ticks: u64,
 ) -> World {
-    let pack = pack_changing(changes);
-    let sprites: Vec<(Pos, Option<Genome>)> = sprites
-        .iter()
-        .map(|&(pos, genes)| {
-            (
-                pos,
-                Some(Genome::from_ron(genes, &pack).expect("valid genes")),
-            )
-        })
-        .collect();
     let mut world = WorldBuilder::grass(width, height)
-        .sprites_with(sprites)
-        .data(pack)
+        .genes(sprites)
+        .data(pack_changing(changes))
         .seed(7)
         .build();
     run(&mut world, ticks);
@@ -675,3 +751,47 @@ pub fn inspector_line(app: &App, world: &World, start: &str) -> String {
     let (_, rows) = inspector_rows(app, world, 30);
     rows_from(&rows, start)[0].trim_start().to_string()
 }
+
+/// `Q`: what a plain left click does, where the Cursor is (design v21
+/// §6.5).
+pub const Q: Action = Action::Press {
+    button: Button::Left,
+    amplified: false,
+};
+
+/// `E`: what a plain right click does, where the Cursor is.
+pub const E: Action = Action::Press {
+    button: Button::Right,
+    amplified: false,
+};
+
+/// Sprite `id`, unnamed, died of `cause` at `age`, on `tick`.
+pub fn died(tick: u64, id: EntityId, cause: terra_sim::DeathCause, age: u64) -> Event {
+    Event {
+        tick,
+        kind: EventKind::Died {
+            id,
+            name: None,
+            cause,
+            age,
+        },
+    }
+}
+
+/// Each drive of the built-in pack, in its order, with the colour a sprite
+/// takes on the map in both built-in themes when it's the strongest
+/// (design §6.3, arousal M2 design §10, and anxiety §15.8).
+pub const DRIVE_COLOURS: [(&str, ratatui::style::Color); 9] = {
+    use ratatui::style::Color;
+    [
+        ("hunger", Color::Yellow),
+        ("thirst", Color::Cyan),
+        ("pain", Color::Red),
+        ("tiredness", Color::Blue),
+        ("boredom", Color::DarkGray),
+        ("loneliness", Color::Magenta),
+        ("crowdedness", Color::LightRed),
+        ("arousal", Color::LightMagenta),
+        ("anxiety", Color::LightGreen),
+    ]
+};

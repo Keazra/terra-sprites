@@ -3,7 +3,7 @@
 //! about it.
 
 mod common;
-use common::{WorldBuilder, at};
+use common::{WorldBuilder, at, hug, run_for, shock};
 
 use terra_sim::{
     Command, EventKind, Learned, Outcome, Pos, Progress, ScriptedAction, Target, Thing, Verb, World,
@@ -21,13 +21,7 @@ fn world(rows: &[&str], sprite: Pos, genes: &str) -> World {
     WorldBuilder::new(rows).sprites(&[(sprite, genes)]).build()
 }
 
-const OPEN: [&str; 5] = [
-    "...........",
-    "...........",
-    "...........",
-    "...........",
-    "...........",
-];
+const OPEN: [&str; 5] = ["..........."; 5];
 
 /// Shows the Cursor to sprites, on `tile`.
 fn show_cursor(world: &mut World, tile: Pos) {
@@ -68,9 +62,7 @@ fn a_visible_cursor_is_seen_as_the_cursor_and_a_sprite_goes_over_to_it() {
     assert_eq!(action.target, Some(Target::Cursor));
     // It's light, so a sprite may stand under it: it walks until it's on
     // the Cursor's tile or beside it.
-    for _ in 0..20 {
-        world.step();
-    }
+    run_for(&mut world, 20);
     let pos = the_sprite(&world).pos();
     assert!(pos.x >= 5 && pos.x <= 7, "it stopped at {pos:?}");
 }
@@ -117,9 +109,7 @@ fn a_sprite_backs_away_from_the_cursor() {
            Instinct(inputs: [("always", false)], verb: Retreat, weight: 3.0),"#,
     );
     show_cursor(&mut world, at(6, 2));
-    for _ in 0..4 {
-        world.step();
-    }
+    run_for(&mut world, 4);
     let action = the_sprite(&world).action().expect("an action");
     assert_eq!(action.verb, Verb::Retreat);
     assert!(
@@ -211,16 +201,9 @@ fn touch_after_eating(world: &mut World, shock: bool) {
     world.step();
     let sprite = the_sprite(world).id();
     world.submit(if shock {
-        Command::Correct {
-            sprite,
-            amplified: true,
-        }
+        common::shock(sprite)
     } else {
-        Command::Reward {
-            sprite,
-            amplified: true,
-            reach_back: 3,
-        }
+        hug(sprite, 3)
     });
     world.step();
 }
@@ -302,16 +285,9 @@ fn a_sprite_that_fears_the_cursor_backs_away_from_it_and_one_that_likes_it_goes_
         // Taught over and over, so the feeling counts.
         for _ in 0..20 {
             world.submit(if shock {
-                Command::Correct {
-                    sprite,
-                    amplified: true,
-                }
+                common::shock(sprite)
             } else {
-                Command::Reward {
-                    sprite,
-                    amplified: true,
-                    reach_back: 3,
-                }
+                hug(sprite, 3)
             });
             world.step();
         }
@@ -351,10 +327,7 @@ fn afraid_of_the_cursor_in(rows: &[&str], rests: usize) -> World {
     show_cursor(&mut world, at(2, 2));
     let sprite = the_sprite(&world).id();
     for _ in 0..20 {
-        world.submit(Command::Correct {
-            sprite,
-            amplified: true,
-        });
+        world.submit(shock(sprite));
         world.step();
     }
     world.step();
@@ -367,9 +340,7 @@ fn a_sprite_gets_used_to_a_feared_cursor_that_stays_on_it_and_does_nothing() {
     let mut world = afraid_of_the_cursor();
     let feared = value_of(&world, &fears_the_cursor());
     assert!(feared < -0.9, "{feared}");
-    for _ in 0..100 {
-        world.step();
-    }
+    run_for(&mut world, 100);
     let calmer = value_of(&world, &fears_the_cursor());
     assert!(calmer > feared / 2.0, "{feared} then {calmer}");
 }
@@ -384,9 +355,7 @@ fn a_feared_cursor_far_off_or_hidden_leaves_the_fear_as_it_was() {
         } else {
             Command::MoveCursor { tile: at(10, 4) }
         });
-        for _ in 0..100 {
-            world.step();
-        }
+        run_for(&mut world, 100);
         assert_eq!(value_of(&world, &fears_the_cursor()), feared, "hide {hide}");
     }
 }
@@ -401,9 +370,7 @@ fn a_feared_cursor_the_sprite_cannot_reach_leaves_the_fear_as_it_was() {
     let mut world = afraid_of_the_cursor_in(&walled, 130);
     let feared = value_of(&world, &fears_the_cursor());
     world.submit(Command::MoveCursor { tile: at(5, 2) });
-    for _ in 0..100 {
-        world.step();
-    }
+    run_for(&mut world, 100);
     assert_eq!(value_of(&world, &fears_the_cursor()), feared);
 }
 
@@ -440,9 +407,7 @@ fn about_to_be_shoved_into(into: &str, visible: bool, genes: &str) -> World {
 /// As `about_to_be_shoved_into_a_thornbush`, four ticks after the shove.
 fn shoved_into_a_thornbush(visible: bool) -> World {
     let mut world = about_to_be_shoved_into_a_thornbush(visible);
-    for _ in 0..4 {
-        world.step();
-    }
+    run_for(&mut world, 4);
     world
 }
 
@@ -478,17 +443,14 @@ fn a_crash_teaches_fear_of_the_cursor_only_in_its_own_tick() {
     let feared = value_of(&world, &fears_the_cursor());
     let sprite = the_sprite(&world).id();
     world.submit(Command::ShowCursor { visible: false });
-    world.submit(Command::Correct {
-        sprite,
-        amplified: true,
-    });
+    world.submit(shock(sprite));
     world.step();
     assert_eq!(value_of(&world, &fears_the_cursor()), feared);
 }
 
 /// The ticks stepped after the shove until the sprite crashed, counting the
 /// tick of the crash.
-fn ticks_to_crash(world: &mut World) -> usize {
+fn ticks_to_crash(world: &mut World) -> u64 {
     for ticks in 1..=6 {
         let crashed = world
             .step()
@@ -523,15 +485,10 @@ fn a_hidden_cursor_s_zap_in_the_tick_of_a_crash_teaches_no_fear_of_the_cursor() 
     // zap's, and the sprite couldn't see where that came from.
     let crash = ticks_to_crash(&mut about_to_be_shoved_into("berry_bush", true, ""));
     let mut world = about_to_be_shoved_into("berry_bush", true, "");
-    for _ in 1..crash {
-        world.step();
-    }
+    run_for(&mut world, crash - 1);
     let sprite = the_sprite(&world).id();
     world.submit(Command::ShowCursor { visible: false });
-    world.submit(Command::Correct {
-        sprite,
-        amplified: true,
-    });
+    world.submit(shock(sprite));
     let crashed = world
         .step()
         .iter()

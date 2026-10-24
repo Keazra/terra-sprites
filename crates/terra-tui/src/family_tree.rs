@@ -15,7 +15,7 @@ use terra_sim::{DeadView, DeathCause, EggView, EntityId, LifeStage, Origin, Spri
 use crate::app::App;
 use crate::inspector::{Hatching, hatching};
 use crate::policy::{Panel, Subject};
-use crate::text::{cause_name, group_thousands, label};
+use crate::text::{BOUND, cause_name, label, thousands, unbroken};
 
 /// What the world knows of a sprite on the tree.
 pub(crate) enum Known<'a> {
@@ -86,9 +86,6 @@ pub(crate) fn origin_text(origin: Origin) -> Option<&'static str> {
     }
 }
 
-/// A space that never breaks a line, between the words of a name.
-const BOUND: char = '\u{a0}';
-
 /// How a death reads: `died of old age`, `died young of dehydration`,
 /// `died hurt by thornbush`. Young is said only of a sprite that died
 /// before it grew up (M2 design §17.2).
@@ -106,7 +103,7 @@ fn death_text(dead: &DeadView, world: &World) -> String {
 /// When an egg hatches, as the tree says it.
 fn hatching_text(egg: &EggView, world: &World) -> String {
     match hatching(egg, world) {
-        Hatching::In(ticks) => format!("egg · hatches in {}", group_thousands(ticks)),
+        Hatching::In(ticks) => format!("egg · hatches in {}", thousands(ticks)),
         Hatching::OncePutDown => "egg · hatches once it's put down".to_string(),
         Hatching::OnceClear => "egg · hatches once nothing stands on it".to_string(),
     }
@@ -125,11 +122,6 @@ pub(crate) fn name_of(app: &App, world: &World, id: EntityId) -> String {
         return String::new();
     }
     label(id, app.names().get(id).or(Known::of(world, id).name()))
-}
-
-/// `name` as one word, never broken across lines.
-fn unbroken(name: &str) -> String {
-    name.replace(' ', &BOUND.to_string())
 }
 
 /// Where the tree draws a sprite: in which band, top to bottom.
@@ -201,7 +193,7 @@ impl Card {
                 "{} · {} · age {} · generation {}",
                 sprite.life_stage().name(),
                 sprite.sex().name(),
-                group_thousands(sprite.age()),
+                thousands(sprite.age()),
                 sprite.generation()
             ),
             Known::Egg(egg) => format!(
@@ -212,7 +204,7 @@ impl Card {
             Known::Dead(dead) => format!(
                 "{} at age {} · generation {}",
                 death_text(dead, world),
-                group_thousands(dead.age()),
+                thousands(dead.age()),
                 dead.generation()
             ),
             Known::Forgotten => "lived long ago".to_string(),

@@ -48,9 +48,10 @@
 
 #[path = "common/args.rs"]
 mod args;
+#[path = "common/parallel.rs"]
+mod parallel;
 
 use std::process::ExitCode;
-use std::sync::Mutex;
 
 use terra_sim::{
     DataPack, DeathCause, EventKind, Outcome, Removal, Verb, World, WorldConfig, drift,
@@ -294,9 +295,7 @@ fn main() -> ExitCode {
     let Some(options) = args::parse(usage, parse) else {
         return ExitCode::FAILURE;
     };
-    if cfg!(debug_assertions) {
-        eprintln!("warning: this is a debug build; add --release, or it will take a long time");
-    }
+    args::warn_if_debug(", or it will take a long time");
     let ways: Vec<&str> = options.ways.iter().map(|way| way.name).collect();
     let seeds: Vec<String> = options.seeds.iter().map(u64::to_string).collect();
     println!(
@@ -340,25 +339,13 @@ fn in_parallel(options: &Options) -> Vec<Run> {
             todo.push((way, seed));
         }
     }
-    let todo = Mutex::new(todo.into_iter());
-    let done = Mutex::new(Vec::new());
-    std::thread::scope(|scope| {
-        for _ in 0..options.jobs {
-            scope.spawn(|| {
-                loop {
-                    let next = todo.lock().expect("no thread panicked").next();
-                    let Some((way, seed)) = next else {
-                        break;
-                    };
-                    let run = run(way, seed, options);
-                    let mut done = done.lock().expect("no thread panicked");
-                    print_run(&run);
-                    done.push(run);
-                }
-            });
-        }
+    let mut done = parallel::in_parallel(todo, options.jobs, |(way, seed)| {
+        let run = run(way, seed, options);
+        // Its table printed whole, before another run's.
+        let _whole = std::io::stdout().lock();
+        print_run(&run);
+        run
     });
-    let mut done = done.into_inner().expect("no thread panicked");
     let order = |way: &Way| options.ways.iter().position(|&w| w.name == way.name);
     done.sort_by_key(|run| (order(run.way), run.seed));
     done

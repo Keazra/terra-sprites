@@ -172,10 +172,8 @@ pub(crate) fn brain_io(
     let inputs = brain_inputs(file.inputs, categories, chemicals, loci)?;
     let mut needs: Vec<usize> = Vec::new();
     for name in &file.needs {
-        let invalid = |problem: &str| DataError::Invalid {
-            file: BRAIN_IO.into(),
-            message: format!("the need `{name}` {problem}"),
-        };
+        let invalid =
+            |problem: &str| DataError::invalid(BRAIN_IO, format!("the need `{name}` {problem}"));
         let place = inputs
             .iter()
             .position(|input| &input.name == name)
@@ -196,9 +194,8 @@ pub(crate) fn brain_io(
     }
     let mut first_order: Vec<usize> = Vec::new();
     for name in &file.first_order {
-        let invalid = |problem: &str| DataError::Invalid {
-            file: BRAIN_IO.into(),
-            message: format!("the first-order need `{name}` {problem}"),
+        let invalid = |problem: &str| {
+            DataError::invalid(BRAIN_IO, format!("the first-order need `{name}` {problem}"))
         };
         let place = needs
             .iter()
@@ -227,10 +224,7 @@ fn brain_inputs(
     chemicals: &[Chemical],
     loci: &[Locus],
 ) -> Result<Vec<BrainInput>, DataError> {
-    let invalid = |message: String| DataError::Invalid {
-        file: BRAIN_IO.into(),
-        message,
-    };
+    let invalid = |message: String| DataError::invalid(BRAIN_IO, message);
     let mut inputs = Vec::new();
     for entry in entries {
         let source = match &entry.reads {
@@ -306,10 +300,7 @@ fn state_source(
     chemicals: &[Chemical],
     loci: &[Locus],
 ) -> Result<LocusRef, DataError> {
-    let invalid = |message: String| DataError::Invalid {
-        file: BRAIN_IO.into(),
-        message,
-    };
+    let invalid = |message: String| DataError::invalid(BRAIN_IO, message);
     match reads {
         ReadsEntry::Chem(chem) => {
             let chemical = chemicals

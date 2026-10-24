@@ -5,8 +5,8 @@
 
 mod common;
 use common::{
-    LONE, WorldBuilder, apply, at, click, follow, grab_app, object_on, pack_changing, point,
-    pointing_at, sprite_on, tick,
+    E, LAYS_ALONE, LONE, WorldBuilder, apply, at, click, follow, grab_app, object_on,
+    pack_changing, point, pointing_at, sprite_on, tick,
 };
 
 use terra_sim::{Command, Dir, EntityId, Pos, ScriptedAction, World};
@@ -173,19 +173,15 @@ fn the_aim_is_cancelled_when_what_the_cursor_held_is_gone() {
 fn e_aims_from_the_cursor_and_letting_it_go_or_pressing_it_again_sends() {
     // A terminal that doesn't report a key let go sends a second press
     // instead (design v25 §6.5).
-    let press = Action::Press {
-        button: Button::Right,
-        amplified: false,
-    };
     let release = Action::Release {
         button: Button::Right,
         at: None,
     };
-    for second in [release, press] {
+    for second in [release, E] {
         let mut world = field(&[(at(5, 5), "ball")], &[]);
         let mut app = grab_app(&world);
         hold(&mut app, &mut world, at(5, 5));
-        apply(&mut app, &world, press);
+        apply(&mut app, &world, E);
         point(&mut app, &world, at(5, 8));
         apply(&mut app, &world, second);
         let throw = Command::Throw {
@@ -500,19 +496,9 @@ fn the_aim_is_cancelled_when_the_led_sprite_dies() {
 /// can (M2 design §10.4), in a pack that lets her at once (§15.7), stepped
 /// until it has: the world and the egg.
 fn laid_an_egg(mother: Pos) -> (World, EntityId) {
-    let pack = pack_changing(&[LONE]);
-    let genome = terra_sim::Genome::from_ron(
-        r#"(format: 1, genes: [
-            InitialConcentration(chem: "feminiser", value: 1.0),
-            InitialConcentration(chem: "longing", value: 1.0),
-            Instinct(inputs: [("always", false)], verb: BreedAlone, weight: 1.0),
-        ])"#,
-        &pack,
-    )
-    .expect("a valid genome");
     let mut world = WorldBuilder::grass(20, 12)
-        .sprites_with(vec![(mother, Some(genome))])
-        .data(pack)
+        .data(pack_changing(&[LONE]))
+        .genes(&[(mother, LAYS_ALONE)])
         .build();
     let egg = (0..50)
         .flat_map(|_| world.step())

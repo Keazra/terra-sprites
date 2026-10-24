@@ -8,35 +8,15 @@ mod common;
 use common::{
     AGES_AT_ONCE, ALONE, FEMALE, KEEN, LONE, Laying, NO_COPYING_ERRORS, OLD, RECEPTIVE, UNPACED,
     WorldBuilder, at, builtin, builtin_changing, builtin_changing_files, close, endings, family,
-    family_in, genome, id_at, laid, lone, pulse_in_h1, starting_with, until, value_of, world_in,
+    family_in, genome, id_at, laid, lone, lone_mother_in, pet, pulse_in_h1, replayed, run_for,
+    shock, starting_with, until, value_of, world_in,
 };
 
 use proptest::prelude::*;
 use terra_sim::{
-    Command, DataPack, EntityId, EventKind, Learned, LifeStage, Outcome, Part, Playback, Pos,
-    Rejection, ScriptedAction, Sex, Target, Thing, Verb, World,
+    Command, DataPack, EntityId, EventKind, Learned, LifeStage, Outcome, Part, Pos, Rejection,
+    ScriptedAction, Sex, Target, Thing, Verb, World,
 };
-
-/// A small field of grass with a sprite of `genes` on each tile of
-/// `sprites`, those on `young` as newborns and the rest just grown up.
-fn field(genes: &str, sprites: &[Pos], young: &[Pos], seed: u64) -> World {
-    field_in(builtin(), genes, sprites, young, seed)
-}
-
-/// `field`, with the data pack `data`.
-fn field_in(data: DataPack, genes: &str, sprites: &[Pos], young: &[Pos], seed: u64) -> World {
-    let genome = genome(genes, &data);
-    let placed = sprites
-        .iter()
-        .map(|&pos| (pos, Some(genome.clone())))
-        .collect();
-    WorldBuilder::new(&["........", "........", "........", "........"])
-        .data(data)
-        .sprites_with(placed)
-        .newborns(young)
-        .seed(seed)
-        .build()
-}
 
 /// A Mate or Court action as it started: the life stage of the sprite
 /// mating or courting, and of the sprite it's aimed at, or `None` if it's
@@ -88,7 +68,7 @@ fn matings(world: &mut World, ticks: u64) -> Vec<Mating> {
 
 #[test]
 fn an_adult_keen_to_mate_mates_with_an_adult() {
-    let mut world = field(KEEN, &[at(2, 1), at(3, 1)], &[], 1);
+    let mut world = family(&[(at(2, 1), KEEN), (at(3, 1), KEEN)], &[], 1);
     let found = matings(&mut world, 20);
     assert!(!found.is_empty(), "no adult mated");
     assert!(
@@ -103,7 +83,7 @@ fn an_adult_keen_to_mate_mates_with_an_adult() {
 fn an_adult_never_mates_with_a_young_sprite_nor_a_young_one_at_all() {
     // M2 design §5: Mate isn't offered unless both are adults, so the
     // instinct has nothing to choose.
-    let mut world = field(KEEN, &[at(2, 1), at(3, 1)], &[at(3, 1)], 1);
+    let mut world = family(&[(at(2, 1), KEEN), (at(3, 1), KEEN)], &[at(3, 1)], 1);
     assert_eq!(matings(&mut world, 200), []);
 }
 
@@ -268,7 +248,7 @@ fn an_adult_is_fertile_only_while_its_energy_and_hydration_are_both_above_0_4() 
     // start.
     let fertile = |energy: f32, hydration: f32| {
         let data = starting_with(energy, hydration);
-        let mut world = field_in(data, REST, &[at(2, 1)], &[], 1);
+        let mut world = family_in(data, &[(at(2, 1), REST)], &[], 1);
         world.step();
         world.sprites().next().expect("the sprite").is_fertile()
     };
@@ -326,8 +306,7 @@ fn an_old_pair_is_still_fertile_and_lays() {
 fn an_egg_hatches_after_750_ticks_as_a_young_male_where_it_lies() {
     // M2 design §10.4: the item is gone, and the young sprite it held
     // stands on its tile, with its ID, born as it hatched.
-    let female = format!("{ALONE}{FEMALE}");
-    let mut world = family_in(lone(), &[(at(2, 1), &female)], &[], 1);
+    let mut world = lone_mother_in(lone(), 1);
     let Laying {
         egg,
         by: mother,
@@ -358,8 +337,7 @@ fn an_egg_hatches_after_750_ticks_as_a_young_male_where_it_lies() {
 fn an_egg_lies_still_as_an_item_until_it_hatches() {
     // M2 design §10.4: an egg is no sprite, so it does nothing and needs
     // nothing, and a sprite's mother walks off it, as over any item.
-    let female = format!("{ALONE}{FEMALE}");
-    let mut world = family_in(lone(), &[(at(2, 1), &female)], &[], 1);
+    let mut world = lone_mother_in(lone(), 1);
     let egg = laid(&mut world, 50).expect("an egg").egg;
     let pos = world.egg(egg).unwrap().pos();
     for _ in 0..700 {
@@ -375,8 +353,7 @@ fn the_cursor_picks_up_and_puts_down_an_egg_but_never_throws_pets_or_zaps_it() {
     // M2 design §10.4, #196: an egg is an item, which the Cursor's Grab
     // mode holds as it does a berry; its type's data says it can't be
     // thrown; and pets and zaps are for sprites.
-    let female = format!("{ALONE}{FEMALE}");
-    let mut world = family_in(lone(), &[(at(2, 1), &female)], &[], 1);
+    let mut world = lone_mother_in(lone(), 1);
     let egg = laid(&mut world, 50).expect("an egg").egg;
     let pos = world.egg(egg).unwrap().pos().unwrap();
     let refused = |world: &mut World, commands: &[Command]| -> Vec<(Command, Rejection)> {
@@ -392,18 +369,7 @@ fn the_cursor_picks_up_and_puts_down_an_egg_but_never_throws_pets_or_zaps_it() {
             })
             .collect()
     };
-    let touches = [
-        Command::Reward {
-            sprite: egg,
-            amplified: false,
-            reach_back: 10,
-        },
-        Command::Correct {
-            sprite: egg,
-            amplified: true,
-        },
-        Command::TakeHold { sprite: egg },
-    ];
+    let touches = [pet(egg, 10), shock(egg), Command::TakeHold { sprite: egg }];
     let expected: Vec<_> = touches
         .iter()
         .map(|c| (c.clone(), Rejection::Gone))
@@ -439,8 +405,7 @@ fn the_cursor_picks_up_and_puts_down_an_egg_but_never_throws_pets_or_zaps_it() {
 #[test]
 fn an_egg_held_when_it_is_due_hatches_on_the_tick_it_is_put_down() {
     // #196: while the Cursor holds it, an egg waits.
-    let female = format!("{ALONE}{FEMALE}");
-    let mut world = family_in(lone(), &[(at(2, 1), &female)], &[], 1);
+    let mut world = lone_mother_in(lone(), 1);
     let egg = laid(&mut world, 50).expect("an egg").egg;
     world.submit(Command::PickUp { item: egg });
     let due = world.egg(egg).unwrap().hatches();
@@ -594,9 +559,7 @@ fn a_female_longs_for_a_male_only_while_she_sees_no_male_adult() {
     let longing = |young: &[Pos]| {
         let mut world = family(&[(at(1, 1), &female), (at(6, 2), REST)], young, 1);
         let her = world.sprite_at(at(1, 1)).unwrap().id();
-        for _ in 0..2_000 {
-            world.step();
-        }
+        run_for(&mut world, 2_000);
         let her = world.sprite(her).unwrap();
         assert_eq!(her.sex(), Sex::Female);
         her.chemical("longing").unwrap()
@@ -670,8 +633,7 @@ fn a_pack_from_before_eggs_were_items_lays_egg_items_that_hatch_when_it_says() {
             ],
         ),
     ]);
-    let female = format!("{ALONE}{FEMALE}");
-    let mut world = family_in(old, &[(at(2, 1), &female)], &[], 1);
+    let mut world = lone_mother_in(old, 1);
     let laying = laid(&mut world, 50).expect("an egg");
     let egg = world.egg(laying.egg).expect("an egg item");
     assert_eq!(egg.type_name(), "egg");
@@ -710,8 +672,7 @@ fn an_egg_saved_and_loaded_hatches_the_same() {
 fn a_birth_hashes_differently() {
     // Births are world state (M2 design §10): two worlds alike but for an
     // egg aren't the same world.
-    let female = format!("{ALONE}{FEMALE}");
-    let mut laying = family_in(lone(), &[(at(2, 1), &female)], &[], 1);
+    let mut laying = lone_mother_in(lone(), 1);
     let mut not = family_in(lone(), &[(at(2, 1), FEMALE)], &[], 1);
     laid(&mut laying, 50).expect("an egg");
     while not.tick() < laying.tick() {
@@ -734,12 +695,7 @@ fn births_replay_exactly() {
             .count();
     }
     assert!(births >= 2, "an egg was laid and hatched");
-    let mut playback = Playback::new(&world.replay().unwrap()).expect("the replay plays");
-    while playback.world().tick() < playback.end() {
-        playback.step();
-    }
-    assert_eq!(playback.divergence(), None);
-    assert_eq!(playback.world().state_hash(), world.state_hash());
+    replayed(&world);
 }
 
 /// Mates with the sprite it attends to while both are aroused and of the

@@ -519,8 +519,8 @@ fn part(state: &mut WorldState, data: &DataPack, events: &mut Vec<Event>) {
 mod tests {
     use super::*;
     use crate::genome::Genome;
-    use crate::test_util::{at, builtin_changing, id_at};
-    use crate::world::{Scenario, World};
+    use crate::test_util::{WorldBuilder, at, builtin_changing, id_at};
+    use crate::world::World;
 
     /// A sprite that sees `sight` tiles and calls all the time, or with
     /// `calls` false, rests.
@@ -547,16 +547,13 @@ mod tests {
     ) -> (World, EntityId, EntityId) {
         let data = builtin_changing("physiology.ron", &[("apart: 4500,", "apart: 50,")]);
         let row = ".".repeat(30);
-        let map = Map::from_ascii(&[row.as_str()], &data).expect("valid drawing");
-        let sprites = [(at(0, 0), Some(a(&data))), (at(gap, 0), Some(b(&data)))];
-        let scenario = Scenario {
-            map,
-            objects: &[],
-            sprites: &sprites,
-            scripted: &[],
-            newborns: &[],
-        };
-        let world = World::from_scenario(scenario, data, 1).expect("valid scenario");
+        let world = WorldBuilder::new(&[row.as_str()])
+            .sprites_with(vec![
+                (at(0, 0), Some(a(&data))),
+                (at(gap, 0), Some(b(&data))),
+            ])
+            .data(data)
+            .build();
         let (a, b) = (id_at(&world, at(0, 0)), id_at(&world, at(gap, 0)));
         (world, a, b)
     }

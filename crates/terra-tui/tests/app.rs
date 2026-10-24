@@ -1,10 +1,10 @@
 mod common;
-use common::{WorldBuilder, at, finished, map_app, map_only, sprite_on};
+use common::{
+    UNHURT, WorldBuilder, acted, at, at_sprite, died, finished, map_app, map_only, sprite_on,
+};
 
 use ratatui::layout::{Position, Rect};
-use terra_sim::{
-    ActionView, DeathCause, EntityId, Event, EventKind, Outcome, Pos, Target, Verb, World,
-};
+use terra_sim::{DeathCause, EntityId, Outcome, Pos, Verb, World};
 use terra_tui::app::{App, Flow, Origin, Screen, Selection, Tab};
 use terra_tui::clock::Speed;
 use terra_tui::input::{Action, Button};
@@ -332,11 +332,7 @@ fn a_click_or_a_turn_of_the_wheel_leaves_the_quit_prompt_open() {
     app.apply(Action::Back, &world);
     let at = Position::new(3, 3);
     for pointer in [
-        Action::Click {
-            at,
-            button: Button::Left,
-            amplified: false,
-        },
+        Action::left_click(at),
         Action::Wheel { at, notches: 1 },
         Action::Wheel { at, notches: -1 },
     ] {
@@ -496,31 +492,20 @@ fn clearing_the_selection_leaves_the_tab_open() {
     assert_eq!((app.selection(), app.tab()), (None, Tab::Body));
 }
 
-fn died(id: EntityId, cause: DeathCause, age: u64) -> Event {
-    Event {
-        tick: age,
-        kind: EventKind::Died {
-            id,
-            name: None,
-            cause,
-            age,
-        },
-    }
-}
-
 #[test]
 fn the_selection_remembers_how_the_selected_sprite_died() {
     let world = grass_with(20, 10, &[at(3, 4), at(6, 2)]);
     let ids: Vec<EntityId> = world.sprites().map(|s| s.id()).collect();
     let mut app = map_app(&world, tile_area(20, 10));
     app.apply(Action::SelectNext, &world);
-    app.record(&[died(ids[1], DeathCause::Starvation, 90)], &world);
+    app.record(&[died(90, ids[1], DeathCause::Starvation, 90)], &world);
     assert_eq!(
         app.selection(),
         Some(Selection::Living(ids[0])),
         "another sprite's death"
     );
-    app.record(&[died(ids[0], DeathCause::Dehydration, 4_012)], &world);
+    let dehydrated = died(4_012, ids[0], DeathCause::Dehydration, 4_012);
+    app.record(&[dehydrated], &world);
     assert_eq!(
         app.selection(),
         Some(Selection::Dead {
@@ -540,11 +525,11 @@ fn after_the_selected_sprite_dies_tab_carries_on_from_its_id() {
     let mut app = map_app(&world, tile_area(20, 10));
     app.apply(Action::SelectNext, &world);
     app.apply(Action::SelectNext, &world);
-    app.record(&[died(ids[1], DeathCause::OldAge, 70_000)], &world);
+    app.record(&[died(70_000, ids[1], DeathCause::OldAge, 70_000)], &world);
     app.apply(Action::SelectNext, &world);
     assert_eq!(app.selection(), Some(Selection::Living(ids[2])));
 
-    app.record(&[died(ids[2], DeathCause::OldAge, 70_000)], &world);
+    app.record(&[died(70_000, ids[2], DeathCause::OldAge, 70_000)], &world);
     app.apply(Action::SelectPrevious, &world);
     assert_eq!(app.selection(), Some(Selection::Living(ids[1])));
 }
@@ -599,31 +584,9 @@ fn the_observed_list_keeps_what_the_selected_sprite_finished_newest_first() {
     );
 }
 
-/// Sprite `id` finished `verb` at sprite `target`, with `outcome`, on `tick`.
-fn finished_at(tick: u64, id: EntityId, verb: Verb, target: EntityId, outcome: Outcome) -> Event {
-    let Event { tick, kind } = finished(tick, id, verb, outcome);
-    let EventKind::ActionEnded { action, .. } = kind else {
-        unreachable!("finished makes an ending");
-    };
-    let action = ActionView {
-        target: Some(Target::Sprite(target)),
-        target_type: Some(101),
-        attempted: outcome == Outcome::Applied,
-        ..action
-    };
-    Event {
-        tick,
-        kind: EventKind::ActionEnded {
-            id,
-            verb,
-            outcome,
-            action,
-        },
-    }
-}
-
 #[test]
 fn the_observed_list_also_keeps_what_others_did_to_the_selected_sprite() {
+    use Outcome::{Applied, Interrupted};
     let world = grass_with(20, 10, &[at(3, 4), at(6, 2)]);
     let ids: Vec<EntityId> = world.sprites().map(|s| s.id()).collect();
     let (me, other) = (ids[0], ids[1]);
@@ -631,10 +594,10 @@ fn the_observed_list_also_keeps_what_others_did_to_the_selected_sprite() {
     app.apply(Action::SelectNext, &world);
     app.record(
         &[
-            finished_at(3, other, Verb::Hit, me, Outcome::Applied),
-            finished_at(4, other, Verb::Hit, me, Outcome::Interrupted),
-            finished_at(5, other, Verb::Play, other, Outcome::Applied),
-            finished_at(6, other, Verb::Play, me, Outcome::Applied),
+            acted(3, other, Verb::Hit, at_sprite(me), Applied, UNHURT),
+            acted(4, other, Verb::Hit, at_sprite(me), Interrupted, UNHURT),
+            acted(5, other, Verb::Play, at_sprite(other), Applied, UNHURT),
+            acted(6, other, Verb::Play, at_sprite(me), Applied, UNHURT),
         ],
         &world,
     );

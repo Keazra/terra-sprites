@@ -2,7 +2,7 @@
 //! game's folder.
 
 mod common;
-use common::{DATA_FOLDER, WorldBuilder, app_in, app_on, at, lines, render};
+use common::{DATA_FOLDER, DRIVE_COLOURS, WorldBuilder, app_in, app_on, at, lines, render};
 
 use ratatui::style::Color;
 use terra_sim::World;
@@ -110,19 +110,11 @@ fn the_legend_shows_each_drive_s_colour_and_each_emote() {
                 (name, screen[(x, y)].fg)
             })
             .collect();
-        let expected = [
-            ("hunger", Color::Yellow),
-            ("thirst", Color::Cyan),
-            ("pain", Color::Red),
-            ("tiredness", Color::Blue),
-            ("boredom", Color::DarkGray),
-            ("loneliness", Color::Magenta),
-            ("crowdedness", Color::LightRed),
-            ("arousal", Color::LightMagenta),
-            ("anxiety", Color::LightGreen),
-            ("none", Color::White),
-        ]
-        .map(|(name, colour)| (name.to_string(), colour));
+        let expected: Vec<(String, Color)> = DRIVE_COLOURS
+            .iter()
+            .chain(&[("none", Color::White)])
+            .map(|&(name, colour)| (name.to_string(), colour))
+            .collect();
         assert_eq!(colours, expected);
         let emote_row = rows[usize::from(emotes_at)]
             .trim_start_matches('│')

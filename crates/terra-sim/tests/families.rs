@@ -8,8 +8,8 @@
 
 mod common;
 use common::{
-    ALONE, FEMALE, LONE, RECEPTIVE, at, builtin, builtin_changing, hatch, id_at, laid, lone,
-    world_in,
+    ALONE, FEMALE, LONE, RECEPTIVE, RESTER, at, builtin, builtin_changing, grass, hatch, id_at,
+    laid, lone, world_in,
 };
 
 use terra_sim::{
@@ -53,17 +53,6 @@ const PAIR: &str = r#"
     Instinct(inputs: [("paired", false)], verb: Rest, weight: 1.0),
     BrainParam(param: "tau_base", value: 0.02),
 "#;
-
-/// Rests, and does nothing else.
-const RESTER: &str = r#"
-    Instinct(inputs: [("always", false)], verb: Rest, weight: 1.0),
-    BrainParam(param: "tau_base", value: 0.02),
-"#;
-
-/// A field of grass `width` by `height` tiles.
-fn field(width: usize, height: usize) -> Vec<String> {
-    (0..height).map(|_| ".".repeat(width)).collect()
-}
 
 /// Where the egg `egg` lies.
 fn egg_at(world: &World, egg: EntityId) -> Pos {
@@ -122,8 +111,7 @@ fn a_parent_goes_back_to_where_it_last_saw_its_egg() {
     // M2 design §15.6: the egg out of sight is offered like a remembered
     // place, and going to it is a trip; once in sight it's an ordinary
     // action aimed at the egg.
-    let rows = field(40, 3);
-    let rows: Vec<&str> = rows.iter().map(String::as_str).collect();
+    let rows = grass(40, 3);
     let (mut world, mother, egg, tile) = mother_led_away(lone(), &rows, at(36, 1));
     let mut by_memory = false;
     let mut came = false;
@@ -151,8 +139,7 @@ fn a_parent_goes_back_to_where_it_last_saw_its_egg() {
 fn a_parent_that_finds_its_egg_gone_forgets_where_it_was() {
     // M2 design §15.6: the Cursor moves the egg out of sight of where it
     // was, and the mother, got there, has lost it.
-    let rows = field(40, 30);
-    let rows: Vec<&str> = rows.iter().map(String::as_str).collect();
+    let rows = grass(40, 30);
     let (mut world, mother, egg, tile) = mother_led_away(lone(), &rows, at(36, 1));
     world.submit(Command::PickUp { item: egg });
     world.submit(Command::PutDown { tile: at(2, 28) });
@@ -181,8 +168,7 @@ fn a_parent_that_finds_its_egg_gone_forgets_where_it_was() {
 fn a_parent_s_eye_goes_to_its_own_egg_before_a_nearer_one() {
     // M2 design §15.6: the egg category offers a parent its own egg, not
     // only the nearest.
-    let rows = field(30, 3);
-    let rows: Vec<&str> = rows.iter().map(String::as_str).collect();
+    let rows = grass(30, 3);
     let genes = format!(
         r#"
         AttentionInstinct(input: "always", category: "egg", whom: Family, weight: 1.0),
@@ -219,8 +205,7 @@ fn a_parent_s_eye_goes_to_its_own_egg_before_a_nearer_one() {
 /// of `weight`: its mother 5 tiles off, or a stranger beside it. The tile it
 /// attends to, its mother's and the stranger's.
 fn young_looks(weight: f32) -> (Option<Pos>, Pos, Pos) {
-    let rows = field(14, 5);
-    let rows: Vec<&str> = rows.iter().map(String::as_str).collect();
+    let rows = grass(14, 5);
     let genes = format!(
         r#"
         AttentionInstinct(input: "always", category: "sprite", whom: Parent, weight: {weight:?}),
@@ -268,8 +253,7 @@ fn a_young_sprite_s_eye_goes_to_its_parent_before_a_nearer_stranger() {
 
 #[test]
 fn eggs_remembered_saved_and_loaded_are_the_same_world() {
-    let rows = field(40, 3);
-    let rows: Vec<&str> = rows.iter().map(String::as_str).collect();
+    let rows = grass(40, 3);
     let (world, _, _, _) = mother_led_away(lone(), &rows, at(36, 1));
     let loaded = World::load(&world.save()).expect("the save loads");
     assert_eq!(loaded.state_hash(), world.state_hash());
@@ -280,8 +264,7 @@ fn eggs_remembered_saved_and_loaded_are_the_same_world() {
 /// sight, once they've had an egg and are partners: the world, her, him,
 /// the third sprite and where the egg lies.
 fn partners(hers: &str, his: &str, third: &str) -> (World, EntityId, EntityId, EntityId, Pos) {
-    let rows = field(40, 3);
-    let rows: Vec<&str> = rows.iter().map(String::as_str).collect();
+    let rows = grass(40, 3);
     let (hers, his) = (
         format!("{PAIR}{FEMALE}{RECEPTIVE}{hers}"),
         format!("{PAIR}{his}"),
@@ -358,8 +341,7 @@ fn partners_sense_each_other_away_and_find_each_other_and_look_to_each_other() {
 /// 6 tiles from her, and a resting stranger between them, in a field 24
 /// tiles by 3: the world, the mother, the young one and the stranger.
 fn mother_young_and_stranger(genes: &str) -> (World, EntityId, EntityId, EntityId) {
-    let rows = field(24, 3);
-    let rows: Vec<&str> = rows.iter().map(String::as_str).collect();
+    let rows = grass(24, 3);
     let genes = format!(
         r#"{genes}
         BrainParam(param: "tau_base", value: 0.02),
@@ -457,8 +439,7 @@ fn the_brain_reads_whether_what_it_attends_to_is_its_family() {
 fn a_young_one_and_its_mother_sense_each_other_away_and_find_each_other() {
     // M2 design §15.6: a young one of its own out of sight; no parent in
     // sight; and finding each other again.
-    let rows = field(40, 3);
-    let rows: Vec<&str> = rows.iter().map(String::as_str).collect();
+    let rows = grass(40, 3);
     let genes = format!(r#"{SENSES}{RESTER}{ALONE}{FEMALE}"#);
     let mut world = world_in(lone(), &rows, &[(at(2, 1), &genes)]);
     let mother = id_at(&world, at(2, 1));
@@ -489,8 +470,7 @@ fn an_egg_that_hatches_out_of_sight_is_not_found_and_not_gone_back_to() {
     // M2 design §15.6: the egg's hatching ends the egg's sense and starts
     // the young one's, with nothing found, and the parent forgets where the
     // egg lay.
-    let rows = field(40, 3);
-    let rows: Vec<&str> = rows.iter().map(String::as_str).collect();
+    let rows = grass(40, 3);
     let genes = format!(
         r#"{SENSES}
         AttentionInstinct(input: "always", category: "egg", whom: Family, weight: 1.0),
@@ -535,8 +515,7 @@ fn an_egg_that_hatches_out_of_sight_while_another_is_in_sight_is_not_found() {
     // M2 design §15.6: with one egg in sight and the other away, the away
     // one hatching ends the egg's sense, but nothing was found: found_family
     // is for one back in sight. Two eggs a hundred ticks apart.
-    let rows = field(40, 3);
-    let rows: Vec<&str> = rows.iter().map(String::as_str).collect();
+    let rows = grass(40, 3);
     let data = builtin_changing("physiology.ron", &[LONE, ("rest: 1500,", "rest: 100,")]);
     let genes = format!("{SENSES}{ALONE}{FEMALE}");
     let mut world = world_in(data, &rows, &[(at(2, 1), &genes)]);
@@ -581,8 +560,7 @@ fn an_egg_that_hatches_out_of_sight_while_another_is_in_sight_is_not_found() {
 /// the lone egg she laid beside her, in `lone`'s pack: the world, the
 /// mother, the egg and where it lay. Her egg was beside her until then.
 fn mother_whose_egg_the_cursor_holds() -> (World, EntityId, EntityId, Pos) {
-    let rows = field(20, 3);
-    let rows: Vec<&str> = rows.iter().map(String::as_str).collect();
+    let rows = grass(20, 3);
     let genes = format!(
         r#"{SENSES}{RESTER}{ALONE}{FEMALE}
         BrainParam(param: "curiosity", value: 0.0),"#

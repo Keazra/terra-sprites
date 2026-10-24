@@ -109,9 +109,7 @@ fn main() -> ExitCode {
     let Some(options) = args::parse("rest [--ticks N] [--seeds A-B] [--sprites]", parse) else {
         return ExitCode::FAILURE;
     };
-    if cfg!(debug_assertions) {
-        eprintln!("warning: this is a debug build; add --release, or it will take a long time");
-    }
+    args::warn_if_debug(", or it will take a long time");
     let data = DataPack::builtin().expect("the built-in data pack is valid");
     let (first, last) = options.seeds;
     println!(
@@ -230,13 +228,10 @@ fn parse(args: &[String]) -> Result<Options, String> {
     while let Some(flag) = args.next() {
         match flag.as_str() {
             "--sprites" => options.per_sprite = true,
-            "--ticks" => options.ticks = args::number("--ticks", &mut args)?,
+            "--ticks" => options.ticks = args::positive("--ticks", &mut args)?,
             "--seeds" => options.seeds = args::seeds("--seeds", &mut args)?,
             _ => return Err(format!("unknown argument {flag}")),
         }
-    }
-    if options.ticks == 0 {
-        return Err("--ticks needs a number above 0".to_string());
     }
     Ok(options)
 }

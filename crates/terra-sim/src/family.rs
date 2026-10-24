@@ -298,10 +298,9 @@ impl Sprite {
 mod tests {
     use super::*;
     use crate::genome::Genome;
-    use crate::map::Map;
     use crate::physiology::FamilyIndices;
-    use crate::test_util::{at, builtin, id_at};
-    use crate::world::{Scenario, World};
+    use crate::test_util::{WorldBuilder, at, builtin, id_at};
+    use crate::world::World;
 
     /// A resting mother on a row of grass 40 tiles long, with two young of
     /// hers, one 2 tiles off, in her sight, and one 30 off, out of it, after
@@ -310,7 +309,6 @@ mod tests {
     fn mother_and_two_young() -> (World, EntityId, EntityId, EntityId) {
         let data = builtin();
         let row = ".".repeat(40);
-        let map = Map::from_ascii(&[row.as_str()], &data).expect("valid drawing");
         let genes = r#"(format: 2, genes: [
             Trait(trait: "speed", value: 10.0),
             Trait(trait: "sense_radius", value: 10.0),
@@ -319,14 +317,11 @@ mod tests {
         ])"#;
         let genome = Genome::from_ron(genes, &data).expect("a valid genome");
         let sprites = [0, 2, 30].map(|x| (at(x, 0), Some(genome.clone())));
-        let scenario = Scenario {
-            map,
-            objects: &[],
-            sprites: &sprites,
-            scripted: &[],
-            newborns: &[at(2, 0), at(30, 0)],
-        };
-        let mut world = World::from_scenario(scenario, data, 1).expect("valid scenario");
+        let mut world = WorldBuilder::new(&[row.as_str()])
+            .sprites_with(sprites.into())
+            .newborns(&[at(2, 0), at(30, 0)])
+            .data(data)
+            .build();
         let [mother, near, away] = [0, 2, 30].map(|x| id_at(&world, at(x, 0)));
         let (state, _) = world.parts();
         for young in [near, away] {
