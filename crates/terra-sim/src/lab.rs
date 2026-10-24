@@ -216,7 +216,7 @@ impl std::fmt::Display for LabError {
 impl std::error::Error for LabError {}
 
 /// What one seed's run counted in each window.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct LabRun {
     pub windows: Vec<Window>,
     /// The control run's windows, if the scenario asks for one.
@@ -226,7 +226,7 @@ pub struct LabRun {
 }
 
 /// What happened in one window of a run.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Window {
     pub from: u64,
     pub to: u64,
@@ -456,15 +456,7 @@ impl LabScenario {
             .map(|&(from, to)| Window {
                 from,
                 to,
-                applied: BTreeMap::new(),
-                deaths: BTreeMap::new(),
-                touches: BTreeMap::new(),
-                lessons: BTreeMap::new(),
-                young: None,
-                first: Childhood::default(),
-                later: Childhood::default(),
-                stage_deaths: BTreeMap::new(),
-                first_died: 0,
+                ..Default::default()
             })
             .collect();
         // The world's first sprites, and each sprite's life stage, to count
@@ -999,15 +991,7 @@ mod tests {
         Window {
             from: 0,
             to: 2,
-            applied: BTreeMap::new(),
-            deaths: BTreeMap::new(),
-            touches: BTreeMap::new(),
-            lessons: BTreeMap::new(),
-            young: None,
-            first: Childhood::default(),
-            later: Childhood::default(),
-            stage_deaths: BTreeMap::new(),
-            first_died: 0,
+            ..Default::default()
         }
     }
 

@@ -1046,15 +1046,8 @@ mod tests {
         Window {
             from,
             to,
-            applied: BTreeMap::new(),
             deaths: deaths.iter().copied().collect(),
-            touches: BTreeMap::new(),
-            lessons: BTreeMap::new(),
-            young: None,
-            first: Childhood::default(),
-            later: Childhood::default(),
-            stage_deaths: BTreeMap::new(),
-            first_died: 0,
+            ..Default::default()
         }
     }
 
@@ -1080,8 +1073,7 @@ mod tests {
                 deaths_window(0, 30_000, by_30k),
                 dying_window(0, 50_000, by_50k),
             ],
-            control: None,
-            without: None,
+            ..Default::default()
         }
     }
 
@@ -1105,8 +1097,7 @@ mod tests {
         };
         LabRun {
             windows: vec![window],
-            control: None,
-            without: None,
+            ..Default::default()
         }
     }
 
