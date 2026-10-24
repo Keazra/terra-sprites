@@ -7,6 +7,11 @@ fn press(code: KeyCode) -> KeyEvent {
     KeyEvent::new(code, KeyModifiers::NONE)
 }
 
+/// What a fresh `Keys` makes of a press of `code`.
+fn action_for(code: KeyCode) -> Option<Action> {
+    Keys::new().action_for(press(code))
+}
+
 fn kind(code: KeyCode, kind: KeyEventKind) -> KeyEvent {
     KeyEvent::new_with_kind(code, KeyModifiers::NONE, kind)
 }
@@ -268,7 +273,7 @@ fn wasd_and_the_arrows_scroll_the_viewport_one_tile() {
         (KeyCode::Right, one(1, 0)),
     ];
     for (code, expected) in cases {
-        assert_eq!(Keys::new().action_for(press(code)), expected, "{code:?}");
+        assert_eq!(action_for(code), expected, "{code:?}");
     }
 }
 
@@ -319,34 +324,25 @@ fn holding_a_scroll_key_keeps_scrolling() {
 
 #[test]
 fn escape_and_y_answer_the_quit_prompt_and_q_no_longer_quits() {
-    assert_eq!(
-        Keys::new().action_for(press(KeyCode::Esc)),
-        Some(Action::Back)
-    );
-    assert_eq!(
-        Keys::new().action_for(press(KeyCode::Char('y'))),
-        Some(Action::Confirm)
-    );
+    assert_eq!(action_for(KeyCode::Esc), Some(Action::Back));
+    assert_eq!(action_for(KeyCode::Char('y')), Some(Action::Confirm));
     // `q` is the left click now (design v21 §6.5).
-    assert_ne!(
-        Keys::new().action_for(press(KeyCode::Char('q'))),
-        Some(Action::Quit)
-    );
+    assert_ne!(action_for(KeyCode::Char('q')), Some(Action::Quit));
 }
 
 #[test]
 fn z_x_and_c_pick_select_train_and_grab() {
     // Design v21 §6.5, v23.
     assert_eq!(
-        Keys::new().action_for(press(KeyCode::Char('z'))),
+        action_for(KeyCode::Char('z')),
         Some(Action::Mode(CursorMode::Select))
     );
     assert_eq!(
-        Keys::new().action_for(press(KeyCode::Char('x'))),
+        action_for(KeyCode::Char('x')),
         Some(Action::Mode(CursorMode::Train))
     );
     assert_eq!(
-        Keys::new().action_for(press(KeyCode::Char('c'))),
+        action_for(KeyCode::Char('c')),
         Some(Action::Mode(CursorMode::Grab))
     );
 }
@@ -385,7 +381,7 @@ fn f_is_follow_and_acts_once_per_press() {
         None,
         "held, it doesn't flicker"
     );
-    assert_eq!(Keys::new().action_for(press(KeyCode::Char('F'))), follow);
+    assert_eq!(action_for(KeyCode::Char('F')), follow);
 }
 
 #[test]
@@ -430,11 +426,7 @@ fn any_other_key_is_reported_so_it_can_cancel_a_prompt() {
         KeyCode::Char('0'),
         KeyCode::F(6),
     ] {
-        assert_eq!(
-            Keys::new().action_for(press(code)),
-            Some(Action::Dismiss),
-            "{code:?}"
-        );
+        assert_eq!(action_for(code), Some(Action::Dismiss), "{code:?}");
     }
 }
 
@@ -457,11 +449,7 @@ fn every_mouse_event_points_and_a_left_press_also_clicks() {
     );
     assert_eq!(
         action(MouseEventKind::Down(MouseButton::Right)),
-        Some(Action::Click {
-            at: Position::new(12, 7),
-            button: Button::Right,
-            amplified: false
-        }),
+        Some(Action::right_click(Position::new(12, 7))),
         "design v21 §6.5"
     );
     // Letting go of the right button sends an aimed throw or shove (design
@@ -516,11 +504,11 @@ fn ctrl_amplifies_a_click() {
 fn caps_lock_letters_without_shift_scroll_one_tile() {
     // With Caps Lock on, Windows reports `W` without the Shift modifier.
     assert_eq!(
-        Keys::new().action_for(press(KeyCode::Char('W'))),
+        action_for(KeyCode::Char('W')),
         Some(Action::Scroll { dx: 0, dy: -1 })
     );
     assert_eq!(
-        Keys::new().action_for(press(KeyCode::Char('D'))),
+        action_for(KeyCode::Char('D')),
         Some(Action::Scroll { dx: 1, dy: 0 })
     );
 }
@@ -540,10 +528,7 @@ fn ctrl_with_any_key_but_c_dismisses() {
 
 #[test]
 fn tab_and_shift_tab_select_the_next_and_previous_sprite() {
-    assert_eq!(
-        Keys::new().action_for(press(KeyCode::Tab)),
-        Some(Action::SelectNext)
-    );
+    assert_eq!(action_for(KeyCode::Tab), Some(Action::SelectNext));
     // Terminals report Shift+Tab as its own key, with Shift held.
     let shift_tab = KeyEvent::new(KeyCode::BackTab, KeyModifiers::SHIFT);
     assert_eq!(
@@ -554,24 +539,18 @@ fn tab_and_shift_tab_select_the_next_and_previous_sprite() {
 
 #[test]
 fn the_square_brackets_switch_inspector_tabs() {
-    assert_eq!(
-        Keys::new().action_for(press(KeyCode::Char(']'))),
-        Some(Action::NextTab)
-    );
-    assert_eq!(
-        Keys::new().action_for(press(KeyCode::Char('['))),
-        Some(Action::PreviousTab)
-    );
+    assert_eq!(action_for(KeyCode::Char(']')), Some(Action::NextTab));
+    assert_eq!(action_for(KeyCode::Char('[')), Some(Action::PreviousTab));
 }
 
 #[test]
 fn page_up_and_page_down_scroll_the_inspector_tab_a_page() {
     assert_eq!(
-        Keys::new().action_for(press(KeyCode::PageDown)),
+        action_for(KeyCode::PageDown),
         Some(Action::ScrollTab { pages: 1 })
     );
     assert_eq!(
-        Keys::new().action_for(press(KeyCode::PageUp)),
+        action_for(KeyCode::PageUp),
         Some(Action::ScrollTab { pages: -1 })
     );
 }
@@ -634,11 +613,7 @@ fn the_place_menu_and_naming_keys_have_their_actions() {
         (KeyCode::Char('r'), Action::Rename),
         (KeyCode::Char('g'), Action::ExportGenome),
     ] {
-        assert_eq!(
-            Keys::new().action_for(press(code)),
-            Some(action),
-            "{code:?}"
-        );
+        assert_eq!(action_for(code), Some(action), "{code:?}");
     }
 }
 
@@ -719,7 +694,7 @@ fn slash_starts_the_sprite_list_s_filter_once_per_press() {
     let repeat = kind(KeyCode::Char('/'), KeyEventKind::Repeat);
     assert_eq!(keys.action_for(repeat), None, "held");
     assert_eq!(
-        Keys::new().action_for(press(KeyCode::Char('?'))),
+        action_for(KeyCode::Char('?')),
         Some(Action::Help),
         "`?`, on the same key, is still help"
     );
