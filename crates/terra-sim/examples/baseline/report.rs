@@ -3,7 +3,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
-use terra_sim::{DataPack, DeathCause, LabRun, LifeStage, SoakRun, Verb, Window};
+use terra_sim::{
+    DataPack, DeathCause, LabRun, LifeStage, SoakRun, Verb, Window, cause_name, thousands,
+};
 
 /// How many grown-up deaths, over all the seeds, A4 needs before it judges
 /// what share hunger and thirst caused (design v37 §7.4).
@@ -928,19 +930,6 @@ pub fn broken_soak(soak: &Soak, run: &Result<SoakRun, String>) -> Option<Broken>
     })
 }
 
-/// A whole number with commas between its thousands: "1,000,000".
-fn thousands(n: u64) -> String {
-    let digits = n.to_string();
-    let mut out = String::new();
-    for (i, digit) in digits.chars().enumerate() {
-        if i > 0 && (digits.len() - i).is_multiple_of(3) {
-            out.push(',');
-        }
-        out.push(digit);
-    }
-    out
-}
-
 /// The run's window over ticks 0 to `to`, as `scenarios/viability.ron` and
 /// `scenarios/unattended.ron` set them.
 fn window(run: &LabRun, to: u64) -> &Window {
@@ -953,17 +942,6 @@ fn window(run: &LabRun, to: u64) -> &Window {
 /// A verb by name, as the lab runner writes it: "eat".
 fn verb_name(verb: Verb) -> String {
     format!("{verb:?}").to_lowercase()
-}
-
-/// A cause of death by name, as the lab runner writes it: "hurt by
-/// thornbush" names the object type.
-fn cause_name(cause: DeathCause, data: &DataPack) -> String {
-    match cause {
-        DeathCause::Starvation => "starvation".into(),
-        DeathCause::Dehydration => "dehydration".into(),
-        DeathCause::OldAge => "old age".into(),
-        DeathCause::HurtBy(id) => format!("hurt by {}", data.object_type_name(id).unwrap_or("?")),
-    }
 }
 
 impl std::fmt::Display for Verdict {

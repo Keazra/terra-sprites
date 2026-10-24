@@ -14,7 +14,7 @@ mod args;
 use std::process::ExitCode;
 use std::time::Instant;
 
-use terra_sim::{DataPack, DeathCause, Soak};
+use terra_sim::{DataPack, Soak, cause_name};
 
 fn main() -> ExitCode {
     let Some((seed, ticks)) = args::parse("soak --seed N [--ticks T]", parse) else {
@@ -40,16 +40,8 @@ fn main() -> ExitCode {
     if run.deaths.is_empty() {
         println!("  none");
     }
-    for (cause, n) in &run.deaths {
-        let cause = match cause {
-            DeathCause::Starvation => "starvation".to_string(),
-            DeathCause::Dehydration => "dehydration".into(),
-            DeathCause::OldAge => "old age".into(),
-            DeathCause::HurtBy(id) => {
-                format!("hurt by {}", data.object_type_name(*id).unwrap_or("?"))
-            }
-        };
-        println!("  {cause}: {n}");
+    for (&cause, n) in &run.deaths {
+        println!("  {}: {n}", cause_name(cause, &data));
     }
     ExitCode::SUCCESS
 }

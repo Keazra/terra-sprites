@@ -959,8 +959,9 @@ fn applied_name((verb, target): (Verb, Option<u16>), data: &DataPack) -> String 
     }
 }
 
-/// A cause of death by name: "hurt by thornbush" names the object type.
-fn cause_name(cause: DeathCause, data: &DataPack) -> String {
+/// A cause of death by name, as the lab runner writes it: "hurt by
+/// thornbush" names the object type.
+pub fn cause_name(cause: DeathCause, data: &DataPack) -> String {
     match cause {
         DeathCause::Starvation => "starvation".into(),
         DeathCause::Dehydration => "dehydration".into(),
@@ -969,8 +970,8 @@ fn cause_name(cause: DeathCause, data: &DataPack) -> String {
     }
 }
 
-/// `5000` → `"5,000"`.
-fn thousands(n: u64) -> String {
+/// A whole number with commas between its thousands: "1,000,000".
+pub fn thousands(n: u64) -> String {
     let digits = n.to_string();
     let mut out = String::new();
     for (i, c) in digits.chars().enumerate() {

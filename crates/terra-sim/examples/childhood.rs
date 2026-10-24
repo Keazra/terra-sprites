@@ -96,7 +96,7 @@ use std::process::ExitCode;
 use lasting::{Census, HOUR, LATE_HOURS};
 use terra_sim::{
     DataPack, DeathCause, EntityId, EventKind, GeneView, LifeStage, Outcome, Pos, Verb, World,
-    WorldConfig,
+    WorldConfig, cause_name,
 };
 
 /// The longest the lone newborns run, in ticks: a sprite whose genes take
@@ -518,16 +518,6 @@ fn bush_count(world: &World) -> usize {
         .objects()
         .filter(|object| object.type_name() == "berry_bush")
         .count()
-}
-
-/// What a death was of, by name.
-fn cause_name(cause: DeathCause, data: &DataPack) -> String {
-    match cause {
-        DeathCause::Starvation => "starvation".into(),
-        DeathCause::Dehydration => "dehydration".into(),
-        DeathCause::OldAge => "old age".into(),
-        DeathCause::HurtBy(id) => format!("hurt by {}", data.object_type_name(id).unwrap_or("?")),
-    }
 }
 
 /// The starter's genes, by what each does and when it works (M2 design

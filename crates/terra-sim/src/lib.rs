@@ -79,7 +79,8 @@ pub use expression::Expression;
 pub use gene_values::{Drift, drift, gene_values, middle_values};
 pub use genome::{EmitterMode, GeneView, Genome, GenomeError, Whom};
 pub use lab::{
-    Childhood, LabError, LabRun, LabScenario, Window, Without, YoungCounts, median, report,
+    Childhood, LabError, LabRun, LabScenario, Window, Without, YoungCounts, cause_name, median,
+    report, thousands,
 };
 pub use lineage::Origin;
 pub use map::{Dir, Map, MapError, Pos};
