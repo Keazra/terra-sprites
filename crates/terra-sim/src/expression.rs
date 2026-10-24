@@ -208,30 +208,22 @@ mod tests {
     use super::*;
     use crate::test_util::builtin;
 
-    /// How each gene of a genome holding `genes` is expressed.
-    fn expressions_of(genes: &[&str]) -> Vec<Expression> {
-        let data = builtin();
-        let text = format!("(format: 2, genes: [{}])", genes.join(", "));
-        let genome = Genome::from_ron(&text, &data).expect("a valid genome");
-        expressions(&genome, &data, LifeStage::Adult)
-    }
-
-    /// Asserts that `gene` is flagged, with a reason mentioning `word`.
-    fn assert_flagged(gene: &str, word: &str) {
-        match &expressions_of(&[gene])[0] {
-            Expression::Flagged(reason) => {
-                assert!(reason.contains(word), "{reason:?} should mention {word}");
-            }
-            other => panic!("expected {gene} to be flagged, got {other:?}"),
-        }
-    }
-
     /// How each gene of a genome holding `genes` is expressed in a sprite at `stage`.
     fn expressions_at(genes: &[&str], stage: LifeStage) -> Vec<Expression> {
         let data = builtin();
         let text = format!("(format: 2, genes: [{}])", genes.join(", "));
         let genome = Genome::from_ron(&text, &data).expect("a valid genome");
         expressions(&genome, &data, stage)
+    }
+
+    /// Asserts that `gene` is flagged, with a reason mentioning `word`.
+    fn assert_flagged(gene: &str, word: &str) {
+        match &expressions_at(&[gene], LifeStage::Adult)[0] {
+            Expression::Flagged(reason) => {
+                assert!(reason.contains(word), "{reason:?} should mention {word}");
+            }
+            other => panic!("expected {gene} to be flagged, got {other:?}"),
+        }
     }
 
     #[test]
@@ -291,7 +283,8 @@ mod tests {
     }
 
     fn assert_expressed(gene: &str) {
-        assert_eq!(expressions_of(&[gene]), [Expression::Expressed], "{gene}");
+        let expressed = expressions_at(&[gene], LifeStage::Adult);
+        assert_eq!(expressed, [Expression::Expressed], "{gene}");
     }
 
     #[test]
@@ -358,17 +351,18 @@ mod tests {
     #[test]
     fn only_the_first_gene_to_set_a_value_is_expressed() {
         use Expression::{Expressed, Unexpressed};
+        let genes = [
+            r#"HalfLife(chem: "pain", ticks: 10)"#,
+            r#"HalfLife(chem: "pain", ticks: 20)"#,
+            r#"HalfLife(chem: "thirst", ticks: 20)"#,
+            r#"InitialConcentration(chem: "boredom", value: 0.2)"#,
+            r#"InitialConcentration(chem: "boredom", value: 0.3)"#,
+            r#"Trait(trait: "speed", value: 7.0)"#,
+            r#"Trait(trait: "lifespan", value: 60000.0)"#,
+            r#"Trait(trait: "speed", value: 9.0)"#,
+        ];
         assert_eq!(
-            expressions_of(&[
-                r#"HalfLife(chem: "pain", ticks: 10)"#,
-                r#"HalfLife(chem: "pain", ticks: 20)"#,
-                r#"HalfLife(chem: "thirst", ticks: 20)"#,
-                r#"InitialConcentration(chem: "boredom", value: 0.2)"#,
-                r#"InitialConcentration(chem: "boredom", value: 0.3)"#,
-                r#"Trait(trait: "speed", value: 7.0)"#,
-                r#"Trait(trait: "lifespan", value: 60000.0)"#,
-                r#"Trait(trait: "speed", value: 9.0)"#,
-            ]),
+            expressions_at(&genes, LifeStage::Adult),
             [
                 Expressed,
                 Unexpressed,
@@ -385,20 +379,21 @@ mod tests {
     #[test]
     fn only_the_first_brain_gene_to_set_a_value_is_expressed() {
         use Expression::{Expressed, Unexpressed};
+        let genes = [
+            r#"BrainParam(param: "tau_base", value: 0.2)"#,
+            r#"BrainParam(param: "tau_base", value: 0.3)"#,
+            r#"BrainParam(param: "switch_margin", value: 0.3)"#,
+            r#"Instinct(inputs: [("hunger", false), ("pain", false)], verb: Eat, weight: 1.0)"#,
+            // The same concept, its inputs listed the other way round.
+            r#"Instinct(inputs: [("pain", false), ("hunger", false)], verb: Eat, weight: 0.5)"#,
+            r#"Instinct(inputs: [("hunger", false), ("pain", false)], verb: Rest, weight: 1.0)"#,
+            r#"Instinct(inputs: [("hunger", false), ("pain", true)], verb: Eat, weight: 1.0)"#,
+            r#"AttentionInstinct(input: "hunger", category: "fruit", weight: 0.8)"#,
+            r#"AttentionInstinct(input: "hunger", category: "fruit", weight: 0.4)"#,
+            r#"AttentionInstinct(input: "hunger", category: "bush", weight: 0.8)"#,
+        ];
         assert_eq!(
-            expressions_of(&[
-                r#"BrainParam(param: "tau_base", value: 0.2)"#,
-                r#"BrainParam(param: "tau_base", value: 0.3)"#,
-                r#"BrainParam(param: "switch_margin", value: 0.3)"#,
-                r#"Instinct(inputs: [("hunger", false), ("pain", false)], verb: Eat, weight: 1.0)"#,
-                // The same concept, its inputs listed the other way round.
-                r#"Instinct(inputs: [("pain", false), ("hunger", false)], verb: Eat, weight: 0.5)"#,
-                r#"Instinct(inputs: [("hunger", false), ("pain", false)], verb: Rest, weight: 1.0)"#,
-                r#"Instinct(inputs: [("hunger", false), ("pain", true)], verb: Eat, weight: 1.0)"#,
-                r#"AttentionInstinct(input: "hunger", category: "fruit", weight: 0.8)"#,
-                r#"AttentionInstinct(input: "hunger", category: "fruit", weight: 0.4)"#,
-                r#"AttentionInstinct(input: "hunger", category: "bush", weight: 0.8)"#,
-            ]),
+            expressions_at(&genes, LifeStage::Adult),
             [
                 Expressed,
                 Unexpressed,
@@ -433,19 +428,21 @@ mod tests {
             r#"Emitter(locus: Locus("always"), mode: Level, gain: 0.001, chem: "boredom")"#;
         let reaction = r#"Reaction(reactants: [("h0", 1)], products: [("h1", 1)], rate: 0.1)"#;
         let receptor = r#"Receptor(chem: "reward", gain: 0.5, target: "learning_rate_mod")"#;
+        let genes = [emitter, emitter, reaction, reaction, receptor, receptor];
         assert_eq!(
-            expressions_of(&[emitter, emitter, reaction, reaction, receptor, receptor]),
+            expressions_at(&genes, LifeStage::Adult),
             vec![Expression::Expressed; 6]
         );
     }
 
     #[test]
     fn traits_are_expressed_and_unknown_genes_are_not() {
+        let genes = [
+            r#"Trait(trait: "speed", value: 7.0)"#,
+            r#"Gene(type: 900, version: 1, payload: "")"#,
+        ];
         assert_eq!(
-            expressions_of(&[
-                r#"Trait(trait: "speed", value: 7.0)"#,
-                r#"Gene(type: 900, version: 1, payload: "")"#,
-            ]),
+            expressions_at(&genes, LifeStage::Adult),
             [Expression::Expressed, Expression::Unknown]
         );
     }

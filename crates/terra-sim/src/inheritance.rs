@@ -280,6 +280,24 @@ mod tests {
         Parent { genome, flaws: &[] }
     }
 
+    /// A parent of `genome` with `flaws`, gene by gene.
+    fn flawed<'a>(genome: &'a Genome, flaws: &'a [u8]) -> Parent<'a> {
+        Parent { genome, flaws }
+    }
+
+    /// A father for the tests of a gene only one parent has: instincts to
+    /// each of `VERBS` at .75 but to approach, which only the mother has,
+    /// and an attention instinct only he has, after the instinct to play.
+    fn his_own_genes(data: &DataPack) -> Genome {
+        let mut his = instincts(&VERBS, 0.75);
+        his.insert(
+            3,
+            r#"AttentionInstinct(input: "thirst", category: "water", weight: 0.8)"#.into(),
+        );
+        his.retain(|gene| !gene.contains("Approach"));
+        genome(&his, data)
+    }
+
     fn weight(gene: &Gene) -> f32 {
         match *gene {
             Gene::Instinct { weight, .. } => weight,
@@ -394,14 +412,8 @@ mod tests {
         // genome; hers stays where it was in hers.
         let data = builtin();
         let mine = genome(&instincts(&VERBS, 0.25), &data);
-        let mut his = instincts(&VERBS, 0.75);
-        his.insert(
-            3,
-            r#"AttentionInstinct(input: "thirst", category: "water", weight: 0.8)"#.into(),
-        );
         // Hers alone: he has no instinct to approach.
-        his.retain(|gene| !gene.contains("Approach"));
-        let theirs = genome(&his, &data);
+        let theirs = his_own_genes(&data);
         let (mut his_extra, mut her_extra) = (0, 0);
         for seed in 0..1_000 {
             let mut rng = ChaCha8Rng::seed_from_u64(seed);
@@ -437,14 +449,7 @@ mod tests {
         let theirs = genome(&instincts(&VERBS, 0.75), &data);
         let pair = |her: u8, his: u8, seed: u64| {
             let (hers, theirs_flaws) = (vec![her; 8], vec![his; 8]);
-            let mother = Parent {
-                genome: &mine,
-                flaws: &hers,
-            };
-            let father = Parent {
-                genome: &theirs,
-                flaws: &theirs_flaws,
-            };
+            let (mother, father) = (flawed(&mine, &hers), flawed(&theirs, &theirs_flaws));
             let mut rng = ChaCha8Rng::seed_from_u64(seed);
             let flaws = of_pair(mother, father, &data, &mut rng).flaws;
             (0..8)
@@ -476,25 +481,12 @@ mod tests {
         let mine = genome(&instincts(&VERBS, 0.25), &data);
         // His alone: an attention instinct. Hers alone: the instinct to
         // approach.
-        let mut his_genes = instincts(&VERBS, 0.75);
-        his_genes.insert(
-            3,
-            r#"AttentionInstinct(input: "thirst", category: "water", weight: 0.8)"#.into(),
-        );
-        his_genes.retain(|gene| !gene.contains("Approach"));
-        let theirs = genome(&his_genes, &data);
+        let theirs = his_own_genes(&data);
         // Each carries every flaw doubled.
         let (her_flaws, his_flaws) = (vec![2; mine.genes.len()], vec![2; theirs.genes.len()]);
         let (mut his_own, mut her_own) = (0, 0);
         for seed in 0..200 {
-            let mother = Parent {
-                genome: &mine,
-                flaws: &her_flaws,
-            };
-            let father = Parent {
-                genome: &theirs,
-                flaws: &his_flaws,
-            };
+            let (mother, father) = (flawed(&mine, &her_flaws), flawed(&theirs, &his_flaws));
             let mut rng = ChaCha8Rng::seed_from_u64(seed);
             let child = of_pair(mother, father, &data, &mut rng);
             for (index, gene) in child.genome.genes.iter().enumerate() {
@@ -527,11 +519,7 @@ mod tests {
         let mut broken = 0;
         for seed in 0..500 {
             let mut rng = ChaCha8Rng::seed_from_u64(seed);
-            let mother = Parent {
-                genome: &mine,
-                flaws: &hers,
-            };
-            let child = alone(mother, &mut rng);
+            let child = alone(flawed(&mine, &hers), &mut rng);
             assert_eq!(child.genome, mine);
             for (index, &her) in hers.iter().enumerate() {
                 let flawed = flaws_of(&child.flaws, index);

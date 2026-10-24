@@ -785,6 +785,13 @@ mod tests {
         builtin_with("physiology.ron", &physiology)
     }
 
+    /// An adult's program of a genome holding `genes`, read with `data`.
+    fn program_in(data: &DataPack, genes: &[&str]) -> Program {
+        let text = format!("(format: 1, genes: [{}])", genes.join(", "));
+        let genome = Genome::from_ron(&text, data).expect("a valid genome");
+        Program::new(&genome, data, LifeStage::Adult)
+    }
+
     /// A sprite with a genome of `genes`, newborn in `data`.
     struct Subject {
         data: DataPack,
@@ -794,12 +801,12 @@ mod tests {
 
     impl Subject {
         fn new(data: DataPack, genes: &[&str]) -> Subject {
-            let text = format!("(format: 1, genes: [{}])", genes.join(", "));
-            let program = Program::new(
-                &Genome::from_ron(&text, &data).expect("a valid genome"),
-                &data,
-                LifeStage::Adult,
-            );
+            let program = program_in(&data, genes);
+            Subject::of(data, program)
+        }
+
+        /// A newborn of `program`, in `data`.
+        fn of(data: DataPack, program: Program) -> Subject {
             let body = Body::newborn(&program, &data);
             Subject {
                 data,
@@ -1490,11 +1497,7 @@ mod tests {
         assert_eq!(program.traits.grows_old, 20_000.0);
         // The average of the three genes that weaken.
         assert_close(program.vigour, (0.5 + 0.25 + 0.5) / 3.0);
-        let mut sprite = Subject {
-            body: Body::newborn(&program, &data),
-            program,
-            data,
-        };
+        let mut sprite = Subject::of(data, program);
         sprite.set("h0", 0.4);
         sprite.set("h3", 0.4);
         sprite.step();
@@ -1514,11 +1517,7 @@ mod tests {
         ])"#;
         let genome = Genome::from_ron(text, &data).expect("a valid genome");
         let program = Program::weakened(&genome, &data, LifeStage::Adult, &[0.5]);
-        let mut sprite = Subject {
-            body: Body::newborn(&program, &data),
-            program,
-            data,
-        };
+        let mut sprite = Subject::of(data, program);
         sprite.set("h0", 0.8);
         sprite.step();
         // 1 + 0.8 × a gain of 0.25.
@@ -1818,12 +1817,7 @@ mod tests {
     fn starter() -> Subject {
         let data = builtin();
         let program = Program::new(data.starter(), &data, LifeStage::Adult);
-        let body = Body::newborn(&program, &data);
-        Subject {
-            data,
-            program,
-            body,
-        }
+        Subject::of(data, program)
     }
 
     #[test]
@@ -1938,13 +1932,7 @@ mod tests {
 
     /// The program of a genome holding `genes`, with the built-in pack.
     fn program(genes: &[&str]) -> Program {
-        let data = builtin();
-        let text = format!("(format: 1, genes: [{}])", genes.join(", "));
-        Program::new(
-            &Genome::from_ron(&text, &data).expect("a valid genome"),
-            &data,
-            LifeStage::Adult,
-        )
+        program_in(&builtin(), genes)
     }
 
     #[test]
