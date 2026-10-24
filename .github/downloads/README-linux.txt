@@ -6,7 +6,8 @@ their own.
 
 This is the game for Linux on a 64-bit Intel or AMD PC, with glibc 2.35
 or newer: Ubuntu 22.04, Debian 12, Fedora 36 or later, and most others
-from 2022 on. It runs in any terminal.
+from 2022 on. It runs in a terminal. If the map's characters look wrong
+in yours, ./terra-sprites --ascii draws it in plain ASCII instead.
 
 
 Running it
@@ -29,16 +30,11 @@ window bigger.
 Playing
 -------
 
-On the title screen, pick New world. Then:
-
-- Click a sprite (the smiley faces) to select it, and press ] for its
-  Brain tab: what it's paying attention to, and why.
-- Space pauses and + speeds up. Lives are long at 1x, so try 4x.
-- ? shows every key.
-
-./terra-sprites --seed 7 goes straight into seed 7's world. The manual
-has every key and flag:
+On the title screen, pick New world. Press ? for every key, and the
+manual has the rest:
 https://github.com/Keazra/terra-sprites/blob/main/docs/manual.md
+
+./terra-sprites --seed 7 goes straight into seed 7's world.
 
 ./terra-sprites --version says which version this is and which build.
 Put that in any bug report.

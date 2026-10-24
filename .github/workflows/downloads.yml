@@ -12,6 +12,8 @@
 # - Otherwise the commit given; or, when there's none, the commit a draft
 #   release for the tag names; or else the newest commit on the branch it was
 #   run from (main). Publishing the release then makes the tag on that commit.
+# - The game at that commit must say the tag's version, or nothing is built.
+#   A tag with a hyphen, such as a test's (v0.1.0-test.1), only warns.
 #
 # Where the zips go:
 # - Onto the draft release for the tag, when there's one (say, made by hand
@@ -68,7 +70,7 @@ jobs:
     outputs:
       name: ${{ steps.resolve.outputs.name }}
       commit: ${{ steps.resolve.outputs.commit }}
-      draft: ${{ steps.resolve.outputs.draft }}
+      has_draft: ${{ steps.resolve.outputs.has_draft }}
     steps:
       - name: Find the commit and the release
         id: resolve
@@ -86,7 +88,7 @@ jobs:
 
           if [ "$EVENT" = pull_request ]; then
             # A dry run: the zips are named after the pull request.
-            { echo "name=pr-$PR"; echo "commit=$BRANCH_HEAD"; echo "draft=false"; } >> "$GITHUB_OUTPUT"
+            { echo "name=pr-$PR"; echo "commit=$BRANCH_HEAD"; echo "has_draft=false"; } >> "$GITHUB_OUTPUT"
             echo "A dry run for pull request #$PR, from $BRANCH_HEAD: no release is touched." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
@@ -114,7 +116,7 @@ jobs:
           # is refused. Drafts make no tag, so there can be several.
           releases=$(gh api "repos/$GH_REPO/releases?per_page=100" --paginate \
             --jq ".[] | select(.tag_name == \"$TAG\") | \"\(.draft) \(.target_commitish)\"")
-          draft=false
+          has_draft=false
           draft_target=""
           if [ -n "$releases" ]; then
             [ "$(wc -l <<<"$releases")" -eq 1 ] \
@@ -122,14 +124,16 @@ jobs:
             read -r is_draft draft_target <<<"$releases"
             [ "$is_draft" = true ] \
               || fail "The release for $TAG is already published. This only adds downloads to a draft release, so that nothing reaches players before it's been checked."
-            draft=true
+            has_draft=true
           fi
 
           if [ -n "$tag_commit" ]; then
             commit=$tag_commit
             from="the tag's commit"
-            if [ -n "$COMMIT" ] && [ "$(gh api "repos/$GH_REPO/commits/$COMMIT" --jq .sha)" != "$tag_commit" ]; then
-              fail "The tag $TAG is already on GitHub, on $tag_commit, not on the commit given."
+            if [ -n "$COMMIT" ]; then
+              given=$(gh api "repos/$GH_REPO/commits/$COMMIT" --jq .sha)
+              [ "$given" = "$tag_commit" ] \
+                || fail "The tag $TAG is already on GitHub, on $tag_commit, not on the commit given."
             fi
           elif [ -n "$COMMIT" ]; then
             commit=$COMMIT
@@ -145,10 +149,23 @@ jobs:
           # branch.
           commit=$(gh api "repos/$GH_REPO/commits/$commit" --jq .sha)
 
-          { echo "name=$TAG"; echo "commit=$commit"; echo "draft=$draft"; } >> "$GITHUB_OUTPUT"
+          # The game at that commit names the tag's version, so --version
+          # says the release. Checked before anything's built. A tag with a
+          # hyphen may differ, for a test (v0.1.0-test.1).
+          version=$(gh api "repos/$GH_REPO/contents/Cargo.toml?ref=$commit" -H "Accept: application/vnd.github.raw+json" \
+            | sed -n '/^\[workspace.package\]/,/^\[/s/^version = "\(.*\)"$/\1/p')
+          if [ "v$version" != "$TAG" ]; then
+            mismatch="The game at $commit says it's version $version, not ${TAG#v}."
+            [[ "$TAG" == *-* ]] \
+              || fail "$mismatch Raise its version first (docs/agents/releases.md, \"Making one\")."
+            echo "::warning::$mismatch That's fine for a test tag."
+            echo "$mismatch That's fine for a test tag." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          { echo "name=$TAG"; echo "commit=$commit"; echo "has_draft=$has_draft"; } >> "$GITHUB_OUTPUT"
           {
             echo "Building $TAG from $commit, $from."
-            if [ "$draft" = true ]; then
+            if [ "$has_draft" = true ]; then
               echo "The zips go on its draft release."
             else
               echo "There's no release for $TAG yet, so the zips go on a new draft release."
@@ -186,16 +203,18 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     env:
-      ZIP: terra-sprites-${{ needs.resolve.outputs.name }}-${{ matrix.name }}
+      # Not ZIP, which zip reads as options of its own.
+      FOLDER: terra-sprites-${{ needs.resolve.outputs.name }}-${{ matrix.name }}
     steps:
       - uses: actions/checkout@v5
         with:
           ref: ${{ needs.resolve.outputs.commit }}
+          persist-credentials: false
       # No cache: each download is built from nothing, so nothing another
       # run left behind can end up in it.
       - uses: dtolnay/rust-toolchain@stable
-      # The same targets as CI's determinism check, which proves each plays
-      # a seed the same (design §2.6, §7.5).
+      # Three of the four targets CI's determinism check proves play a seed
+      # the same (design §2.6, §7.5).
       - name: The runner builds for the promised target
         shell: bash
         run: |
@@ -204,6 +223,7 @@ jobs:
             echo "expected ${{ matrix.target }}, but this runner builds for $host"
             exit 1
           fi
+          echo "${{ matrix.name }}: built with $(rustc -V)" >> "$GITHUB_STEP_SUMMARY"
       - name: Build
         run: cargo build --release --locked -p terra-tui
         env:
@@ -221,21 +241,21 @@ jobs:
       - name: Zip it with the licences and its README
         shell: bash
         run: |
-          mkdir "$ZIP"
-          cp "target/release/${{ matrix.program }}" LICENSE-MIT LICENSE-APACHE "$ZIP/"
-          cp ".github/downloads/README-${{ matrix.readme }}.txt" "$ZIP/README.txt"
+          mkdir "$FOLDER"
+          cp "target/release/${{ matrix.program }}" LICENSE-MIT LICENSE-APACHE "$FOLDER/"
+          cp ".github/downloads/README-${{ matrix.readme }}.txt" "$FOLDER/README.txt"
           if [ "$RUNNER_OS" = Windows ]; then
-            7z a -tzip "$ZIP.zip" "$ZIP"
-            7z l "$ZIP.zip"
+            7z a -tzip "$FOLDER.zip" "$FOLDER"
+            7z l "$FOLDER.zip"
           else
             # zip keeps the program executable.
-            zip -r -X "$ZIP.zip" "$ZIP"
-            unzip -l "$ZIP.zip"
+            zip -r -X "$FOLDER.zip" "$FOLDER"
+            unzip -l "$FOLDER.zip"
           fi
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.ZIP }}
-          path: ${{ env.ZIP }}.zip
+          name: ${{ env.FOLDER }}
+          path: ${{ env.FOLDER }}.zip
           if-no-files-found: error
           retention-days: 14
 
@@ -252,46 +272,47 @@ jobs:
       GH_REPO: ${{ github.repository }}
       TAG: ${{ needs.resolve.outputs.name }}
       COMMIT: ${{ needs.resolve.outputs.commit }}
-      DRAFT: ${{ needs.resolve.outputs.draft }}
+      HAS_DRAFT: ${{ needs.resolve.outputs.has_draft }}
     steps:
       - uses: actions/checkout@v5
         with:
           ref: ${{ needs.resolve.outputs.commit }}
           sparse-checkout: docs/releases
+          persist-credentials: false
       - uses: actions/download-artifact@v4
         with:
           pattern: terra-sprites-*
           path: zips
           merge-multiple: true
-      - name: The game's version matches the tag
-        run: |
-          version=$(sed -n '/^\[workspace.package\]/,/^\[/s/^version = "\(.*\)"$/\1/p' Cargo.toml)
-          if [ "v$version" != "$TAG" ]; then
-            message="The game at this commit says it's $version, not ${TAG#v}. For a release, was its version raised (docs/agents/releases.md, \"Making one\")? A test tag can differ."
-            echo "::warning::$message"
-            echo "$message" >> "$GITHUB_STEP_SUMMARY"
-          fi
       - name: Put the zips on a draft release
         run: |
           set -euo pipefail
           ls -l zips
           [ "$(find zips -name '*.zip' | wc -l)" -eq 3 ] || { echo "::error::Expected three zips."; exit 1; }
-          if [ "$DRAFT" = true ]; then
+          if [ "$HAS_DRAFT" = true ]; then
             # Still a draft, just before it's touched.
-            if [ "$(gh release view "$TAG" --json isDraft --jq .isDraft)" != true ]; then
+            is_draft=$(gh release view "$TAG" --json isDraft --jq .isDraft)
+            if [ "$is_draft" != true ]; then
               echo "::error::The release for $TAG was published while this ran, so its zips weren't added."
               exit 1
             fi
             gh release edit "$TAG" --target "$COMMIT"
             gh release upload "$TAG" zips/*.zip --clobber
           else
-            notes="docs/releases/$TAG.md"
+            # The notes' heading is the release's title, and the rest its
+            # description.
+            file="docs/releases/$TAG.md"
+            notes=$(mktemp)
             title=""
-            if [ -f "$notes" ]; then
-              title=$(sed -n '1s/^# *//p' "$notes")
+            if [ -f "$file" ]; then
+              title=$(sed -n '1s/^# *//p' "$file")
+              if [ -n "$title" ]; then
+                tail -n +2 "$file" | sed '/./,$!d' > "$notes"
+              else
+                cp "$file" "$notes"
+              fi
             else
-              notes=$(mktemp)
-              echo "Downloads for $TAG, built from $COMMIT. There was no docs/releases/$TAG.md at that commit to describe it." > "$notes"
+              echo "Downloads for $TAG, built from $COMMIT. There was no $file at that commit to describe it." > "$notes"
             fi
             prerelease=()
             if [[ "$TAG" == *-* ]]; then prerelease=(--prerelease); fi

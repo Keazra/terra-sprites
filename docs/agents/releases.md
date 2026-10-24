@@ -38,9 +38,11 @@ At the end of the milestone's acceptance slice (M2's is Slice 30b, [#148](https:
    gh workflow run downloads.yml -f tag=v0.2.0 -f commit=<the version PR's merge commit>
    ```
 
-   Or on GitHub: Actions, "Downloads", "Run workflow", with the tag and the commit. It builds the game from that commit for Windows, Mac (Apple silicon) and Linux, in about N minutes, and makes a draft release for the tag holding one zip for each: the program, both licences, and a `README.txt` on running it (`.github/downloads/`), with a Mac's first-run steps for a program from an unknown developer. The draft takes its title from the notes file's first line and its description from the rest. The run's summary links to it.
+   Or on GitHub: Actions, "Downloads", "Run workflow", with the tag and the commit. It builds the game from that commit for Windows, Mac (Apple silicon) and Linux, in about 3 minutes, and makes a draft release for the tag holding one zip for each: the program, both licences, and a `README.txt` on running it (`.github/downloads/`), with a Mac's first-run steps for a program from an unknown developer. The draft takes its title from the notes file's first line and its description from the rest. The run's summary links to it.
 
-   A draft release made by hand on GitHub beforehand works too: the workflow adds the zips to it, and builds the commit it names when no commit is given. Running it again replaces the zips. It refuses a release that's already published.
+   A draft release made by hand on GitHub beforehand works too: the workflow adds the zips to it, and builds the commit it names when no commit is given. Running it again replaces the zips. It refuses a release that's already published, and a tag that doesn't match the version in `Cargo.toml` at that commit.
+
+   To try the workflow without a release, give it a test tag with a hyphen, such as `v0.1.0-test.1`, which only warns that the version differs, then delete the draft it made. A draft never made a tag, so nothing else is left behind.
 3. **Check the draft, then publish it.** On GitHub, under Releases, the draft should hold the three zips, `terra-sprites-v0.2.0-windows-x86_64.zip`, `…-mac-apple-silicon.zip` and `…-linux-x86_64.zip`. Open the one for your computer, and check its `terra-sprites --version` names the release. Then "Edit" and "Publish release", or:
 
    ```powershell
