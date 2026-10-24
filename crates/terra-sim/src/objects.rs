@@ -715,6 +715,7 @@ mod tests {
         scene.next_id += 1;
         let object = Object {
             stage_ends: 500,
+            fresh: true,
             ..scene.object("berry", at(1, 0))
         };
         scene.objects.place(berry, object, &scene.data, 10);

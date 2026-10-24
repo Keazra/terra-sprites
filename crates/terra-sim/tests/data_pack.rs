@@ -3,10 +3,8 @@ use common::builtin_source;
 
 use terra_sim::{DataError, DataPack, Terrain, Verb};
 
-const BUILTIN_TERRAIN: &str = include_str!("../../../data/terrain.ron");
-
 /// Loads the built-in pack with `file` replaced by `text`.
-fn builtin_with(file: &str, text: &str) -> Result<DataPack, DataError> {
+fn loaded_with(file: &str, text: &str) -> Result<DataPack, DataError> {
     let sources: Vec<(&str, &str)> = DataPack::builtin_sources()
         .iter()
         .map(|&(path, builtin)| (path, if path == file { text } else { builtin }))
@@ -34,7 +32,7 @@ fn assert_refused(loaded: Result<DataPack, DataError>, file: &str, text: &str, w
 /// Asserts that the built-in pack with `file` replaced by `text` is invalid,
 /// with a message mentioning every one of `words`.
 fn assert_invalid(file: &str, text: &str, words: &[&str]) {
-    assert_refused(builtin_with(file, text), file, text, words);
+    assert_refused(loaded_with(file, text), file, text, words);
 }
 
 /// Asserts that the built-in pack, with `from` in `file` changed to `to`,
@@ -235,7 +233,7 @@ fn a_terrain_that_carries_sound_weakens_a_call_crossing_it() {
 fn a_pack_without_a_chemicals_file_is_rejected() {
     let result = DataPack::from_sources(&[
         ("pack.ron", r#"(name: "test", version: "1")"#),
-        ("terrain.ron", BUILTIN_TERRAIN),
+        ("terrain.ron", builtin_source("terrain.ron")),
     ]);
     assert_eq!(
         result.unwrap_err(),
@@ -344,7 +342,7 @@ fn only_one_type_hatches_and_only_a_sprite_lays_one() {
     let counts_eggs =
         r#"rules: [(trigger: Every(5), if: [DensityBelow("egg", 2, 1)], do: [DestroySelf])]"#;
     let objects = format!("[{}, {}]", egg(1, "egg", ""), bush(2, "bush", counts_eggs));
-    let data = builtin_with("objects.ron", &objects);
+    let data = loaded_with("objects.ron", &objects);
     assert!(data.is_ok(), "{data:?}");
 }
 
@@ -360,7 +358,7 @@ fn only_an_item_says_the_cursor_cannot_throw_it() {
     assert_invalid_objects(&[water], &["water", "throwable"]);
     let pebble = r#"(id: 5, name: "pebble", category: "toy", size: Small, hardness: 1.0,
         throwable: false)"#;
-    let data = builtin_with("objects.ron", &format!("[{pebble}]"));
+    let data = loaded_with("objects.ron", &format!("[{pebble}]"));
     assert!(data.is_ok(), "{data:?}");
 }
 
@@ -473,7 +471,7 @@ fn an_object_type_is_solid_and_a_fixture_or_neither() {
     assert_invalid_objects(&[&with_tags("[Fixture]")], &["crate", "solid", "fixture"]);
     for valid in ["[Solid, Fixture]", "[]"] {
         let text = format!("[{}]", with_tags(valid));
-        assert!(builtin_with("objects.ron", &text).is_ok(), "{valid}");
+        assert!(loaded_with("objects.ron", &text).is_ok(), "{valid}");
     }
 }
 
@@ -485,7 +483,7 @@ fn an_object_type_s_tags_are_built_in_or_defined_in_the_data() {
         )
     };
     let thorny = format!("[{}]", cactus("[Solid, Fixture, Thorny]"));
-    assert!(builtin_with("objects.ron", &thorny).is_ok());
+    assert!(loaded_with("objects.ron", &thorny).is_ok());
     assert_invalid_objects(
         &[&cactus("[Solid, Fixture, Sticky]")],
         &["cactus", "Sticky"],
@@ -501,7 +499,7 @@ fn sticky(effect: &str) -> String {
 #[test]
 fn a_tag_s_contact_only_injects_into_or_signals_the_sprite_making_it() {
     let fine = sticky(r#"Inject(Actor, "injury", 0.1), Signal(Actor, "pricked")"#);
-    assert!(builtin_with("tags.ron", &fine).is_ok());
+    assert!(loaded_with("tags.ron", &fine).is_ok());
     for (effect, words) in [
         (
             r#"Inject(Target, "injury", 0.1)"#,
@@ -659,7 +657,7 @@ fn each_category_is_worded_in_general_by_its_plural() {
     assert_eq!(pack.category_plural("dragon"), None, "no such category");
 
     let text = categories_with(r#"(id: 9, name: "tree", plural: "  trees ")"#);
-    let pack = builtin_with("categories.ron", &text).expect("a valid pack");
+    let pack = loaded_with("categories.ron", &text).expect("a valid pack");
     assert_eq!(pack.category_plural("tree"), Some("trees"));
     for plural in [r#""""#, r#""  ""#] {
         let text = categories_with(&format!(r#"(id: 9, name: "tree", plural: {plural})"#));
@@ -685,7 +683,7 @@ fn category_ids_and_names_are_unique_and_from_1_to_26() {
         assert_invalid(file, &text, &[&format!("the id {id}")]);
     }
     let text = categories_with(r#"(id: 26, name: "tree")"#);
-    assert!(builtin_with(file, &text).is_ok(), "26 is the last ID");
+    assert!(loaded_with(file, &text).is_ok(), "26 is the last ID");
 }
 
 #[test]
@@ -741,7 +739,7 @@ fn each_object_type_is_worded_in_general_by_its_own_plural() {
         bush(1, "shrub", ""),
         bush(2, "bramble", r#"plural: "brambles""#)
     );
-    let pack = builtin_with("objects.ron", &text).expect("a valid pack");
+    let pack = loaded_with("objects.ron", &text).expect("a valid pack");
     assert_eq!(pack.plural_of("bramble"), Some("brambles"));
     assert_eq!(pack.plural_of("shrub"), None);
 }
@@ -749,7 +747,7 @@ fn each_object_type_is_worded_in_general_by_its_own_plural() {
 #[test]
 fn an_object_type_s_plural_loses_any_spaces_at_either_end() {
     let text = format!("[{}]", bush(1, "shrub", r#"plural: "  shrubs ""#));
-    let pack = builtin_with("objects.ron", &text).expect("a valid pack");
+    let pack = loaded_with("objects.ron", &text).expect("a valid pack");
     assert_eq!(pack.plural_of("shrub"), Some("shrubs"));
 }
 
@@ -1092,7 +1090,7 @@ fn ageing_shares_are_fractions_and_its_rates_are_numbers() {
 fn a_pack_from_before_life_stages_still_loads() {
     // A save carries its own pack (design §2.8). One from before M2's life
     // stages (M2 design §9) calls `grows_old` `lifespan` and has no `ageing`.
-    let physiology = include_str!("../../../data/physiology.ron");
+    let physiology = builtin_source("physiology.ron");
     let start = physiology
         .find("    // Growing up and growing old")
         .expect("ageing");
@@ -1108,7 +1106,7 @@ fn a_pack_from_before_life_stages_still_loads() {
         !older.contains("ageing") && !older.contains("grows_"),
         "{older}"
     );
-    builtin_with("physiology.ron", &older).expect("the older pack loads");
+    loaded_with("physiology.ron", &older).expect("the older pack loads");
 }
 
 #[test]
@@ -1218,7 +1216,7 @@ fn a_category_s_brain_input_takes_its_id_from_the_category_s() {
     // 35 + id for categories 1 to 6, and 37 + id from 7, past target_distance
     // and target_adjacent (design v19 §3.5.5).
     let text = categories_with(r#"(id: 9, name: "tree"), (id: 26, name: "shell")"#);
-    let pack = builtin_with("categories.ron", &text).expect("a valid pack");
+    let pack = loaded_with("categories.ron", &text).expect("a valid pack");
     let targets: Vec<(u16, &str)> = pack
         .brain_inputs()
         .filter(|&(id, _)| (36..=63).contains(&id))
@@ -1229,7 +1227,7 @@ fn a_category_s_brain_input_takes_its_id_from_the_category_s() {
 
     // A retired category leaves its input's ID unused.
     let text = categories_with(r#"(id: 10, name: "thornbush")"#);
-    let pack = builtin_with("categories.ron", &text).expect("a valid pack");
+    let pack = loaded_with("categories.ron", &text).expect("a valid pack");
     let ids: Vec<u16> = pack
         .brain_inputs()
         .map(|(id, _)| id)
@@ -1451,7 +1449,7 @@ fn an_object_type_with_objects_needs_a_size_and_a_hardness() {
     assert_invalid_objects(&[&pebble("size: Small")], &["pebble", "hardness"]);
     assert_invalid_objects(&[&pebble("")], &["pebble", "size", "hardness"]);
     let text = format!("[{}]", pebble("size: Small, hardness: 0.5"));
-    assert!(builtin_with("objects.ron", &text).is_ok());
+    assert!(loaded_with("objects.ron", &text).is_ok());
 }
 
 #[test]
@@ -1465,7 +1463,7 @@ fn hardness_is_from_0_to_1() {
             "[{}]",
             pebble(&format!("size: Small, hardness: {hardness}"))
         );
-        assert!(builtin_with("objects.ron", &text).is_ok(), "{hardness}");
+        assert!(loaded_with("objects.ron", &text).is_ok(), "{hardness}");
     }
 }
 
@@ -1485,7 +1483,7 @@ fn a_pseudo_type_gives_both_a_size_and_a_hardness_or_neither() {
     );
     for fields in ["", "size: Large, hardness: 0.5"] {
         let text = format!("[{}, {}]", bush(1, "bush", ""), water(fields));
-        assert!(builtin_with("objects.ron", &text).is_ok(), "{fields:?}");
+        assert!(loaded_with("objects.ron", &text).is_ok(), "{fields:?}");
     }
 }
 

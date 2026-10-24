@@ -132,7 +132,7 @@ fn p_opens_the_population_graph_over_the_panels_and_p_or_esc_closes_it() {
 /// lays alone at once (M2 design §10.4).
 fn mother() -> World {
     WorldBuilder::grass(12, 4)
-        .genes(&[(Pos { x: 5, y: 2 }, LAYS_ALONE)])
+        .genes(&[(at(5, 2), LAYS_ALONE)])
         .data(lone())
         .build()
 }

@@ -7,13 +7,11 @@
 
 mod common;
 use common::{
-    AGES_AT_ONCE, ALONE, FEMALE, LONE, Laying, OLD, at, builtin, builtin_changing, family_in,
+    AGES_AT_ONCE, ALONE, FEMALE, LONE, Laying, OLD, at, builtin_changing, default_world, family_in,
     hatch, laid, lone_mother_in, replayed,
 };
 
-use terra_sim::{
-    Command, CopyChangeView, DataPack, EventKind, GeneView, LifeStage, World, WorldConfig,
-};
+use terra_sim::{Command, CopyChangeView, DataPack, EventKind, GeneView, LifeStage, World};
 
 /// The change to the built-in physiology that copies every gene value
 /// wrongly.
@@ -168,9 +166,7 @@ fn what_age_did_to_a_mother_s_genes_isn_t_passed_on() {
 #[test]
 fn the_first_sprites_carry_a_few_hidden_flaws_and_none_broken() {
     // M2 design §12: as wild animals do, about three each.
-    let data = builtin();
-    let config = WorldConfig::builtin(&data);
-    let world = World::new(config, data, 7);
+    let world = default_world(7);
     let mut carried = 0;
     let mut sprites = 0;
     for sprite in world.sprites() {

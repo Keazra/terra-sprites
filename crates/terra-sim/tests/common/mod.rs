@@ -1,8 +1,10 @@
-//! Shared helpers for terra-sim integration tests.
+//! Shared helpers for terra-sim's tests.
 //!
-//! Each test file is its own crate, so it `mod common;` and uses only the
-//! pieces it needs. Helpers a given file never calls are allowed here so the
-//! shared API stays one place (#155).
+//! Each integration test file is its own crate, so it `mod common;` and uses
+//! only the pieces it needs. The crate's own unit tests have them too,
+//! through `src/test_util.rs`, which includes this file. Helpers a given
+//! file never calls are allowed here so the shared API stays one place
+//! (#155).
 #![allow(dead_code)]
 
 use terra_sim::{
@@ -611,8 +613,8 @@ pub fn replayed(world: &World) -> Playback {
 }
 
 /// A small field of grass with one grown female on (2, 1) who breeds alone
-/// whenever she can, made with `data` and `seed`: for tests of the eggs
-/// she lays.
+/// whenever she can (M2 design §15.7), made with `data` and `seed`: for
+/// tests of the eggs she lays.
 pub fn lone_mother_in(data: DataPack, seed: u64) -> World {
     let mother = format!("{ALONE}{FEMALE}");
     family_in(data, &[(at(2, 1), &mother)], &[], seed)

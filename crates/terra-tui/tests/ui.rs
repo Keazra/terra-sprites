@@ -2899,23 +2899,27 @@ fn a_hurt_sprite_takes_turns_with_a_red_bang_for_a_second() {
             ],
             &world,
         );
-        let at = |app: &App, cell| {
+        let look = |app: &App, cell| {
             let screen = render(app, &world, 100, 30);
             let cell = &screen[cell];
             (cell.symbol().to_string(), cell.fg)
         };
         // A quarter of a second the bang, a quarter the sprite, for a second.
         let bang = ("!".to_string(), Color::Red);
-        assert_eq!(at(&app, biter_cell), bang);
-        assert_eq!(at(&app, other_cell).0, sprite_glyph, "a kick hurts nobody");
+        assert_eq!(look(&app, biter_cell), bang);
+        assert_eq!(
+            look(&app, other_cell).0,
+            sprite_glyph,
+            "a kick hurts nobody"
+        );
         app.animate(Duration::from_millis(250));
-        assert_eq!(at(&app, biter_cell).0, sprite_glyph);
+        assert_eq!(look(&app, biter_cell).0, sprite_glyph);
         app.animate(Duration::from_millis(250));
-        assert_eq!(at(&app, biter_cell), bang);
+        assert_eq!(look(&app, biter_cell), bang);
         app.animate(Duration::from_millis(500));
-        assert_eq!(at(&app, biter_cell).0, sprite_glyph, "and then it's over");
+        assert_eq!(look(&app, biter_cell).0, sprite_glyph, "and then it's over");
         app.animate(Duration::from_millis(250));
-        assert_eq!(at(&app, biter_cell).0, sprite_glyph);
+        assert_eq!(look(&app, biter_cell).0, sprite_glyph);
 
         // A hit hurts the sprite hit, not the hitter.
         let hit = acted(
@@ -2927,8 +2931,8 @@ fn a_hurt_sprite_takes_turns_with_a_red_bang_for_a_second() {
             HURT_TARGET,
         );
         app.record(&[hit], &world);
-        assert_eq!(at(&app, other_cell), bang);
-        assert_eq!(at(&app, biter_cell).0, sprite_glyph);
+        assert_eq!(look(&app, other_cell), bang);
+        assert_eq!(look(&app, biter_cell).0, sprite_glyph);
     }
 }
 
@@ -3343,18 +3347,22 @@ fn a_pet_shows_a_heart_and_a_zap_a_yellow_double_bang_for_a_second() {
             &[touch(ids(petted), false), touch(ids(zapped), true)],
             &world,
         );
-        let at = |app: &App, cell| {
+        let look = |app: &App, cell| {
             let screen = render(app, &world, 100, 30);
             let cell = &screen[cell];
             (cell.symbol().to_string(), cell.fg)
         };
-        assert_eq!(at(&app, petted_cell).0, heart);
-        assert_eq!(at(&app, zapped_cell), (bang.to_string(), Color::Yellow));
+        assert_eq!(look(&app, petted_cell).0, heart);
+        assert_eq!(look(&app, zapped_cell), (bang.to_string(), Color::Yellow));
         app.animate(Duration::from_millis(250));
-        assert_eq!(at(&app, petted_cell).0, sprite_glyph);
+        assert_eq!(look(&app, petted_cell).0, sprite_glyph);
         app.animate(Duration::from_millis(1000));
-        assert_eq!(at(&app, petted_cell).0, sprite_glyph, "and then it's over");
-        assert_ne!(at(&app, zapped_cell).0, bang);
+        assert_eq!(
+            look(&app, petted_cell).0,
+            sprite_glyph,
+            "and then it's over"
+        );
+        assert_ne!(look(&app, zapped_cell).0, bang);
     }
 }
 

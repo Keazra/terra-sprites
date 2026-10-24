@@ -91,7 +91,7 @@ fn map_row(buffer: &Buffer, y: u16) -> String {
 }
 
 /// The sprite at (2, 3).
-const WANDERER: Pos = Pos { x: 2, y: 3 };
+const WANDERER: Pos = at(2, 3);
 
 /// An app on `world` with the wanderer selected, hurt, a death and a hurt
 /// in the event log, and the Cursor on the wanderer.
