@@ -11,6 +11,7 @@ use serde::Deserialize;
 use terra_sim::Pos;
 
 use crate::app::Origin;
+use crate::listed::listed_enum;
 
 /// What the map view shows at a place counted in tiles from the map's
 /// top-left corner, which may be past the wall.
@@ -60,32 +61,25 @@ impl Place {
     }
 }
 
-/// A piece of the glass, each with a glyph of the theme's (M2 design
-/// §11.5): `═` along the top and bottom, `║` down the sides, and the four
-/// corners.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Pane {
-    /// Along the top or the bottom.
-    Horizontal,
-    /// Down the left or the right.
-    Vertical,
-    TopLeft,
-    TopRight,
-    BottomLeft,
-    BottomRight,
-}
+listed_enum! {
+    /// A piece of the glass, each with a glyph of the theme's (M2 design
+    /// §11.5): `═` along the top and bottom, `║` down the sides, and the four
+    /// corners.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
+    #[serde(rename_all = "snake_case")]
+    pub enum Pane {
+        /// Along the top or the bottom.
+        Horizontal,
+        /// Down the left or the right.
+        Vertical,
+        TopLeft,
+        TopRight,
+        BottomLeft,
+        BottomRight,
+    }
 
-impl Pane {
     /// Every piece of the glass.
-    pub const ALL: [Pane; 6] = [
-        Pane::Horizontal,
-        Pane::Vertical,
-        Pane::TopLeft,
-        Pane::TopRight,
-        Pane::BottomLeft,
-        Pane::BottomRight,
-    ];
+    pub const ALL;
 }
 
 /// A depth of stars (M2 design §11.3). The numbers are those of the

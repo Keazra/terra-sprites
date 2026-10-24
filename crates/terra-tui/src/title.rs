@@ -15,6 +15,7 @@ use terra_sim::{Mode, Pos, World};
 use crate::app::{App, Draft, highlight_moved, shown};
 use crate::clock::Speed;
 use crate::input::Action;
+use crate::listed::listed_enum;
 use crate::saves::{self, SaveFile};
 use crate::start::Preset;
 use crate::theme::{Glyph, SemanticTile, Theme};
@@ -33,8 +34,6 @@ const TICK_EVERY: Duration = Duration::from_millis(200);
 const MOST_TICKS_AT_ONCE: u32 = 5;
 /// The menu's box: as wide as the title lettering and a margin.
 const BOX_WIDTH: u16 = 56;
-/// The choices the menu always offers, after Continue when there's a save.
-const ALWAYS_OFFERED: [Choice; 4] = [Choice::NewWorld, Choice::Load, Choice::Help, Choice::Quit];
 /// The most saves the list of saves shows at once; it scrolls for more.
 const LOAD_ROWS: usize = 12;
 /// The list of saves' rows besides the saves: its border.
@@ -91,27 +90,22 @@ fn explained(mode: Mode) -> [String; 3] {
     [what, speeds, kept]
 }
 
-/// A choice on the title screen's menu.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Choice {
-    /// Load the newest save; offered only when there is one.
-    Continue,
-    NewWorld,
-    Load,
-    Help,
-    Quit,
-}
-
-impl Choice {
-    pub fn label(self) -> &'static str {
-        match self {
-            Choice::Continue => "Continue",
-            Choice::NewWorld => "New world",
-            Choice::Load => "Load",
-            Choice::Help => "Help",
-            Choice::Quit => "Quit",
-        }
+listed_enum! {
+    /// A choice on the title screen's menu.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub enum Choice {
+        /// Load the newest save; offered only when there is one.
+        Continue => "Continue",
+        NewWorld => "New world",
+        Load => "Load",
+        Help => "Help",
+        Quit => "Quit",
     }
+
+    /// Every choice, in the menu's order.
+    pub const ALL;
+
+    pub fn label(self) -> &'static str;
 }
 
 /// What the game does after an action on the title screen.
@@ -255,10 +249,10 @@ impl Title {
         self.shown_for >= SCENE_ENDS
     }
 
-    /// The menu's choices, in order.
+    /// The menu's choices, in order: Continue, first, only when there's a
+    /// save.
     pub fn choices(&self) -> Vec<Choice> {
-        let continues = (!self.saves.is_empty()).then_some(Choice::Continue);
-        continues.into_iter().chain(ALWAYS_OFFERED).collect()
+        Choice::ALL[usize::from(self.saves.is_empty())..].to_vec()
     }
 
     /// Whether keys type, as they do in the New world box.
@@ -561,7 +555,7 @@ fn clear_of_boxes(world: &World, screen: Size) -> (Range<u16>, Range<u16>) {
     let map = world.map();
     let width = map.width().min(screen.width);
     let height = map.height().min(screen.height);
-    let menu = (ALWAYS_OFFERED.len() + 1) as u16 + MENU_FRAME_ROWS;
+    let menu = Choice::ALL.len() as u16 + MENU_FRAME_ROWS;
     let new_world = PRESET_ROWS as u16 + NEW_WORLD_FRAME_ROWS;
     let load = LOAD_ROWS as u16 + LOAD_FRAME_ROWS;
     let top = centred_box(screen, BOX_WIDTH, menu.max(new_world).max(load)).y;
