@@ -2020,10 +2020,7 @@ mod tests {
     #[test]
     fn a_save_that_doesnt_fit_its_pack_is_refused() {
         let damage: [fn(&mut WorldState, &DataPack); 11] = [
-            |state, _| {
-                let id = state.objects.at(Pos { x: 2, y: 2 }).expect("the bush");
-                state.objects.get_mut(id).expect("the bush").kind = 127;
-            },
+            |state, _| the_bush(state).kind = 127,
             |state, _| {
                 the_sprite(state).body.chems.pop();
             },
@@ -2232,11 +2229,7 @@ mod tests {
                 .is_err_and(|broken| broken.0.contains("remembered as dead"))
         );
         world.state.dead = RecordOfTheDead::default();
-        let bush = world
-            .state
-            .objects
-            .at(Pos { x: 2, y: 2 })
-            .expect("the bush");
+        let bush = world.object_at(Pos { x: 2, y: 2 }).expect("the bush").id();
         world.state.dead.remember(bush, record);
         assert!(
             world
@@ -2272,6 +2265,30 @@ mod tests {
     fn the_sprite(state: &mut WorldState) -> &mut Sprite {
         let (id, _) = state.sprites.iter().next().expect("a sprite");
         state.sprites.get_mut(id).expect("the sprite")
+    }
+
+    /// Sprite `id` of `world`, to change.
+    fn sprite_mut(world: &mut World, id: EntityId) -> &mut Sprite {
+        world.state.sprites.get_mut(id).expect("a sprite")
+    }
+
+    /// The berry bush on (2, 2) of the field with a bush, to change.
+    fn the_bush(state: &mut WorldState) -> &mut Object {
+        let id = state.objects.at(Pos { x: 2, y: 2 }).expect("the bush");
+        state.objects.get_mut(id).expect("the bush")
+    }
+
+    /// Runs step 4 (design §2.4) for every sprite of `world` but those
+    /// `dying`, with none of them in company.
+    fn step_4(world: &mut World, dying: &[EntityId]) {
+        let mut events = Vec::new();
+        learning::run(
+            &mut world.state,
+            &world.data,
+            dying,
+            &BTreeMap::new(),
+            &mut events,
+        );
     }
 
     /// Puts an object of type `name` on `pos` without checking the placement rules.
@@ -2349,12 +2366,7 @@ mod tests {
     #[test]
     fn an_id_counter_that_goes_back_breaks_an_invariant() {
         let mut world = field_with_a_bush();
-        force_place(&mut world, "berry", Pos { x: 5, y: 1 });
-        let berry = world
-            .state
-            .objects
-            .at(Pos { x: 5, y: 1 })
-            .expect("the berry");
+        let berry = force_berry(&mut world, Pos { x: 5, y: 1 });
         world.state.objects.remove(berry);
         assert_eq!(world.check_invariants(), Ok(()));
         // Every object left is below the counter, but the berry's ID could now be reused.
@@ -2378,14 +2390,14 @@ mod tests {
     #[test]
     fn a_sprite_the_tile_index_has_elsewhere_breaks_an_invariant() {
         let (mut world, first, _) = field_with_sprites();
-        world.state.sprites.get_mut(first).expect("a sprite").pos = Pos { x: 0, y: 0 };
+        sprite_mut(&mut world, first).pos = Pos { x: 0, y: 0 };
         assert!(world.check_invariants().is_err());
     }
 
     #[test]
     fn two_sprites_on_one_tile_break_an_invariant() {
         let (mut world, first, _) = field_with_sprites();
-        world.state.sprites.get_mut(first).expect("a sprite").pos = Pos { x: 5, y: 2 };
+        sprite_mut(&mut world, first).pos = Pos { x: 5, y: 2 };
         assert!(world.check_invariants().is_err());
     }
 
@@ -2423,7 +2435,7 @@ mod tests {
         // M2 design §9.3, §12.4: the sensor and the life stage agree on
         // when it grows old.
         let (mut world, first, _) = field_with_sprites();
-        let sprite = world.state.sprites.get_mut(first).expect("a sprite");
+        let sprite = sprite_mut(&mut world, first);
         sprite.flaws = vec![2; sprite.genome.genes.len()];
         world.step();
         let view = world.sprite(first).expect("a sprite");
@@ -2454,12 +2466,12 @@ mod tests {
     #[test]
     fn a_copying_error_in_a_gene_the_genome_lacks_breaks_an_invariant() {
         let (mut world, first, _) = field_with_sprites();
-        let sprite = world.state.sprites.get_mut(first).expect("a sprite");
+        let sprite = sprite_mut(&mut world, first);
         let gene = sprite.genome.genes.len() - 1;
         let was = sprite.genome.genes[gene].clone();
         sprite.copying_errors = vec![CopyingError { gene, was }];
         assert_eq!(world.check_invariants(), Ok(()), "its last gene");
-        let sprite = world.state.sprites.get_mut(first).expect("a sprite");
+        let sprite = sprite_mut(&mut world, first);
         sprite.copying_errors[0].gene += 1;
         assert!(world.check_invariants().is_err());
     }
@@ -2468,7 +2480,7 @@ mod tests {
     fn a_copying_error_that_changed_what_a_gene_does_breaks_an_invariant() {
         // M2 design §12.1: copying changes only a gene's values.
         let (mut world, first, _) = field_with_sprites();
-        let sprite = world.state.sprites.get_mut(first).expect("a sprite");
+        let sprite = sprite_mut(&mut world, first);
         let gene = sprite.genome.genes.len() - 1;
         let was = sprite.genome.genes[gene].clone();
         let other = sprite
@@ -2487,7 +2499,7 @@ mod tests {
         // M2 design §13: a doubled gene does what the gene before it does;
         // a changed one differs from what it was.
         let (mut world, first, _) = field_with_sprites();
-        let sprite = world.state.sprites.get_mut(first).expect("a sprite");
+        let sprite = sprite_mut(&mut world, first);
         let last = sprite.genome.genes.len() - 1;
         let gene = sprite.genome.genes[last].clone();
         let switch = sprite.genome.switch(last);
@@ -2527,7 +2539,7 @@ mod tests {
         sprite.copy_changes = fits.to_vec();
         assert_eq!(world.check_invariants(), Ok(()));
         for change in not {
-            let sprite = world.state.sprites.get_mut(first).expect("a sprite");
+            let sprite = sprite_mut(&mut world, first);
             sprite.copy_changes = vec![change.clone()];
             assert!(world.check_invariants().is_err(), "{change:?}");
         }
@@ -2536,13 +2548,13 @@ mod tests {
     #[test]
     fn more_than_two_flawed_copies_of_a_gene_or_flaws_of_genes_it_lacks_break_an_invariant() {
         let (mut world, first, _) = field_with_sprites();
-        let sprite = world.state.sprites.get_mut(first).expect("a sprite");
+        let sprite = sprite_mut(&mut world, first);
         sprite.flaws = vec![1, 2];
         assert_eq!(world.check_invariants(), Ok(()), "two at most");
-        let sprite = world.state.sprites.get_mut(first).expect("a sprite");
+        let sprite = sprite_mut(&mut world, first);
         sprite.flaws = vec![3];
         assert!(world.check_invariants().is_err());
-        let sprite = world.state.sprites.get_mut(first).expect("a sprite");
+        let sprite = sprite_mut(&mut world, first);
         sprite.flaws = vec![0; sprite.genome.genes.len() + 1];
         assert!(world.check_invariants().is_err(), "a gene too many");
     }
@@ -2550,7 +2562,7 @@ mod tests {
     #[test]
     fn a_sprite_led_by_no_cursor_breaks_an_invariant() {
         let (mut world, first, _) = field_with_sprites();
-        world.state.sprites.get_mut(first).expect("a sprite").lead = Some(Walk::default());
+        sprite_mut(&mut world, first).lead = Some(Walk::default());
         assert!(world.check_invariants().is_err());
     }
 
@@ -2566,17 +2578,7 @@ mod tests {
     fn an_object_not_scheduled_for_its_next_turn_breaks_an_invariant() {
         let mut world = field_with_a_bush();
         world.step();
-        let bush = world
-            .state
-            .objects
-            .at(Pos { x: 2, y: 2 })
-            .expect("the bush");
-        world
-            .state
-            .objects
-            .get_mut(bush)
-            .expect("the bush")
-            .stage_ends = 5;
+        the_bush(&mut world.state).stage_ends = 5;
         assert!(world.check_invariants().is_err());
     }
 
@@ -2604,13 +2606,7 @@ mod tests {
     #[test]
     fn a_level_outside_0_to_1_breaks_an_invariant() {
         let (mut world, _, second) = field_with_sprites();
-        world
-            .state
-            .sprites
-            .get_mut(second)
-            .expect("a sprite")
-            .body
-            .chems[0] = 1.5;
+        sprite_mut(&mut world, second).body.chems[0] = 1.5;
         assert!(world.check_invariants().is_err());
     }
 
@@ -2618,7 +2614,7 @@ mod tests {
     fn levels_a_tick_ago_that_do_not_match_the_chemicals_break_an_invariant() {
         // As a body loaded from a save would have, if loading didn't fill them in.
         let (mut world, first, _) = field_with_sprites();
-        let body = &mut world.state.sprites.get_mut(first).expect("a sprite").body;
+        let body = &mut sprite_mut(&mut world, first).body;
         body.chems_before_tick.clear();
         assert!(world.check_invariants().is_err());
     }
@@ -2626,13 +2622,7 @@ mod tests {
     #[test]
     fn a_locus_that_is_not_a_number_breaks_an_invariant() {
         let (mut world, first, _) = field_with_sprites();
-        world
-            .state
-            .sprites
-            .get_mut(first)
-            .expect("a sprite")
-            .body
-            .loci[1] = f32::NAN;
+        sprite_mut(&mut world, first).body.loci[1] = f32::NAN;
         assert!(world.check_invariants().is_err());
     }
 
@@ -2648,13 +2638,7 @@ mod tests {
     fn the_state_hash_covers_every_sprite_s_chemistry() {
         let (mut world, _, second) = field_with_sprites();
         let before = world.state_hash();
-        world
-            .state
-            .sprites
-            .get_mut(second)
-            .expect("a sprite")
-            .body
-            .chems[5] = 0.5;
+        sprite_mut(&mut world, second).body.chems[5] = 0.5;
         assert_ne!(world.state_hash(), before);
     }
 
@@ -2801,7 +2785,7 @@ mod tests {
         let ids: Vec<EntityId> = world.sprites().map(|s| s.id()).collect();
         world.step();
         let indices = world.data.physiology().indices;
-        let dying = world.state.sprites.get_mut(ids[1]).expect("east");
+        let dying = sprite_mut(&mut world, ids[1]);
         dying.body.chems[indices.energy] = 0.0;
         dying.body.chems[indices.injury] = 1.0;
         let events = world.step();
@@ -2834,7 +2818,7 @@ mod tests {
             .build();
         let id = world.sprite_at(walker).expect("the walker").id();
         let target = Target::Object(world.state.objects.at(bush).expect("the bush"));
-        world.state.sprites.get_mut(id).expect("the walker").action =
+        sprite_mut(&mut world, id).action =
             Some(Action::new(Verb::Eat, None, Some((target, None)), true, 0));
         let mut ended = None;
         for _ in 0..40 {
@@ -2878,7 +2862,7 @@ mod tests {
         let target = Target::Object(world.state.objects.at(far).expect("the far bush"));
         let kind = world.state.type_of(&world.data, target);
         let backing_away = Action::new(Verb::Retreat, None, Some((target, kind)), false, 0);
-        world.state.sprites.get_mut(id).expect("the sprite").action = Some(backing_away);
+        sprite_mut(&mut world, id).action = Some(backing_away);
         world.step();
         let action = world.sprite(id).expect("the sprite").action();
         let action = action.expect("an action");
@@ -3003,7 +2987,7 @@ mod tests {
                 .newborns(&[tile])
                 .build();
             let id = world.sprites().next().expect("the egg").id();
-            let egg = world.state.sprites.get_mut(id).expect("the egg");
+            let egg = sprite_mut(&mut world, id);
             egg.hatches = Some(750);
             world.state.old_eggs_to_items(&world.data);
             let as_egg = world.egg(id).map(|egg| egg.hatches());
@@ -3052,7 +3036,7 @@ mod tests {
         let needs = world.data.need_places().len();
         let thirst = world.data.needs().position(|need| need == "thirst");
         let thirst = thirst.expect("thirst is a need");
-        let brain = &mut world.state.sprites.get_mut(id).expect("a sprite").brain;
+        let brain = &mut sprite_mut(world, id).brain;
         let known = brain.experience.learn_about(WATER, needs);
         known.worth[thirst] = 0.6;
         known.touched = true;
@@ -3081,12 +3065,7 @@ mod tests {
             [mother, father, young].map(|pos| id_at(&world, pos));
         know_water(&mut world, mother_id);
         let parents = vec![mother_id, father_id];
-        world
-            .state
-            .sprites
-            .get_mut(young_id)
-            .expect("the young one")
-            .parents = parents;
+        sprite_mut(&mut world, young_id).parents = parents;
         let looks_at = |world: &World| world.sprite(young_id).expect("young").attending_to();
         world.step();
         assert_eq!(looks_at(&world), Some(mother), "its mother is drinking");
@@ -3121,23 +3100,13 @@ mod tests {
         let needs = world.data.need_places().len();
         let berry = world.data.real_object_type("berry").expect("berries");
         let berry_type = world.data.object_types()[berry].id;
-        let brain = &mut world
-            .state
-            .sprites
-            .get_mut(mother_id)
-            .expect("mother")
-            .brain;
+        let brain = &mut sprite_mut(&mut world, mother_id).brain;
         let known = brain
             .experience
             .learn_about(Subject::ObjectType(berry_type), needs);
         known.worth[0] = 0.6;
         known.touched = true;
-        world
-            .state
-            .sprites
-            .get_mut(young_id)
-            .expect("young")
-            .parents = vec![mother_id];
+        sprite_mut(&mut world, young_id).parents = vec![mother_id];
         while world.state.objects.iter().next().is_some() {
             world.step();
         }
@@ -3185,7 +3154,7 @@ mod tests {
         let (mother_id, young_id) = (id_at(&world, mother), id_at(&world, young_tile));
         know_water(&mut world, mother_id);
         let tick = world.state.tick;
-        let young = world.state.sprites.get_mut(young_id).expect("young");
+        let young = sprite_mut(&mut world, young_id);
         young.parents = vec![mother_id];
         young.heard.push(crate::courtship::Heard {
             caller: mother_id,
@@ -3248,7 +3217,7 @@ mod tests {
             }],
         );
         let stamina = world.data.physiology().indices.stamina;
-        let sprite = world.state.sprites.get_mut(id).expect("the walker");
+        let sprite = sprite_mut(&mut world, id);
         sprite.body.start_at(stamina, 0.0);
         for _ in 0..5 {
             world.step();
@@ -3274,12 +3243,7 @@ mod tests {
             ])
             .build();
         let id = world.sprite_at(walker).expect("the walker").id();
-        world
-            .state
-            .sprites
-            .get_mut(id)
-            .expect("the walker")
-            .move_points = 1_000;
+        sprite_mut(&mut world, id).move_points = 1_000;
         world.step();
         let sprite = world.state.sprites.get(id).expect("the walker");
         assert_eq!(sprite.pos, walker, "held up");
@@ -3294,12 +3258,7 @@ mod tests {
                 destination: Pos { x: 1, y: 0 },
             }],
         );
-        world
-            .state
-            .sprites
-            .get_mut(id)
-            .expect("the walker")
-            .move_points = 1_000;
+        sprite_mut(&mut world, id).move_points = 1_000;
         world.step();
         let walker = world.state.sprites.get(id).expect("the walker");
         assert_eq!(walker.pos, Pos { x: 1, y: 0 });
@@ -3309,12 +3268,7 @@ mod tests {
     #[test]
     fn a_counter_above_its_maximum_breaks_an_invariant() {
         let mut world = field_with_a_bush();
-        let id = world
-            .state
-            .objects
-            .at(Pos { x: 2, y: 2 })
-            .expect("the bush");
-        world.state.objects.get_mut(id).expect("the bush").counters[0] = 7;
+        the_bush(&mut world.state).counters[0] = 7;
         assert!(world.check_invariants().is_err());
     }
 
@@ -3380,19 +3334,12 @@ mod tests {
         let reward = world.data.physiology().indices.reward;
         for id in [first, second] {
             let entry = eat_entry(0);
-            let sprite = world.state.sprites.get_mut(id).expect("a sprite");
+            let sprite = sprite_mut(&mut world, id);
             sprite.brain.trace.push_back(entry);
             sprite.body.chems[reward] = 0.5;
         }
         world.state.tick = 1;
-        let mut events = Vec::new();
-        learning::run(
-            &mut world.state,
-            &world.data,
-            &[second],
-            &BTreeMap::new(),
-            &mut events,
-        );
+        step_4(&mut world, &[second]);
         let sprite = |id| world.state.sprites.get(id).expect("a sprite");
         assert_eq!(sprite(first).brain.felt, 0.5, "the living one learns");
         assert_eq!(sprite(first).body.chems[reward], 0.0);
@@ -3411,7 +3358,7 @@ mod tests {
         world.state.learning = false;
         let indices = world.data.physiology().indices;
         let bush = world.data.category_named("bush").expect("a category");
-        let sprite = world.state.sprites.get_mut(first).expect("a sprite");
+        let sprite = sprite_mut(&mut world, first);
         sprite.brain.touched = Some(Touch {
             tick: 0,
             verb: Some(Verb::Eat),
@@ -3422,14 +3369,7 @@ mod tests {
             place: None,
         });
         sprite.body.chems[indices.reward] = 0.5;
-        let mut events = Vec::new();
-        learning::run(
-            &mut world.state,
-            &world.data,
-            &[],
-            &BTreeMap::new(),
-            &mut events,
-        );
+        step_4(&mut world, &[]);
         let sprite = world.state.sprites.get(first).expect("a sprite");
         assert_eq!(sprite.brain.felt, 0.5, "felt, and used up");
         assert_eq!(sprite.body.chems[indices.reward], 0.0);
@@ -3443,13 +3383,7 @@ mod tests {
         let (mut world, first, _) = field_with_sprites();
         world.state.learning = false;
         let bush = world.data.category_named("bush").expect("a category");
-        world
-            .state
-            .sprites
-            .get_mut(first)
-            .expect("a sprite")
-            .brain
-            .touched = Some(Touch {
+        sprite_mut(&mut world, first).brain.touched = Some(Touch {
             tick: 0,
             verb: Some(Verb::Eat),
             subject: Subject::Category(bush),
@@ -3463,15 +3397,8 @@ mod tests {
             amplified: false,
             reach_back: 10,
         });
-        let mut events = Vec::new();
-        world.apply_commands(&mut events);
-        learning::run(
-            &mut world.state,
-            &world.data,
-            &[],
-            &BTreeMap::new(),
-            &mut events,
-        );
+        world.apply_commands(&mut Vec::new());
+        step_4(&mut world, &[]);
         let sprite = world.state.sprites.get(first).expect("a sprite");
         assert_eq!(sprite.brain.felt, 0.5, "felt, and used up");
         assert_eq!(sprite.brain.reach_back, None, "used up");
@@ -3484,11 +3411,11 @@ mod tests {
         let entry = eat_entry(0);
         let before = world.state_hash();
         let data = world.data.clone();
-        let brain = &mut world.state.sprites.get_mut(second).expect("a sprite").brain;
+        let brain = &mut sprite_mut(&mut world, second).brain;
         brain.trace.push_back(entry);
         let traced = world.state_hash();
         assert_ne!(traced, before, "the trace is hashed");
-        let brain = &mut world.state.sprites.get_mut(second).expect("a sprite").brain;
+        let brain = &mut sprite_mut(&mut world, second).brain;
         let bush = data.category_named("bush").expect("a category");
         brain.touched = Some(Touch {
             tick: 0,
@@ -3511,12 +3438,12 @@ mod tests {
         brain.learn(0, &signals, 1.0, &data);
         let touched = world.state_hash();
         assert_ne!(touched, traced, "what it touched is hashed");
-        let brain = &mut world.state.sprites.get_mut(second).expect("a sprite").brain;
+        let brain = &mut sprite_mut(&mut world, second).brain;
         let signals = hunger(brain, 0.5);
         brain.learn(1, &signals, 1.0, &data);
         let learned = world.state_hash();
         assert_ne!(learned, touched, "what it learned is hashed");
-        let brain = &mut world.state.sprites.get_mut(second).expect("a sprite").brain;
+        let brain = &mut sprite_mut(&mut world, second).brain;
         let water = Target::Water(Pos { x: 0, y: 0 });
         let place = (
             Subject::Category(data.water_category()),
@@ -3545,7 +3472,7 @@ mod tests {
     fn remember_places(world: &mut World, id: EntityId, n: u16) {
         let water = Subject::Category(world.data.water_category());
         let width = world.state.map.width();
-        let brain = &mut world.state.sprites.get_mut(id).expect("a sprite").brain;
+        let brain = &mut sprite_mut(world, id).brain;
         for n in 0..n {
             let at = Pos {
                 x: n % width,
@@ -3572,18 +3499,9 @@ mod tests {
         assert_eq!(world.check_invariants(), Ok(()));
         let breaks: [fn(&mut World, EntityId); 4] = [
             |world, id| remember_places(world, id, 9),
-            |world, id| {
-                let brain = &mut world.state.sprites.get_mut(id).expect("a sprite").brain;
-                brain.experience.places[0].at = Pos { x: 999, y: 0 };
-            },
-            |world, id| {
-                let brain = &mut world.state.sprites.get_mut(id).expect("a sprite").brain;
-                brain.experience.places[0].recall = 1.5;
-            },
-            |world, id| {
-                let brain = &mut world.state.sprites.get_mut(id).expect("a sprite").brain;
-                brain.experience.places[0].recall = f32::NAN;
-            },
+            |world, id| sprite_mut(world, id).brain.experience.places[0].at = Pos { x: 999, y: 0 },
+            |world, id| sprite_mut(world, id).brain.experience.places[0].recall = 1.5,
+            |world, id| sprite_mut(world, id).brain.experience.places[0].recall = f32::NAN,
         ];
         for (i, broken) in breaks.into_iter().enumerate() {
             let (mut world, first, _) = field_with_sprites();
@@ -3603,7 +3521,7 @@ mod tests {
             .build();
         let id = world.sprites().next().expect("the sprite").id();
         let water = Subject::Category(world.data.water_category());
-        let brain = &mut world.state.sprites.get_mut(id).expect("a sprite").brain;
+        let brain = &mut sprite_mut(&mut world, id).brain;
         for &x in xs {
             let at = Pos { x, y: 0 };
             let loose = crate::physiology::RememberedPlaces {
@@ -3740,7 +3658,7 @@ mod tests {
         assert_eq!(world.sprites().next().expect("it").remembered_places(), []);
         // No longer thirsty, it has no reason to change what it's doing.
         let thirst = thirst_chem(&world);
-        world.state.sprites.get_mut(id).expect("it").body.chems[thirst] = 0.0;
+        sprite_mut(&mut world, id).body.chems[thirst] = 0.0;
         let events = world.step();
         let ended = events
             .iter()
@@ -3778,7 +3696,7 @@ mod tests {
         // its eye goes back where it was, and its latest step 5 is that
         // tick's, so it watches as it would have.
         let (mut world, id, ball) = going_to_a_ball_with_water_beyond_a_wall("", &[]);
-        world.state.sprites.get_mut(id).expect("the sprite").action = None;
+        sprite_mut(&mut world, id).action = None;
         let tick = world.state.tick;
         world.step();
         let sprite = world.sprites().next().expect("the sprite");
@@ -3843,7 +3761,7 @@ mod tests {
         let subject = world.state.subject_of(&world.data, target);
         let needs = world.data.needs().count();
         let limits = world.data.physiology().remembered_places;
-        let brain = &mut world.state.sprites.get_mut(id).expect("a sprite").brain;
+        let brain = &mut sprite_mut(&mut world, id).brain;
         brain.experience.remember_place(subject, target, at, limits);
         brain.experience.places[0].recall = recall;
         let known = brain.experience.learn_about(subject, needs);
@@ -3932,7 +3850,7 @@ mod tests {
         for broken in [1.5, f32::NAN] {
             let (mut world, first, _) = field_with_sprites();
             assert_eq!(world.check_invariants(), Ok(()));
-            let brain = &mut world.state.sprites.get_mut(first).expect("a sprite").brain;
+            let brain = &mut sprite_mut(&mut world, first).brain;
             brain.break_a_link_for_test(broken);
             assert!(world.check_invariants().is_err(), "{broken}");
         }
@@ -3957,7 +3875,7 @@ mod tests {
         ];
         for (i, broken) in breaks.into_iter().enumerate() {
             let (mut world, first, _) = field_with_sprites();
-            broken(&mut world.state.sprites.get_mut(first).expect("a sprite").brain);
+            broken(&mut sprite_mut(&mut world, first).brain);
             assert!(world.check_invariants().is_err(), "break {i}");
         }
     }
@@ -3965,13 +3883,7 @@ mod tests {
     #[test]
     fn a_felt_value_that_is_not_a_number_breaks_an_invariant() {
         let (mut world, first, _) = field_with_sprites();
-        world
-            .state
-            .sprites
-            .get_mut(first)
-            .expect("a sprite")
-            .brain
-            .felt = f32::NAN;
+        sprite_mut(&mut world, first).brain.felt = f32::NAN;
         assert!(world.check_invariants().is_err());
     }
 
@@ -4054,7 +3966,7 @@ mod tests {
         let (a, b, c) = (ids[0], ids[1], ids[2]);
         make_partners(&mut world, a, b);
         let injury = world.data.physiology().indices.injury;
-        world.state.sprites.get_mut(b).expect("b").body.chems[injury] = 1.0;
+        sprite_mut(&mut world, b).body.chems[injury] = 1.0;
         let events = world.step();
         let lost: Vec<_> = events
             .iter()
@@ -4099,7 +4011,7 @@ mod tests {
             "b is out of sight"
         );
         let injury = world.data.physiology().indices.injury;
-        world.state.sprites.get_mut(b).expect("b").body.chems[injury] = 1.0;
+        sprite_mut(&mut world, b).body.chems[injury] = 1.0;
         for _ in 0..3 {
             world.step();
             assert_eq!(locus(&world, families.found), 0.0, "nothing found");
