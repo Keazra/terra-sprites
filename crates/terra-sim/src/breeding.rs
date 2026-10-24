@@ -21,7 +21,7 @@ use crate::perception::Target;
 use crate::physiology::RoomNearby;
 use crate::random::uniform;
 use crate::registry::Verb;
-use crate::sprites::{Genes, Sprite, check_genes};
+use crate::sprites::{Genes, check_genes};
 use crate::world::WorldState;
 
 listed_enum! {
@@ -129,18 +129,19 @@ pub enum Fertility {
     Infertile,
 }
 
-/// Whether `sprite` is fertile now (M2 design §10): see `fertility`.
-pub(crate) fn fertile(state: &WorldState, sprite: &Sprite, data: &DataPack) -> bool {
-    fertility(state, sprite, data) == Fertility::Fertile
+/// Whether sprite `id` is fertile now (M2 design §10): see `fertility`.
+pub(crate) fn fertile(state: &WorldState, id: EntityId, data: &DataPack) -> bool {
+    fertility(state, id, data) == Fertility::Fertile
 }
 
-/// Whether `sprite` can breed now (M2 design §10.2). It's fertile in a pack
+/// Whether sprite `id` can breed now (M2 design §10.2). It's fertile in a pack
 /// that `breeds`, grown up, fed and watered, rested long enough since its
 /// last egg, in a world with `room` for another sprite, and with room
 /// nearby. A save from before breeding keeps its pack, which has none. The
 /// world's room is asked first, since only a death makes it, and the room
 /// nearby last, since it's the one that counts other sprites.
-pub(crate) fn fertility(state: &WorldState, sprite: &Sprite, data: &DataPack) -> Fertility {
+pub(crate) fn fertility(state: &WorldState, id: EntityId, data: &DataPack) -> Fertility {
+    let sprite = state.sprites.get(id).expect("a sprite");
     let physiology = data.physiology();
     let (breeding, indices) = (&physiology.breeding, physiology.indices);
     let chems = &sprite.body.chems;
@@ -157,7 +158,7 @@ pub(crate) fn fertility(state: &WorldState, sprite: &Sprite, data: &DataPack) ->
         Fertility::WorldFull
     } else if breeding
         .room_nearby
-        .is_some_and(|room| too_crowded(state, sprite, room))
+        .is_some_and(|room| too_crowded(state, id, room))
     {
         Fertility::TooCrowded
     } else {
@@ -166,16 +167,17 @@ pub(crate) fn fertility(state: &WorldState, sprite: &Sprite, data: &DataPack) ->
 }
 
 /// Whether `room`'s `fewer_than` or more other grown sprites, adult or old,
-/// a partner included, are within its `within` tiles of `sprite` in a
+/// a partner included, are within its `within` tiles of sprite `me` in a
 /// straight line (M2 design §10.2, §10.9). Young sprites and eggs don't
 /// count.
-fn too_crowded(state: &WorldState, sprite: &Sprite, room: RoomNearby) -> bool {
+fn too_crowded(state: &WorldState, me: EntityId, room: RoomNearby) -> bool {
+    let pos = state.sprites.get(me).expect("a sprite").pos;
     let reach = u64::from(room.within).pow(2);
     let near = state
         .sprites
         .iter()
-        .filter(|&(_, other)| !std::ptr::eq(other, sprite) && other.stage().is_grown())
-        .filter(|(_, other)| other.pos.distance_squared(sprite.pos) <= reach)
+        .filter(|&(id, other)| id != me && other.stage().is_grown())
+        .filter(|(_, other)| other.pos.distance_squared(pos) <= reach)
         .count();
     near >= usize::from(room.fewer_than)
 }
@@ -197,7 +199,7 @@ pub(crate) fn mate(
         .filter(|&partner| adults(state, actor, partner))
         .and_then(|partner| {
             let (a, b) = (state.sprites.get(actor)?, state.sprites.get(partner)?);
-            let both = fertile(state, a, data) && fertile(state, b, data);
+            let both = fertile(state, actor, data) && fertile(state, partner, data);
             let (mother, father) = match (a.sex, b.sex) {
                 (Sex::Female, Sex::Male) => (actor, partner),
                 (Sex::Male, Sex::Female) => (partner, actor),
@@ -242,7 +244,7 @@ pub(crate) fn breed_alone(
         .alone_after
         .is_none_or(|ticks| state.tick >= sprite.last_male.saturating_add(ticks));
     let longs = breeding.breeds_alone.is_none_or(|level| longing >= level);
-    let able = sprite.sex == Sex::Female && alone && longs && fertile(state, sprite, data);
+    let able = sprite.sex == Sex::Female && alone && longs && fertile(state, actor, data);
     let laid = able
         .then(|| lay(state, data, actor, None, events))
         .flatten();

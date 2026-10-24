@@ -672,7 +672,7 @@ impl<'a> SpriteView<'a> {
     /// which room (M2 design §10.2, §10.6).
     pub fn fertility(&self) -> Fertility {
         let state = &self.world.state;
-        breeding::fertility(state, self.sprite, &self.world.data)
+        breeding::fertility(state, self.id, &self.world.data)
     }
 
     /// The level of its `feminiser` hormone over the level at which a male
@@ -1788,7 +1788,7 @@ impl World {
                     standing: action::is_standing(sprite),
                     stage: sprite.stage(),
                     sooner: sprite.sooner(data),
-                    fertile: breeding::fertile(state, sprite, data),
+                    fertile: breeding::fertile(state, id, data),
                     female: sprite.sex == Sex::Female,
                     female_near: company.female_near,
                     male_near: company.male_near,

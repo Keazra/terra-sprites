@@ -1,13 +1,13 @@
 # Room nearby
 
-Room nearby was settled with the owner on 2026-10-20 in [#318](https://github.com/Keazra/terra-sprites/issues/318), as Slice 29b ([#331](https://github.com/Keazra/terra-sprites/issues/331)): a grown sprite can breed only where fewer than 4 other grown sprites are within 10 tiles, so that roaming pays again in a world that sits full. On 2026-10-24 the owner held Slice 29's missed long-run bars over to [#332](https://github.com/Keazra/terra-sprites/issues/332), reported but not must-pass. What the screen says was settled in Slice 29b's round on 2026-10-24, as recommended.
+Room nearby was settled with the owner on 2026-10-20 in [#318](https://github.com/Keazra/terra-sprites/issues/318), as Slice 29b ([#331](https://github.com/Keazra/terra-sprites/issues/331), [PR #350](https://github.com/Keazra/terra-sprites/pull/350)): a grown sprite can breed only where fewer than 4 other grown sprites are within 10 tiles, so that roaming pays again in a world that sits full. On 2026-10-24 the owner held Slice 29's missed long-run bars over to [#332](https://github.com/Keazra/terra-sprites/issues/332), reported but not must-pass. What the screen says was settled in Slice 29b's round on 2026-10-24, as recommended.
 
 ## M2 "Generations"
 
 | # | Change | Source | Sections |
 |---|---|---|---|
 | 1 | **Room nearby.** A grown sprite is fertile only while fewer than 4 other grown sprites, adult or old, a partner included, are within 10 tiles in a straight line. Young sprites and eggs don't count. The `fertile` sensor and arousal follow it. | #318 Q1, Q2 | §10.2, §10.6, §10.9 |
-| 2 | **Its two numbers are data,** physiology's `breeding.room_nearby`, `(within: 10, fewer_than: 4)`. A pack without it keeps the world's limit as its only rule. | #318, #331 | §10.9 |
+| 2 | **Its two numbers are data,** physiology's `breeding.room_nearby`, `(within: 10, fewer_than: 4)`, each at least 1. A pack without it keeps the world's limit as its only rule. A data pack can change them and a preset can't, as with `fed`, `rest` and every number of the body's: #318 settled them as physiology's breeding data, and #331's "a preset or pack" went further than that, since a preset holds only the world's own settings. | #318, #331 | §10.9 |
 | 3 | **The world's room comes first:** in a full world a sprite whose body could breed is held back by the limit, whatever is near it. | #331 | §10.9 |
 | 4 | **No `boredom → Wander` in the starter.** It's the next thing to try if sprites with their wandering switched off creep back. | #318 Q3 | §10.9 |
 | 5 | **The screen says why a sprite won't breed:** the Body tab says `too crowded to breed` or `world full` in place of `fertile`, and the World tab counts the grown sprites fertile and too crowded, or says the world is full. | #331's round | §10.7, §10.9 |

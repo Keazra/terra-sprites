@@ -829,6 +829,13 @@ fn room_nearby_has_room_for_at_least_one_other_sprite() {
 }
 
 #[test]
+fn room_nearby_reaches_at_least_one_tile() {
+    // M2 design §10.9, #331: within no tiles, only a sprite on its own tile
+    // would count, and none is, so the rule would be off without saying so.
+    assert_invalid_physiology("within: 10", "within: 0", "breeding.room_nearby.within");
+}
+
+#[test]
 fn a_pack_with_egg_items_says_when_they_hatch_only_in_objects_ron() {
     // #196: `breeding.hatches` is only a pack's from before eggs were
     // items, which has no egg type of its own.
