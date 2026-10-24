@@ -19,7 +19,7 @@ use crate::family_tree::{self, Lineage};
 use crate::inspector::{self, INSPECTOR_WIDTH, NOTHING_SELECTED, first_shown};
 use crate::policy::{Panel, Subject};
 use crate::space::{self, Place};
-use crate::text::{display_name, group_thousands, terrain_name};
+use crate::text::{display_name, terrain_name, thousands};
 use crate::theme::{Glyph, SemanticTile};
 
 /// The narrowest terminal that has room for the inspector beside the map view.
@@ -899,7 +899,7 @@ fn top_bar_line(app: &App, world: &World, width: u16) -> Line<'static> {
     };
     let text = format!(
         " Terra Sprites │ tick {} │ {time} │ seed {}{population} │ {saved}",
-        group_thousands(world.tick()),
+        thousands(world.tick()),
         app.seed,
     );
     const HELP: &str = "? help ";
@@ -1149,7 +1149,7 @@ fn render_event_log(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
         } else {
             String::new()
         };
-        let line = format!(" {:>7}  {text}{times}", group_thousands(tick));
+        let line = format!(" {:>7}  {text}{times}", thousands(tick));
         buf.set_stringn(
             inner.x,
             row,

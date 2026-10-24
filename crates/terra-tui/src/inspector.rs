@@ -20,8 +20,8 @@ use crate::listed::listed_enum;
 use crate::policy::{Panel, Subject};
 use crate::text;
 use crate::text::{
-    BOUND, ROOTED, Words, cause_name, change, display_name, group_thousands, level, signed,
-    signed_level, significant, terrain_name, unbroken, whole, wrap,
+    BOUND, ROOTED, Words, cause_name, change, display_name, level, signed, signed_level,
+    significant, terrain_name, thousands, unbroken, whole, wrap,
 };
 
 /// The inspector's width, in columns, border included (design §6.1).
@@ -118,7 +118,7 @@ fn shown(app: &App, world: &World) -> Vec<(Line<'static>, Option<MemoryOpen>)> {
                 "{} died {} at age{BOUND}{}",
                 unbroken(&app.names().label(id)),
                 unbroken(&how),
-                group_thousands(age)
+                thousands(age)
             );
             bare(wrapped(&text, 1, Style::default()))
         }
@@ -167,7 +167,7 @@ fn body_tab(sprite: &SpriteView, app: &App, world: &World) -> Vec<Line<'static>>
     let doing = doing_line(sprite, app, world).map(|line| format!(" {line}"));
     let mut lines: Vec<String> = doing.into_iter().collect();
     lines.extend([
-        format!(" age {} · {}", group_thousands(sprite.age()), {
+        format!(" age {} · {}", thousands(sprite.age()), {
             let stage = sprite.life_stage();
             match stage {
                 LifeStage::Young => {
@@ -389,7 +389,7 @@ fn observed_lines(app: &App, now: u64) -> Vec<String> {
             let ago = match now.saturating_sub(o.tick + 1) {
                 0 => "just now".to_string(),
                 1 => "1 tick ago".to_string(),
-                n => format!("{} ticks ago", group_thousands(n)),
+                n => format!("{} ticks ago", thousands(n)),
             };
             let times = if o.count > 1 {
                 // An x: CP437 has no × (design §6.2).
@@ -1762,7 +1762,7 @@ fn numbers(gene: &GeneView) -> Vec<String> {
         GeneView::HalfLife { ticks: 1, .. } => vec![format!("every{BOUND}tick")],
         GeneView::HalfLife { ticks, .. } => vec![format!(
             "every{BOUND}{}{BOUND}ticks",
-            group_thousands(u64::from(ticks))
+            thousands(u64::from(ticks))
         )],
         GeneView::Reaction { rate, .. } => vec![format!("rate{BOUND}{}", significant(rate))],
         GeneView::Emitter {
@@ -2010,7 +2010,7 @@ fn world_tab(app: &App, world: &World) -> Vec<Line<'static>> {
         .iter()
         .map(|&cause| {
             let n = world.deaths(cause);
-            format!("{} {}", cause_name(cause, data), group_thousands(n))
+            format!("{} {}", cause_name(cause, data), thousands(n))
         })
         .collect();
     let total: u64 = world.deaths_by_cause().map(|(_, n)| n).sum();
@@ -2030,14 +2030,14 @@ fn world_tab(app: &App, world: &World) -> Vec<Line<'static>> {
         Line::from(format!(
             " {:<12}{:>7}",
             "sprites",
-            group_thousands(world.sprites().count() as u64)
+            thousands(world.sprites().count() as u64)
         )),
     ]);
     lines.extend(generations_line(world));
     lines.push(Line::from(format!(
         " {:<12}{:>7}",
         "deaths",
-        group_thousands(total)
+        thousands(total)
     )));
     lines.extend(wrapped(&listed(&deaths), 3, plain));
     for object_type in data.object_type_names() {
@@ -2048,7 +2048,7 @@ fn world_tab(app: &App, world: &World) -> Vec<Line<'static>> {
         lines.push(Line::from(format!(
             " {:<12}{:>7}",
             display_name(object_type),
-            group_thousands(objects.len() as u64)
+            thousands(objects.len() as u64)
         )));
         let stages = data.stage_names(object_type);
         if stages.len() > 1 {
@@ -2056,7 +2056,7 @@ fn world_tab(app: &App, world: &World) -> Vec<Line<'static>> {
                 .iter()
                 .map(|&stage| {
                     let n = objects.iter().filter(|o| o.stage() == Some(stage)).count();
-                    format!("{stage} {}", group_thousands(n as u64))
+                    format!("{stage} {}", thousands(n as u64))
                 })
                 .collect();
             lines.extend(wrapped(&listed(&counts), 3, plain));
@@ -2069,7 +2069,7 @@ fn world_tab(app: &App, world: &World) -> Vec<Line<'static>> {
                     .iter()
                     .map(|o| u64::from(o.counter(counter).unwrap_or(0)))
                     .sum();
-                format!("{counter} {}", group_thousands(total))
+                format!("{counter} {}", thousands(total))
             })
             .collect();
         if !totals.is_empty() {
@@ -2173,7 +2173,7 @@ pub(crate) fn event_line(event: &Event, data: &Words) -> Option<String> {
             name.as_deref()
                 .map_or_else(|| data.label(*id), |name| text::label(*id, Some(name))),
             cause_name(*cause, data),
-            group_thousands(*age)
+            thousands(*age)
         )),
         EventKind::ActionEnded { id, action, .. } => logged_line(*id, action, data),
         // Life stages (M2 design §9.6).

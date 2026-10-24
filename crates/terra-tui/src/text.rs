@@ -141,24 +141,14 @@ pub(crate) fn generations_words(generations: Generations) -> (&'static str, Stri
     }
 }
 
-/// `1234567` → `"1,234,567"`.
-pub(crate) fn group_thousands(n: u64) -> String {
-    let digits = n.to_string();
-    let mut out = String::with_capacity(digits.len() + digits.len() / 3);
-    for (i, c) in digits.chars().enumerate() {
-        if i > 0 && (digits.len() - i).is_multiple_of(3) {
-            out.push(',');
-        }
-        out.push(c);
-    }
-    out
-}
+/// `1234567` → `"1,234,567"`, as the simulation's own reports write it.
+pub(crate) use terra_sim::thousands;
 
 /// `value` rounded to a whole number, with its sign, grouped in thousands:
 /// `-1,235`.
 pub(crate) fn whole(value: f64) -> String {
     let sign = if value.round() < 0.0 { "-" } else { "" };
-    format!("{sign}{}", group_thousands(value.abs().round() as u64))
+    format!("{sign}{}", thousands(value.abs().round() as u64))
 }
 
 /// A level: two decimals, with no leading zero: `.42`, `1.00`.

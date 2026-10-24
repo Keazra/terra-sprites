@@ -11,7 +11,7 @@ use crate::app::{App, strongest_drive};
 use crate::inspector;
 use crate::listed::listed_enum;
 use crate::policy::{Panel, Subject};
-use crate::text::{display_name, group_thousands};
+use crate::text::{display_name, thousands};
 
 listed_enum! {
     /// What the sprite list is sorted by.
@@ -55,7 +55,7 @@ impl<'a> Row<'a> {
         Row {
             id: sprite.id(),
             label: app.names().label(sprite.id()),
-            age: group_thousands(sprite.age()),
+            age: thousands(sprite.age()),
             stage: sprite.life_stage().name(),
             drive: strongest_drive(sprite).map(|drive| drive.name),
             generation: sprite.generation(),

@@ -24,7 +24,7 @@ use crate::policy::{InfoPolicy, Omniscient, Panel, Subject};
 use crate::saves::{self, MAX_SAVE_NAME_CHARS, QUICKSAVE, SaveFile};
 use crate::space::Place;
 use crate::sprite_list::{self, SortBy};
-use crate::text::{Names, ROOTED, Words, display_name, group_thousands};
+use crate::text::{Names, ROOTED, Words, display_name, thousands};
 use crate::theme::{Emote, Theme};
 
 /// Whether the game carries on after an action.
@@ -3173,11 +3173,11 @@ impl App {
         let from = if playback.started_fresh() {
             "a new world".to_string()
         } else {
-            format!("a save at tick {}", group_thousands(playback.start()))
+            format!("a save at tick {}", thousands(playback.start()))
         };
         self.tell_player(format!(
             "Replaying {name}: from {from} to tick {}",
-            group_thousands(playback.end())
+            thousands(playback.end())
         ));
         self.take_in_replay(playback);
     }
@@ -3213,7 +3213,7 @@ impl App {
         self.settle_cursor(world);
         self.tell_player(format!(
             "You took over the replay at tick {}: it's your world now",
-            group_thousands(world.tick())
+            thousands(world.tick())
         ));
     }
 
@@ -3257,7 +3257,7 @@ impl App {
             self.clock.pause();
             self.tell_player(format!(
                 "The replay ends here, at tick {}: time can run on, with nothing more done",
-                group_thousands(replay.end)
+                thousands(replay.end)
             ));
         }
         if replay.divergence.is_none()
@@ -3275,12 +3275,9 @@ impl App {
     pub fn replay_status(&self) -> Option<String> {
         let replay = self.replay?;
         Some(match replay.divergence {
-            Some(divergence) => format!(
-                "replay diverged by tick {}",
-                group_thousands(divergence.tick)
-            ),
+            Some(divergence) => format!("replay diverged by tick {}", thousands(divergence.tick)),
             None if replay.ended => "replay ended".into(),
-            None => format!("replay to tick {}", group_thousands(replay.end)),
+            None => format!("replay to tick {}", thousands(replay.end)),
         })
     }
 
@@ -3591,7 +3588,7 @@ impl App {
         fresh.saved_now(&world);
         fresh.tell_player(format!(
             "Loaded {name}, at tick {}",
-            group_thousands(world.tick())
+            thousands(world.tick())
         ));
         *self = fresh;
         // Its names show at once, paused, before any tick is taken in, and
@@ -3872,11 +3869,11 @@ fn changes_the_world(action: &Action, wheel_on_map: bool) -> bool {
 /// What the status line says when playback first finds the world different
 /// from the recording (design §2.7).
 fn diverged(divergence: Divergence) -> String {
-    let by = group_thousands(divergence.tick);
+    let by = thousands(divergence.tick);
     match divergence.matched {
         Some(matched) => format!(
             "The replay parted from its recording between ticks {} and {by}",
-            group_thousands(matched)
+            thousands(matched)
         ),
         None => format!("The replay was different from its recording from tick {by}"),
     }

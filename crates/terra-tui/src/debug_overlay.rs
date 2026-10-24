@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use crate::clock::{Clock, SIM_BUDGET, Speed};
 use crate::input::KeyReports;
-use crate::text::group_thousands;
+use crate::text::thousands;
 
 /// How long the meter gathers frames before it reads them: about a second,
 /// so the numbers hold still long enough to read and stay fresh.
@@ -137,7 +137,7 @@ fn achieved_rate(rate: f64) -> String {
     if rate < 100.0 {
         format!("{rate:.1}")
     } else {
-        group_thousands(rate.round() as u64)
+        thousands(rate.round() as u64)
     }
 }
 

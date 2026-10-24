@@ -12,7 +12,7 @@ use terra_sim::{DataPack, PopulationChanges, PopulationCount, World};
 
 use crate::app::App;
 use crate::listed::listed_enum;
-use crate::text::{cause_name, generations_words, group_thousands};
+use crate::text::{cause_name, generations_words, thousands};
 use crate::theme::PopulationLook;
 
 /// The ticks a column stands for while the run is too short to fill the
@@ -261,10 +261,10 @@ impl Plot {
                 text.push_str(&label);
             }
         };
-        put(gutter - 1, group_thousands(self.start));
+        put(gutter - 1, thousands(self.start));
         for j in self.marks() {
             let tick = self.boundary(j + 1);
-            put(gutter + j, group_thousands((tick + 50) / 100 * 100));
+            put(gutter + j, thousands((tick + 50) / 100 * 100));
         }
         Line::from(text)
     }
@@ -313,9 +313,9 @@ impl Plot {
         };
         let count = &self.points[shown];
         let when = if shown + 1 == self.points.len() {
-            format!("now, tick {}", group_thousands(count.tick))
+            format!("now, tick {}", thousands(count.tick))
         } else {
-            format!("tick {}", group_thousands(count.tick))
+            format!("tick {}", thousands(count.tick))
         };
         let sprites = count.sprites();
         let mut first = format!(
@@ -356,7 +356,7 @@ impl Plot {
             for point in &self.points[before + 1..=shown] {
                 changes.add(&point.since);
             }
-            let since = group_thousands(self.points[before].tick);
+            let since = thousands(self.points[before].tick);
             format!(" since tick {since}: {}", changed(&changes, data))
         } else {
             " the first count".to_string()
@@ -536,11 +536,7 @@ pub(crate) fn covers(world: &World) -> String {
         .population()
         .first()
         .map_or(world.tick(), |count| count.tick);
-    format!(
-        "ticks {} to {}",
-        group_thousands(first),
-        group_thousands(world.tick())
-    )
+    format!("ticks {} to {}", thousands(first), thousands(world.tick()))
 }
 
 #[cfg(test)]

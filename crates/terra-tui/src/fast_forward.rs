@@ -10,7 +10,7 @@ use std::time::Duration;
 
 use terra_sim::{DeathCause, EntityId, EventKind, World, drift, gene_values, middle_values};
 
-use crate::text::{cause_name, group_thousands};
+use crate::text::{cause_name, thousands};
 
 /// Ticks in an hour of play at 1×, 1.25 ticks a second (design §6.6).
 pub const HOUR: u64 = 4_500;
@@ -251,17 +251,17 @@ impl Row {
         format!(
             "{:>6}  {:>7}  {:>5}  {:>6}  {:>3}  {:>4}  {:>10}  {:>5}  {:>7}  {:>6}  {:>6}  {:>4}",
             hours(self.ticks_run),
-            group_thousands(self.sprites().into()),
-            group_thousands(self.young.into()),
-            group_thousands(self.adults.into()),
-            group_thousands(self.old.into()),
-            group_thousands(self.eggs.into()),
+            thousands(self.sprites().into()),
+            thousands(self.young.into()),
+            thousands(self.adults.into()),
+            thousands(self.old.into()),
+            thousands(self.eggs.into()),
             self.generation,
-            group_thousands(self.died.values().sum()),
-            group_thousands(died(DeathCause::OldAge)),
-            group_thousands(died(DeathCause::Starvation)),
-            group_thousands(died(DeathCause::Dehydration)),
-            group_thousands(hurt),
+            thousands(self.died.values().sum()),
+            thousands(died(DeathCause::OldAge)),
+            thousands(died(DeathCause::Starvation)),
+            thousands(died(DeathCause::Dehydration)),
+            thousands(hurt),
         )
     }
 }
@@ -271,17 +271,14 @@ impl Row {
 /// new world was made from.
 pub fn opening_line(world: &World, loaded: Option<&str>, preset: &str, hours: u64) -> String {
     let what = match loaded {
-        Some(name) => format!(
-            "{name}, a Lab world at tick {}",
-            group_thousands(world.tick())
-        ),
+        Some(name) => format!("{name}, a Lab world at tick {}", thousands(world.tick())),
         None => format!("a new Lab world, seed {}, {preset} preset", world.seed()),
     };
     let unit = if hours == 1 { "hour" } else { "hours" };
     format!(
         "Fast-forwarding {what}, for {} {unit} ({} ticks).",
-        group_thousands(hours),
-        group_thousands(hours * HOUR)
+        thousands(hours),
+        thousands(hours * HOUR)
     )
 }
 
@@ -297,7 +294,7 @@ pub fn closing_line(
     let unit = if ticks_run == HOUR { "hour" } else { "hours" };
     let ran = hours(ticks_run);
     let took = spoken(took);
-    let rate = group_thousands(ticks_per_second.round() as u64);
+    let rate = thousands(ticks_per_second.round() as u64);
     if stopped {
         format!("Stopped at {ran} {unit}, after {took}, {rate} ticks a second.")
     } else {
@@ -340,8 +337,8 @@ pub fn tables(name: &str, world: &World, genes: &GeneTable) -> [(String, String)
 pub fn hours(ticks: u64) -> String {
     let tenths = (ticks * 10 + HOUR / 2) / HOUR;
     match tenths % 10 {
-        0 => group_thousands(tenths / 10),
-        tenth => format!("{}.{tenth}", group_thousands(tenths / 10)),
+        0 => thousands(tenths / 10),
+        tenth => format!("{}.{tenth}", thousands(tenths / 10)),
     }
 }
 
@@ -354,14 +351,14 @@ pub fn progress_line(run: &FastForward, ticks_per_second: f64) -> String {
         "► {} hours · generation {} · {} sprites · {} eggs",
         hours(run.ticks_run()),
         run.generation(),
-        group_thousands(count.sprites().into()),
-        group_thousands(count.eggs.into()),
+        thousands(count.sprites().into()),
+        thousands(count.eggs.into()),
     );
     if ticks_per_second > 0.0 {
         let left = (run.ticks() - run.ticks_run()) as f64 / ticks_per_second;
         line += &format!(
             " · {} ticks a second · about {} left",
-            group_thousands(ticks_per_second as u64),
+            thousands(ticks_per_second as u64),
             spoken(Duration::from_secs_f64(left)),
         );
     }
