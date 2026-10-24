@@ -3,7 +3,9 @@
 //! away, and some hits are hit back. Driven through hand-made worlds.
 
 mod common;
-use common::{MakeGenome, WorldBuilder, at, builtin, id_at, run_for, scene, walker, wander_to};
+use common::{
+    MakeGenome, WorldBuilder, at, builtin, id_at, run_for, scene, seeded_scene, walker, wander_to,
+};
 
 use terra_sim::{
     DataPack, EntityId, EventKind, Genome, Outcome, Pos, ScriptedAction, Target, Verb, World,
@@ -27,22 +29,6 @@ fn watcher(data: &DataPack) -> Genome {
         Instinct(inputs: [("always", false)], verb: Rest, weight: 1.0),
     ])"#;
     Genome::from_ron(text, data).expect("a valid genome")
-}
-
-/// Common's `scene`, with the world's RNG seeded with `seed`.
-fn scene_with(
-    rows: &[&str],
-    objects: &[(Pos, &str)],
-    sprites: &[(Pos, MakeGenome)],
-    scripted: &[(Pos, ScriptedAction)],
-    seed: u64,
-) -> World {
-    WorldBuilder::new(rows)
-        .objects(objects)
-        .sprites_made(sprites)
-        .scripts(scripted)
-        .seed(seed)
-        .build()
 }
 
 /// The verb and target of the first action sprite `id` starts in the next
@@ -105,7 +91,7 @@ fn a_sprite_pricked_by_a_thornbush_backs_away_from_it() {
     for seed in 0..10 {
         let script = [(me, ScriptedAction::Eat { at: thornbush })];
         let sprites = [(me, starter as MakeGenome)];
-        let mut world = scene_with(&rows, &[(thornbush, "thornbush")], &sprites, &script, seed);
+        let mut world = seeded_scene(&rows, &[(thornbush, "thornbush")], &sprites, &script, seed);
         let id = id_at(&world, me);
         let bush = world.object_at(thornbush).expect("the thornbush").id();
         world.step();
@@ -248,7 +234,7 @@ fn a_sprite_cornered_by_its_attacker_turns_on_it() {
             (attacker, ScriptedAction::Rest),
         ];
         let sprites = [(me, starter as MakeGenome), (attacker, walker)];
-        let mut world = scene_with(&["......"], &[], &sprites, &script, seed);
+        let mut world = seeded_scene(&["......"], &[], &sprites, &script, seed);
         let (id, them) = (id_at(&world, me), id_at(&world, attacker));
         // What the sprite does next, once a retreat of its has been cornered.
         let mut cornered = false;
@@ -396,7 +382,7 @@ fn a_starter_sprite_hit_by_a_bully_backs_away_from_it_far_more_than_from_a_stran
             (bully, starter),
             (stranger, starter),
         ];
-        let mut world = scene_with(&["............"; 8], &[], &sprites, &script, seed);
+        let mut world = seeded_scene(&["............"; 8], &[], &sprites, &script, seed);
         let (id, them, other) = (
             id_at(&world, me),
             id_at(&world, bully),

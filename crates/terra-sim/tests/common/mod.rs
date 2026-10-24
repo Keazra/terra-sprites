@@ -585,10 +585,22 @@ pub fn scene(
     sprites: &[(Pos, MakeGenome)],
     scripted: &[(Pos, ScriptedAction)],
 ) -> World {
+    seeded_scene(rows, objects, sprites, scripted, 1)
+}
+
+/// [`scene`], with the world's RNG seeded with `seed`.
+pub fn seeded_scene(
+    rows: &[&str],
+    objects: &[(Pos, &str)],
+    sprites: &[(Pos, MakeGenome)],
+    scripted: &[(Pos, ScriptedAction)],
+    seed: u64,
+) -> World {
     WorldBuilder::new(rows)
         .objects(objects)
         .sprites_made(sprites)
         .scripts(scripted)
+        .seed(seed)
         .build()
 }
 
