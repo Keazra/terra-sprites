@@ -1,0 +1,308 @@
+# Downloads: ready-made copies of the game for a release, so players without
+# Rust can play (#345). The owner runs it from the Actions tab (Downloads >
+# Run workflow) with the release's tag, such as v0.2.0. It builds the game in
+# release mode on Windows, a Mac and Linux, zips each copy with both licences
+# and a README.txt on running it (from .github/downloads/), and puts the
+# three zips on a draft release for the tag. Sessions can't make releases,
+# but a workflow can. It never publishes one: the owner checks the zips and
+# publishes it (docs/agents/releases.md, "Making one").
+#
+# What it builds:
+# - The tag's commit, when the tag is already on GitHub.
+# - Otherwise the commit given; or, when there's none, the commit a draft
+#   release for the tag names; or else the newest commit on the branch it was
+#   run from (main). Publishing the release then makes the tag on that commit.
+#
+# Where the zips go:
+# - Onto the draft release for the tag, when there's one (say, made by hand
+#   on GitHub), replacing any of the same name. The draft is pointed at the
+#   commit built, so publishing it tags what was built.
+# - Otherwise onto a new draft release, titled from the first line of
+#   docs/releases/<tag>.md at that commit, with that file's text as its
+#   description. A tag with a hyphen, such as v0.3.0-beta.1, makes a
+#   pre-release.
+# - A release that's already published is refused, so nothing reaches
+#   players before the owner has checked it.
+#
+# A pull request that changes this file or the READMEs runs the builds as a
+# dry run: the zips stay on the run, under Artifacts, and no release is
+# touched.
+
+name: Downloads
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: The release's tag, such as v0.2.0
+        required: true
+        type: string
+      commit:
+        description: The commit to build, when the tag isn't on GitHub yet (left empty, the draft release's, or the branch's newest)
+        required: false
+        type: string
+  pull_request:
+    paths:
+      - .github/workflows/downloads.yml
+      - .github/downloads/**
+
+# The jobs only read the code, except the two below that look up and make
+# the release.
+permissions:
+  contents: read
+
+# One run at a time for a tag, so two can't both make its release. A pull
+# request's newer push stops its older run.
+concurrency:
+  group: downloads-${{ inputs.tag || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  resolve:
+    name: what to build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # GitHub lists draft releases only to a token that can write.
+    permissions:
+      contents: write
+    outputs:
+      name: ${{ steps.resolve.outputs.name }}
+      commit: ${{ steps.resolve.outputs.commit }}
+      draft: ${{ steps.resolve.outputs.draft }}
+    steps:
+      - name: Find the commit and the release
+        id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+          PR: ${{ github.event.pull_request.number }}
+          TAG: ${{ inputs.tag }}
+          COMMIT: ${{ inputs.commit }}
+          BRANCH_HEAD: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          fail() { echo "::error::$1"; exit 1; }
+
+          if [ "$EVENT" = pull_request ]; then
+            # A dry run: the zips are named after the pull request.
+            { echo "name=pr-$PR"; echo "commit=$BRANCH_HEAD"; echo "draft=false"; } >> "$GITHUB_OUTPUT"
+            echo "A dry run for pull request #$PR, from $BRANCH_HEAD: no release is touched." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          # Only a version tag, which also keeps the tag safe in the URLs,
+          # queries and file names below.
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] \
+            || fail "A release's tag looks like v0.2.0, or v0.3.0-beta.1."
+          [[ -z "$COMMIT" || "$COMMIT" =~ ^[0-9a-f]{7,40}$ ]] \
+            || fail "The commit is a commit's hash, such as 1a2b3c4, or left empty."
+
+          # The tag's commit, when it's on GitHub. An annotated tag points at
+          # a tag object, which points at the commit.
+          tag_object=$(gh api "repos/$GH_REPO/git/matching-refs/tags/$TAG" \
+            --jq ".[] | select(.ref == \"refs/tags/$TAG\") | \"\(.object.type) \(.object.sha)\"")
+          tag_commit=""
+          if [ -n "$tag_object" ]; then
+            read -r type tag_commit <<<"$tag_object"
+            if [ "$type" = tag ]; then
+              tag_commit=$(gh api "repos/$GH_REPO/git/tags/$tag_commit" --jq .object.sha)
+            fi
+          fi
+
+          # The release for the tag: a draft takes the zips, a published one
+          # is refused. Drafts make no tag, so there can be several.
+          releases=$(gh api "repos/$GH_REPO/releases?per_page=100" --paginate \
+            --jq ".[] | select(.tag_name == \"$TAG\") | \"\(.draft) \(.target_commitish)\"")
+          draft=false
+          draft_target=""
+          if [ -n "$releases" ]; then
+            [ "$(wc -l <<<"$releases")" -eq 1 ] \
+              || fail "There's more than one release for $TAG. Delete all but one, then run this again."
+            read -r is_draft draft_target <<<"$releases"
+            [ "$is_draft" = true ] \
+              || fail "The release for $TAG is already published. This only adds downloads to a draft release, so that nothing reaches players before it's been checked."
+            draft=true
+          fi
+
+          if [ -n "$tag_commit" ]; then
+            commit=$tag_commit
+            from="the tag's commit"
+            if [ -n "$COMMIT" ] && [ "$(gh api "repos/$GH_REPO/commits/$COMMIT" --jq .sha)" != "$tag_commit" ]; then
+              fail "The tag $TAG is already on GitHub, on $tag_commit, not on the commit given."
+            fi
+          elif [ -n "$COMMIT" ]; then
+            commit=$COMMIT
+            from="the commit given"
+          elif [ -n "$draft_target" ]; then
+            commit=$draft_target
+            from="the commit the draft release names"
+          else
+            commit=$BRANCH_HEAD
+            from="the newest commit on ${GITHUB_REF_NAME}"
+          fi
+          # A whole hash from here on, whether it was given short or as a
+          # branch.
+          commit=$(gh api "repos/$GH_REPO/commits/$commit" --jq .sha)
+
+          { echo "name=$TAG"; echo "commit=$commit"; echo "draft=$draft"; } >> "$GITHUB_OUTPUT"
+          {
+            echo "Building $TAG from $commit, $from."
+            if [ "$draft" = true ]; then
+              echo "The zips go on its draft release."
+            else
+              echo "There's no release for $TAG yet, so the zips go on a new draft release."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  build:
+    name: build (${{ matrix.name }})
+    needs: resolve
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows-x86_64
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            program: terra-sprites.exe
+            readme: windows
+            # Builds Microsoft's C runtime into the program, so it runs on a
+            # PC that hasn't got the Visual C++ runtime installed.
+            rustflags: -C target-feature=+crt-static
+          - name: mac-apple-silicon
+            os: macos-latest
+            target: aarch64-apple-darwin
+            program: terra-sprites
+            readme: mac
+          - name: linux-x86_64
+            # The oldest Ubuntu GitHub offers, since a program built against
+            # an older glibc (2.35) runs on more Linuxes. Move it on when
+            # GitHub retires this one.
+            os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            program: terra-sprites
+            readme: linux
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    env:
+      ZIP: terra-sprites-${{ needs.resolve.outputs.name }}-${{ matrix.name }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.resolve.outputs.commit }}
+      # No cache: each download is built from nothing, so nothing another
+      # run left behind can end up in it.
+      - uses: dtolnay/rust-toolchain@stable
+      # The same targets as CI's determinism check, which proves each plays
+      # a seed the same (design §2.6, §7.5).
+      - name: The runner builds for the promised target
+        shell: bash
+        run: |
+          host=$(rustc -vV | sed -n 's/^host: //p')
+          if [ "$host" != "${{ matrix.target }}" ]; then
+            echo "expected ${{ matrix.target }}, but this runner builds for $host"
+            exit 1
+          fi
+      - name: Build
+        run: cargo build --release --locked -p terra-tui
+        env:
+          RUSTFLAGS: ${{ matrix.rustflags }}
+      - name: The program says its version and commit
+        shell: bash
+        run: |
+          said=$("target/release/${{ matrix.program }}" --version)
+          echo "$said"
+          commit=$(git rev-parse --short HEAD)
+          if [[ "$said" != *"($commit)" ]]; then
+            echo "expected it to name the commit it was built from, $commit"
+            exit 1
+          fi
+      - name: Zip it with the licences and its README
+        shell: bash
+        run: |
+          mkdir "$ZIP"
+          cp "target/release/${{ matrix.program }}" LICENSE-MIT LICENSE-APACHE "$ZIP/"
+          cp ".github/downloads/README-${{ matrix.readme }}.txt" "$ZIP/README.txt"
+          if [ "$RUNNER_OS" = Windows ]; then
+            7z a -tzip "$ZIP.zip" "$ZIP"
+            7z l "$ZIP.zip"
+          else
+            # zip keeps the program executable.
+            zip -r -X "$ZIP.zip" "$ZIP"
+            unzip -l "$ZIP.zip"
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ZIP }}
+          path: ${{ env.ZIP }}.zip
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: draft release
+    if: github.event_name == 'workflow_dispatch'
+    needs: [resolve, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ needs.resolve.outputs.name }}
+      COMMIT: ${{ needs.resolve.outputs.commit }}
+      DRAFT: ${{ needs.resolve.outputs.draft }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.resolve.outputs.commit }}
+          sparse-checkout: docs/releases
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: terra-sprites-*
+          path: zips
+          merge-multiple: true
+      - name: The game's version matches the tag
+        run: |
+          version=$(sed -n '/^\[workspace.package\]/,/^\[/s/^version = "\(.*\)"$/\1/p' Cargo.toml)
+          if [ "v$version" != "$TAG" ]; then
+            message="The game at this commit says it's $version, not ${TAG#v}. For a release, was its version raised (docs/agents/releases.md, \"Making one\")? A test tag can differ."
+            echo "::warning::$message"
+            echo "$message" >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Put the zips on a draft release
+        run: |
+          set -euo pipefail
+          ls -l zips
+          [ "$(find zips -name '*.zip' | wc -l)" -eq 3 ] || { echo "::error::Expected three zips."; exit 1; }
+          if [ "$DRAFT" = true ]; then
+            # Still a draft, just before it's touched.
+            if [ "$(gh release view "$TAG" --json isDraft --jq .isDraft)" != true ]; then
+              echo "::error::The release for $TAG was published while this ran, so its zips weren't added."
+              exit 1
+            fi
+            gh release edit "$TAG" --target "$COMMIT"
+            gh release upload "$TAG" zips/*.zip --clobber
+          else
+            notes="docs/releases/$TAG.md"
+            title=""
+            if [ -f "$notes" ]; then
+              title=$(sed -n '1s/^# *//p' "$notes")
+            else
+              notes=$(mktemp)
+              echo "Downloads for $TAG, built from $COMMIT. There was no docs/releases/$TAG.md at that commit to describe it." > "$notes"
+            fi
+            prerelease=()
+            if [[ "$TAG" == *-* ]]; then prerelease=(--prerelease); fi
+            gh release create "$TAG" zips/*.zip --draft --target "$COMMIT" \
+              --title "${title:-$TAG}" --notes-file "$notes" "${prerelease[@]}"
+          fi
+          url=$(gh release view "$TAG" --json url --jq .url)
+          {
+            echo "## Downloads for $TAG"
+            echo
+            echo "The zips are on the draft release: $url"
+            echo
+            echo "Check all three are there, open the one for your computer, then publish the release (Edit, then Publish release). Nobody else can see it until then."
+          } >> "$GITHUB_STEP_SUMMARY"

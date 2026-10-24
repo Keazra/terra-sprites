@@ -111,7 +111,7 @@ How the owner likes to work, the project's conventions and the slice loop are in
 
 ### Releases
 
-Each finished milestone is a numbered release (M1 is v0.1.0, M2 v0.2.0), and from v0.2.0 on the README installs the newest one. `main` carries the work in progress, and PRs keep going to it one at a time: a milestone is never held back on a branch or a stack of its own. The milestone's acceptance slice prepares its release, and the owner makes it with one `gh` command, since GitHub refuses a session's tags and releases: `docs/agents/releases.md`.
+Each finished milestone is a numbered release (M1 is v0.1.0, M2 v0.2.0), and from v0.2.0 on the README installs the newest one. `main` carries the work in progress, and PRs keep going to it one at a time: a milestone is never held back on a branch or a stack of its own. The milestone's acceptance slice prepares its release. GitHub refuses a session's tags and releases, so the owner makes it with the downloads workflow, which builds the game for Windows, Mac and Linux and makes a draft release holding the zips, and then checks the draft and publishes it: `docs/agents/releases.md`.
 
 ## Agent skills
 
