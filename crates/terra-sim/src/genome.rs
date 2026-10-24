@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use crate::ageing::{LifeStage, Switch, some_stage};
 use crate::brain_io::{ATTENDED, InputId, TARGET_IDS};
 use crate::data::DataPack;
+use crate::listed::listed_enum;
 use crate::registry::{BrainParam, CategoryId, ChemId, LocusId, Trait, Verb};
 
 /// The newest genome file format this build reads. It writes format 1 for
@@ -26,65 +27,47 @@ fn newest(type_id: u16) -> u8 {
     if type_id == ATTENTION_INSTINCT { 2 } else { 1 }
 }
 
-/// Whom an attention instinct is about (M2 design §15.6): anything of its
-/// category, or only the sprite's family in it, its kin, or one kind of
-/// family: its partner, its parents or its young; or grown-ups (§18.1).
-/// The discriminants are how a payload writes it.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub enum Whom {
-    /// Anything of its category.
-    #[default]
-    Any = 0,
-    /// The sprite's family: its partner, its parents while it's young, its
-    /// young, and its eggs.
-    Family = 1,
-    /// Its close kin: its parents, its young and its eggs, and its brothers
-    /// and sisters.
-    Kin = 2,
-    /// Its partner.
-    Partner = 3,
-    /// Its parents, while it's young.
-    Parent = 4,
-    /// Its young.
-    Young = 5,
-    /// A sprite grown up, adult or old (M2 design §18.1).
-    Grown = 6,
-    /// Its parent, while it's young, doing something that would show it
-    /// a lesson it hasn't learned (M2 design §18.1).
-    Showing = 7,
-}
-
-impl Whom {
-    pub(crate) const ALL: [Whom; 8] = [
-        Whom::Any,
-        Whom::Family,
-        Whom::Kin,
-        Whom::Partner,
-        Whom::Parent,
-        Whom::Young,
-        Whom::Grown,
-        Whom::Showing,
-    ];
-
-    /// Whether it's about anything of its category.
-    pub(crate) fn is_any(&self) -> bool {
-        *self == Whom::Any
+listed_enum! {
+    /// Whom an attention instinct is about (M2 design §15.6): anything of its
+    /// category, or only the sprite's family in it, its kin, or one kind of
+    /// family: its partner, its parents or its young; or grown-ups (§18.1).
+    /// The discriminants are how a payload writes it.
+    #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+    pub enum Whom {
+        /// Anything of its category.
+        #[default]
+        Any = 0 => None,
+        /// The sprite's family: its partner, its parents while it's young, its
+        /// young, and its eggs.
+        Family = 1 => Some("family"),
+        /// Its close kin: its parents, its young and its eggs, and its brothers
+        /// and sisters.
+        Kin = 2 => Some("kin"),
+        /// Its partner.
+        Partner = 3 => Some("partner"),
+        /// Its parents, while it's young.
+        Parent = 4 => Some("parents"),
+        /// Its young.
+        Young = 5 => Some("young"),
+        /// A sprite grown up, adult or old (M2 design §18.1).
+        Grown = 6 => Some("grown-ups"),
+        /// Its parent, while it's young, doing something that would show it
+        /// a lesson it hasn't learned (M2 design §18.1).
+        Showing = 7 => Some("parent showing something"),
     }
+
+    pub(crate) const ALL;
 
     /// Whom it's about, as the player sees it: `family`, `kin`,
     /// `partner`, `parents`, `young`, `grown-ups` or `parent showing
     /// something`, and nothing for anything.
-    pub fn name(self) -> Option<&'static str> {
-        match self {
-            Whom::Any => None,
-            Whom::Family => Some("family"),
-            Whom::Kin => Some("kin"),
-            Whom::Partner => Some("partner"),
-            Whom::Parent => Some("parents"),
-            Whom::Young => Some("young"),
-            Whom::Grown => Some("grown-ups"),
-            Whom::Showing => Some("parent showing something"),
-        }
+    pub fn name(self) -> Option<&'static str>;
+}
+
+impl Whom {
+    /// Whether it's about anything of its category.
+    pub(crate) fn is_any(&self) -> bool {
+        *self == Whom::Any
     }
 }
 

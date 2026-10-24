@@ -9,6 +9,7 @@ use crate::data::DataPack;
 use crate::ecology::{holds_without_drawing, new_object};
 use crate::events::{Event, EventKind};
 use crate::genome::Genome;
+use crate::listed::listed_enum;
 use crate::map::{Dir, Pos};
 use crate::mutation;
 use crate::names::{self, NameProblem};
@@ -73,16 +74,24 @@ pub enum Command {
     Rename { sprite: EntityId, name: String },
 }
 
-/// One of the Cursor's four touches (design v21 §4.6): a Reward or a
-/// Correct, amplified or not.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
-pub enum CursorTouch {
-    Pet,
-    /// An amplified pet.
-    Hug,
-    Zap,
-    /// An amplified zap.
-    Shock,
+listed_enum! {
+    /// One of the Cursor's four touches (design v21 §4.6): a Reward or a
+    /// Correct, amplified or not.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
+    pub enum CursorTouch {
+        Pet => "pet",
+        /// An amplified pet.
+        Hug => "hug",
+        Zap => "zap",
+        /// An amplified zap.
+        Shock => "shock",
+    }
+
+    /// Every touch: a pet, a hug, a zap and a shock.
+    pub const ALL;
+
+    /// Its name: `pet`, `hug`, `zap` or `shock`.
+    pub fn name(self) -> &'static str;
 }
 
 impl CursorTouch {
@@ -147,16 +156,6 @@ impl CursorTouch {
                 amplified,
                 reach_back,
             }
-        }
-    }
-
-    /// Its name: `pet`, `hug`, `zap` or `shock`.
-    pub fn name(self) -> &'static str {
-        match self {
-            CursorTouch::Pet => "pet",
-            CursorTouch::Hug => "hug",
-            CursorTouch::Zap => "zap",
-            CursorTouch::Shock => "shock",
         }
     }
 }

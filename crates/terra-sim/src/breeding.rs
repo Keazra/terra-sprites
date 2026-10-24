@@ -13,6 +13,7 @@ use crate::events::{Event, EventKind};
 use crate::genome::Genome;
 use crate::inheritance;
 use crate::lineage;
+use crate::listed::listed_enum;
 use crate::map::Dir;
 use crate::mutation::{self, Copied, CopyChange, CopyingError};
 use crate::objects::EntityId;
@@ -22,26 +23,24 @@ use crate::registry::Verb;
 use crate::sprites::{Genes, Sprite, check_genes};
 use crate::world::WorldState;
 
-/// A sprite's sex (M2 design §10). Every sprite hatches male; an adult male
-/// turns female for good once its genes have it feel no female near for
-/// long enough. Only a female lays eggs.
-#[derive(
-    Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
-)]
-pub enum Sex {
-    #[default]
-    Male,
-    Female,
-}
-
-impl Sex {
-    /// The sex's name, as the player sees it.
-    pub fn name(self) -> &'static str {
-        match self {
-            Sex::Male => "male",
-            Sex::Female => "female",
-        }
+listed_enum! {
+    /// A sprite's sex (M2 design §10). Every sprite hatches male; an adult male
+    /// turns female for good once its genes have it feel no female near for
+    /// long enough. Only a female lays eggs.
+    #[derive(
+        Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
+    )]
+    pub enum Sex {
+        #[default]
+        Male => "male",
+        Female => "female",
     }
+
+    /// Both sexes, male first.
+    pub const ALL;
+
+    /// The sex's name, as the player sees it.
+    pub fn name(self) -> &'static str;
 }
 
 /// The sprite an egg holds until it hatches (M2 design §10.4, #196): its
