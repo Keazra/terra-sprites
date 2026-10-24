@@ -96,6 +96,6 @@ pub use save::{LoadError, SCHEMA_VERSION};
 pub use soak::{Soak, SoakRun};
 pub use terrain::{Terrain, TerrainProps};
 pub use world::{
-    ChemicalLevel, CursorView, DeadView, EggView, HeldView, InvariantViolation, ObjectView,
-    Scenario, ScenarioError, SpriteView, World,
+    ChemicalLevel, CursorView, DeadView, EggView, InvariantViolation, ObjectView, Scenario,
+    ScenarioError, SpriteView, World,
 };

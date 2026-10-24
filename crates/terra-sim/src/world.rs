@@ -785,7 +785,8 @@ impl<'a> SpriteView<'a> {
     }
 }
 
-/// A read-only view of one object.
+/// A read-only view of one object: on the map, or the item the Cursor holds
+/// (`CursorView::holds`).
 pub struct ObjectView<'a> {
     id: EntityId,
     object: &'a Object,
@@ -803,7 +804,8 @@ impl<'a> ObjectView<'a> {
         &self.world.data.object_types()[self.object.kind].name
     }
 
-    /// The tile the object stands on.
+    /// The tile the object stands on. The item the Cursor holds stands on
+    /// none: for it, the tile it was picked up from.
     pub fn pos(&self) -> Pos {
         self.object.pos
     }
@@ -834,6 +836,8 @@ impl<'a> ObjectView<'a> {
 
     /// The name of the look a theme draws the object with: the state of the
     /// first of its type's visual rules whose conditions hold, or `"default"`.
+    /// Held, it has no tile, so rules asking about one don't hold (design
+    /// §3.5.2).
     pub fn visual_state(&self) -> &'a str {
         visual_state(self.world, self.object)
     }
@@ -891,59 +895,16 @@ impl<'a> CursorView<'a> {
         self.world.state.cursor.visible
     }
 
-    /// The item the Cursor holds, if any.
-    pub fn holds(&self) -> Option<HeldView<'a>> {
+    /// The item the Cursor holds, if any: an object off the map, never
+    /// solid.
+    pub fn holds(&self) -> Option<ObjectView<'a>> {
         let id = self.world.state.cursor.holds()?;
         let object = self.world.state.objects.get(id)?;
-        Some(HeldView {
+        Some(ObjectView {
             id,
             object,
             world: self.world,
         })
-    }
-}
-
-/// A read-only view of the item the Cursor holds: an object off the map.
-pub struct HeldView<'a> {
-    id: EntityId,
-    object: &'a Object,
-    world: &'a World,
-}
-
-impl<'a> HeldView<'a> {
-    /// The item's entity ID.
-    pub fn id(&self) -> EntityId {
-        self.id
-    }
-
-    /// The name of the item's type, as `objects.ron` gives it.
-    pub fn type_name(&self) -> &'a str {
-        &self.world.data.object_types()[self.object.kind].name
-    }
-
-    /// Whether the Cursor may throw it (design §3.5.4): not an egg, which
-    /// it can only put down (M2 design §10.4).
-    pub fn is_throwable(&self) -> bool {
-        self.world.data.object_types()[self.object.kind].throwable
-    }
-
-    /// Whether it's an egg (M2 design §10.4): `World::egg` tells more.
-    pub fn is_egg(&self) -> bool {
-        self.object.unhatched.is_some()
-    }
-
-    /// The name of the look a theme draws the item with, as for an object
-    /// on the map (`ObjectView::visual_state`); held, it has no tile, so
-    /// rules asking about one don't hold (design §3.5.2).
-    pub fn visual_state(&self) -> &'a str {
-        visual_state(self.world, self.object)
-    }
-
-    /// The name of the item's current stage, or `None` if its type has no
-    /// stages, as for an object on the map (`ObjectView::stage`).
-    pub fn stage(&self) -> Option<&'a str> {
-        let stages = &self.world.data.object_types()[self.object.kind].stages;
-        self.object.stage.map(|stage| stages[stage].name.as_str())
     }
 }
 

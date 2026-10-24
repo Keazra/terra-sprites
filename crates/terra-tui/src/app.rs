@@ -8,8 +8,8 @@ use ratatui::layout::{Margin, Position, Rect, Size};
 use serde::Deserialize;
 use terra_sim::{
     ActionView, ChemicalKind, ChemicalLevel, Command, CursorTouch, DeathCause, Dir, Divergence,
-    EntityId, Event, EventKind, Genome, Grip, HeldView, MAX_NAME_CHARS, Map, Mode, ObjectView,
-    Outcome, Playback, Pos, Progress, SpriteView, Target, Thing, Verb, World,
+    EntityId, Event, EventKind, Genome, Grip, MAX_NAME_CHARS, Map, Mode, ObjectView, Outcome,
+    Playback, Pos, Progress, SpriteView, Target, Thing, Verb, World,
 };
 
 use crate::clock::{Clock, Speed};
@@ -720,7 +720,8 @@ pub(crate) struct ItemLook<'w> {
 }
 
 impl<'w> ItemLook<'w> {
-    fn on_map(object: &ObjectView<'w>) -> ItemLook<'w> {
+    /// How the screen shows `object`, on the map or held.
+    fn of(object: &ObjectView<'w>) -> ItemLook<'w> {
         ItemLook {
             id: object.id(),
             type_name: object.type_name(),
@@ -731,28 +732,14 @@ impl<'w> ItemLook<'w> {
             throwable: object.is_throwable(),
         }
     }
-
-    fn held(held: &HeldView<'w>) -> ItemLook<'w> {
-        ItemLook {
-            id: held.id(),
-            type_name: held.type_name(),
-            visual_state: held.visual_state(),
-            stage: held.stage(),
-            solid: false,
-            egg: held.is_egg(),
-            throwable: held.is_throwable(),
-        }
-    }
 }
 
 /// The item `id`, held by the Cursor or, while a pick-up waits in the queue,
 /// still on the map (design §6.5).
 pub(crate) fn item_look(world: &World, id: EntityId) -> Option<ItemLook<'_>> {
-    if let Some(held) = world.cursor().holds().filter(|held| held.id() == id) {
-        return Some(ItemLook::held(&held));
-    }
-    let object = world.objects().find(|object| object.id() == id)?;
-    Some(ItemLook::on_map(&object))
+    let held = world.cursor().holds().filter(|held| held.id() == id);
+    let object = held.or_else(|| world.objects().find(|object| object.id() == id))?;
+    Some(ItemLook::of(&object))
 }
 
 /// Where a Grab-mode command waiting for the next tick leaves an item it
@@ -780,7 +767,7 @@ impl<'w> ShownItems<'w> {
     pub(crate) fn at(&self, tile: Pos) -> Option<ItemLook<'w>> {
         let on_map = self.world.object_at(tile);
         let stays = on_map.filter(|object| !self.moved.contains_key(&object.id()));
-        stays.map(|object| ItemLook::on_map(&object)).or_else(|| {
+        stays.map(|object| ItemLook::of(&object)).or_else(|| {
             let (_, look) = self.put_down.iter().find(|&&(at, _)| at == tile)?;
             Some(*look)
         })
