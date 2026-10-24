@@ -6,8 +6,8 @@
 
 mod common;
 use common::{
-    ALONE, FEMALE, LONE, NO_COPYING_ERRORS, at, builtin_changing, family, family_in, hatch, laid,
-    replayed, until,
+    LONE, NO_COPYING_ERRORS, at, builtin_changing, family, hatch, laid, lone_mother_in, replayed,
+    until,
 };
 
 use terra_sim::{Command, DeathCause, EntityId, EventKind, LifeStage, Origin, Sex, World};
@@ -29,8 +29,7 @@ fn mother_of(seed: u64) -> (World, EntityId) {
         .chain([LONE])
         .collect();
     let data = builtin_changing("physiology.ron", &changes);
-    let mother = format!("{ALONE}{FEMALE}");
-    let world = family_in(data, &[(at(2, 1), &mother)], &[], seed);
+    let world = lone_mother_in(data, seed);
     let id = world.sprite_at(at(2, 1)).expect("the mother").id();
     (world, id)
 }

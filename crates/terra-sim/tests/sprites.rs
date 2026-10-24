@@ -2,7 +2,9 @@
 //! death without food or water, and standing about with nothing to do.
 
 mod common;
-use common::{WorldBuilder, at, builtin, builtin_changing, builtin_with, close, id_at, run_for};
+use common::{
+    WorldBuilder, at, builtin, builtin_changing, builtin_with, close, default_world, id_at, run_for,
+};
 
 use std::collections::BTreeSet;
 
@@ -13,8 +15,7 @@ use terra_sim::{
 
 #[test]
 fn a_new_world_places_the_preset_s_sprites_after_its_objects_on_empty_walkable_tiles() {
-    let data = builtin();
-    let world = World::new(WorldConfig::builtin(&data), data, 3);
+    let world = default_world(3);
     let sprites: Vec<_> = world.sprites().collect();
     assert_eq!(sprites.len(), 30, "the built-in preset's count");
     let last_object = world.objects().map(|o| o.id()).max().expect("objects");
@@ -31,8 +32,7 @@ fn a_new_world_places_the_preset_s_sprites_after_its_objects_on_empty_walkable_t
 
 #[test]
 fn the_first_population_starts_between_60_and_100_percent_full() {
-    let data = builtin();
-    let world = World::new(WorldConfig::builtin(&data), data, 3);
+    let world = default_world(3);
     let mut energies = BTreeSet::new();
     for sprite in world.sprites() {
         for chemical in ["energy", "hydration"] {
@@ -48,8 +48,7 @@ fn the_first_population_starts_between_60_and_100_percent_full() {
 fn the_first_population_are_adults_of_all_ages() {
     // M2 design §9.1: ages drawn through adulthood, so a fresh world isn't
     // all children and doesn't all grow old at once.
-    let data = builtin();
-    let world = World::new(WorldConfig::builtin(&data), data, 3);
+    let world = default_world(3);
     let mut ages = BTreeSet::new();
     for sprite in world.sprites() {
         assert_eq!(sprite.life_stage(), LifeStage::Adult);

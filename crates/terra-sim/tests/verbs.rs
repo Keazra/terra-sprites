@@ -4,7 +4,8 @@
 
 mod common;
 use common::{
-    WorldBuilder, at, builtin, builtin_changing, builtin_with, endings, walker, walkers, walkers_in,
+    WorldBuilder, at, builtin, builtin_changing, builtin_with, endings, walker, walkers,
+    walkers_in, wander_to,
 };
 
 use terra_sim::{
@@ -274,9 +275,7 @@ fn approaching_a_bush_ends_on_arrival_beside_it() {
 fn approaching_a_sprite_follows_it_as_it_moves() {
     // The leader wanders off along the top row; the follower sets off after it.
     let (leader_start, leader_end) = (at(3, 1), at(12, 1));
-    let wander = [ScriptedAction::Wander {
-        destination: leader_end,
-    }];
+    let wander = [wander_to(leader_end)];
     let approach = [ScriptedAction::Approach { at: leader_start }];
     let mut world = walkers(
         &[
@@ -359,12 +358,7 @@ fn acting_from_where_it_stands_banks_no_move_points_for_the_next_walk() {
         &["..........", "..........", ".........."],
         &[(bush, "berry_bush")],
         at(1, 1),
-        &[
-            ScriptedAction::Eat { at: bush },
-            ScriptedAction::Wander {
-                destination: at(8, 1),
-            },
-        ],
+        &[ScriptedAction::Eat { at: bush }, wander_to(at(8, 1))],
     );
     world
         .start_object(bush, "mature", &[("fruit", 3)])

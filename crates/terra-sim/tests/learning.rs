@@ -2,7 +2,9 @@
 //! learns what things are worth and its habits.
 
 mod common;
-use common::{WorldBuilder, at, builtin, builtin_changing, builtin_with, close, pet, run_for, zap};
+use common::{
+    WorldBuilder, at, builtin, builtin_changing, builtin_with, close, pet, run_for, wander_to, zap,
+};
 
 use terra_sim::{
     Command, DataPack, Dir, EntityId, Event, EventKind, Learned, Part, Pos, ScriptedAction, Thing,
@@ -311,12 +313,8 @@ fn a_type_of_bush_the_sprite_has_never_touched_is_judged_by_the_bushes_it_knows(
             ScriptedAction::Eat { at: thornbush },
             ScriptedAction::Eat { at: bramble },
             // In two legs, since it walks only as far as it can see.
-            ScriptedAction::Wander {
-                destination: at(11, 1),
-            },
-            ScriptedAction::Wander {
-                destination: at(19, 1),
-            },
+            wander_to(at(11, 1)),
+            wander_to(at(19, 1)),
         ],
     );
     let berry_bush = Part::Worth(Thing::from("berry_bush"));

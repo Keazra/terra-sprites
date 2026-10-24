@@ -609,3 +609,11 @@ pub fn replayed(world: &World) -> Playback {
     assert_eq!(playback.world().state_hash(), world.state_hash());
     playback
 }
+
+/// A small field of grass with one grown female on (2, 1) who breeds alone
+/// whenever she can, made with `data` and `seed`: for tests of the eggs
+/// she lays.
+pub fn lone_mother_in(data: DataPack, seed: u64) -> World {
+    let mother = format!("{ALONE}{FEMALE}");
+    family_in(data, &[(at(2, 1), &mother)], &[], seed)
+}
