@@ -610,6 +610,12 @@ impl DataPack {
         &self.physiology
     }
 
+    /// Whether its sprites can breed (M2 design §10.2): it has breeding,
+    /// and an egg for a mother to lay. A pack from before breeding has none.
+    pub fn breeds(&self) -> bool {
+        self.physiology.indices.breeding.is_some() && self.egg_type.is_some()
+    }
+
     /// The genome sprites without parents are made from.
     pub fn starter(&self) -> &Genome {
         &self.starter

@@ -1677,6 +1677,12 @@ impl World {
         self.state.most_sprites
     }
 
+    /// Whether the world holds its most sprites, eggs included, so that no
+    /// sprite can breed until one dies (M2 design §10.6).
+    pub fn is_full(&self) -> bool {
+        !breeding::room(&self.state)
+    }
+
     /// The world's state and data pack, for the benchmark hooks.
     pub(crate) fn parts(&mut self) -> (&mut WorldState, &DataPack) {
         (&mut self.state, &self.data)

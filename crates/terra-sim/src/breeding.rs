@@ -134,17 +134,16 @@ pub(crate) fn fertile(state: &WorldState, sprite: &Sprite, data: &DataPack) -> b
 }
 
 /// Whether `sprite` can breed now (M2 design §10.2). It's fertile in a pack
-/// with breeding and an egg type, grown up, fed and watered, rested long
-/// enough since its last egg, in a world with `room` for another sprite,
-/// and with room nearby. A save from before breeding keeps its pack, which
-/// has none. The world's room is asked first, since only a death makes it,
-/// and the room nearby last, since it's the one that counts other sprites.
+/// that `breeds`, grown up, fed and watered, rested long enough since its
+/// last egg, in a world with `room` for another sprite, and with room
+/// nearby. A save from before breeding keeps its pack, which has none. The
+/// world's room is asked first, since only a death makes it, and the room
+/// nearby last, since it's the one that counts other sprites.
 pub(crate) fn fertility(state: &WorldState, sprite: &Sprite, data: &DataPack) -> Fertility {
     let physiology = data.physiology();
     let (breeding, indices) = (&physiology.breeding, physiology.indices);
     let chems = &sprite.body.chems;
-    let able = indices.breeding.is_some()
-        && data.egg_type().is_some()
+    let able = data.breeds()
         && sprite.stage().is_grown()
         && chems[indices.energy] > breeding.fed
         && chems[indices.hydration] > breeding.fed

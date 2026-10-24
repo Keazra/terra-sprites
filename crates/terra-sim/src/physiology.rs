@@ -938,6 +938,13 @@ impl PhysiologyEntry {
         if breeding.rest == 0 {
             return Err("`breeding.rest` must be at least 1 tick".into());
         }
+        // Fewer than none can't be near, so no sprite could breed (#331).
+        if breeding
+            .room_nearby
+            .is_some_and(|room| room.fewer_than == 0)
+        {
+            return Err("`breeding.room_nearby.fewer_than` must be at least 1".into());
+        }
         fraction("breeding.crossover", breeding.crossover)?;
         let mutation = self.mutation;
         fraction("mutation.chance", mutation.chance)?;

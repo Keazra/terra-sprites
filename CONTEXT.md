@@ -360,7 +360,7 @@ Able to breed: grown up, its energy and hydration above `fed` (0.4), rested sinc
 _Avoid_: ready, in season
 
 **Room nearby** (M2, Slice 29b):
-The body's rule, beside most sprites, that a grown sprite is fertile only where fewer than 4 other grown sprites, adult or old, a partner included, are within 10 tiles, as the crow flies. Young sprites and eggs don't count. Physiology's `breeding.room_nearby` sets the two numbers. A sprite held back by it alone is **too crowded to breed**; one held back by a full world alone, whatever is near it, is **world full**.
+The body's rule, beside most sprites, that a grown sprite is fertile only where fewer than 4 other grown sprites, adult or old, a partner included, are within 10 tiles, as the crow flies. Young sprites and eggs don't count. Physiology's `breeding.room_nearby` sets the two numbers. A sprite whose body could breed but for it is **too crowded to breed**; one that the world's limit holds back, whatever is near it, is **world full**.
 _Avoid_: crowdedness (the drive about sprites within 3 tiles), crowded (alone, which reads as that drive), personal space
 
 **Wandering switched off** (M2, #318):

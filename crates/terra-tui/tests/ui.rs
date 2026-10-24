@@ -2714,11 +2714,15 @@ fn the_world_tab_shows_the_population_and_the_deaths_by_cause() {
     let (_, text) = inspector(&app, &world);
     let text = &text[GRAPH_LINES..];
     assert_eq!(
-        text[1..5],
+        text[1..7],
         [
             "sprites           3",
             // The generations of the living (M2 design §17.5).
             "generation        1",
+            // The grown who can breed, and those room nearby holds back
+            // (M2 design §10.7).
+            "fertile           3",
+            "too crowded 0",
             "deaths            0",
             "starvation 0 · dehydration 0 · old age 0",
         ]
@@ -2735,6 +2739,70 @@ fn the_world_tab_shows_the_population_and_the_deaths_by_cause() {
         ]
     );
     assert_eq!(text[4], "berry bush        0", "then the objects");
+}
+
+#[test]
+fn the_world_tab_counts_the_grown_sprites_fertile_and_too_crowded_to_breed() {
+    // M2 design §10.7, #331: each of the 5 on the left has 4 others within
+    // 10 tiles, and the 2 on the right, 15 tiles from them, only each other.
+    // The young one in between counts for neither, and can't breed itself.
+    let crowd = [at(0, 0), at(2, 0), at(4, 0), at(1, 2), at(3, 2)];
+    let young = at(10, 4);
+    let world = WorldBuilder::grass(20, 5)
+        .starters(&crowd)
+        .starters(&[at(19, 0), at(19, 2), young])
+        .newborns(&[young])
+        .seed(7)
+        .build();
+    let app = app_for(&world, Theme::cp437(), 100, 30);
+    let (_, text) = inspector(&app, &world);
+    assert_eq!(
+        text[GRAPH_LINES + 1..GRAPH_LINES + 6],
+        [
+            "sprites           8",
+            "generation        1",
+            "fertile           2",
+            "too crowded 5",
+            "deaths            0",
+        ]
+    );
+}
+
+#[test]
+fn in_a_full_world_the_world_tab_says_so_beneath_the_fertile() {
+    // M2 design §10.6, §10.7, #331: no sprite can breed until one dies.
+    let world = full_world();
+    let app = app_for(&world, Theme::cp437(), 100, 30);
+    let (_, text) = inspector(&app, &world);
+    assert_eq!(
+        text[GRAPH_LINES + 1..GRAPH_LINES + 6],
+        [
+            "sprites         100",
+            "generation        1",
+            "fertile           0",
+            "world full",
+            "deaths            0",
+        ]
+    );
+}
+
+#[test]
+fn a_world_tab_without_breeding_or_sprites_counts_no_fertile() {
+    // M2 design §10.7: a pack with no egg can't breed, and a world with no
+    // sprites has nobody to count, as with its generations.
+    let eggless = pack_changing(&[("objects.ron", &[("next: Hatch", "next: Expire")])]);
+    let world = WorldBuilder::grass(10, 5)
+        .starters(&[at(1, 1)])
+        .data(eggless)
+        .seed(7)
+        .build();
+    let app = app_for(&world, Theme::cp437(), 100, 30);
+    let (_, text) = inspector(&app, &world);
+    assert_eq!(text[GRAPH_LINES + 3], "deaths            0", "{text:?}");
+    let empty = garden(pack());
+    let app = app_for(&empty, Theme::cp437(), 100, 30);
+    let (_, text) = inspector(&app, &empty);
+    assert_eq!(text[GRAPH_LINES + 2], "deaths            0", "{text:?}");
 }
 
 #[test]
@@ -3809,6 +3877,49 @@ fn the_body_tab_says_how_near_a_male_is_to_turning_female_once_grown() {
     );
     app.apply(Action::SelectNext, &world);
     assert_eq!(inspector_line(&app, &world, "male"), "male", "young");
+}
+
+/// The Body tab's line that starts with the selected sprite's sex.
+fn sex_line(app: &App, world: &World) -> String {
+    let Some(Selection::Living(id)) = app.selection() else {
+        panic!("a sprite selected");
+    };
+    let sprite = world.sprite(id).expect("the sprite");
+    inspector_line(app, world, sprite.sex().name())
+}
+
+#[test]
+fn the_body_tab_says_when_room_nearby_or_a_full_world_holds_a_sprite_back() {
+    // M2 design §10.7, #331: grown, fed and rested, but with 4 other grown
+    // sprites within 10 tiles, it's `too crowded to breed`.
+    let crowd = [at(2, 3), at(0, 0), at(9, 0), at(0, 4), at(9, 4)];
+    let world = WorldBuilder::grass(10, 5).starters(&crowd).seed(7).build();
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
+    app.apply(Action::SelectNext, &world);
+    assert_eq!(sex_line(&app, &world), "male · too crowded to breed");
+    // With one of them out of reach, it has room nearby.
+    let world = WorldBuilder::grass(14, 5)
+        .starters(&crowd[..4])
+        .starters(&[at(13, 4)])
+        .seed(7)
+        .build();
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
+    app.apply(Action::SelectNext, &world);
+    assert_eq!(sex_line(&app, &world), "male · fertile");
+    // A world that holds its 100 is full first, whatever is near (§10.6).
+    let world = full_world();
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
+    app.apply(Action::SelectNext, &world);
+    assert_eq!(sex_line(&app, &world), "male · world full");
+}
+
+/// 100 starters, as many as a world holds (M2 design §10.6).
+fn full_world() -> World {
+    let sprites: Vec<Pos> = (0..100).map(|i| at(i % 12, i / 12)).collect();
+    WorldBuilder::grass(12, 9)
+        .starters(&sprites)
+        .seed(7)
+        .build()
 }
 
 #[test]
