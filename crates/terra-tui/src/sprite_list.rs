@@ -208,8 +208,7 @@ pub(crate) fn lines(
     let age_width = widest("Age", every_row.iter().map(|row| &row.age));
     let drive_width = widest("Drive", world.data().drives().map(display_name));
     // Each sprite's life stage after its age (M2 design §9.6).
-    let stages = [LifeStage::Young, LifeStage::Adult, LifeStage::Old];
-    let stage_width = widest("Life stage", stages.map(LifeStage::name));
+    let stage_width = widest("Life stage", LifeStage::ALL.map(LifeStage::name));
     // Each sprite's generation after its drive (M2 design §17.1, #313).
     let generation_width = widest(
         "Generation",
