@@ -319,7 +319,7 @@ fn family_lines(sprite: &SpriteView, data: &Words) -> Vec<String> {
 fn fertility_words(fertility: Fertility) -> Option<&'static str> {
     match fertility {
         Fertility::Fertile => Some("fertile"),
-        Fertility::Crowded => Some("too crowded to breed"),
+        Fertility::TooCrowded => Some("too crowded to breed"),
         Fertility::WorldFull => Some("world full"),
         Fertility::Infertile => None,
     }
@@ -2021,7 +2021,7 @@ fn fertile_lines(world: &World) -> Vec<Line<'static>> {
     let beneath = if world.is_full() {
         "world full".to_string()
     } else {
-        format!("too crowded {}", count(Fertility::Crowded))
+        format!("too crowded {}", count(Fertility::TooCrowded))
     };
     let mut lines = vec![Line::from(format!(
         " {:<12}{:>7}",

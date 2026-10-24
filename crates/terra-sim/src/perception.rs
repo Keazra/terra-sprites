@@ -375,18 +375,11 @@ impl Flood {
     /// in row order: where a led sprite heads (design v23 §6.5). The origin
     /// is always allowed, so there's always one.
     pub(crate) fn nearest_reached(&self, to: Pos, free: impl Fn(Pos) -> bool) -> Pos {
-        let squared = |pos: Pos| {
-            let (dx, dy) = (
-                u32::from(pos.x.abs_diff(to.x)),
-                u32::from(pos.y.abs_diff(to.y)),
-            );
-            dx * dx + dy * dy
-        };
         (0..self.costs.len())
             .filter(|&index| self.costs[index] != UNREACHED)
             .map(|index| (self.pos(index), self.costs[index], index))
             .filter(|&(pos, _, _)| pos == self.origin || free(pos))
-            .min_by_key(|&(pos, cost, index)| (squared(pos), cost, index))
+            .min_by_key(|&(pos, cost, index)| (pos.distance_squared(to), cost, index))
             .map_or(self.origin, |(pos, _, _)| pos)
     }
 

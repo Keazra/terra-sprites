@@ -360,11 +360,11 @@ Able to breed: grown up, its energy and hydration above `fed` (0.4), rested sinc
 _Avoid_: ready, in season
 
 **Room nearby** (M2, Slice 29b):
-The body's rule, beside most sprites, that a grown sprite is fertile only where fewer than 4 other grown sprites, adult or old, a partner included, are within 10 tiles, as the crow flies. Young sprites and eggs don't count. Physiology's `breeding.room_nearby` sets the two numbers. A sprite whose body could breed but for it is **too crowded to breed**; one that the world's limit holds back, whatever is near it, is **world full**.
+The body's rule, beside most sprites, that a grown sprite is fertile only where fewer than 4 other grown sprites, adult or old, a partner included, are within 10 tiles in a straight line. Young sprites and eggs don't count. Physiology's `breeding.room_nearby` sets the two numbers. A sprite whose body could breed but for it is **too crowded to breed**; one that the world's limit holds back, whatever is near it, is **world full**.
 _Avoid_: crowdedness (the drive about sprites within 3 tiles), crowded (alone, which reads as that drive), personal space
 
 **Wandering switched off** (M2, #318):
-A grown sprite whose `always → Wander` instinct, as its brain takes it, pulls less than its act threshold, so it never wanders on its own: a copying error weakened the gene, two hidden flaws broke it, or copy and change lost it. It plays where it stands, drinks and rests, and stays near its partner. Room nearby keeps such sprites from winning the race for room in a full world.
+A grown sprite whose `always → Wander` instinct, as its brain takes it, pulls less than its act threshold, so it never wanders on its own: a copying error weakened the gene, two hidden flaws broke it, or copy and change lost it. It plays where it stands, drinks and rests, and stays near its partner. Room nearby is meant to keep such sprites from winning the race for room in a full world (#318), which Slice 29b's long run checks.
 _Avoid_: homebody (#318's word for it), lazy, idle (a sprite with nothing to do stands by design)
 
 **Arousal** (M2):

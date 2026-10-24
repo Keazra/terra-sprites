@@ -32,7 +32,7 @@ use crate::objects::{EntityId, Object, Objects};
 use crate::perception::{Flood, Target, goal_tiles};
 use crate::population::{PopulationCount, PopulationRecord};
 use crate::regions::Regions;
-use crate::registry::{CategoryId, ChemicalKind};
+use crate::registry::{BrainParam, CategoryId, ChemicalKind};
 use crate::replay::{self, CHECKPOINT_EVERY, Recording, Start};
 use crate::rolling;
 use crate::save::{self, LoadError};
@@ -709,6 +709,13 @@ impl<'a> SpriteView<'a> {
     /// 0 (M2 design §9.4).
     pub fn gene_health(&self) -> &'a [f32] {
         &self.sprite.health
+    }
+
+    /// The least pull that starts a verb while it isn't busy, as its brain
+    /// takes it (M2 design §19.2): its expressed `act_threshold` gene, kept
+    /// in range, or the pack's default without one.
+    pub fn act_threshold(&self) -> f32 {
+        self.sprite.brain.params.get(BrainParam::ActThreshold)
     }
 
     /// How many of its two copies of each gene carry a hidden flaw, from 0

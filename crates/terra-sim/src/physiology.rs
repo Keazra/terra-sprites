@@ -558,8 +558,8 @@ pub(crate) struct Breeding {
     pub(crate) fed: f32,
     /// How many ticks after its last egg an adult is fertile again.
     pub(crate) rest: u64,
-    /// How few other grown sprites must be near an adult for it to be
-    /// fertile (M2 design §10.2, #331). A pack from before room nearby has
+    /// How few other grown sprites must be near a grown sprite for it to be
+    /// fertile (M2 design §10.2, §10.9). A pack from before room nearby has
     /// none: only the world's limit holds breeding back.
     #[serde(default)]
     pub(crate) room_nearby: Option<RoomNearby>,
@@ -597,10 +597,10 @@ pub(crate) struct Breeding {
     pub(crate) crossover: f32,
 }
 
-/// Room nearby (M2 design §10.2, #331): an adult is fertile only while
-/// fewer than `fewer_than` other grown sprites, adult or old, are within
-/// `within` tiles of it, as the crow flies. Young sprites and eggs don't
-/// count.
+/// Room nearby (M2 design §10.2, §10.9): a grown sprite is fertile only
+/// while fewer than `fewer_than` other grown sprites, adult or old, are
+/// within `within` tiles of it in a straight line. Young sprites and eggs
+/// don't count.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct RoomNearby {
@@ -615,7 +615,8 @@ fn gene_by_gene() -> f32 {
 }
 
 /// What a saved world's pack from before breeding gets: the built-in
-/// pack's, which a test checks they match.
+/// pack's, which a test checks they match, but for room nearby, which a
+/// pack from before has none of (M2 design §10.9).
 impl Default for Breeding {
     fn default() -> Breeding {
         Breeding {
@@ -938,7 +939,8 @@ impl PhysiologyEntry {
         if breeding.rest == 0 {
             return Err("`breeding.rest` must be at least 1 tick".into());
         }
-        // Fewer than none can't be near, so no sprite could breed (#331).
+        // Fewer than none can't be near, so no sprite could breed (M2
+        // design §10.9).
         if breeding
             .room_nearby
             .is_some_and(|room| room.fewer_than == 0)

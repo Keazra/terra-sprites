@@ -891,22 +891,25 @@ fn an_adult_has_room_nearby_with_3_other_grown_sprites_within_10_tiles_but_not_4
     let three = resting(&THREE_NEAR);
     assert_eq!(fertility_among(builtin(), &three, &[]), Fertility::Fertile);
     let four = resting(&[THREE_NEAR.as_slice(), &[at(9, 3)]].concat());
-    assert_eq!(fertility_among(builtin(), &four, &[]), Fertility::Crowded);
+    assert_eq!(
+        fertility_among(builtin(), &four, &[]),
+        Fertility::TooCrowded
+    );
 }
 
 #[test]
-fn other_grown_sprites_count_out_to_10_tiles_as_the_crow_flies() {
-    // M2 design §10.2: a fourth sprite 10 tiles away crowds it, 11 doesn't;
+fn other_grown_sprites_count_out_to_10_tiles_in_a_straight_line() {
+    // M2 design §10.9: a fourth sprite 10 tiles away crowds it, 11 doesn't;
     // and on a slant, 6 across and 8 down is 10, but 7 across and 8 down
     // is more, though no further in either direction than 8.
     let with = |fourth: Pos| {
         let others = resting(&[THREE_NEAR.as_slice(), &[fourth]].concat());
         fertility_among(builtin(), &others, &[])
     };
-    assert_eq!(with(at(12, 1)), Fertility::Crowded, "10 tiles across");
+    assert_eq!(with(at(12, 1)), Fertility::TooCrowded, "10 tiles across");
     assert_eq!(with(at(13, 1)), Fertility::Fertile, "11 tiles across");
-    assert_eq!(with(at(2, 11)), Fertility::Crowded, "10 tiles down");
-    assert_eq!(with(at(8, 9)), Fertility::Crowded, "6 across, 8 down");
+    assert_eq!(with(at(2, 11)), Fertility::TooCrowded, "10 tiles down");
+    assert_eq!(with(at(8, 9)), Fertility::TooCrowded, "6 across, 8 down");
     assert_eq!(with(at(9, 9)), Fertility::Fertile, "7 across, 8 down");
 }
 
@@ -916,7 +919,7 @@ fn an_old_sprite_counts_towards_a_crowd_and_a_young_one_does_not() {
     let data = builtin_changing("physiology.ron", &AGES_AT_ONCE);
     let old = format!("{REST}{OLD}");
     let others = [resting(&THREE_NEAR), vec![(at(9, 3), old.as_str())]].concat();
-    assert_eq!(fertility_among(data, &others, &[]), Fertility::Crowded);
+    assert_eq!(fertility_among(data, &others, &[]), Fertility::TooCrowded);
     let young = [at(9, 3), at(3, 3), at(5, 2), at(1, 6)];
     let three = resting(&THREE_NEAR);
     assert_eq!(
@@ -969,7 +972,7 @@ fn a_pair_with_2_others_near_lays_but_not_with_3() {
 }
 
 #[test]
-fn a_crowded_sprite_feels_no_arousal() {
+fn a_sprite_too_crowded_to_breed_feels_no_arousal() {
     // M2 design §10.2: the `fertile` sensor follows room nearby, and with
     // it the starter's arousal.
     let arousal = |others: &[Pos]| {
@@ -986,7 +989,7 @@ fn a_crowded_sprite_feels_no_arousal() {
     let roomy = arousal(&THREE_NEAR);
     assert!(roomy > 0.1, "with room nearby: {roomy}");
     let four = [THREE_NEAR.as_slice(), &[at(9, 3)]].concat();
-    assert_eq!(arousal(&four), 0.0, "crowded");
+    assert_eq!(arousal(&four), 0.0, "too crowded to breed");
 }
 
 #[test]

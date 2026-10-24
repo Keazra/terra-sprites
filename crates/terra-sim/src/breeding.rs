@@ -121,8 +121,9 @@ pub enum Fertility {
     /// until one dies.
     WorldFull,
     /// Its body could breed, and the world has room, but too many other
-    /// grown sprites are near it: it has no room nearby (§10.2, #331).
-    Crowded,
+    /// grown sprites are near it: it's too crowded to breed, with no room
+    /// nearby (§10.2, §10.9).
+    TooCrowded,
     /// Its body can't: it's young, hungry, thirsty or resting since its last
     /// egg, or its pack has no breeding.
     Infertile,
@@ -156,28 +157,25 @@ pub(crate) fn fertility(state: &WorldState, sprite: &Sprite, data: &DataPack) ->
         Fertility::WorldFull
     } else if breeding
         .room_nearby
-        .is_some_and(|room| crowded(state, sprite, room))
+        .is_some_and(|room| too_crowded(state, sprite, room))
     {
-        Fertility::Crowded
+        Fertility::TooCrowded
     } else {
         Fertility::Fertile
     }
 }
 
 /// Whether `room`'s `fewer_than` or more other grown sprites, adult or old,
-/// a partner included, are within its `within` tiles of `sprite`, as the
-/// crow flies (M2 design §10.2, #331). Young sprites and eggs don't count.
-fn crowded(state: &WorldState, sprite: &Sprite, room: RoomNearby) -> bool {
+/// a partner included, are within its `within` tiles of `sprite` in a
+/// straight line (M2 design §10.2, §10.9). Young sprites and eggs don't
+/// count.
+fn too_crowded(state: &WorldState, sprite: &Sprite, room: RoomNearby) -> bool {
     let reach = u64::from(room.within).pow(2);
     let near = state
         .sprites
         .iter()
         .filter(|&(_, other)| !std::ptr::eq(other, sprite) && other.stage().is_grown())
-        .filter(|(_, other)| {
-            let dx = u64::from(other.pos.x.abs_diff(sprite.pos.x));
-            let dy = u64::from(other.pos.y.abs_diff(sprite.pos.y));
-            dx * dx + dy * dy <= reach
-        })
+        .filter(|(_, other)| other.pos.distance_squared(sprite.pos) <= reach)
         .count();
     near >= usize::from(room.fewer_than)
 }
@@ -405,14 +403,14 @@ mod tests {
 
     #[test]
     fn a_full_world_says_so_before_room_nearby() {
-        // M2 design §10.2, §10.6: five sprites close together, each with
-        // four others near, are crowded while the world has room, and in a
-        // full world it's the world that's full, since only a death can
-        // make room.
+        // M2 design §10.6, §10.9: five sprites close together, each with
+        // four others near, are too crowded to breed while the world has
+        // room, and in a full world it's the world that's full, since only
+        // a death can make room.
         let tiles = [at(0, 0), at(2, 0), at(4, 0), at(1, 2), at(3, 2)];
         let mut world = WorldBuilder::new(&FIELD).starters(&tiles).build();
         let fertility = |world: &World| world.sprites().map(|s| s.fertility()).collect::<Vec<_>>();
-        assert_eq!(fertility(&world), [Fertility::Crowded; 5]);
+        assert_eq!(fertility(&world), [Fertility::TooCrowded; 5]);
         world.set_most_sprites(5);
         assert_eq!(fertility(&world), [Fertility::WorldFull; 5]);
     }

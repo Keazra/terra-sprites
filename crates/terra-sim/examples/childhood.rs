@@ -18,8 +18,9 @@
 //! too; an Eat that ended on its way isn't one. An adult's wandering is
 //! switched off when its `always → Wander` instinct, as its brain takes it,
 //! the expressed one's weight times its gene's health (M2 design §9.4),
-//! pulls less than its act threshold (§19.2): it never wanders on its own. It comes from a copying error that weakened the gene, two
-//! hidden flaws that broke it, or copy and change losing it (#318).
+//! pulls less than its act threshold (§19.2): it never wanders on its own.
+//! It comes from a copying error that weakened the gene, two hidden flaws
+//! that broke it, or copy and change losing it (§10.9, #318).
 //!
 //! The bar for each seed that lasts, since Slice 29b (#331):
 //!
@@ -142,14 +143,18 @@ const NEEDS: [&str; 12] = [
 /// listed (#237 rule 4).
 const LISTED_FROM: f64 = 0.1;
 
+/// The held-over bar on adults dying of hunger or thirst (M2 design §19.6).
+const HUNGER_AND_THIRST: &str = "adults' hunger and thirst";
+
+/// The held-over bar on bites tried too full (M2 design §19.6).
+const TOO_FULL: &str = "too full";
+
 /// The held-over bars (the owner, 2026-10-24), each with how many seeds
 /// missed it in Slice 29's run on the owner's PC, at 9bc50de: more than
-/// that is clearly worse (#331).
-const HUNGER_AND_THIRST: &str = "adults' hunger and thirst";
-const TOO_FULL: &str = "too full";
+/// that is clearly worse (M2 design §19.6).
 const SLICE_29_MISSES: [(&str, usize); 2] = [(HUNGER_AND_THIRST, 2), (TOO_FULL, 1)];
 
-/// The bar for each seed that lasts (#331).
+/// The roaming bar, for each seed that lasts (M2 design §10.9, §19.6).
 const ON_THE_MOVE: &str = "on the move";
 
 struct Options {
@@ -520,7 +525,7 @@ fn run(data: &DataPack, starter: &Starter, seed: u64, options: &Options) -> Run 
 }
 
 /// The adults alive in `world` with their wandering switched off, and the
-/// adults alive (#318).
+/// adults alive (M2 design §19.6, #318).
 fn wander_off(world: &World) -> (usize, usize) {
     let adults: Vec<SpriteView> = world
         .sprites()
@@ -530,36 +535,30 @@ fn wander_off(world: &World) -> (usize, usize) {
     (off, adults.len())
 }
 
-/// Whether `sprite`'s wandering is switched off (#318): its `always →
-/// Wander` instinct, as its brain takes it, pulls less than its act
-/// threshold, so it never wanders on its own. The brain takes the expressed
-/// instinct for those inputs and verb, the first (design §4.3), its weight
-/// times its gene's health (M2 design §9.4), and the expressed
-/// `act_threshold`, 0 without one (§19.2), as the built-in pack's default
-/// is.
+/// Whether `sprite`'s wandering is switched off (M2 design §19.6, #318):
+/// its `always → Wander` instinct, as its brain takes it, pulls less than
+/// its act threshold (§19.2), so it never wanders on its own. The brain
+/// takes the expressed instinct for those inputs and verb, the one gene of
+/// them that expression left expressed (design §4.3), its weight times its
+/// gene's health (M2 design §9.4).
 fn switched_off(sprite: &SpriteView) -> bool {
     let health = sprite.gene_health();
-    let (mut wander, mut act) = (0.0, 0.0);
-    for (index, (gene, expression)) in sprite.genes().into_iter().enumerate() {
-        if expression != Expression::Expressed {
-            continue;
-        }
-        match gene {
+    let wander = sprite
+        .genes()
+        .into_iter()
+        .enumerate()
+        .find_map(|(index, (gene, expression))| match gene {
             GeneView::Instinct {
                 inputs,
                 verb: Verb::Wander,
                 weight,
-            } if inputs == [("always", false)] => {
-                wander = weight * health.get(index).copied().unwrap_or(1.0);
+            } if expression == Expression::Expressed && inputs == [("always", false)] => {
+                Some(weight * health.get(index).copied().unwrap_or(1.0))
             }
-            GeneView::BrainParam {
-                param: "act_threshold",
-                value,
-            } => act = value,
-            _ => {}
-        }
-    }
-    wander < act
+            _ => None,
+        })
+        .unwrap_or(0.0);
+    wander < sprite.act_threshold()
 }
 
 /// Which of `Run::by_parent` a young sprite counts in, by its ticks and
@@ -750,10 +749,9 @@ struct Verdicts {
 }
 
 impl Verdicts {
-    /// The held-over bars that missed in more seeds than in Slice 29's run,
-    /// each with how many seeds now and then: clearly worse, for the owner
-    /// before the PR merges (#331).
-    fn clearly_worse(&self) -> Vec<(&'static str, usize, usize)> {
+    /// Each held-over bar, with how many seeds missed it now and in Slice
+    /// 29's run (M2 design §19.6).
+    fn held_over_misses(&self) -> Vec<(&'static str, usize, usize)> {
         SLICE_29_MISSES
             .into_iter()
             .map(|(bar, then)| {
@@ -763,8 +761,15 @@ impl Verdicts {
                     .filter(|(_, bars)| bars.contains(&bar));
                 (bar, now.count(), then)
             })
-            .filter(|&(_, now, then)| now > then)
             .collect()
+    }
+
+    /// The held-over bars that missed in more seeds than in Slice 29's run,
+    /// each with how many seeds now and then: clearly worse, for the owner
+    /// before the PR merges (M2 design §19.6).
+    fn clearly_worse(&self) -> Vec<(&'static str, usize, usize)> {
+        let misses = self.held_over_misses().into_iter();
+        misses.filter(|&(_, now, then)| now > then).collect()
     }
 }
 
@@ -1102,15 +1107,10 @@ fn held_over(verdicts: &Verdicts) {
         "Held over to #332, reported but not must-pass (the owner, 2026-10-24): {}.",
         listed(&verdicts.held_over).join("; ")
     );
-    let missed: Vec<String> = SLICE_29_MISSES
+    let missed: Vec<String> = verdicts
+        .held_over_misses()
         .into_iter()
-        .map(|(bar, then)| {
-            let now = verdicts
-                .held_over
-                .iter()
-                .filter(|(_, bars)| bars.contains(&bar));
-            format!("{bar} in {} (Slice 29: {then})", now.count())
-        })
+        .map(|(bar, now, then)| format!("{bar} in {now} (Slice 29: {then})"))
         .collect();
     let worse: Vec<&str> = verdicts
         .clearly_worse()
@@ -1321,16 +1321,8 @@ mod tests {
         // design §14): its first, before the first step, then every 100
         // ticks until it squeezes.
         let data = DataPack::builtin().expect("the built-in data pack is valid");
-        let map = Map::from_ascii(&["....."], &data).expect("a valid drawing");
         let sprites: Vec<(Pos, Option<Genome>)> = [0, 2, 4].map(|x| (Pos { x, y: 0 }, None)).into();
-        let scenario = Scenario {
-            map,
-            objects: &[],
-            sprites: &sprites,
-            scripted: &[],
-            newborns: &[],
-        };
-        let world = World::from_scenario(scenario, data, 1).expect("a valid scenario");
+        let world = on_a_row(data, &sprites);
         let mut census = Census::new(&world);
         census.note(100, 30, 100);
         assert_eq!(census.fewest, 3);
@@ -1562,8 +1554,6 @@ mod tests {
     /// A world of one grown sprite of `genes` on each of its tiles.
     fn grown(genes: &[&str]) -> World {
         let data = DataPack::builtin().expect("the built-in data pack is valid");
-        let row = ".".repeat(2 * genes.len());
-        let map = Map::from_ascii(&[&row], &data).expect("a valid drawing");
         let sprites: Vec<(Pos, Option<Genome>)> = (genes.iter().enumerate())
             .map(|(x, genes)| {
                 let text = format!("(format: 2, genes: [{genes}])");
@@ -1571,10 +1561,19 @@ mod tests {
                 (Pos::new(2 * x as u16, 0), Some(genome))
             })
             .collect();
+        on_a_row(data, &sprites)
+    }
+
+    /// A world of one row of grass, just long enough for `sprites`, with
+    /// the starter's genes where they have none.
+    fn on_a_row(data: DataPack, sprites: &[(Pos, Option<Genome>)]) -> World {
+        let long = sprites.iter().map(|(pos, _)| pos.x + 1).max().unwrap_or(1);
+        let row = ".".repeat(usize::from(long));
+        let map = Map::from_ascii(&[&row], &data).expect("a valid drawing");
         let scenario = Scenario {
             map,
             objects: &[],
-            sprites: &sprites,
+            sprites,
             scripted: &[],
             newborns: &[],
         };
