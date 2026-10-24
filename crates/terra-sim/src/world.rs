@@ -768,18 +768,9 @@ impl<'a> SpriteView<'a> {
     /// such chemical. The breeding drive reads 0 in a sprite not grown up
     /// (M2 design §5).
     pub fn chemical(&self, name: &str) -> Option<f32> {
-        let index = self
-            .world
-            .data
-            .chemicals()
-            .iter()
-            .position(|c| c.name == name)?;
-        let hidden = self.hidden_drive() == Some(index);
-        Some(if hidden {
-            0.0
-        } else {
-            self.sprite.body.chems[index]
-        })
+        self.chemicals()
+            .find(|chemical| chemical.name == name)
+            .map(|chemical| chemical.level)
     }
 
     /// The chemical the breeding drive reads, if this sprite isn't grown up:
@@ -1649,12 +1640,7 @@ impl World {
         if !self.state.map.contains(pos) {
             return None;
         }
-        let id = self.state.sprites.at(pos)?;
-        Some(SpriteView {
-            id,
-            sprite: self.state.sprites.get(id)?,
-            world: self,
-        })
+        self.sprite(self.state.sprites.at(pos)?)
     }
 
     /// The object on the tile at `pos`, if any. Off the map there is none.

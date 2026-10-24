@@ -30,22 +30,14 @@ pub struct DataPack {
     /// loci every tick (design §7.4 A5).
     chemical_places: Vec<Option<u16>>,
     locus_places: Vec<Option<u16>>,
-    /// Every brain input, in ID order.
     brain_inputs: Vec<BrainInput>,
     /// The State inputs, as places in `brain_inputs`, found once for
     /// attention's scoring every tick (design §5.2, §5.3).
     state_places: Vec<usize>,
-    /// What the breeding drive's need reads, if the pack has one and it
-    /// reads a State input (M2 design §5).
     drive: Option<LocusRef>,
-    /// Every brain input that reads the breeding drive, in the sprite or in
-    /// the one it attends to, as places in `brain_inputs` (M2 design §5).
     drive_places: Vec<usize>,
-    /// Where `target_distance` is in `brain_inputs` (design §5.2).
     target_distance_place: Option<usize>,
-    /// The needs (design §5.2), as places in `brain_inputs`.
     needs: Vec<usize>,
-    /// The first-order needs, as places in `brain_inputs` (design v21 §5.2).
     first_order: Vec<usize>,
     /// What sprites perceive things as (design v19 §3.5.5), in ascending ID order.
     categories: Vec<Category>,
@@ -54,23 +46,17 @@ pub struct DataPack {
     water_category: CategoryId,
     sprite_category: CategoryId,
     cursor_category: CategoryId,
-    /// The tags defined in the data (design v23 §3.5.6), in listed order.
     tags: Vec<Tag>,
-    /// In ascending ID order.
     object_types: Vec<ObjectType>,
     /// Where each object type (design §3.5.3) is in `object_types`, by ID,
     /// so looking one up is no search.
     object_type_places: Vec<Option<u16>>,
-    /// The index of the type whose objects hatch, the egg a mother lays
-    /// (M2 design §10.4), if the pack has one.
     egg_type: Option<usize>,
     physiology: Physiology,
     /// What sprites without parents are made from. Every gene in it is expressed or unexpressed.
     starter: Genome,
     /// What random names are made of (design v28 §3.5.1).
     syllables: Syllables,
-    /// The files the pack was read from, as `(path within the pack, RON
-    /// text)`, which a save embeds (design §2.8).
     sources: Vec<(String, String)>,
 }
 
