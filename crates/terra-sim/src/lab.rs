@@ -401,23 +401,23 @@ impl LabScenario {
 
     /// Runs the scenario for `seed`, counting each window.
     pub fn run(&self, data: DataPack, seed: u64) -> LabRun {
-        let world = || self.world(data.clone(), seed).expect("checked when read");
+        let fresh = || self.world(data.clone(), seed).expect("checked when read");
         let (control, without) = match self.file.control {
             Control::Off => (None, None),
             Control::NoLearning => {
-                let mut world = world();
+                let mut world = fresh();
                 world.switch_off_learning();
                 let windows = self.count(world, self.trainer);
                 (Some(windows), Some(Without::Learning))
             }
-            Control::NoTrainer => (Some(self.count(world(), None)), Some(Without::Trainer)),
+            Control::NoTrainer => (Some(self.count(fresh(), None)), Some(Without::Trainer)),
             Control::Orphans => {
-                let windows = self.counting(world(), self.trainer, true);
+                let windows = self.counting(fresh(), self.trainer, true);
                 (Some(windows), Some(Without::Parents))
             }
         };
         LabRun {
-            windows: self.count(world(), self.trainer),
+            windows: self.count(fresh(), self.trainer),
             control,
             without,
         }

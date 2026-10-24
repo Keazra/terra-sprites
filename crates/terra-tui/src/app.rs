@@ -1825,7 +1825,8 @@ impl App {
             self.debug.toggle();
             return Flow::Continue;
         }
-        // `Ctrl+C` quits at once, whatever is open, as on the title screen.
+        // `Ctrl+C` quits at once, whatever is open, as on the title screen
+        // (design §6.6).
         if action == Action::Quit {
             return Flow::Quit;
         }

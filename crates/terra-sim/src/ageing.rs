@@ -9,7 +9,7 @@ use crate::listed::listed_enum;
 use crate::registry::Trait;
 
 listed_enum! {
-    /// A phase of a sprite's life (M2 design §9.1). Objects have stages of their
+    /// A sprite's life stage (M2 design §9.1). Objects have stages of their
     /// own; a sprite's are life stages. They come in this order.
     #[derive(
         Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,

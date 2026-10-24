@@ -94,7 +94,8 @@ listed_enum! {
     /// A choice on the title screen's menu.
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub enum Choice {
-        /// Load the newest save; offered only when there is one.
+        /// Load the newest save; offered only when there is one, so it stays
+        /// first ([`Title::choices`]).
         Continue => "Continue",
         NewWorld => "New world",
         Load => "Load",
