@@ -13,6 +13,38 @@ pub(crate) fn display_name(name: &str) -> String {
 /// Why a fixture can't be grabbed (design v23 §6.1).
 pub(crate) const ROOTED: &str = "it's rooted to the ground";
 
+/// A space that never breaks a line: between the words of a name, or a
+/// word and the number after it.
+pub(crate) const BOUND: char = '\u{a0}';
+
+/// `text` as one word, its spaces kept together when a line wraps.
+pub(crate) fn unbroken(text: &str) -> String {
+    text.replace(' ', &BOUND.to_string())
+}
+
+/// `text` after `first`, wrapped at its spaces to lines of at most `width`
+/// columns, each later line after `later`. A word after another needs a
+/// space before it; the first word on a line goes there whether it fits or
+/// not.
+pub(crate) fn wrap(first: &str, later: &str, text: &str, width: usize) -> Vec<String> {
+    let mut lines = Vec::new();
+    let mut line = first.to_string();
+    let mut empty = true;
+    for word in text.split(' ') {
+        if !empty && line.chars().count() + 1 + word.chars().count() > width {
+            lines.push(std::mem::replace(&mut line, later.to_string()));
+            empty = true;
+        }
+        if !empty {
+            line.push(' ');
+        }
+        line.push_str(word);
+        empty = false;
+    }
+    lines.push(line);
+    lines
+}
+
 /// A terrain's name on screen: `deep water`.
 pub(crate) fn terrain_name(terrain: Terrain) -> &'static str {
     match terrain {

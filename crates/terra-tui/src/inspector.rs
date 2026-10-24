@@ -20,8 +20,8 @@ use crate::listed::listed_enum;
 use crate::policy::{Panel, Subject};
 use crate::text;
 use crate::text::{
-    ROOTED, Words, cause_name, change, display_name, group_thousands, level, signed, signed_level,
-    significant, terrain_name, whole,
+    BOUND, ROOTED, Words, cause_name, change, display_name, group_thousands, level, signed,
+    signed_level, significant, terrain_name, unbroken, whole, wrap,
 };
 
 /// The inspector's width, in columns, border included (design §6.1).
@@ -406,30 +406,10 @@ fn observed_lines(app: &App, now: u64) -> Vec<String> {
     let width = entries.iter().map(|(ago, _)| ago.chars().count()).max();
     for (ago, text) in &entries {
         let head = format!(" {ago:>width$} · ", width = width.unwrap_or(0));
-        lines.extend(hanging(&head, text));
+        // Each later line is indented to where the text began.
+        let indent = " ".repeat(head.chars().count());
+        lines.extend(wrap(&head, &indent, text, WIDTH));
     }
-    lines
-}
-
-/// `text` after `head`, wrapped to the inspector's width with each later
-/// line indented to where the text began.
-fn hanging(head: &str, text: &str) -> Vec<String> {
-    let indent = " ".repeat(head.chars().count());
-    let mut lines = Vec::new();
-    let mut line = head.to_string();
-    let mut empty = true;
-    for word in text.split(' ') {
-        if !empty && line.chars().count() + 1 + word.chars().count() > WIDTH {
-            lines.push(std::mem::replace(&mut line, indent.clone()));
-            empty = true;
-        }
-        if !empty {
-            line.push(' ');
-        }
-        line.push_str(word);
-        empty = false;
-    }
-    lines.push(line);
     lines
 }
 
@@ -1884,9 +1864,6 @@ fn switch_text(switch: Switch) -> String {
     }
 }
 
-/// Keeps a word with the number after it when a line wraps.
-const BOUND: char = '\u{a0}';
-
 /// A gene as a plain line: `low energy → hunger +.00428 past .5`.
 fn gene_text(gene: &GeneView) -> String {
     let numbers = numbers(gene);
@@ -1993,11 +1970,6 @@ fn emitter_source(locus: &str, mode: EmitterMode, invert: bool) -> String {
     }
 }
 
-/// `text` with its spaces kept together when a line wraps.
-fn unbroken(text: &str) -> String {
-    text.replace(' ', &BOUND.to_string())
-}
-
 /// `items` as one line, `a · b · c`, which wraps only after a dot, never
 /// inside an item.
 fn listed(items: &[String]) -> String {
@@ -2008,24 +1980,7 @@ fn listed(items: &[String]) -> String {
 /// `text` wrapped at word boundaries to fit the inspector, its first line
 /// indented `indent` columns and the rest 3, all in `style`.
 fn wrapped(text: &str, indent: usize, style: Style) -> Vec<Line<'static>> {
-    let mut lines: Vec<String> = Vec::new();
-    let mut line = " ".repeat(indent);
-    let mut empty = true;
-    for word in text.split(' ') {
-        // A word after another needs a space before it. The first word on a
-        // line goes there whether it fits or not.
-        if !empty && line.chars().count() + 1 + word.chars().count() > WIDTH {
-            lines.push(std::mem::replace(&mut line, " ".repeat(3)));
-            empty = true;
-        }
-        if !empty {
-            line.push(' ');
-        }
-        line.push_str(word);
-        empty = false;
-    }
-    lines.push(line);
-    lines
+    wrap(&" ".repeat(indent), "   ", text, WIDTH)
         .into_iter()
         .map(|line| Line::styled(line.replace(BOUND, " "), style))
         .collect()
