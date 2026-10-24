@@ -409,73 +409,6 @@ impl Theme {
         Theme::parse(text).unwrap_or_else(|e| panic!("the built-in {name} theme is invalid: {e}"))
     }
 
-    /// The default theme's glass and stars, for a theme without its own
-    /// (M2 design §11.5), such as one made before there was space.
-    fn default_space() -> SpaceFile {
-        let space = ron::from_str::<ThemeFile>(CP437)
-            .unwrap_or_else(|e| panic!("the built-in cp437 theme is invalid: {e}"))
-            .space
-            .expect("the built-in cp437 theme draws space");
-        assert!(
-            Pane::ALL.iter().all(|pane| space.glass.contains_key(pane))
-                && Depth::ALL
-                    .iter()
-                    .all(|depth| space.stars.contains_key(depth)),
-            "the built-in cp437 theme draws every piece of glass and depth of stars"
-        );
-        space
-    }
-
-    /// The default theme's population graph, for a theme without its own
-    /// (M2 design §14), such as one made before there was a graph.
-    fn default_population() -> PopulationLook {
-        let file = ron::from_str::<ThemeFile>(CP437)
-            .unwrap_or_else(|e| panic!("the built-in cp437 theme is invalid: {e}"))
-            .population
-            .expect("the built-in cp437 theme draws the population graph");
-        let stages = &file.stages;
-        let (Some(young), Some(adult), Some(old), Some(egg), Some(full), Some(half), Some(limit)) = (
-            stages.young,
-            stages.adult,
-            stages.old,
-            stages.egg,
-            file.full,
-            file.half,
-            file.limit,
-        ) else {
-            panic!("the built-in cp437 theme draws every part of the population graph");
-        };
-        PopulationLook {
-            young: young.into(),
-            adult: adult.into(),
-            old: old.into(),
-            egg: egg.into(),
-            full,
-            half,
-            limit: glyph(limit),
-        }
-    }
-
-    /// The default theme's lineage colours, for a theme without its own
-    /// (M2 design §17.4), such as one made before there were any.
-    fn default_lineage() -> LineageLook {
-        let file = ron::from_str::<ThemeFile>(CP437)
-            .unwrap_or_else(|e| panic!("the built-in cp437 theme is invalid: {e}"))
-            .lineage
-            .expect("the built-in cp437 theme has lineage colours");
-        let (Some(elders), Some(siblings), Some(young), Some(others)) =
-            (file.elders, file.siblings, file.young, file.others)
-        else {
-            panic!("the built-in cp437 theme has every lineage colour");
-        };
-        LineageLook {
-            elders: elders.into(),
-            siblings: siblings.into(),
-            young: young.into(),
-            others: others.into(),
-        }
-    }
-
     /// A theme from a theme file's text, complete and within CP437.
     fn parse(text: &str) -> Result<Theme, String> {
         let file: ThemeFile = ron::from_str(text).map_err(|e| e.to_string())?;
@@ -506,40 +439,34 @@ impl Theme {
             .map(|(object, states)| (object, glyphs(states)))
             .collect();
         // Any piece of glass or depth of stars a theme leaves out, it draws
-        // as the default theme does (M2 design §11.5).
-        let builtin = Theme::default_space();
-        let (mut glass, mut stars) = (glyphs(builtin.glass), glyphs(builtin.stars));
-        if let Some(space) = file.space {
-            glass.extend(glyphs(space.glass));
-            stars.extend(glyphs(space.stars));
+        // as the default theme does (M2 design §11.5), such as one made
+        // before there was space.
+        let builtin: ThemeFile = ron::from_str(CP437)
+            .unwrap_or_else(|e| panic!("the built-in cp437 theme is invalid: {e}"));
+        let mut space = builtin.space.expect("the built-in cp437 theme draws space");
+        assert!(
+            Pane::ALL.iter().all(|pane| space.glass.contains_key(pane))
+                && Depth::ALL
+                    .iter()
+                    .all(|depth| space.stars.contains_key(depth)),
+            "the built-in cp437 theme draws every piece of glass and depth of stars"
+        );
+        if let Some(theirs) = file.space {
+            space.glass.extend(theirs.glass);
+            space.stars.extend(theirs.stars);
         }
         // And any part of the population graph (M2 design §14).
-        let mut population = Theme::default_population();
-        if let Some(graph) = file.population {
-            let colour =
-                |colour: Option<Colour>, default: Color| colour.map_or(default, Color::from);
-            population = PopulationLook {
-                young: colour(graph.stages.young, population.young),
-                adult: colour(graph.stages.adult, population.adult),
-                old: colour(graph.stages.old, population.old),
-                egg: colour(graph.stages.egg, population.egg),
-                full: graph.full.unwrap_or(population.full),
-                half: graph.half.unwrap_or(population.half),
-                limit: graph.limit.map_or(population.limit, glyph),
-            };
-        }
+        let population = file
+            .population
+            .unwrap_or_default()
+            .look(builtin.population.unwrap_or_default())
+            .expect("the built-in cp437 theme draws every part of the population graph");
         // And any of the lineage colours (M2 design §17.4).
-        let mut lineage = Theme::default_lineage();
-        if let Some(colours) = file.lineage {
-            let colour =
-                |colour: Option<Colour>, default: Color| colour.map_or(default, Color::from);
-            lineage = LineageLook {
-                elders: colour(colours.elders, lineage.elders),
-                siblings: colour(colours.siblings, lineage.siblings),
-                young: colour(colours.young, lineage.young),
-                others: colour(colours.others, lineage.others),
-            };
-        }
+        let lineage = file
+            .lineage
+            .unwrap_or_default()
+            .look(builtin.lineage.unwrap_or_default())
+            .expect("the built-in cp437 theme has every lineage colour");
         let theme = Theme {
             tiles,
             objects,
@@ -558,8 +485,8 @@ impl Theme {
                 .into_iter()
                 .map(|(drive, colour)| (drive, colour.into()))
                 .collect(),
-            glass,
-            stars,
+            glass: glyphs(space.glass),
+            stars: glyphs(space.stars),
             population,
             lineage,
         };
@@ -759,7 +686,7 @@ struct SpaceFile {
 
 /// A theme file's `population` section: how the population graph is
 /// drawn (M2 design §14).
-#[derive(Deserialize)]
+#[derive(Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct PopulationFile {
     /// Each life stage's colour.
@@ -774,6 +701,23 @@ struct PopulationFile {
     /// A dot of the line at the world's limit.
     #[serde(default, deserialize_with = "implicit_some")]
     limit: Option<GlyphEntry>,
+}
+
+impl PopulationFile {
+    /// The graph as this section draws it, with `default`'s part for any it
+    /// leaves out: `None` if both leave a part out.
+    fn look(self, default: PopulationFile) -> Option<PopulationLook> {
+        let (theirs, ours) = (self.stages, default.stages);
+        Some(PopulationLook {
+            young: theirs.young.or(ours.young)?.into(),
+            adult: theirs.adult.or(ours.adult)?.into(),
+            old: theirs.old.or(ours.old)?.into(),
+            egg: theirs.egg.or(ours.egg)?.into(),
+            full: self.full.or(default.full)?,
+            half: self.half.or(default.half)?,
+            limit: glyph(self.limit.or(default.limit)?),
+        })
+    }
 }
 
 /// The colour of each life stage on the population graph.
@@ -791,7 +735,7 @@ struct StagesFile {
 }
 
 /// A theme file's `lineage` section: the lineage colours (M2 design §17.4).
-#[derive(Deserialize)]
+#[derive(Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct LineageFile {
     #[serde(default, deserialize_with = "implicit_some")]
@@ -802,6 +746,19 @@ struct LineageFile {
     young: Option<Colour>,
     #[serde(default, deserialize_with = "implicit_some")]
     others: Option<Colour>,
+}
+
+impl LineageFile {
+    /// The colours this section gives, with `default`'s for any it leaves
+    /// out: `None` if both leave a colour out.
+    fn look(self, default: LineageFile) -> Option<LineageLook> {
+        Some(LineageLook {
+            elders: self.elders.or(default.elders)?.into(),
+            siblings: self.siblings.or(default.siblings)?.into(),
+            young: self.young.or(default.young)?.into(),
+            others: self.others.or(default.others)?.into(),
+        })
+    }
 }
 
 /// A theme file's `cursor` section.
