@@ -508,8 +508,8 @@ Settled with the owner on 2026-10-20 ([#318](https://github.com/Keazra/terra-spr
 **How we know it worked,** agreed before measuring (#331, and the owner's call of 2026-10-24 on Slice 29's missed bars):
 
 - **Roaming:** adults on the move at least a quarter of the time over the last 50 hours of the long run (§19.6), in every seed that lasts.
-- **The bars Slice 29 met still hold:** in the long run, the world lasts and the bushes hold in at least 9 seeds of 10; in the short runs, 10% to 30% of lone newborns grow up in the unattended run's middle seed, at least 60% of the young hatched in the viability run grow up, and adults dying of hunger or thirst stay under 1 in 20 of its grown deaths (§19.8).
-- **Held over to [#332](https://github.com/Keazra/terra-sprites/issues/332), reported, not must-pass:** adults dying of hunger or thirst in each seed of the long run, and bites tried too full, which Slice 29's run missed on seeds 8 and 10, and on seed 10. If either misses in more seeds than that, it goes back to the owner before merging.
+- **The bars Slice 29 met still hold:** in the long run, the world lasts and the bushes hold in at least 9 seeds of 10; in the short runs, 10% to 30% of lone newborns grow up in the unattended run's middle seed, and at least 60% of the young hatched in the viability run grow up (§19.8).
+- **Held over to [#332](https://github.com/Keazra/terra-sprites/issues/332), reported, not must-pass:** adults dying of hunger or thirst in each seed of the long run, and bites tried too full, which Slice 29's run missed on seeds 8 and 10, and on seed 10. If either misses in more seeds than that, it goes back to the owner before merging. And, by the owner's call once this slice's short runs were in (2026-10-24), the viability run's grown bar: adults dying of hunger or thirst were 61 of its 1,048 grown deaths (5.8%), against Slice 29's 47 of 1,132 (4.2%) and a bar of under 1 in 20. The same build without room nearby gives Slice 29's numbers exactly, so the rise is the rule's, and it comes in a world's first hours, while it fills: in the cloud's 100-hour runs of seeds 1 and 4, about 6% of grown deaths in hours 0–10 and about 1.4% after.
 - **Reported with no bar** (#318): lone newborns given hour 220's genes, and how many adults have their wandering switched off, hour by hour.
 
 ---
@@ -1586,6 +1586,7 @@ A young sprite's water drains at the grown rate **× 4,500 ÷ the ticks its gene
 - **Not the player.** The owner (#223): "The player is an X factor to Sprite survival, so this is measuring against the world running without interference."
 - **The guided bar has no upper end in M2** (#225 round 1). #223 set 60% to 90%, so that childhood stays dangerous even in a family; M3's dangers bring it back into that band.
 - **A4 and G5 are one check** in the baseline report (M1 design §7.4, §7.6), which runs the unattended run beside the viability run. "Alive at tick 10,000" is gone.
+- **The grown bar is held over to [#332](https://github.com/Keazra/terra-sprites/issues/332)** since Slice 29b, by the owner's call (2026-10-24): room nearby raised it to 5.8% (§10.9). The baseline report still judges it, so it says not met, but it isn't must-pass until #332 settles it.
 - **The lab counts childhoods.** Each window of a lab run counts how many of the world's first sprites that started young, and how many of the young that appeared later, grew up or died young, and every death by the life stage it came at: rows `grew up: first`, `died young: later`, `died, adult: dehydration` and so on.
 - **The long run** (#222, #237, #224, #225): `cargo run --release -p terra-sim --example childhood` runs the default world, left alone, for 220 hours (990,000 ticks) on seeds 1–10, and reports every 10 hours, then the bars. A seed takes about 3 hours on the owner's PC once its world fills, so it runs there, at about half the PC's threads.
   - **In each seed that lasts,** since Slice 29b: **adults on the move at least a quarter of the time** over the last 50 hours (#237, #331, §10.9), the share of their ticks on another tile than the tick before.
@@ -1642,7 +1643,7 @@ The grown bar's and the too-full bar's misses came late in the run and grew over
 ### 19.9 Later
 
 - **Roaming that pays** ([#318](https://github.com/Keazra/terra-sprites/issues/318)): adults on the move a quarter of the time. #225's check failed it in every seed (7–25%), with the world sitting full. Slice 29b builds room nearby for it ([#331](https://github.com/Keazra/terra-sprites/issues/331), §10.9).
-- **Harshness, revisited once more features are in** ([#332](https://github.com/Keazra/terra-sprites/issues/332)): the grown bar on seeds 8 and 10, too-full bites on seed 10 and partners in sight (§19.8).
+- **Harshness, revisited once more features are in** ([#332](https://github.com/Keazra/terra-sprites/issues/332)): the grown bar on seeds 8 and 10, too-full bites on seed 10 and partners in sight (§19.8), and the viability run's grown bar since room nearby (§10.9).
 - **Careful copying,** if a long run trips its trigger (§19.6).
 - **Parents that look after their young.** As genes change, parents stop looking for their young, because nothing threatens the young yet. M3's dangers would give that care a use.
 - **The gentle world on the title screen,** as a choice when making a world.
