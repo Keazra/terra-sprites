@@ -2,7 +2,7 @@ mod common;
 use common::{
     HURT_ITSELF, HURT_TARGET, LETHAL_THORNS, LONE, UNHURT, WorldBuilder, acted, at_sprite,
     finished, group, inspector_line, inspector_rows, lines, open, pack, pack_changing, render_on,
-    select, sized_app, status_line,
+    run, select, sized_app, status_line,
 };
 
 use std::time::Duration;
@@ -123,9 +123,7 @@ fn the_top_bar_shows_the_tick_and_speed() {
 #[test]
 fn the_top_bar_groups_tick_digits_in_thousands() {
     let mut world = generated_world();
-    for _ in 0..1_234 {
-        world.step();
-    }
+    run(&mut world, 1_234);
     let app = app_for(&world, Theme::cp437(), 100, 30);
     let bar = lines(&render(&app, &world, 100, 30))[0].clone();
     assert!(bar.contains("tick 1,234"), "{bar}");
@@ -719,9 +717,7 @@ fn a_fruiting_bush_is_drawn_bold_red() {
             ("Every(200)", "Every(1)"),
         ],
     )]));
-    for _ in 0..3 {
-        world.step();
-    }
+    run(&mut world, 3);
     let app = pointing_at(&world, Theme::cp437(), 100, 30, 0, 4);
     let bush = &render(&app, &world, 100, 30)[cell(&world, 1, 1)];
     assert_eq!(bush.symbol(), "♣");
@@ -1309,12 +1305,12 @@ fn a_sprite_hurt_to_death_by_an_object_is_named_after_its_type() {
 /// A 10×5 field of grass with one sprite at (2, 3), made from `genome`, and
 /// an app on it that has selected the sprite and stepped the world `ticks`
 /// times.
-fn one_sprite(genome: &str, ticks: u32) -> (World, App) {
+fn one_sprite(genome: &str, ticks: u64) -> (World, App) {
     one_sprite_doing(genome, &[], ticks)
 }
 
 /// `one_sprite`, starting on the `scripted` actions.
-fn one_sprite_doing(genome: &str, scripted: &[ScriptedAction], ticks: u32) -> (World, App) {
+fn one_sprite_doing(genome: &str, scripted: &[ScriptedAction], ticks: u64) -> (World, App) {
     one_sprite_among(genome, &[], scripted, ticks)
 }
 
@@ -1323,7 +1319,7 @@ fn one_sprite_among(
     genome: &str,
     objects: &[(Pos, &str)],
     scripted: &[ScriptedAction],
-    ticks: u32,
+    ticks: u64,
 ) -> (World, App) {
     one_sprite_in(pack(), genome, objects, scripted, ticks)
 }
@@ -1334,21 +1330,18 @@ fn one_sprite_in(
     genome: &str,
     objects: &[(Pos, &str)],
     scripted: &[ScriptedAction],
-    ticks: u32,
+    ticks: u64,
 ) -> (World, App) {
-    let genome = terra_sim::Genome::from_ron(genome, &pack).expect("a valid genome");
     let start = Pos { x: 2, y: 3 };
     let scripted: Vec<(Pos, ScriptedAction)> = scripted.iter().map(|&a| (start, a)).collect();
     let mut world = WorldBuilder::grass(10, 5)
         .objects(objects)
-        .sprites_with(vec![(start, Some(genome))])
+        .genes(&[(start, genome)])
         .scripts(&scripted)
         .data(pack)
         .seed(7)
         .build();
-    for _ in 0..ticks {
-        world.step();
-    }
+    run(&mut world, ticks);
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
     app.apply(Action::SelectNext, &world);
     (world, app)
@@ -1416,21 +1409,19 @@ fn the_body_tab_says_when_the_young_grow_up_and_the_old_are_old() {
         ],
     )]);
     let genes = |grows_up: f32, grows_old: f32| {
-        let genes = format!(
+        format!(
             r#"(format: 1, genes: [
                 Trait(trait: "grows_up", value: {grows_up:?}),
                 Trait(trait: "grows_old", value: {grows_old:?}),
             ])"#
-        );
-        terra_sim::Genome::from_ron(&genes, &pack).expect("a valid genome")
+        )
     };
     let (young, grown) = (Pos { x: 2, y: 3 }, Pos { x: 6, y: 1 });
-    let sprites = vec![
-        (young, Some(genes(4500.0, 13500.0))),
-        (grown, Some(genes(10.0, 20.0))),
-    ];
     let mut world = WorldBuilder::grass(10, 5)
-        .sprites_with(sprites)
+        .genes(&[
+            (young, &genes(4500.0, 13500.0)),
+            (grown, &genes(10.0, 20.0)),
+        ])
         .newborns(&[young])
         .data(pack)
         .seed(7)
@@ -1447,9 +1438,7 @@ fn the_body_tab_says_when_the_young_grow_up_and_the_old_are_old() {
         inspector_line(&app, &world, "age "),
         "age 11 · adult · grows old 20"
     );
-    for _ in 0..10 {
-        world.step();
-    }
+    run(&mut world, 10);
     assert_eq!(inspector_line(&app, &world, "age "), "age 21 · old");
 }
 
@@ -1565,9 +1554,7 @@ fn the_body_tab_says_a_led_sprite_is_being_led_and_how_far_behind() {
         inspector(&app, &world).1[0],
         "LED → (7,3) · walking (4 tiles)"
     );
-    for _ in 0..4 {
-        world.step();
-    }
+    run(&mut world, 4);
     assert_eq!(inspector(&app, &world).1[0], "LED → (7,3)");
     app.apply(Action::ToggleDetail, &world);
     assert_eq!(inspector(&app, &world).1[0], "Being led", "caught up");
@@ -1581,9 +1568,7 @@ fn a_led_sprite_as_close_as_it_can_get_to_the_cursor_has_caught_up() {
     let sprite = world.sprites().next().expect("the sprite").id();
     world.submit(Command::TakeHold { sprite });
     world.submit(Command::MoveCursor { tile: bush });
-    for _ in 0..6 {
-        world.step();
-    }
+    run(&mut world, 6);
     assert_eq!(world.sprite(sprite).expect("it").pos(), Pos { x: 6, y: 3 });
     assert_eq!(inspector(&app, &world).1[0], "Being led");
 }
@@ -1803,20 +1788,15 @@ fn the_brain_tab_opens_the_rest_of_a_things_lessons() {
 
 #[test]
 fn choosing_another_sprite_shuts_lessons_that_were_open() {
-    let pack = pack();
-    let genome = terra_sim::Genome::from_ron(EVERY_NEED_GENOME, &pack).expect("a valid genome");
-    let neighbor = terra_sim::Genome::from_ron("(format: 1, genes: [])", &pack).expect("valid");
+    let neighbor = "(format: 1, genes: [])";
     let (eater, bystander) = (Pos { x: 2, y: 3 }, Pos { x: 8, y: 1 });
-    let sprites = vec![(eater, Some(genome)), (bystander, Some(neighbor))];
     let objects = [(Pos { x: 3, y: 3 }, "berry")];
     let mut world = WorldBuilder::grass(10, 5)
         .objects(&objects)
-        .sprites_with(sprites)
+        .genes(&[(eater, EVERY_NEED_GENOME), (bystander, neighbor)])
         .seed(7)
         .build();
-    for _ in 0..2 {
-        world.step();
-    }
+    run(&mut world, 2);
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
     app.apply(Action::SelectNext, &world);
     let eater_id = app.selection().expect("the eater").id();
@@ -1847,15 +1827,9 @@ fn sprites_in_general_sit_above_the_sprites_it_remembers() {
     // Two bullies, each a punishment of 1, so each is frightening at -1.
     // Sprites in general are half that average until it knows three: -.50,
     // and that line comes before either of them.
-    let pack = pack();
-    let genome = |text: &str| terra_sim::Genome::from_ron(text, &pack).expect("a valid genome");
     let walker = r#"(format: 1, genes: [Trait(trait: "speed", value: 10.0)])"#;
     let (me, first, second) = (Pos { x: 2, y: 3 }, Pos { x: 3, y: 3 }, Pos { x: 1, y: 3 });
-    let sprites = vec![
-        (me, Some(genome(SKITTISH_GENOME))),
-        (first, Some(genome(walker))),
-        (second, Some(genome(walker))),
-    ];
+    let sprites = [(me, SKITTISH_GENOME), (first, walker), (second, walker)];
     let scripted = [
         (me, ScriptedAction::Rest),
         (first, ScriptedAction::Hit { at: me }),
@@ -1868,13 +1842,11 @@ fn sprites_in_general_sit_above_the_sprites_it_remembers() {
         (second, ScriptedAction::Hit { at: me }),
     ];
     let mut world = WorldBuilder::grass(10, 5)
-        .sprites_with(sprites)
+        .genes(&sprites)
         .scripts(&scripted)
         .seed(7)
         .build();
-    for _ in 0..8 {
-        world.step();
-    }
+    run(&mut world, 8);
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
     app.apply(Action::SelectNext, &world);
     open(&mut app, &world, Tab::Brain);
@@ -1961,7 +1933,6 @@ fn a_habit_about_sprites_sits_with_what_it_thinks_of_them_in_general() {
     // It hits two sprites, and they hit it back. The habit of hitting them,
     // and what it thinks of sprites in general, are the first step under
     // Sprites. That step is not folded at three (design v40 §6.1).
-    let pack = pack();
     let hitter = r#"(format: 1, genes: [
         Trait(trait: "speed", value: 10.0),
         InitialConcentration(chem: "loneliness", value: 1.0),
@@ -1977,20 +1948,12 @@ fn a_habit_about_sprites_sits_with_what_it_thinks_of_them_in_general() {
         AttentionInstinct(input: "always", category: "sprite", weight: 1.0),
         Instinct(inputs: [("always", false)], verb: Hit, weight: 1.0),
     ])"#;
-    let genome = |text: &str| terra_sim::Genome::from_ron(text, &pack).expect("a valid genome");
     let (me, first, second) = (Pos { x: 2, y: 3 }, Pos { x: 3, y: 3 }, Pos { x: 1, y: 3 });
-    let sprites = vec![
-        (me, Some(genome(hitter))),
-        (first, Some(genome(bully))),
-        (second, Some(genome(bully))),
-    ];
     let mut world = WorldBuilder::grass(10, 5)
-        .sprites_with(sprites)
+        .genes(&[(me, hitter), (first, bully), (second, bully)])
         .seed(7)
         .build();
-    for _ in 0..16 {
-        world.step();
-    }
+    run(&mut world, 16);
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
     app.apply(Action::SelectNext, &world);
     open(&mut app, &world, Tab::Brain);
@@ -2121,27 +2084,22 @@ fn the_brain_tab_shows_memory_before_the_first_decision() {
 fn the_brain_tab_lists_the_places_the_sprite_remembers() {
     // M2 design §7: a scripted drink at the water on its west eases its
     // thirst, so it remembers the water there.
-    let pack = pack();
     let genome = r#"(format: 1, genes: [
         InitialConcentration(chem: "thirst", value: 1.0),
         Emitter(locus: Locus("drank"), mode: Level, gain: -0.5, chem: "thirst"),
     ])"#;
-    let genome = terra_sim::Genome::from_ron(genome, &pack).expect("a valid genome");
     let start = Pos { x: 1, y: 3 };
-    let sprites = vec![(start, Some(genome))];
     let water = Pos { x: 0, y: 3 };
     let scripted = [
         (start, ScriptedAction::Drink { at: water }),
         (start, ScriptedAction::Rest),
     ];
     let mut world = WorldBuilder::new(&["~........."; 5])
-        .sprites_with(sprites)
+        .genes(&[(start, genome)])
         .scripts(&scripted)
         .seed(7)
         .build();
-    for _ in 0..2 {
-        world.step();
-    }
+    run(&mut world, 2);
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
     app.apply(Action::SelectNext, &world);
     open(&mut app, &world, Tab::Brain);
@@ -2161,7 +2119,6 @@ fn the_brain_tab_lists_the_places_best_remembered_first_below_what_it_has_learne
     // M2 design §7.5: it drinks at the water on its west, then eats from
     // the bush on its east, and its places fade fast, so the water is
     // remembered less well by the time it looks.
-    let pack = pack();
     let genome = r#"(format: 1, genes: [
         InitialConcentration(chem: "thirst", value: 1.0),
         Emitter(locus: Locus("drank"), mode: Level, gain: -0.5, chem: "thirst"),
@@ -2169,9 +2126,7 @@ fn the_brain_tab_lists_the_places_best_remembered_first_below_what_it_has_learne
         Emitter(locus: Locus("ate"), mode: Level, gain: -0.5, chem: "hunger"),
         BrainParam(param: "place_fade", value: 0.01),
     ])"#;
-    let genome = terra_sim::Genome::from_ron(genome, &pack).expect("a valid genome");
     let (start, water, bush) = (Pos { x: 1, y: 3 }, Pos { x: 0, y: 3 }, Pos { x: 4, y: 3 });
-    let sprites = vec![(start, Some(genome))];
     let scripted = [
         (start, ScriptedAction::Drink { at: water }),
         (start, ScriptedAction::Eat { at: bush }),
@@ -2179,16 +2134,14 @@ fn the_brain_tab_lists_the_places_best_remembered_first_below_what_it_has_learne
     ];
     let mut world = WorldBuilder::new(&["~........."; 5])
         .objects(&[(bush, "berry_bush")])
-        .sprites_with(sprites)
+        .genes(&[(start, genome)])
         .scripts(&scripted)
         .seed(7)
         .build();
     world
         .start_object(bush, "mature", &[("fruit", 6)])
         .expect("the bush");
-    for _ in 0..20 {
-        world.step();
-    }
+    run(&mut world, 20);
     let mut app = app_for(&world, Theme::cp437(), 100, 40);
     app.apply(Action::SelectNext, &world);
     open(&mut app, &world, Tab::Brain);
@@ -2692,16 +2645,12 @@ fn a_tab_goes_back_to_the_top_when_the_tab_or_the_selection_changes() {
 
 #[test]
 fn selecting_another_sprite_starts_its_tab_from_the_top_and_the_same_one_again_does_not() {
-    let pack = pack();
-    let genome = || Some(terra_sim::Genome::from_ron(&long_genome(), &pack).expect("valid"));
-    let sprites = vec![
-        (terra_sim::Pos { x: 2, y: 3 }, genome()),
-        (terra_sim::Pos { x: 6, y: 1 }, genome()),
+    let genome = long_genome();
+    let sprites = [
+        (terra_sim::Pos { x: 2, y: 3 }, genome.as_str()),
+        (terra_sim::Pos { x: 6, y: 1 }, genome.as_str()),
     ];
-    let world = WorldBuilder::grass(10, 5)
-        .sprites_with(sprites)
-        .seed(7)
-        .build();
+    let world = WorldBuilder::grass(10, 5).genes(&sprites).seed(7).build();
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
     app.apply(Action::SelectNext, &world);
     open(&mut app, &world, Tab::Genome);
@@ -2772,9 +2721,7 @@ fn big_and_negative_gene_values_keep_3_significant_figures_and_their_sign() {
 fn every_tab_s_text_is_within_cp437() {
     // Design §6.2: any CP437 font or tileset can draw every panel.
     let mut world = generated_world();
-    for _ in 0..500 {
-        world.step();
-    }
+    run(&mut world, 500);
     let mut app = app_for(&world, Theme::cp437(), 100, 40);
     app.apply(Action::SelectNext, &world);
     for _ in terra_tui::app::Tab::ALL {
@@ -2817,9 +2764,7 @@ fn the_world_tab_shows_the_population_and_the_deaths_by_cause() {
             "starvation 0 · dehydration 0 · old age 0",
         ]
     );
-    for _ in 0..10 {
-        world.step();
-    }
+    run(&mut world, 10);
     let (_, text) = inspector(&app, &world);
     let text = &text[GRAPH_LINES..];
     assert_eq!(
@@ -2948,9 +2893,7 @@ fn the_body_tab_ends_with_what_was_observed_and_how_long_ago() {
         [" Observed", "   nothing yet"]
     );
     let id = world.sprites().next().expect("the sprite").id();
-    for _ in 0..1_300 {
-        world.step();
-    }
+    run(&mut world, 1_300);
     // The world has run ticks 0 to 1,299.
     app.record(
         &[
@@ -3047,20 +2990,14 @@ const SKITTISH_GENOME: &str = r#"(format: 1, genes: [
 /// A skittish sprite, #1, hit by a bully, #2, that then rests beside it,
 /// `ticks` ticks on, with an app that logged every tick and selects #1.
 fn hit_by_a_bully(ticks: u32) -> (World, App) {
-    let pack = pack();
-    let genome = |text: &str| terra_sim::Genome::from_ron(text, &pack).expect("a valid genome");
     let walker = r#"(format: 1, genes: [Trait(trait: "speed", value: 10.0)])"#;
     let (me, bully) = (Pos { x: 2, y: 3 }, Pos { x: 3, y: 3 });
-    let sprites = vec![
-        (me, Some(genome(SKITTISH_GENOME))),
-        (bully, Some(genome(walker))),
-    ];
     let scripted = [
         (bully, ScriptedAction::Hit { at: me }),
         (bully, ScriptedAction::Rest),
     ];
     let mut world = WorldBuilder::grass(10, 5)
-        .sprites_with(sprites)
+        .genes(&[(me, SKITTISH_GENOME), (bully, walker)])
         .scripts(&scripted)
         .seed(7)
         .build();
@@ -3912,14 +3849,12 @@ fn g_saves_a_selected_egg_s_genome_but_f_won_t_follow_it_and_tab_passes_it_by() 
 fn the_body_tab_says_how_near_a_male_is_to_turning_female_once_grown() {
     // M2 design §10.7: `turning 50%` with half the feminiser it takes;
     // never in a young one (§10.1).
-    let pack = pack();
     let genome = r#"(format: 1, genes: [
         InitialConcentration(chem: "feminiser", value: 0.4),
     ])"#;
-    let genome = terra_sim::Genome::from_ron(genome, &pack).expect("a valid genome");
     let (grown, young) = (Pos { x: 2, y: 3 }, Pos { x: 6, y: 1 });
     let world = WorldBuilder::grass(10, 5)
-        .sprites_with(vec![(grown, Some(genome.clone())), (young, Some(genome))])
+        .genes(&[(grown, genome), (young, genome)])
         .newborns(&[young])
         .seed(7)
         .build();
@@ -4073,24 +4008,18 @@ fn leading_a_young_sprite_the_cursor_s_mark_shows_it_small() {
 /// changed as `changes` say, has laid an egg alone, and the egg. She may
 /// breed alone at once (M2 design §15.7).
 fn a_lone_egg(changes: &[(&str, &str)]) -> (World, EntityId) {
-    let pack = pack_changing(&[LONE, ("physiology.ron", changes)]);
-    let genome = terra_sim::Genome::from_ron(
-        r#"(format: 1, genes: [
-            Trait(trait: "speed", value: 7.0),
-            Trait(trait: "sense_radius", value: 9.0),
-            Emitter(locus: Chem("energy"), mode: Level, invert: true, threshold: 0.5, gain: 0.004, chem: "hunger"),
-            Emitter(locus: Chem("hydration"), mode: Level, invert: true, threshold: 0.5, gain: 0.004, chem: "thirst"),
-            InitialConcentration(chem: "feminiser", value: 1.0),
-            InitialConcentration(chem: "longing", value: 1.0),
-            Instinct(inputs: [("always", false)], verb: BreedAlone, weight: 1.0),
-        ])"#,
-        &pack,
-    )
-    .expect("a valid genome");
-    let sprites = vec![(Pos { x: 1, y: 4 }, Some(genome))];
+    let genome = r#"(format: 1, genes: [
+        Trait(trait: "speed", value: 7.0),
+        Trait(trait: "sense_radius", value: 9.0),
+        Emitter(locus: Chem("energy"), mode: Level, invert: true, threshold: 0.5, gain: 0.004, chem: "hunger"),
+        Emitter(locus: Chem("hydration"), mode: Level, invert: true, threshold: 0.5, gain: 0.004, chem: "thirst"),
+        InitialConcentration(chem: "feminiser", value: 1.0),
+        InitialConcentration(chem: "longing", value: 1.0),
+        Instinct(inputs: [("always", false)], verb: BreedAlone, weight: 1.0),
+    ])"#;
     let mut world = WorldBuilder::grass(10, 5)
-        .sprites_with(sprites)
-        .data(pack)
+        .genes(&[(Pos { x: 1, y: 4 }, genome)])
+        .data(pack_changing(&[LONE, ("physiology.ron", changes)]))
         .seed(7)
         .build();
     let egg = (0..50)
@@ -4108,7 +4037,7 @@ fn a_lone_egg(changes: &[(&str, &str)]) -> (World, EntityId) {
 /// egg and become partners: the world, her and him.
 fn a_pair(pack: DataPack, his: &str) -> (World, EntityId, EntityId) {
     let keen = |extra: &str| {
-        let text = format!(
+        format!(
             r#"(format: 1, genes: [
                 Trait(trait: "speed", value: 10.0),
                 Trait(trait: "sense_radius", value: 10.0),
@@ -4117,17 +4046,15 @@ fn a_pair(pack: DataPack, his: &str) -> (World, EntityId, EntityId) {
                 InitialConcentration(chem: "receptivity", value: 1.0),
                 {extra}
             ])"#
-        );
-        terra_sim::Genome::from_ron(&text, &pack).expect("a valid genome")
+        )
     };
     let hers = r#"InitialConcentration(chem: "feminiser", value: 1.0),"#;
-    let sprites = vec![
-        (Pos { x: 1, y: 0 }, Some(keen(hers))),
-        (Pos { x: 2, y: 0 }, Some(keen(his))),
-    ];
     let mut world = WorldBuilder::grass(6, 2)
         .objects(&[(Pos { x: 4, y: 1 }, "thornbush")])
-        .sprites_with(sprites)
+        .genes(&[
+            (Pos { x: 1, y: 0 }, &keen(hers)),
+            (Pos { x: 2, y: 0 }, &keen(his)),
+        ])
         .data(pack)
         .seed(7)
         .build();

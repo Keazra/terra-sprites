@@ -41,11 +41,23 @@ pub fn at(x: u16, y: u16) -> Pos {
 pub struct WorldBuilder<'a> {
     rows: Vec<String>,
     objects: &'a [(Pos, &'a str)],
-    sprites: Vec<(Pos, Option<Genome>)>,
+    sprites: Vec<(Pos, SpriteGenome<'a>)>,
     scripted: Vec<(Pos, ScriptedAction)>,
     newborns: Vec<Pos>,
     data: Option<DataPack>,
     seed: u64,
+}
+
+/// Where the genome of a [`WorldBuilder`] sprite comes from. Genes written
+/// out are read with the world's data pack once the world is built, so the
+/// pack can be given before or after them.
+enum SpriteGenome<'a> {
+    /// The starter genome, with spawn variation.
+    Starter,
+    /// A genome already made.
+    Made(Genome),
+    /// Genes written as in a genome file.
+    Genes(&'a str),
 }
 
 impl<'a> WorldBuilder<'a> {
@@ -77,14 +89,30 @@ impl<'a> WorldBuilder<'a> {
     /// A sprite of the starter genome, with spawn variation, on each of
     /// `tiles` (appends).
     pub fn starters(mut self, tiles: &[Pos]) -> Self {
-        self.sprites.extend(tiles.iter().map(|&tile| (tile, None)));
+        let genomes = tiles.iter().map(|&tile| (tile, SpriteGenome::Starter));
+        self.sprites.extend(genomes);
         self
     }
 
     /// Sprites as `(tile, genes)`, the starter genome where there are none
     /// (appends).
     pub fn sprites_with(mut self, sprites: Vec<(Pos, Option<Genome>)>) -> Self {
-        self.sprites.extend(sprites);
+        let genomes = sprites.into_iter().map(|(tile, genome)| {
+            let genome = genome.map_or(SpriteGenome::Starter, SpriteGenome::Made);
+            (tile, genome)
+        });
+        self.sprites.extend(genomes);
+        self
+    }
+
+    /// Sprites as `(tile, genes)`, the genes written as in a genome file and
+    /// read with the world's data pack, the built-in one or [`Self::data`]'s,
+    /// once the world is built (appends).
+    pub fn genes(mut self, sprites: &[(Pos, &'a str)]) -> Self {
+        let genomes = sprites
+            .iter()
+            .map(|&(tile, genes)| (tile, SpriteGenome::Genes(genes)));
+        self.sprites.extend(genomes);
         self
     }
 
@@ -118,10 +146,22 @@ impl<'a> WorldBuilder<'a> {
         let data = self.data.unwrap_or_else(pack);
         let rows: Vec<&str> = self.rows.iter().map(String::as_str).collect();
         let map = Map::from_ascii(&rows, &data).expect("valid drawing");
+        let sprites: Vec<(Pos, Option<Genome>)> = self
+            .sprites
+            .into_iter()
+            .map(|(tile, source)| match source {
+                SpriteGenome::Starter => (tile, None),
+                SpriteGenome::Made(genome) => (tile, Some(genome)),
+                SpriteGenome::Genes(genes) => {
+                    let genome = Genome::from_ron(genes, &data).expect("valid genes");
+                    (tile, Some(genome))
+                }
+            })
+            .collect();
         let scenario = Scenario {
             map,
             objects: self.objects,
-            sprites: &self.sprites,
+            sprites: &sprites,
             scripted: &self.scripted,
             newborns: &self.newborns,
         };
@@ -520,6 +560,14 @@ pub const LETHAL_THORNS: Changes = (
     )],
 );
 
+/// Genes for a sprite that turns female and lays alone whenever it can (M2
+/// design §10.4).
+pub const LAYS_ALONE: &str = r#"(format: 1, genes: [
+    InitialConcentration(chem: "feminiser", value: 1.0),
+    InitialConcentration(chem: "longing", value: 1.0),
+    Instinct(inputs: [("always", false)], verb: BreedAlone, weight: 1.0),
+])"#;
+
 /// Genes for a sprite that grows up 10 ticks after it hatches, turns
 /// female and lays alone whenever it can.
 pub const LONE_MOTHER: &str = r#"(format: 1, genes: [
@@ -583,19 +631,9 @@ pub fn grow(
     sprites: &[(Pos, &str)],
     ticks: u64,
 ) -> World {
-    let pack = pack_changing(changes);
-    let sprites: Vec<(Pos, Option<Genome>)> = sprites
-        .iter()
-        .map(|&(pos, genes)| {
-            (
-                pos,
-                Some(Genome::from_ron(genes, &pack).expect("valid genes")),
-            )
-        })
-        .collect();
     let mut world = WorldBuilder::grass(width, height)
-        .sprites_with(sprites)
-        .data(pack)
+        .genes(sprites)
+        .data(pack_changing(changes))
         .seed(7)
         .build();
     run(&mut world, ticks);
@@ -726,25 +764,6 @@ pub const E: Action = Action::Press {
     button: Button::Right,
     amplified: false,
 };
-
-impl WorldBuilder<'_> {
-    /// Sprites as `(tile, genes)`, the genes written as in a genome file
-    /// and read against the data given so far: the built-in pack, or
-    /// [`Self::data`]'s, so a test with data of its own gives it first
-    /// (appends).
-    pub fn genes(self, sprites: &[(Pos, &str)]) -> Self {
-        let builtin = self.data.is_none().then(pack);
-        let data = self.data.as_ref().or(builtin.as_ref()).expect("a pack");
-        let sprites = sprites
-            .iter()
-            .map(|&(tile, genes)| {
-                let genome = Genome::from_ron(genes, data).expect("valid genes");
-                (tile, Some(genome))
-            })
-            .collect();
-        self.sprites_with(sprites)
-    }
-}
 
 /// Sprite `id`, unnamed, died of `cause` at `age`, on `tick`.
 pub fn died(tick: u64, id: EntityId, cause: terra_sim::DeathCause, age: u64) -> Event {

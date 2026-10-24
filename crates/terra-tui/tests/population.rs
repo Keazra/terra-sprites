@@ -5,8 +5,8 @@
 
 mod common;
 use common::{
-    LONE, Q, WorldBuilder, app_on, at, group, inspector_rows, pack_changing, pointer_on, render,
-    render_on, row, run, sized_app,
+    LAYS_ALONE, LONE, Q, WorldBuilder, app_on, at, group, inspector_rows, pack_changing,
+    pointer_on, render, render_on, row, run, sized_app,
 };
 
 use std::time::Duration;
@@ -14,7 +14,7 @@ use std::time::Duration;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Size};
 use ratatui::style::{Color, Modifier};
-use terra_sim::{DataPack, Genome, Pos, World};
+use terra_sim::{DataPack, Pos, World};
 use terra_tui::app::{App, CursorMode, Screen};
 use terra_tui::input::Action;
 use terra_tui::policy::{InfoPolicy, Panel, Subject};
@@ -131,19 +131,9 @@ fn p_opens_the_population_graph_over_the_panels_and_p_or_esc_closes_it() {
 /// A grown female of the first generation alone on a field of grass, who
 /// lays alone at once (M2 design §10.4).
 fn mother() -> World {
-    let pack = lone();
-    let mother = Genome::from_ron(
-        r#"(format: 1, genes: [
-            InitialConcentration(chem: "feminiser", value: 1.0),
-            InitialConcentration(chem: "longing", value: 1.0),
-            Instinct(inputs: [("always", false)], verb: BreedAlone, weight: 1.0),
-        ])"#,
-        &pack,
-    )
-    .expect("a valid genome");
     WorldBuilder::grass(12, 4)
-        .sprites_with(vec![(Pos { x: 5, y: 2 }, Some(mother))])
-        .data(pack)
+        .genes(&[(Pos { x: 5, y: 2 }, LAYS_ALONE)])
+        .data(lone())
         .build()
 }
 

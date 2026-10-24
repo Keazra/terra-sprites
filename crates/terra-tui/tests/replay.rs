@@ -4,7 +4,7 @@
 //! parted from its recording; and `--data` reads a folder of pack files.
 
 mod common;
-use common::{at, ball_world, map_app, pack, pointer_on, render_on, row, scratch_folder};
+use common::{at, ball_world, map_app, pack, pointer_on, render_on, row, run, scratch_folder};
 
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::{Path, PathBuf};
@@ -69,9 +69,7 @@ fn a_live_session_writes_a_session_log_that_plays_back_to_the_same_world() {
 fn loading_a_save_starts_the_session_log_afresh_from_it() {
     let mut session = played(ball_world(), 50);
     let mut other = ball_world();
-    for _ in 0..30 {
-        other.step();
-    }
+    run(&mut other, 30);
     let loaded = World::load(&other.save()).expect("the save loads");
     session.load(loaded);
     session.step();

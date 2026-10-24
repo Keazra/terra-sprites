@@ -5,8 +5,8 @@
 
 mod common;
 use common::{
-    E, LONE, WorldBuilder, apply, at, click, follow, grab_app, object_on, pack_changing, point,
-    pointing_at, sprite_on, tick,
+    E, LAYS_ALONE, LONE, WorldBuilder, apply, at, click, follow, grab_app, object_on,
+    pack_changing, point, pointing_at, sprite_on, tick,
 };
 
 use terra_sim::{Command, Dir, EntityId, Pos, ScriptedAction, World};
@@ -496,14 +496,9 @@ fn the_aim_is_cancelled_when_the_led_sprite_dies() {
 /// can (M2 design §10.4), in a pack that lets her at once (§15.7), stepped
 /// until it has: the world and the egg.
 fn laid_an_egg(mother: Pos) -> (World, EntityId) {
-    let genes = r#"(format: 1, genes: [
-        InitialConcentration(chem: "feminiser", value: 1.0),
-        InitialConcentration(chem: "longing", value: 1.0),
-        Instinct(inputs: [("always", false)], verb: BreedAlone, weight: 1.0),
-    ])"#;
     let mut world = WorldBuilder::grass(20, 12)
         .data(pack_changing(&[LONE]))
-        .genes(&[(mother, genes)])
+        .genes(&[(mother, LAYS_ALONE)])
         .build();
     let egg = (0..50)
         .flat_map(|_| world.step())

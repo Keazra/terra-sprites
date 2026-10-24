@@ -11,8 +11,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use terra_sim::{
-    DeathCause, EntityId, EventKind, Genome, Mode, Pos, World, WorldConfig, gene_values,
-    middle_values,
+    DeathCause, EntityId, EventKind, Mode, Pos, World, WorldConfig, gene_values, middle_values,
 };
 use terra_tui::clock::Speed;
 use terra_tui::fast_forward::{
@@ -44,9 +43,7 @@ fn a_fast_forwarded_world_is_the_world_the_game_would_have() {
     run_through(&mut run);
     assert!(run.done());
     let mut played = lab_world(7);
-    for _ in 0..HOUR {
-        played.step();
-    }
+    common::run(&mut played, HOUR);
     assert_eq!(run.world().tick(), HOUR);
     assert_eq!(run.world().state_hash(), played.state_hash());
 }
@@ -79,9 +76,7 @@ fn a_fast_forwarded_world_opens_from_continue_in_lab_mode_with_its_whole_graph()
 #[test]
 fn it_reports_ten_rows_each_a_tenth_of_the_way_on_from_where_it_started() {
     let mut world = lab_world(3);
-    for _ in 0..123 {
-        world.step();
-    }
+    common::run(&mut world, 123);
     let mut run = FastForward::new(world, 1);
     let mut due = Vec::new();
     while let Some(next) = run.next_row() {
@@ -614,17 +609,12 @@ fn a_value_that_crosses_0_moved_furthest_of_all() {
 fn the_genes_table_is_blank_where_no_sprite_carries_a_value() {
     // M2 design §16.4: a sprite whose genome is two traits, speed and
     // sense radius, carries none of the starter's other values.
-    let data = pack();
-    let genome = Genome::from_ron(
-        r#"(format: 2, genes: [
-            Trait(trait: "speed", value: 12.0),
-            Trait(trait: "sense_radius", value: 9.0),
-        ])"#,
-        &data,
-    )
-    .expect("a valid genome");
+    let genome = r#"(format: 2, genes: [
+        Trait(trait: "speed", value: 12.0),
+        Trait(trait: "sense_radius", value: 9.0),
+    ])"#;
     let world = WorldBuilder::grass(10, 6)
-        .sprites_with(vec![(at(4, 3), Some(genome))])
+        .genes(&[(at(4, 3), genome)])
         .build();
     let run = FastForward::new(world, 1);
     let table = cells(&run.genes().table());
