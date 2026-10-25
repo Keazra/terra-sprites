@@ -560,3 +560,68 @@ fn lone_newborns_take_after_the_hatched_sprites_of_another_world_in_turn() {
         assert_eq!(&newborn.flaws(), flaws, "newborn {n}'s flaws");
     }
 }
+
+#[test]
+fn the_race_s_evolved_side_is_the_starter_s_world_with_another_world_s_genes() {
+    // M2 design §19.6: the race runs the same fresh world twice, its first
+    // sprites given the starter's genes once and, once, the genomes and
+    // hidden flaws of the hatched sprites alive at the end of a long run,
+    // spread through them in turn. Each stands where the starter's sprite
+    // in its place stands, grown up as it is. A world with none gives none.
+    let data = builtin_changing(
+        "physiology.ron",
+        &[LONE, ("flaws: (arise: 0.004,", "flaws: (arise: 0.1,")],
+    );
+    let female = format!("{ALONE}{FEMALE}");
+    let mut world = family_in(
+        data.clone(),
+        &[(at(2, 1), &female), (at(5, 2), &female)],
+        &[],
+        1,
+    );
+    let config = WorldConfig::builtin(&data);
+    assert!(World::new_like(config.clone(), data.clone(), 1, &world).is_none());
+    let hatched = |world: &World| -> Vec<_> {
+        world
+            .sprites()
+            .filter(|s| !s.parents().is_empty())
+            .map(|s| (s.genome().clone(), s.flaws()))
+            .collect()
+    };
+    while hatched(&world).len() < 2 {
+        assert!(world.tick() < 2_000, "two eggs hatch");
+        world.step();
+    }
+    let hatched = hatched(&world);
+    assert_ne!(hatched[0], hatched[1], "two different young");
+    let starter = World::new(config.clone(), data.clone(), 1);
+    let evolved = World::new_like(config.clone(), data, 1, &world).expect("hatched sprites");
+    assert_eq!(evolved.mode(), starter.mode());
+    let objects = |world: &World| -> Vec<_> {
+        world
+            .objects()
+            .map(|o| (o.pos(), o.type_name().to_string()))
+            .collect()
+    };
+    assert_eq!(objects(&evolved), objects(&starter), "the same objects");
+    let (firsts, wild): (Vec<_>, Vec<_>) =
+        (evolved.sprites().collect(), starter.sprites().collect());
+    assert_eq!(firsts.len(), config.sprites());
+    assert_eq!(firsts.len(), wild.len());
+    for (n, (first, wild)) in firsts.iter().zip(&wild).enumerate() {
+        assert_eq!(
+            first.pos(),
+            wild.pos(),
+            "sprite {n} stands where the starter's does"
+        );
+        assert!(first.parents().is_empty(), "a first sprite");
+        assert_ne!(
+            first.life_stage(),
+            LifeStage::Young,
+            "sprite {n} is grown up"
+        );
+        let (genome, flaws) = &hatched[usize::from(n >= firsts.len() / 2)];
+        assert_eq!(first.genome(), genome, "sprite {n}'s genome");
+        assert_eq!(&first.flaws(), flaws, "sprite {n}'s flaws");
+    }
+}

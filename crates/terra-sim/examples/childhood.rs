@@ -2,8 +2,8 @@
 //! left alone, from the given seeds for 220 hours of play each, and
 //! reports every 10 hours how its sprites stand, then each seed against
 //! the bars and the bars judged across seeds, lone newborns given the
-//! genes of the sprites alive at the end and evolution (G4), and last
-//! whether every bar was met.
+//! genes of the sprites alive at the end, the race against the starter's
+//! genes and evolution (G4), and last whether every bar was met.
 //!
 //! Each row: the hour; sprites, the young among them, and eggs; berry
 //! bushes; and since the last row, the hatched young that grew up and that
@@ -55,14 +55,29 @@
 //! says they weren't judged. A seed that misses a bar across seeds has
 //! failed it only if the bar isn't met.
 //!
+//! **The race** against the starter's genes (#226 Q7, #237 rules 1 and 8),
+//! run every time: for each seed that didn't die out, with hatched sprites
+//! alive at the end, the same fresh world as the viability run's
+//! (`scenarios/viability.ron`), run as it is for 50,000 ticks twice: once
+//! as it generates, its 30 first sprites wild, from the starter's genes;
+//! once with them taking after the hatched sprites alive at the end, in
+//! turn, their genomes and hidden flaws, each on the tile the starter's
+//! sprite in its place has (`World::new_like`). A seed is won when the
+//! evolved side's hatched young grow up more often, counted as the viability
+//! run counts them: those still growing at the end aren't. The race is won
+//! when the evolved side wins at least 8 of the seeds that lasted and were
+//! raced; one with no young counted on a side isn't judged. Lost, the
+//! species has **fallen behind** the starter's, and each seed raced that
+//! wasn't won has failed it, as with the bars across seeds.
+//!
 //! Then evolution (M2 design §12.7, G4), judged on this run by #226: at
 //! least 3 gene numbers whose middle value among the living at the end
 //! moved by a tenth the same way in every seed that lasted. A seed that
 //! didn't last, or had no sprite alive at the end, drops out of it. Each
 //! number is named by what its gene does and when it works, so the young's
-//! and grown sprites' Wander weights are two numbers. It's G4's first test:
-//! if it isn't met, Slice 30's race against the starter's genes is its
-//! second (#226), so it fails no seed.
+//! and grown sprites' Wander weights are two numbers. It's G4's first test,
+//! so it fails no seed: if it isn't met, the race is its second (#226), and
+//! G4 is met if the race is won.
 //!
 //! Reported with no bar: the young hatched that grew up, whose bar is the
 //! viability run's (#226); the young's time on the move (#237 rule 5);
@@ -76,13 +91,12 @@
 //! that didn't die out, with hatched sprites alive at the end, the
 //! unattended run (`scenarios/unattended.ron`) on the same seed, its
 //! newborns taking after those sprites, until each grows up or dies, set
-//! beside the unattended band of 10%–30%. Whether the species has fallen
-//! behind is the race against the starter's genes, which Slice 30 runs
-//! (#237 rules 1 and 8).
+//! beside the unattended band of 10%–30%; whether the species has fallen
+//! behind is the race's to say.
 //!
-//! Careful copying would switch on for a seed that failed a bar (or the
-//! race is lost overall, which Slice 30 runs and this doesn't) while more
-//! than half its living lack a needs gene (#237 rule 4, M2 design §19.6).
+//! Careful copying would switch on for a seed that failed a bar, the race
+//! among them when it's lost overall, while more than half its living lack
+//! a needs gene (#237 rule 4, M2 design §19.6).
 //! A held-over bar doesn't switch it on (the owner, 2026-10-24): the seeds
 //! a held-over bar would have switched it on for are named apart, for
 //! #332. A seed that died out is judged on its living at the last hour any
@@ -95,7 +109,7 @@
 //! `--every N` reports every N hours (10 by default), and `--jobs N` runs N
 //! worlds at a time (4 by default). Each world is its own, so the results
 //! don't depend on it. Each seed's table is printed as it finishes, and the
-//! bars, evolution and the verdict at the end.
+//! bars, the race, evolution and the verdict at the end.
 
 #[path = "common/args.rs"]
 mod args;
@@ -120,6 +134,18 @@ use terra_sim::{
 /// The longest the lone newborns run, in ticks: a sprite whose genes take
 /// longer than this to grow up is counted as neither.
 const NEWBORN_TICKS: u64 = 20_000;
+
+/// Each side of the race runs as long as the viability run
+/// (`scenarios/viability.ron`), in ticks (#226 Q7).
+const RACE_TICKS: u64 = 50_000;
+
+/// The seeds the evolved side must win, of those that lasted and were
+/// raced, for the race to be won (#226 Q7): by chance alone, about 1 time
+/// in 18 with ten seeds.
+const RACE_WINS: usize = 8;
+
+/// The bar a seed fails when the race is lost overall (#237 rule 1).
+const RACE: &str = "the race";
 
 /// The twelve needs genes (M2 design §16.6, §19.6), by what each does, as
 /// the starter genome has them: hunger's, thirst's and tiredness's.
@@ -210,10 +236,38 @@ impl Counts {
 }
 
 /// How many young grew up, and how many died young.
-#[derive(Debug, Default, Clone, Copy)]
+#[derive(Debug, Default, Clone, Copy, PartialEq)]
 struct Raised {
     grew_up: u64,
     died_young: u64,
+}
+
+impl Raised {
+    /// The young counted: those that grew up or died young.
+    fn counted(&self) -> u64 {
+        self.grew_up + self.died_young
+    }
+}
+
+/// One seed's race (#226 Q7): its fresh world's hatched young, run as the
+/// viability run, from the starter's genes and from the end's.
+#[derive(Debug, Default, Clone, Copy, PartialEq)]
+struct Race {
+    starter: Raised,
+    evolved: Raised,
+}
+
+impl Race {
+    /// Whether the evolved side's young grew up more often than the
+    /// starter's, a share against a share; a tie isn't. None if either
+    /// side had no young to count.
+    fn won(&self) -> Option<bool> {
+        let (starter, evolved) = (self.starter, self.evolved);
+        if starter.counted() == 0 || evolved.counted() == 0 {
+            return None;
+        }
+        Some(evolved.grew_up * starter.counted() > starter.grew_up * evolved.counted())
+    }
 }
 
 /// What a run follows from event to event: each sprite's life stage, the
@@ -355,6 +409,9 @@ struct Run {
     /// The lone newborns: how many grew up and how many died, if the
     /// world didn't die out and had hatched sprites alive at the end.
     newborns: Option<(u64, u64)>,
+    /// The race, if the world didn't die out and had hatched sprites alive
+    /// at the end.
+    race: Option<Race>,
 }
 
 impl Run {
@@ -434,7 +491,7 @@ fn in_parallel(data: &DataPack, starter: &Starter, options: &Options) -> Vec<Run
 }
 
 /// Runs the default world from `seed` for `options.hours`, then the lone
-/// newborns.
+/// newborns and the race.
 fn run(data: &DataPack, starter: &Starter, seed: u64, options: &Options) -> Run {
     let config = WorldConfig::builtin(data);
     let mut world = World::new(config.clone(), data.clone(), seed);
@@ -519,9 +576,31 @@ fn run(data: &DataPack, starter: &Starter, seed: u64, options: &Options) -> Run 
     out.by_parent = tally.by_parent;
     out.numbers = evolution::middles(&world, &starter.numbers);
     if out.died_out.is_none() {
-        out.newborns = World::unattended_like(config, data.clone(), seed, &world).map(newborns);
+        out.newborns =
+            World::unattended_like(config.clone(), data.clone(), seed, &world).map(newborns);
+        out.race =
+            World::new_like(config.clone(), data.clone(), seed, &world).map(|evolved| Race {
+                starter: raised(World::new(config, data.clone(), seed)),
+                evolved: raised(evolved),
+            });
     }
     out
+}
+
+/// Runs `world` for the race's ticks: how many of its hatched young grew
+/// up, and how many died young (#226 Q7).
+fn raised(mut world: World) -> Raised {
+    let mut tally = Tally::new(&world);
+    let mut counts = Counts::default();
+    for _ in 0..RACE_TICKS {
+        for event in world.step() {
+            tally.count(&event.kind, &mut counts);
+        }
+    }
+    Raised {
+        grew_up: counts.grew_up,
+        died_young: counts.died_young,
+    }
 }
 
 /// The adults alive in `world` with their wandering switched off, and the
@@ -738,6 +817,10 @@ struct Verdicts {
     /// Each seed that missed a held-over bar, with the bars it missed
     /// (#332): reported, not failed.
     held_over: Vec<(u64, Vec<&'static str>)>,
+    /// Each seed that lasted and was raced, with whether the evolved side
+    /// won it, and whether the race was won (#226 Q7).
+    raced: Vec<(u64, bool)>,
+    race_won: bool,
     /// The seeds that failed a bar with more than half their living lacking
     /// a needs gene, at the end or the last hour before dying out, for
     /// which careful copying would switch on (#237 rule 4).
@@ -797,6 +880,12 @@ fn judge(runs: &[Run], hours: u64) -> Verdicts {
     let bushes_met = bushes
         .as_ref()
         .is_none_or(|(missed, judged)| lasting::pooled_met(missed.len(), *judged));
+    let raced: Vec<(u64, bool)> = runs
+        .iter()
+        .filter(|run| !not_lasted.iter().any(|(seed, _)| *seed == run.seed))
+        .filter_map(|run| Some((run.seed, run.race?.won()?)))
+        .collect();
+    let race_won = raced.iter().filter(|(_, won)| *won).count() >= RACE_WINS;
     let (mut failed, mut held_over) = (Vec::new(), Vec::new());
     for run in runs {
         let (mut fails, mut misses) = (Vec::new(), Vec::new());
@@ -827,6 +916,9 @@ fn judge(runs: &[Run], hours: u64) -> Verdicts {
         {
             fails.push("bushes");
         }
+        if !race_won && raced.contains(&(run.seed, false)) {
+            fails.push(RACE);
+        }
         if !fails.is_empty() {
             failed.push((run.seed, fails));
         }
@@ -855,6 +947,8 @@ fn judge(runs: &[Run], hours: u64) -> Verdicts {
         bushes_met,
         failed,
         held_over,
+        raced,
+        race_won,
         trips,
         held_over_trips,
     }
@@ -1025,28 +1119,36 @@ fn bars(runs: &[Run], starter: &[(String, f32)], options: &Options) {
         without.grew_up + without.died_young,
     );
     genes_lacked(runs, hours);
+    race(runs, &verdicts);
     let (lasted, dropped) = evolution_seeds(runs, &verdicts.not_lasted);
-    let evolved = evolution::evolution(starter, &lasted, &dropped);
-    // G4 unmet here fails no seed: the race is its second test (#226).
-    let g4 = "G4 wasn't met by the numbers, its first test: Slice 30's race against the \
-              starter's genes is its second (#226).";
-    if verdicts.failed.is_empty() {
+    let by_numbers = evolution::evolution(starter, &lasted, &dropped);
+    // The numbers unmet fail no seed: the race is G4's second test (#226).
+    let g4 = by_numbers || verdicts.race_won;
+    if verdicts.failed.is_empty() && g4 && verdicts.race_won {
         let every = if short {
             "Every bar judged"
         } else {
             "Every bar"
         };
-        let but = if evolved { "" } else { " but G4's" };
-        println!("\n{every}{but} was met.");
+        println!("\n{every} was met.");
     } else {
         let mut lines = listed(&verdicts.failed);
-        if !evolved {
+        if !verdicts.race_won {
+            lines.push("the race, across seeds: the species has fallen behind".into());
+        }
+        if !g4 {
             lines.push("G4, across seeds".into());
         }
         println!("\nBars failed: {}.", lines.join("; "));
     }
-    if !evolved {
-        println!("{g4}");
+    if g4 && !by_numbers {
+        println!(
+            "G4 was met by the race, its second test: the numbers, its first, fell short (#226)."
+        );
+    } else if !g4 {
+        println!(
+            "G4 wasn't met by the numbers, its first test, nor by the race, its second (#226)."
+        );
     }
     held_over(&verdicts);
     if !verdicts.trips.is_empty() {
@@ -1065,6 +1167,53 @@ fn bars(runs: &[Run], starter: &[(String, f32)], options: &Options) {
             before_dying_out(runs, &verdicts.held_over_trips)
         );
     }
+}
+
+/// The race against the starter's genes, seed by seed, and whether it was
+/// won (#226 Q7, #237 rules 1 and 8).
+fn race(runs: &[Run], verdicts: &Verdicts) {
+    println!(
+        "\nThe race: each seed's fresh world run as the viability run, {RACE_TICKS} ticks, with \
+         the starter's genes and with the genes of the hatched sprites alive at the end"
+    );
+    println!(
+        "{:>5} {:>22} {:>22} {:>5}",
+        "Seed", "Starter: young grew up", "Evolved: young grew up", "Won"
+    );
+    let side = |raised: Raised| {
+        format!(
+            "{} of {} ({})",
+            raised.grew_up,
+            raised.counted(),
+            percent(raised.grew_up, raised.counted())
+        )
+    };
+    for run in runs {
+        let Some(race) = run.race else {
+            println!("{:>5} {:>22} {:>22} {:>5}", run.seed, "-", "-", "-");
+            continue;
+        };
+        let judged = verdicts.raced.iter().find(|(seed, _)| *seed == run.seed);
+        println!(
+            "{:>5} {:>22} {:>22} {:>5}",
+            run.seed,
+            side(race.starter),
+            side(race.evolved),
+            yes_no(judged.map(|&(_, won)| won))
+        );
+    }
+    let won = verdicts.raced.iter().filter(|(_, won)| *won).count();
+    println!(
+        "\nThe evolved side's young grew up more often in {won} of the {} seeds that lasted and \
+         were raced: {} (bar: at least {RACE_WINS}).{}",
+        verdicts.raced.len(),
+        if verdicts.race_won { "won" } else { "lost" },
+        if verdicts.race_won {
+            ""
+        } else {
+            " The species has fallen behind the starter's genes."
+        }
+    );
 }
 
 /// Each seed with the bars it failed or missed: `seed 8: too full`.
@@ -1259,6 +1408,7 @@ mod tests {
             seed,
             whole: counts,
             late: counts,
+            race: Some(race(90, 91)),
             bushes: vec![1_000; hours as usize],
             census: Census {
                 fewest: 30,
@@ -1266,6 +1416,21 @@ mod tests {
             },
             lacking_hour: hours,
             ..Run::default()
+        }
+    }
+
+    /// A race in which the starter's side raised 90 young of 100 and the
+    /// evolved side `grew_up` of `of`.
+    fn race(grew_up: u64, of: u64) -> Race {
+        Race {
+            starter: Raised {
+                grew_up: 90,
+                died_young: 10,
+            },
+            evolved: Raised {
+                grew_up,
+                died_young: of - grew_up,
+            },
         }
     }
 
@@ -1634,5 +1799,64 @@ mod tests {
             ]
         );
         assert_eq!(judged.trips, [1]);
+    }
+
+    #[test]
+    fn a_seed_is_won_when_the_evolved_side_s_young_grow_up_more_often() {
+        // #226 Q7: a share against a share, so more young raised isn't a
+        // win by itself, and a tie isn't one.
+        assert_eq!(race(91, 100).won(), Some(true));
+        assert_eq!(race(90, 100).won(), Some(false), "a tie");
+        assert_eq!(
+            race(180, 201).won(),
+            Some(false),
+            "more young, a smaller share"
+        );
+        assert_eq!(
+            race(10, 11).won(),
+            Some(true),
+            "fewer young, a larger share"
+        );
+        assert_eq!(race(0, 0).won(), None, "no young to count");
+    }
+
+    #[test]
+    fn the_race_is_won_by_8_seeds_and_lost_it_fails_the_seeds_not_won() {
+        // #226 Q7, #237 rule 1: won when the evolved side wins at least 8
+        // of the seeds raced. Lost, the species has fallen behind, and each
+        // seed raced and not won has failed it, which can switch careful
+        // copying on.
+        let mut runs = ten();
+        assert!(judge(&runs, 220).race_won);
+        runs[1].race = Some(race(90, 100));
+        runs[4].race = Some(race(80, 100));
+        let two = judge(&runs, 220);
+        assert!(two.race_won);
+        assert_eq!(two.failed, []);
+        runs[8].race = Some(race(85, 100));
+        runs[8].lacking = lacking_thirst(0.9);
+        let three = judge(&runs, 220);
+        assert!(!three.race_won);
+        assert_eq!(
+            three.failed,
+            [(2, vec![RACE]), (5, vec![RACE]), (9, vec![RACE])]
+        );
+        assert_eq!(three.trips, [9]);
+    }
+
+    #[test]
+    fn a_seed_that_didn_t_last_or_wasn_t_raced_drops_out_of_the_race() {
+        // #226 Q7: the race is over the seeds that lasted, so with three
+        // out, the other seven can't win it.
+        let mut runs = ten();
+        runs[0].census.fewest = 9;
+        runs[0].race = Some(race(10, 100));
+        runs[1].race = None;
+        runs[2].race = Some(Race::default());
+        let judged = judge(&runs, 220);
+        let seeds: Vec<u64> = judged.raced.iter().map(|(seed, _)| *seed).collect();
+        assert_eq!(seeds, [4, 5, 6, 7, 8, 9, 10]);
+        assert!(!judged.race_won);
+        assert_eq!(judged.failed, [], "no seed raced lost it");
     }
 }

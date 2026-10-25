@@ -1055,7 +1055,31 @@ impl World {
     /// A new world, generated from `config` and `seed`, in `mode`, which
     /// it keeps for its whole life (M2 design §16).
     pub fn new_in(config: WorldConfig, data: DataPack, seed: u64, mode: Mode) -> World {
-        World::generated(config, data, seed, mode, place_sprites)
+        World::generated(config, data, seed, mode, |config, data, state| {
+            place_sprites(config, data, state, &[])
+        })
+    }
+
+    /// The world `new` makes from `config` and `seed`, but with its first
+    /// sprites taking after the hatched sprites alive in `from`, in turn,
+    /// rather than wild: each one's genome and hidden flaws, on the tile the
+    /// starter's sprite in its place has, its age and its levels drawn as
+    /// that sprite's are (M2 design §19.6). It's the race's evolved side: the
+    /// same fresh world as the starter's genes get, for a species' genes.
+    /// None if no hatched sprite is alive in `from`, whose data pack must be
+    /// `data`.
+    pub fn new_like(config: WorldConfig, data: DataPack, seed: u64, from: &World) -> Option<World> {
+        let like = from.hatched_genomes();
+        if like.is_empty() {
+            return None;
+        }
+        Some(World::generated(
+            config,
+            data,
+            seed,
+            Mode::Story,
+            |config, data, state| place_sprites(config, data, state, &like),
+        ))
     }
 
     /// The unattended run's world (M2 design §19.6): `config`'s world as
@@ -1080,14 +1104,7 @@ impl World {
         seed: u64,
         from: &World,
     ) -> Option<World> {
-        let like: Vec<(Genome, Vec<u8>)> = from
-            .state
-            .sprites
-            .iter()
-            .map(|(_, sprite)| sprite)
-            .filter(|sprite| !sprite.parents.is_empty())
-            .map(|sprite| (sprite.genome.clone(), sprite.flaws.clone()))
-            .collect();
+        let like = from.hatched_genomes();
         if like.is_empty() {
             return None;
         }
@@ -1098,6 +1115,18 @@ impl World {
             Mode::Lab,
             |config, data, state| place_newborns(config, data, state, &like),
         ))
+    }
+
+    /// The genome and hidden flaws of each hatched sprite alive, in ID
+    /// order, for a world whose first sprites take after them.
+    fn hatched_genomes(&self) -> Vec<(Genome, Vec<u8>)> {
+        self.state
+            .sprites
+            .iter()
+            .map(|(_, sprite)| sprite)
+            .filter(|sprite| !sprite.parents.is_empty())
+            .map(|sprite| (sprite.genome.clone(), sprite.flaws.clone()))
+            .collect()
     }
 
     /// `config`'s world as generated from `seed`, in `mode`, with its
