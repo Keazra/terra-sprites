@@ -501,7 +501,8 @@ pub fn changed(text: &str, from: &str, to: &str) -> String {
 /// Changes that make generations quick: eggs copied exactly, hatching 20
 /// ticks after they're laid, the young grown up as soon as their genes
 /// say and thirsting as grown sprites do, and a mother free to lay again 30
-/// ticks after her last egg.
+/// ticks after her last egg, with no room nearby to need (M2 design §10.9),
+/// so a family fills a small field.
 pub const QUICK: [Changes; 2] = [
     (
         "physiology.ron",
@@ -511,6 +512,7 @@ pub const QUICK: [Changes; 2] = [
             ("grows_up: (1500.0, 13500.0)", "grows_up: (10.0, 13500.0)"),
             ("thirst_childhood: 4500.0,", ""),
             ("rest: 1500,", "rest: 30,"),
+            ("room_nearby: (within: 10, fewer_than: 4),", ""),
             ("cost: 0.3,", "cost: 0.0,"),
         ],
     ),

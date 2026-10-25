@@ -10,7 +10,7 @@ use crate::action::{self, ActionView, ScriptedAction, chebyshev};
 use crate::ageing::{LifeStage, Switch};
 use crate::biochem::{self, Senses, Traits};
 use crate::brain::{self, Explanation, Memory, RememberedPlace};
-use crate::breeding::{self, Sex, Unhatched};
+use crate::breeding::{self, Fertility, Sex, Unhatched};
 use crate::command::{self, Command};
 use crate::config::{MOST_SPRITES, WorldConfig};
 use crate::courtship::{self, Company};
@@ -32,7 +32,7 @@ use crate::objects::{EntityId, Object, Objects};
 use crate::perception::{Flood, Target, goal_tiles};
 use crate::population::{PopulationCount, PopulationRecord};
 use crate::regions::Regions;
-use crate::registry::{CategoryId, ChemicalKind};
+use crate::registry::{BrainParam, CategoryId, ChemicalKind};
 use crate::replay::{self, CHECKPOINT_EVERY, Recording, Start};
 use crate::rolling;
 use crate::save::{self, LoadError};
@@ -662,10 +662,17 @@ impl<'a> SpriteView<'a> {
     }
 
     /// Whether it's fertile now (M2 design §10): grown up, fed, watered and
-    /// rested since its last egg, in a world with room for another sprite.
+    /// rested since its last egg, in a world with room for another sprite,
+    /// and with room nearby (§10.2).
     pub fn is_fertile(&self) -> bool {
+        self.fertility() == Fertility::Fertile
+    }
+
+    /// Whether it can breed now, and if its body could but room stops it,
+    /// which room (M2 design §10.2, §10.6).
+    pub fn fertility(&self) -> Fertility {
         let state = &self.world.state;
-        breeding::fertile(state, self.sprite, &self.world.data)
+        breeding::fertility(state, self.id, &self.world.data)
     }
 
     /// The level of its `feminiser` hormone over the level at which a male
@@ -702,6 +709,13 @@ impl<'a> SpriteView<'a> {
     /// 0 (M2 design §9.4).
     pub fn gene_health(&self) -> &'a [f32] {
         &self.sprite.health
+    }
+
+    /// The least pull that starts a verb while it isn't busy, as its brain
+    /// takes it (M2 design §19.2): its expressed `act_threshold` gene, kept
+    /// in range, or the pack's default without one.
+    pub fn act_threshold(&self) -> f32 {
+        self.sprite.brain.params.get(BrainParam::ActThreshold)
     }
 
     /// How many of its two copies of each gene carry a hidden flaw, from 0
@@ -1670,6 +1684,12 @@ impl World {
         self.state.most_sprites
     }
 
+    /// Whether the world holds its most sprites, eggs included, so that no
+    /// sprite can breed until one dies (M2 design §10.6).
+    pub fn is_full(&self) -> bool {
+        !breeding::room(&self.state)
+    }
+
     /// The world's state and data pack, for the benchmark hooks.
     pub(crate) fn parts(&mut self) -> (&mut WorldState, &DataPack) {
         (&mut self.state, &self.data)
@@ -1768,7 +1788,7 @@ impl World {
                     standing: action::is_standing(sprite),
                     stage: sprite.stage(),
                     sooner: sprite.sooner(data),
-                    fertile: breeding::fertile(state, sprite, data),
+                    fertile: breeding::fertile(state, id, data),
                     female: sprite.sex == Sex::Female,
                     female_near: company.female_near,
                     male_near: company.male_near,

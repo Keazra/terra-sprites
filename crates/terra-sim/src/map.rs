@@ -16,6 +16,14 @@ impl Pos {
     pub const fn new(x: u16, y: u16) -> Pos {
         Pos { x, y }
     }
+
+    /// How far it is from `other` in a straight line, squared: across
+    /// squared plus down squared, whole, so distances compare exactly.
+    pub(crate) fn distance_squared(self, other: Pos) -> u64 {
+        let dx = u64::from(self.x.abs_diff(other.x));
+        let dy = u64::from(self.y.abs_diff(other.y));
+        dx * dx + dy * dy
+    }
 }
 
 listed_enum! {

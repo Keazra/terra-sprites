@@ -9,9 +9,9 @@ use ratatui::text::Line;
 use terra_sim::{
     ActionView, Blocker, ChemicalKind, ChemicalLevel, Command, CopyChangeView, CursorTouch,
     DeathCause, Dir, EggView, EmitterMode, Emptied, EntityId, Event, EventKind, Explanation,
-    Expression, GeneView, Grip, Learned, LifeStage, MAX_NAME_CHARS, NameProblem, ObjectView,
-    Outcome, Part, PlaceRule, Pos, Progress, Rejection, Removal, SpriteView, Switch, Target,
-    Terrain, Thing, Trait, Verb, Whom, World,
+    Expression, Fertility, GeneView, Grip, Learned, LifeStage, MAX_NAME_CHARS, NameProblem,
+    ObjectView, Outcome, Part, PlaceRule, Pos, Progress, Rejection, Removal, SpriteView, Switch,
+    Target, Terrain, Thing, Trait, Verb, Whom, World,
 };
 
 use crate::app::{App, Selection, Tab};
@@ -287,11 +287,13 @@ fn object_type(id: EntityId, at: Pos, world: &World) -> &str {
 /// without, and its generation (M2 design §10, §17.5), and its partner, if it
 /// has one (§15.8): `male · fertile · turning 40%`, `parents Pip #12 and Bo
 /// #7 · generation 4`, `partner Kit #20`, or once its partner has died, until
-/// it pairs again, `partner Kit #20 · died`.
+/// it pairs again, `partner Kit #20 · died`. One whose body could breed but
+/// for room says which room holds it back (§10.7, #331): `male · too
+/// crowded to breed`, or `female · world full`.
 fn family_lines(sprite: &SpriteView, data: &Words) -> Vec<String> {
     let mut line = format!(" {}", sprite.sex().name());
-    if sprite.is_fertile() {
-        line.push_str(" · fertile");
+    if let Some(words) = fertility_words(sprite.fertility()) {
+        line.push_str(&format!(" · {words}"));
     }
     let turning = sprite.turning().filter(|&share| share > 0.0);
     if let Some(share) = turning.filter(|_| sprite.life_stage().is_grown()) {
@@ -310,6 +312,17 @@ fn family_lines(sprite: &SpriteView, data: &Words) -> Vec<String> {
         lines.push(format!(" partner {}{died}", data.label(partner)));
     }
     lines
+}
+
+/// What the Body tab says of a sprite's `fertility` (M2 design §10.7),
+/// nothing for one whose body can't breed.
+fn fertility_words(fertility: Fertility) -> Option<&'static str> {
+    match fertility {
+        Fertility::Fertile => Some("fertile"),
+        Fertility::TooCrowded => Some("too crowded to breed"),
+        Fertility::WorldFull => Some("world full"),
+        Fertility::Infertile => None,
+    }
 }
 
 /// Where a sprite or egg came from, `whence`, and its generation (M2
@@ -1994,10 +2007,36 @@ fn generations_line(world: &World) -> Option<Line<'static>> {
     Some(Line::from(format!(" {label:<12}{value:>7}")))
 }
 
+/// How many grown sprites are fertile, in a pack that breeds and a world
+/// with sprites, and beneath, how many room nearby holds back, or that the
+/// world is full (M2 design §10.7, #331): `fertile 6`, `too crowded 9`.
+fn fertile_lines(world: &World) -> Vec<Line<'static>> {
+    if !world.data().breeds() || world.sprites().next().is_none() {
+        return Vec::new();
+    }
+    let count = |fertility| {
+        let n = world.sprites().filter(|s| s.fertility() == fertility);
+        thousands(n.count() as u64)
+    };
+    let beneath = if world.is_full() {
+        "world full".to_string()
+    } else {
+        format!("too crowded {}", count(Fertility::TooCrowded))
+    };
+    let mut lines = vec![Line::from(format!(
+        " {:<12}{:>7}",
+        "fertile",
+        count(Fertility::Fertile)
+    ))];
+    lines.extend(wrapped(&beneath, 3, Style::default()));
+    lines
+}
+
 /// The World tab (design §6.1): a small population graph (M2 design §14),
-/// if the policy shows it; the data pack; the population, and the deaths by
-/// cause; then each object type with its count, the count in each stage
-/// (for a type with more than one) and the total of each counter.
+/// if the policy shows it; the data pack; the population, the grown sprites
+/// fertile (M2 design §10.7) and the deaths by cause; then each object type
+/// with its count, the count in each stage (for a type with more than one)
+/// and the total of each counter.
 fn world_tab(app: &App, world: &World) -> Vec<Line<'static>> {
     let data = world.data();
     // Physiology's causes always; an object only once it has killed.
@@ -2034,6 +2073,7 @@ fn world_tab(app: &App, world: &World) -> Vec<Line<'static>> {
         )),
     ]);
     lines.extend(generations_line(world));
+    lines.extend(fertile_lines(world));
     lines.push(Line::from(format!(
         " {:<12}{:>7}",
         "deaths",

@@ -558,6 +558,11 @@ pub(crate) struct Breeding {
     pub(crate) fed: f32,
     /// How many ticks after its last egg an adult is fertile again.
     pub(crate) rest: u64,
+    /// How few other grown sprites must be near a grown sprite for it to be
+    /// fertile (M2 design §10.2, §10.9). A pack from before room nearby has
+    /// none: only the world's limit holds breeding back.
+    #[serde(default)]
+    pub(crate) room_nearby: Option<RoomNearby>,
     /// The level of the hormone `feminiser` at which a male adult turns
     /// female, for good.
     pub(crate) turns_female: f32,
@@ -592,6 +597,17 @@ pub(crate) struct Breeding {
     pub(crate) crossover: f32,
 }
 
+/// Room nearby (M2 design §10.2, §10.9): a grown sprite is fertile only
+/// while fewer than `fewer_than` other grown sprites, adult or old, are
+/// within `within` tiles of it in a straight line. Young sprites and eggs
+/// don't count.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct RoomNearby {
+    pub(crate) within: u16,
+    pub(crate) fewer_than: u16,
+}
+
 /// The `crossover` of a pack from before stretches: each gene from either
 /// parent, as a coin toss.
 fn gene_by_gene() -> f32 {
@@ -599,7 +615,8 @@ fn gene_by_gene() -> f32 {
 }
 
 /// What a saved world's pack from before breeding gets: the built-in
-/// pack's, which a test checks they match.
+/// pack's, which a test checks they match, but for room nearby, which a
+/// pack from before has none of (M2 design §10.9).
 impl Default for Breeding {
     fn default() -> Breeding {
         Breeding {
@@ -607,6 +624,8 @@ impl Default for Breeding {
             cost: 0.3,
             fed: 0.4,
             rest: 1_500,
+            // From before room nearby too (#331).
+            room_nearby: None,
             turns_female: 0.8,
             breeds_alone: None,
             alone_after: Some(4_500),
@@ -919,6 +938,17 @@ impl PhysiologyEntry {
         // tick (M2 design §10).
         if breeding.rest == 0 {
             return Err("`breeding.rest` must be at least 1 tick".into());
+        }
+        // Fewer than none can't be near, so no sprite could breed; and
+        // within no tiles none is near, so the rule would be off (M2 design
+        // §10.9).
+        if let Some(room) = breeding.room_nearby {
+            if room.fewer_than == 0 {
+                return Err("`breeding.room_nearby.fewer_than` must be at least 1".into());
+            }
+            if room.within == 0 {
+                return Err("`breeding.room_nearby.within` must be at least 1 tile".into());
+            }
         }
         fraction("breeding.crossover", breeding.crossover)?;
         let mutation = self.mutation;
@@ -1499,7 +1529,13 @@ mod tests {
             ..physiology.ageing
         };
         assert_eq!(Ageing::default(), ageing);
-        assert_eq!(Breeding::default(), physiology.breeding);
+        // And from before room nearby (#331), so only the world's limit
+        // holds its breeding back.
+        let breeding = Breeding {
+            room_nearby: None,
+            ..physiology.breeding.clone()
+        };
+        assert_eq!(Breeding::default(), breeding);
         assert_eq!(Calls::default(), physiology.calls);
         assert_eq!(grows_up_range(), physiology.traits.grows_up);
     }

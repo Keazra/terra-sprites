@@ -18,9 +18,10 @@ use crate::map::Dir;
 use crate::mutation::{self, Copied, CopyChange, CopyingError};
 use crate::objects::EntityId;
 use crate::perception::Target;
+use crate::physiology::RoomNearby;
 use crate::random::uniform;
 use crate::registry::Verb;
-use crate::sprites::{Genes, Sprite, check_genes};
+use crate::sprites::{Genes, check_genes};
 use crate::world::WorldState;
 
 listed_enum! {
@@ -110,23 +111,75 @@ pub(crate) fn room(state: &WorldState) -> bool {
     state.sprites.len() + state.objects.eggs() < usize::from(state.most_sprites)
 }
 
-/// Whether `sprite` is fertile now (M2 design §10): in a pack with
-/// breeding and an egg type, grown up, fed and watered, rested long enough
-/// since its last egg, in a world with `room` for another sprite. A save
-/// from before breeding keeps its pack, which has none.
-pub(crate) fn fertile(state: &WorldState, sprite: &Sprite, data: &DataPack) -> bool {
+/// Whether a sprite can breed now, and if its body could but room stops it,
+/// which room (M2 design §10.2, §10.6).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Fertility {
+    /// It can breed.
+    Fertile,
+    /// Its body could breed, but the world is full (§10.6): no sprite can
+    /// until one dies.
+    WorldFull,
+    /// Its body could breed, and the world has room, but too many other
+    /// grown sprites are near it: it's too crowded to breed, with no room
+    /// nearby (§10.2, §10.9).
+    TooCrowded,
+    /// Its body can't: it's young, hungry, thirsty or resting since its last
+    /// egg, or its pack has no breeding.
+    Infertile,
+}
+
+/// Whether sprite `id` is fertile now (M2 design §10): see `fertility`.
+pub(crate) fn fertile(state: &WorldState, id: EntityId, data: &DataPack) -> bool {
+    fertility(state, id, data) == Fertility::Fertile
+}
+
+/// Whether sprite `id` can breed now (M2 design §10.2). It's fertile in a pack
+/// that `breeds`, grown up, fed and watered, rested long enough since its
+/// last egg, in a world with `room` for another sprite, and with room
+/// nearby. A save from before breeding keeps its pack, which has none. The
+/// world's room is asked first, since only a death makes it, and the room
+/// nearby last, since it's the one that counts other sprites.
+pub(crate) fn fertility(state: &WorldState, id: EntityId, data: &DataPack) -> Fertility {
+    let sprite = state.sprites.get(id).expect("a sprite");
     let physiology = data.physiology();
     let (breeding, indices) = (&physiology.breeding, physiology.indices);
     let chems = &sprite.body.chems;
-    indices.breeding.is_some()
-        && data.egg_type().is_some()
-        && room(state)
+    let able = data.breeds()
         && sprite.stage().is_grown()
         && chems[indices.energy] > breeding.fed
         && chems[indices.hydration] > breeding.fed
         && sprite
             .last_bred
-            .is_none_or(|last| state.tick >= last.saturating_add(breeding.rest))
+            .is_none_or(|last| state.tick >= last.saturating_add(breeding.rest));
+    if !able {
+        Fertility::Infertile
+    } else if !room(state) {
+        Fertility::WorldFull
+    } else if breeding
+        .room_nearby
+        .is_some_and(|room| too_crowded(state, id, room))
+    {
+        Fertility::TooCrowded
+    } else {
+        Fertility::Fertile
+    }
+}
+
+/// Whether `room`'s `fewer_than` or more other grown sprites, adult or old,
+/// a partner included, are within its `within` tiles of sprite `me` in a
+/// straight line (M2 design §10.2, §10.9). Young sprites and eggs don't
+/// count.
+fn too_crowded(state: &WorldState, me: EntityId, room: RoomNearby) -> bool {
+    let pos = state.sprites.get(me).expect("a sprite").pos;
+    let reach = u64::from(room.within).pow(2);
+    let near = state
+        .sprites
+        .iter()
+        .filter(|&(id, other)| id != me && other.stage().is_grown())
+        .filter(|(_, other)| other.pos.distance_squared(pos) <= reach)
+        .count();
+    near >= usize::from(room.fewer_than)
 }
 
 /// Sprite `actor`, beside `target`, tries to mate with it, once (M2 design
@@ -146,7 +199,7 @@ pub(crate) fn mate(
         .filter(|&partner| adults(state, actor, partner))
         .and_then(|partner| {
             let (a, b) = (state.sprites.get(actor)?, state.sprites.get(partner)?);
-            let both = fertile(state, a, data) && fertile(state, b, data);
+            let both = fertile(state, actor, data) && fertile(state, partner, data);
             let (mother, father) = match (a.sex, b.sex) {
                 (Sex::Female, Sex::Male) => (actor, partner),
                 (Sex::Male, Sex::Female) => (partner, actor),
@@ -191,7 +244,7 @@ pub(crate) fn breed_alone(
         .alone_after
         .is_none_or(|ticks| state.tick >= sprite.last_male.saturating_add(ticks));
     let longs = breeding.breeds_alone.is_none_or(|level| longing >= level);
-    let able = sprite.sex == Sex::Female && alone && longs && fertile(state, sprite, data);
+    let able = sprite.sex == Sex::Female && alone && longs && fertile(state, actor, data);
     let laid = able
         .then(|| lay(state, data, actor, None, events))
         .flatten();
@@ -348,6 +401,20 @@ mod tests {
         world.step();
         assert!(world.cursor().holds().is_some_and(|held| held.id() == egg));
         assert!(!laid(&mut world), "a second egg while the first is held");
+    }
+
+    #[test]
+    fn a_full_world_says_so_before_room_nearby() {
+        // M2 design §10.6, §10.9: five sprites close together, each with
+        // four others near, are too crowded to breed while the world has
+        // room, and in a full world it's the world that's full, since only
+        // a death can make room.
+        let tiles = [at(0, 0), at(2, 0), at(4, 0), at(1, 2), at(3, 2)];
+        let mut world = WorldBuilder::new(&FIELD).starters(&tiles).build();
+        let fertility = |world: &World| world.sprites().map(|s| s.fertility()).collect::<Vec<_>>();
+        assert_eq!(fertility(&world), [Fertility::TooCrowded; 5]);
+        world.set_most_sprites(5);
+        assert_eq!(fertility(&world), [Fertility::WorldFull; 5]);
     }
 
     #[test]

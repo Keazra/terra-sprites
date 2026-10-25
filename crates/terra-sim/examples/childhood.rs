@@ -1,8 +1,8 @@
 //! The harsher world's long run (M2 design §19.6): runs the default world,
 //! left alone, from the given seeds for 220 hours of play each, and
 //! reports every 10 hours how its sprites stand, then each seed against
-//! Slice 29's bars and the bars judged across seeds, lone newborns given
-//! the genes of the sprites alive at the end and evolution (G4), and last
+//! the bars and the bars judged across seeds, lone newborns given the
+//! genes of the sprites alive at the end and evolution (G4), and last
 //! whether every bar was met.
 //!
 //! Each row: the hour; sprites, the young among them, and eggs; berry
@@ -10,13 +10,29 @@
 //! died young, the grown-up deaths and how many of them were adults dying
 //! of hunger or thirst, the share of bites tried by a young sprite or an
 //! adult too full to eat and the same share of old sprites' bites, the
-//! share of adults' time on the move and of the young's, and how many of
-//! the twelve needs genes (M2 design §16.6) more than half of the hatched
-//! sprites alive lack. A bite tried is an Eat that got to its food and made
-//! its try (design §5.5), a Too full one too; an Eat that ended on its way
-//! isn't one.
+//! share of adults' time on the move and of the young's; then how many of
+//! the adults alive have their wandering switched off, of how many adults
+//! (#318); and how many of the twelve needs genes (M2 design §16.6) more
+//! than half of the hatched sprites alive lack. A bite tried is an Eat
+//! that got to its food and made its try (design §5.5), a Too full one
+//! too; an Eat that ended on its way isn't one. An adult's wandering is
+//! switched off when its `always → Wander` instinct, as its brain takes it,
+//! the expressed one's weight times its gene's health (M2 design §9.4),
+//! pulls less than its act threshold (§19.2): it never wanders on its own.
+//! It comes from a copying error that weakened the gene, two hidden flaws
+//! that broke it, or copy and change losing it (§10.9, #318).
 //!
-//! The bars for each seed:
+//! The bar for each seed that lasts, since Slice 29b (#331):
+//!
+//! - **Adults are on the move at least a quarter of the time** over the
+//!   last 50 hours (#237, #318): the share of their ticks on another tile
+//!   than the tick before.
+//!
+//! Held over to #332 by the owner's call (2026-10-24), each reported for
+//! each seed but not must-pass, beside how many seeds missed it in Slice
+//! 29's run on the owner's PC (`SLICE_29_MISSES`). If one misses in more
+//! seeds than that, it's clearly worse, and goes back to the owner before
+//! the PR merges:
 //!
 //! - **Adults dying of hunger or thirst are under 1 in 20 of grown-up
 //!   deaths,** over the run and over its last 50 hours, in each seed that
@@ -49,8 +65,8 @@
 //! second (#226), so it fails no seed.
 //!
 //! Reported with no bar: the young hatched that grew up, whose bar is the
-//! viability run's (#226); adults' time on the move over the last 50 hours,
-//! which #318 asks to be a quarter, and the young's (#237 rule 5); what
+//! viability run's (#226); the young's time on the move (#237 rule 5);
+//! the adults with their wandering switched off, hour by hour (#318); what
 //! killed the hatched young, and how those that saw a parent for most of
 //! their childhood fared against those that didn't; the share of the
 //! hatched sprites alive at the end lacking each needs gene, and each other
@@ -67,7 +83,9 @@
 //! Careful copying would switch on for a seed that failed a bar (or the
 //! race is lost overall, which Slice 30 runs and this doesn't) while more
 //! than half its living lack a needs gene (#237 rule 4, M2 design §19.6).
-//! A seed that died out is judged on its living at the last hour any
+//! A held-over bar doesn't switch it on (the owner, 2026-10-24): the seeds
+//! a held-over bar would have switched it on for are named apart, for
+//! #332. A seed that died out is judged on its living at the last hour any
 //! hatched sprite was alive.
 //!
 //! `cargo run --release -p terra-sim --example childhood`
@@ -95,8 +113,8 @@ use std::process::ExitCode;
 
 use lasting::{Census, HOUR, LATE_HOURS};
 use terra_sim::{
-    DataPack, DeathCause, EntityId, EventKind, GeneView, LifeStage, Outcome, Pos, Verb, World,
-    WorldConfig, cause_name,
+    DataPack, DeathCause, EntityId, EventKind, Expression, GeneView, LifeStage, Outcome, Pos,
+    SpriteView, Verb, World, WorldConfig, cause_name,
 };
 
 /// The longest the lone newborns run, in ticks: a sprite whose genes take
@@ -124,6 +142,20 @@ const NEEDS: [&str; 12] = [
 /// table lists it, as `generations` does; the needs genes are always
 /// listed (#237 rule 4).
 const LISTED_FROM: f64 = 0.1;
+
+/// The held-over bar on adults dying of hunger or thirst (M2 design §19.6).
+const HUNGER_AND_THIRST: &str = "adults' hunger and thirst";
+
+/// The held-over bar on bites tried too full (M2 design §19.6).
+const TOO_FULL: &str = "too full";
+
+/// The held-over bars (the owner, 2026-10-24), each with how many seeds
+/// missed it in Slice 29's run on the owner's PC, at 9bc50de: more than
+/// that is clearly worse (M2 design §19.6).
+const SLICE_29_MISSES: [(&str, usize); 2] = [(HUNGER_AND_THIRST, 2), (TOO_FULL, 1)];
+
+/// The roaming bar, for each seed that lasts (M2 design §10.9, §19.6).
+const ON_THE_MOVE: &str = "on the move";
 
 struct Options {
     seeds: Vec<u64>,
@@ -284,6 +316,9 @@ struct Row {
     eggs: usize,
     bushes: usize,
     counts: Counts,
+    /// The adults alive with their wandering switched off, and the adults
+    /// alive (#318).
+    wander_off: (usize, usize),
     /// Needs genes more than half the hatched sprites alive lack.
     needs_lacked: usize,
 }
@@ -468,6 +503,7 @@ fn run(data: &DataPack, starter: &Starter, seed: u64, options: &Options) -> Run 
                     eggs: world.eggs().count(),
                     bushes,
                     counts: std::mem::take(&mut row),
+                    wander_off: wander_off(&world),
                     needs_lacked,
                 });
             }
@@ -486,6 +522,43 @@ fn run(data: &DataPack, starter: &Starter, seed: u64, options: &Options) -> Run 
         out.newborns = World::unattended_like(config, data.clone(), seed, &world).map(newborns);
     }
     out
+}
+
+/// The adults alive in `world` with their wandering switched off, and the
+/// adults alive (M2 design §19.6, #318).
+fn wander_off(world: &World) -> (usize, usize) {
+    let adults: Vec<SpriteView> = world
+        .sprites()
+        .filter(|sprite| sprite.life_stage() == LifeStage::Adult)
+        .collect();
+    let off = adults.iter().filter(|sprite| switched_off(sprite)).count();
+    (off, adults.len())
+}
+
+/// Whether `sprite`'s wandering is switched off (M2 design §19.6, #318):
+/// its `always → Wander` instinct, as its brain takes it, pulls less than
+/// its act threshold (§19.2), so it never wanders on its own. The brain
+/// takes the expressed instinct for those inputs and verb, the one gene of
+/// them that expression left expressed (design §4.3), its weight times its
+/// gene's health (M2 design §9.4).
+fn switched_off(sprite: &SpriteView) -> bool {
+    let health = sprite.gene_health();
+    let wander = sprite
+        .genes()
+        .into_iter()
+        .enumerate()
+        .find_map(|(index, (gene, expression))| match gene {
+            GeneView::Instinct {
+                inputs,
+                verb: Verb::Wander,
+                weight,
+            } if expression == Expression::Expressed && inputs == [("always", false)] => {
+                Some(weight * health.get(index).copied().unwrap_or(1.0))
+            }
+            _ => None,
+        })
+        .unwrap_or(0.0);
+    wander < sprite.act_threshold()
 }
 
 /// Which of `Run::by_parent` a young sprite counts in, by its ticks and
@@ -591,7 +664,8 @@ fn print_run(run: &Run) {
     };
     println!("\nSeed {}{ended}", run.seed);
     println!(
-        "{:>5} {:>7} {:>6} {:>5} {:>7} {:>7} {:>10} {:>6} {:>8} {:>8} {:>8} {:>7} {:>8} {:>6}",
+        "{:>5} {:>7} {:>6} {:>5} {:>7} {:>7} {:>10} {:>6} {:>8} {:>8} {:>8} {:>7} {:>8} {:>10} \
+         {:>6}",
         "Hour",
         "Sprites",
         "Young",
@@ -605,12 +679,15 @@ fn print_run(run: &Run) {
         "OldFull",
         "Moving",
         "YoungMv",
+        "WanderOff",
         "Needs"
     );
     for row in &run.rows {
         let c = row.counts;
+        let (off, adults) = row.wander_off;
         println!(
-            "{:>5} {:>7} {:>6} {:>5} {:>7} {:>7} {:>10} {:>6} {:>8} {:>8} {:>8} {:>7} {:>8} {:>6}",
+            "{:>5} {:>7} {:>6} {:>5} {:>7} {:>7} {:>10} {:>6} {:>8} {:>8} {:>8} {:>7} {:>8} \
+             {:>10} {:>6}",
             row.hour,
             row.sprites,
             row.young,
@@ -624,6 +701,7 @@ fn print_run(run: &Run) {
             percent(c.old_too_full, c.old_bites),
             percent(c.moving, c.adult_ticks),
             percent(c.young_moving, c.young_ticks),
+            format!("{off}/{adults}"),
             row.needs_lacked
         );
     }
@@ -654,17 +732,50 @@ struct Verdicts {
     /// Whether enough seeds' bushes held: met if they weren't judged.
     bushes_met: bool,
     /// Each seed that failed a bar, with the bars it failed: one judged in
-    /// each seed (the adults' in each seed that lasted), or one judged
-    /// across seeds that wasn't met and that it missed.
+    /// each seed that lasted, or one judged across seeds that wasn't met
+    /// and that it missed.
     failed: Vec<(u64, Vec<&'static str>)>,
-    /// The seeds among them with more than half their living lacking a
-    /// needs gene, at the end or the last hour before dying out, for which
-    /// careful copying would switch on (#237 rule 4).
+    /// Each seed that missed a held-over bar, with the bars it missed
+    /// (#332): reported, not failed.
+    held_over: Vec<(u64, Vec<&'static str>)>,
+    /// The seeds that failed a bar with more than half their living lacking
+    /// a needs gene, at the end or the last hour before dying out, for
+    /// which careful copying would switch on (#237 rule 4).
     trips: Vec<u64>,
+    /// The seeds that missed only a held-over bar with more than half their
+    /// living lacking a needs gene: careful copying would have switched on
+    /// for them, had held-over bars counted (#332).
+    held_over_trips: Vec<u64>,
 }
 
-/// Judges `runs`, each `hours` long, against the bars (M2 design §19.6).
-/// The young's growing up is reported, not judged, on the long run (#226).
+impl Verdicts {
+    /// Each held-over bar, with how many seeds missed it now and in Slice
+    /// 29's run (M2 design §19.6).
+    fn held_over_misses(&self) -> Vec<(&'static str, usize, usize)> {
+        SLICE_29_MISSES
+            .into_iter()
+            .map(|(bar, then)| {
+                let now = self
+                    .held_over
+                    .iter()
+                    .filter(|(_, bars)| bars.contains(&bar));
+                (bar, now.count(), then)
+            })
+            .collect()
+    }
+
+    /// The held-over bars that missed in more seeds than in Slice 29's run,
+    /// each with how many seeds now and then: clearly worse, for the owner
+    /// before the PR merges (M2 design §19.6).
+    fn clearly_worse(&self) -> Vec<(&'static str, usize, usize)> {
+        let misses = self.held_over_misses().into_iter();
+        misses.filter(|&(_, now, then)| now > then).collect()
+    }
+}
+
+/// Judges `runs`, each `hours` long, against the bars (M2 design §19.6),
+/// and the held-over bars apart (#331). The young's growing up is reported,
+/// not judged, on the long run (#226).
 fn judge(runs: &[Run], hours: u64) -> Verdicts {
     let not_lasted: Vec<(u64, Vec<&str>)> = runs
         .iter()
@@ -686,25 +797,29 @@ fn judge(runs: &[Run], hours: u64) -> Verdicts {
     let bushes_met = bushes
         .as_ref()
         .is_none_or(|(missed, judged)| lasting::pooled_met(missed.len(), *judged));
-    let mut failed = Vec::new();
+    let (mut failed, mut held_over) = (Vec::new(), Vec::new());
     for run in runs {
-        let mut fails = Vec::new();
+        let (mut fails, mut misses) = (Vec::new(), Vec::new());
         let why = not_lasted.iter().find(|(s, _)| *s == run.seed);
         if !lasted_met && let Some((_, why)) = why {
             fails.extend(why);
         }
         let (whole, late) = (run.whole, run.late);
-        // A world dying out starves its adults: #226 judges them only in
-        // the seeds that last.
+        // A world dying out starves its adults, and stills them: #226
+        // judges their hunger and thirst only in the seeds that last, and
+        // #331 their moving.
         if why.is_none()
             && ![whole, late]
                 .iter()
                 .all(|c| 20 * c.adult_hunger_thirst < c.grown_deaths.max(1))
         {
-            fails.push("adults' hunger and thirst");
+            misses.push(HUNGER_AND_THIRST);
         }
         if ![whole, late].iter().all(|c| 10 * c.too_full <= c.bites) {
-            fails.push("too full");
+            misses.push(TOO_FULL);
+        }
+        if why.is_none() && 4 * late.moving < late.adult_ticks {
+            fails.push(ON_THE_MOVE);
         }
         if !bushes_met
             && let Some((missed, _)) = &bushes
@@ -715,11 +830,22 @@ fn judge(runs: &[Run], hours: u64) -> Verdicts {
         if !fails.is_empty() {
             failed.push((run.seed, fails));
         }
+        if !misses.is_empty() {
+            held_over.push((run.seed, misses));
+        }
     }
+    let lacks_needs = |run: &&Run| !needs_lacked(&run.lacking).is_empty();
+    let in_list = |list: &[(u64, Vec<&str>)], seed: u64| list.iter().any(|(s, _)| *s == seed);
     let trips = runs
         .iter()
-        .filter(|run| failed.iter().any(|(seed, _)| *seed == run.seed))
-        .filter(|run| !needs_lacked(&run.lacking).is_empty())
+        .filter(|run| in_list(&failed, run.seed))
+        .filter(lacks_needs)
+        .map(|run| run.seed)
+        .collect();
+    let held_over_trips = runs
+        .iter()
+        .filter(|run| in_list(&held_over, run.seed) && !in_list(&failed, run.seed))
+        .filter(lacks_needs)
         .map(|run| run.seed)
         .collect();
     Verdicts {
@@ -728,7 +854,9 @@ fn judge(runs: &[Run], hours: u64) -> Verdicts {
         bushes,
         bushes_met,
         failed,
+        held_over,
         trips,
+        held_over_trips,
     }
 }
 
@@ -810,7 +938,8 @@ fn bars(runs: &[Run], starter: &[(String, f32)], options: &Options) {
         "\nAll seeds: young grew up {} ({} of {}), with no bar here (#226); adults dying of \
          hunger or thirst {} of grown-up deaths ({} of {}), and old sprites {}; bites tried too \
          full {} ({} of {}), and old sprites' {} ({} of {}) apart from the bar; over the last \
-         {LATE_HOURS} hours, adults on the move {} (#318 asks a quarter) and the young {}.",
+         {LATE_HOURS} hours, adults on the move {} (the bar: a quarter, in each seed that lasts, \
+         #331) and the young {}.",
         percent(pooled.grew_up, pooled.grew_up + pooled.died_young),
         pooled.grew_up,
         pooled.grew_up + pooled.died_young,
@@ -909,39 +1038,96 @@ fn bars(runs: &[Run], starter: &[(String, f32)], options: &Options) {
         };
         let but = if evolved { "" } else { " but G4's" };
         println!("\n{every}{but} was met.");
+    } else {
+        let mut lines = listed(&verdicts.failed);
         if !evolved {
-            println!("{g4}");
+            lines.push("G4, across seeds".into());
         }
-        return;
+        println!("\nBars failed: {}.", lines.join("; "));
     }
-    let mut lines: Vec<String> = verdicts
-        .failed
-        .iter()
-        .map(|(seed, fails)| format!("seed {seed}: {}", fails.join(", ")))
-        .collect();
-    if !evolved {
-        lines.push("G4, across seeds".into());
-    }
-    println!("\nBars failed: {}.", lines.join("; "));
     if !evolved {
         println!("{g4}");
     }
+    held_over(&verdicts);
     if !verdicts.trips.is_empty() {
-        let seeds: Vec<String> = verdicts.trips.iter().map(u64::to_string).collect();
-        let before: Vec<String> = runs
-            .iter()
-            .filter(|run| run.died_out.is_some() && verdicts.trips.contains(&run.seed))
-            .map(|run| format!("seed {}'s at hour {}", run.seed, run.lacking_hour))
-            .collect();
-        let before = if before.is_empty() {
-            String::new()
-        } else {
-            format!(" ({}, before it died out)", before.join("; "))
-        };
         println!(
             "Careful copying would switch on: seeds {} failed a bar with more than half their \
-             living lacking a needs gene{before}.",
-            seeds.join(", ")
+             living lacking a needs gene{}.",
+            seeds(&verdicts.trips),
+            before_dying_out(runs, &verdicts.trips)
+        );
+    }
+    if !verdicts.held_over_trips.is_empty() {
+        println!(
+            "A held-over bar doesn't switch careful copying on, but would have for seeds {}, \
+             with more than half their living lacking a needs gene{}: for #332.",
+            seeds(&verdicts.held_over_trips),
+            before_dying_out(runs, &verdicts.held_over_trips)
+        );
+    }
+}
+
+/// Each seed with the bars it failed or missed: `seed 8: too full`.
+fn listed(seeds: &[(u64, Vec<&str>)]) -> Vec<String> {
+    seeds
+        .iter()
+        .map(|(seed, bars)| format!("seed {seed}: {}", bars.join(", ")))
+        .collect()
+}
+
+/// `seeds`, as `4, 9`.
+fn seeds(seeds: &[u64]) -> String {
+    let seeds: Vec<String> = seeds.iter().map(u64::to_string).collect();
+    seeds.join(", ")
+}
+
+/// Which of `seeds` died out, judged on their living before it:
+/// ` (seed 4's at hour 170, before it died out)`, or nothing.
+fn before_dying_out(runs: &[Run], seeds: &[u64]) -> String {
+    let before: Vec<String> = runs
+        .iter()
+        .filter(|run| run.died_out.is_some() && seeds.contains(&run.seed))
+        .map(|run| format!("seed {}'s at hour {}", run.seed, run.lacking_hour))
+        .collect();
+    if before.is_empty() {
+        String::new()
+    } else {
+        format!(" ({}, before it died out)", before.join("; "))
+    }
+}
+
+/// The held-over bars (the owner, 2026-10-24): the seeds that missed them,
+/// and whether that's clearly worse than Slice 29's run (#331).
+fn held_over(verdicts: &Verdicts) {
+    if verdicts.held_over.is_empty() {
+        println!("The bars held over to #332 were met in every seed.");
+        return;
+    }
+    println!(
+        "Held over to #332, reported but not must-pass (the owner, 2026-10-24): {}.",
+        listed(&verdicts.held_over).join("; ")
+    );
+    let missed: Vec<String> = verdicts
+        .held_over_misses()
+        .into_iter()
+        .map(|(bar, now, then)| format!("{bar} in {now} (Slice 29: {then})"))
+        .collect();
+    let worse: Vec<&str> = verdicts
+        .clearly_worse()
+        .into_iter()
+        .map(|(bar, _, _)| bar)
+        .collect();
+    if worse.is_empty() {
+        println!(
+            "Seeds missing them: {}, no more than in Slice 29's run.",
+            missed.join(", ")
+        );
+    } else {
+        println!(
+            "Seeds missing them: {}. Clearly worse than Slice 29's run in {}, so it goes back \
+             to the owner before the PR merges.",
+            missed.join(", "),
+            worse.join(" and ")
         );
     }
 }
@@ -1135,16 +1321,8 @@ mod tests {
         // design §14): its first, before the first step, then every 100
         // ticks until it squeezes.
         let data = DataPack::builtin().expect("the built-in data pack is valid");
-        let map = Map::from_ascii(&["....."], &data).expect("a valid drawing");
         let sprites: Vec<(Pos, Option<Genome>)> = [0, 2, 4].map(|x| (Pos { x, y: 0 }, None)).into();
-        let scenario = Scenario {
-            map,
-            objects: &[],
-            sprites: &sprites,
-            scripted: &[],
-            newborns: &[],
-        };
-        let world = World::from_scenario(scenario, data, 1).expect("a valid scenario");
+        let world = on_a_row(data, &sprites);
         let mut census = Census::new(&world);
         census.note(100, 30, 100);
         assert_eq!(census.fewest, 3);
@@ -1303,9 +1481,11 @@ mod tests {
     }
 
     #[test]
-    fn adults_hunger_and_thirst_are_judged_in_the_seeds_that_last() {
+    fn adults_hunger_and_thirst_are_held_over_in_the_seeds_that_last() {
         // #226: adults dying of hunger or thirst stay under 1 in 20 of
-        // grown-up deaths in every seed that lasts.
+        // grown-up deaths in every seed that lasts. Held over to #332 by
+        // the owner (2026-10-24), a miss fails no seed and switches careful
+        // copying on for none, though the seeds it would have are named.
         let mut runs = ten();
         for run in &mut runs[..2] {
             run.late.adult_hunger_thirst = 5;
@@ -1315,8 +1495,113 @@ mod tests {
         runs[1].census.fewest = 0;
         let judged = judge(&runs, 220);
         assert!(judged.lasted_met);
-        assert_eq!(judged.failed, [(1, vec!["adults' hunger and thirst"])]);
-        assert_eq!(judged.trips, [1]);
+        assert_eq!(judged.failed, []);
+        assert_eq!(judged.held_over, [(1, vec![HUNGER_AND_THIRST])]);
+        assert_eq!((judged.trips, judged.held_over_trips), (vec![], vec![1]));
+    }
+
+    #[test]
+    fn too_full_bites_are_held_over() {
+        // #224's bar, held over to #332 (the owner, 2026-10-24): at most 1
+        // in 10 bites tried too full, over the run and its last 50 hours.
+        let mut runs = ten();
+        runs[2].late.too_full = 11;
+        runs[4].whole.too_full = 10;
+        let judged = judge(&runs, 220);
+        assert_eq!(judged.failed, []);
+        assert_eq!(judged.held_over, [(3, vec![TOO_FULL])]);
+    }
+
+    #[test]
+    fn a_held_over_bar_missed_in_more_seeds_than_slice_29_s_run_is_clearly_worse() {
+        // #331: more than 2 seeds for hunger and thirst, or more than 1 for
+        // too full, goes back to the owner before merging.
+        let mut runs = ten();
+        for run in &mut runs[..2] {
+            run.late.adult_hunger_thirst = 5;
+        }
+        runs[9].late.too_full = 11;
+        assert_eq!(judge(&runs, 220).clearly_worse(), []);
+        runs[2].whole.adult_hunger_thirst = 5;
+        runs[3].whole.too_full = 11;
+        assert_eq!(
+            judge(&runs, 220).clearly_worse(),
+            [(HUNGER_AND_THIRST, 3, 2), (TOO_FULL, 2, 1)]
+        );
+    }
+
+    #[test]
+    fn adults_on_the_move_a_quarter_of_the_time_is_judged_in_the_seeds_that_last() {
+        // #331: over the last 50 hours, in each seed that lasts. A seed
+        // that didn't last is judged on that alone.
+        let mut runs = ten();
+        for run in &mut runs {
+            run.late.adult_ticks = 1_000;
+            run.late.moving = 250;
+        }
+        assert_eq!(judge(&runs, 220).failed, []);
+        runs[1].late.moving = 249;
+        runs[7].late.moving = 100;
+        runs[7].died_out = Some(200 * HOUR);
+        runs[7].census.fewest = 0;
+        runs[7].lacking = lacking_thirst(0.9);
+        runs[1].lacking = lacking_thirst(0.9);
+        let judged = judge(&runs, 220);
+        assert_eq!(judged.failed, [(2, vec![ON_THE_MOVE])]);
+        assert_eq!(judged.trips, [2]);
+    }
+
+    /// A world of one grown sprite of `genes` on each of its tiles.
+    fn grown(genes: &[&str]) -> World {
+        let data = DataPack::builtin().expect("the built-in data pack is valid");
+        let sprites: Vec<(Pos, Option<Genome>)> = (genes.iter().enumerate())
+            .map(|(x, genes)| {
+                let text = format!("(format: 2, genes: [{genes}])");
+                let genome = Genome::from_ron(&text, &data).expect("a valid genome");
+                (Pos::new(2 * x as u16, 0), Some(genome))
+            })
+            .collect();
+        on_a_row(data, &sprites)
+    }
+
+    /// A world of one row of grass, just long enough for `sprites`, with
+    /// the starter's genes where they have none.
+    fn on_a_row(data: DataPack, sprites: &[(Pos, Option<Genome>)]) -> World {
+        let long = sprites.iter().map(|(pos, _)| pos.x + 1).max().unwrap_or(1);
+        let row = ".".repeat(usize::from(long));
+        let map = Map::from_ascii(&[&row], &data).expect("a valid drawing");
+        let scenario = Scenario {
+            map,
+            objects: &[],
+            sprites,
+            scripted: &[],
+            newborns: &[],
+        };
+        World::from_scenario(scenario, data, 1).expect("a valid scenario")
+    }
+
+    #[test]
+    fn an_adult_s_wandering_is_switched_off_when_it_pulls_less_than_its_act_threshold() {
+        // #318: a weakened gene, or none, under the pull it takes to act.
+        // The young's gene doesn't work in an adult, and of two the first
+        // is the one expressed (design §4.3).
+        let act = r#"BrainParam(param: "act_threshold", value: 0.25),"#;
+        let wander = |weight: f32, when: &str| {
+            format!(
+                r#"Instinct(inputs: [("always", false)], verb: Wander, weight: {weight:?}{when}),"#
+            )
+        };
+        let world = grown(&[
+            &format!("{act}{}", wander(0.3, ", from: Adult")),
+            &format!("{act}{}", wander(0.2, ", from: Adult")),
+            act,
+            "",
+            &format!("{act}{}", wander(0.3, ", until: Adult")),
+            &format!("{act}{}{}", wander(0.3, ""), wander(0.2, "")),
+        ]);
+        let off: Vec<bool> = world.sprites().map(|s| switched_off(&s)).collect();
+        assert_eq!(off, [false, true, true, false, true, false]);
+        assert_eq!(wander_off(&world), (3, 6));
     }
 
     #[test]

@@ -8,14 +8,14 @@ mod common;
 use common::{
     AGES_AT_ONCE, ALONE, FEMALE, KEEN, LONE, Laying, NO_COPYING_ERRORS, OLD, RECEPTIVE, UNPACED,
     WorldBuilder, at, builtin, builtin_changing, builtin_changing_files, close, endings, family,
-    family_in, genome, id_at, laid, lone, lone_mother_in, pet, pulse_in_h1, replayed, run_for,
-    shock, starting_with, until, value_of, world_in,
+    family_in, genome, grass, id_at, laid, lone, lone_mother_in, pet, pulse_in_h1, replayed,
+    run_for, shock, starting_with, until, value_of, world_in,
 };
 
 use proptest::prelude::*;
 use terra_sim::{
-    Command, DataPack, EntityId, EventKind, Learned, LifeStage, Outcome, Part, Pos, Rejection,
-    ScriptedAction, Sex, Target, Thing, Verb, World,
+    Command, DataPack, EntityId, EventKind, Fertility, Learned, LifeStage, Outcome, Part, Pos,
+    Rejection, ScriptedAction, Sex, Target, Thing, Verb, World,
 };
 
 /// A Mate or Court action as it started: the life stage of the sprite
@@ -858,6 +858,151 @@ fn without_breeding() -> DataPack {
         ),
     ])
 }
+
+/// The fertility of a grown sprite resting on (2, 1) of a wide field, with
+/// grown sprites resting on `others` and young ones on `young`, as the
+/// world starts: all of them fed, watered and never bred.
+fn fertility_among(data: DataPack, others: &[(Pos, &str)], young: &[Pos]) -> Fertility {
+    let subject = at(2, 1);
+    let mut sprites = vec![(subject, REST)];
+    sprites.extend_from_slice(others);
+    sprites.extend(young.iter().map(|&pos| (pos, REST)));
+    let world = WorldBuilder::new(&grass(20, 12))
+        .data(data)
+        .sprites(&sprites)
+        .newborns(young)
+        .build();
+    world.sprite_at(subject).expect("the sprite").fertility()
+}
+
+/// Three tiles within 10 of (2, 1).
+const THREE_NEAR: [Pos; 3] = [Pos::new(4, 1), Pos::new(2, 4), Pos::new(7, 6)];
+
+/// Resting sprites on each of `tiles`.
+fn resting(tiles: &[Pos]) -> Vec<(Pos, &'static str)> {
+    tiles.iter().map(|&pos| (pos, REST)).collect()
+}
+
+#[test]
+fn an_adult_has_room_nearby_with_3_other_grown_sprites_within_10_tiles_but_not_4() {
+    // M2 design §10.2 (#331): fertile only while fewer than 4 other grown
+    // sprites are within 10 tiles.
+    assert_eq!(fertility_among(builtin(), &[], &[]), Fertility::Fertile);
+    let three = resting(&THREE_NEAR);
+    assert_eq!(fertility_among(builtin(), &three, &[]), Fertility::Fertile);
+    let four = resting(&[THREE_NEAR.as_slice(), &[at(9, 3)]].concat());
+    assert_eq!(
+        fertility_among(builtin(), &four, &[]),
+        Fertility::TooCrowded
+    );
+}
+
+#[test]
+fn other_grown_sprites_count_out_to_10_tiles_in_a_straight_line() {
+    // M2 design §10.9: a fourth sprite 10 tiles away crowds it, 11 doesn't;
+    // and on a slant, 6 across and 8 down is 10, but 7 across and 8 down
+    // is more, though no further in either direction than 8.
+    let with = |fourth: Pos| {
+        let others = resting(&[THREE_NEAR.as_slice(), &[fourth]].concat());
+        fertility_among(builtin(), &others, &[])
+    };
+    assert_eq!(with(at(12, 1)), Fertility::TooCrowded, "10 tiles across");
+    assert_eq!(with(at(13, 1)), Fertility::Fertile, "11 tiles across");
+    assert_eq!(with(at(2, 11)), Fertility::TooCrowded, "10 tiles down");
+    assert_eq!(with(at(8, 9)), Fertility::TooCrowded, "6 across, 8 down");
+    assert_eq!(with(at(9, 9)), Fertility::Fertile, "7 across, 8 down");
+}
+
+#[test]
+fn an_old_sprite_counts_towards_a_crowd_and_a_young_one_does_not() {
+    // M2 design §10.2: grown means adult or old.
+    let data = builtin_changing("physiology.ron", &AGES_AT_ONCE);
+    let old = format!("{REST}{OLD}");
+    let others = [resting(&THREE_NEAR), vec![(at(9, 3), old.as_str())]].concat();
+    assert_eq!(fertility_among(data, &others, &[]), Fertility::TooCrowded);
+    let young = [at(9, 3), at(3, 3), at(5, 2), at(1, 6)];
+    let three = resting(&THREE_NEAR);
+    assert_eq!(
+        fertility_among(builtin(), &three, &young),
+        Fertility::Fertile
+    );
+}
+
+#[test]
+fn eggs_do_not_count_towards_a_crowd() {
+    // M2 design §10.2: a mother who lays an egg whenever she can, at no
+    // cost, near the sprite watched, with two others near it too. Her
+    // eggs don't crowd it, though one egg would if they counted.
+    let quick = [
+        LONE,
+        ("cost: 0.3,", "cost: 0.0,"),
+        ("rest: 1500,", "rest: 1,"),
+    ];
+    let data = builtin_changing("physiology.ron", &quick);
+    let mother = format!("{ALONE}{FEMALE}");
+    let subject = at(6, 1);
+    let others = [
+        (at(2, 1), mother.as_str()),
+        (at(6, 4), REST),
+        (at(8, 1), REST),
+    ];
+    let mut world = WorldBuilder::new(&grass(20, 12))
+        .data(data)
+        .sprites(&[[(subject, REST)].as_slice(), &others].concat())
+        .build();
+    run_for(&mut world, 200);
+    assert!(world.eggs().count() >= 4, "{} eggs", world.eggs().count());
+    let sprite = world.sprite_at(subject).expect("the sprite");
+    assert_eq!(sprite.fertility(), Fertility::Fertile);
+}
+
+#[test]
+fn a_pair_with_2_others_near_lays_but_not_with_3() {
+    // M2 design §10.2: a partner counts, so a pair can breed with up to 2
+    // others near, each of them then having 3.
+    let female = format!("{KEEN}{FEMALE}");
+    let lays = |others: &[Pos]| {
+        let mut sprites = vec![(at(2, 1), female.as_str()), (at(3, 1), KEEN)];
+        sprites.extend(resting(others));
+        let mut world = WorldBuilder::new(&grass(16, 8)).sprites(&sprites).build();
+        laid(&mut world, 100).is_some()
+    };
+    assert!(lays(&[at(5, 4), at(8, 2)]), "with 2 others near");
+    assert!(!lays(&[at(5, 4), at(8, 2), at(6, 6)]), "with 3");
+}
+
+#[test]
+fn a_sprite_too_crowded_to_breed_feels_no_arousal() {
+    // M2 design §10.2: the `fertile` sensor follows room nearby, and with
+    // it the starter's arousal.
+    let arousal = |others: &[Pos]| {
+        let feels = format!(
+            r#"{REST}Emitter(locus: Locus("fertile"), mode: Level, threshold: 0.5, gain: 0.1, chem: "arousal"),"#
+        );
+        let mut sprites = vec![(at(2, 1), feels.as_str())];
+        sprites.extend(resting(others));
+        let mut world = WorldBuilder::new(&grass(20, 12)).sprites(&sprites).build();
+        run_for(&mut world, 5);
+        let sprite = world.sprite_at(at(2, 1)).expect("the sprite");
+        sprite.chemical("arousal").expect("arousal")
+    };
+    let roomy = arousal(&THREE_NEAR);
+    assert!(roomy > 0.1, "with room nearby: {roomy}");
+    let four = [THREE_NEAR.as_slice(), &[at(9, 3)]].concat();
+    assert_eq!(arousal(&four), 0.0, "too crowded to breed");
+}
+
+#[test]
+fn a_pack_without_room_nearby_has_no_crowd() {
+    // M2 design §10.2: a pack from before #331 keeps the world's limit as
+    // its only rule of room.
+    let data = builtin_changing("physiology.ron", &[(ROOM_NEARBY, "")]);
+    let crowd = resting(&[THREE_NEAR.as_slice(), &[at(9, 3), at(3, 3)]].concat());
+    assert_eq!(fertility_among(data, &crowd, &[]), Fertility::Fertile);
+}
+
+/// The built-in `physiology.ron`'s room nearby (M2 design §10.2).
+const ROOM_NEARBY: &str = "room_nearby: (within: 10, fewer_than: 4),";
 
 #[test]
 fn the_drive_works_only_between_adults_in_a_pack_that_doesnt_breed_too() {
