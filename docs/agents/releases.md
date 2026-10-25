@@ -35,12 +35,19 @@ At the end of the milestone's acceptance slice (M2's is Slice 30b, [#148](https:
 2. **The owner merges it, then runs the downloads workflow for the release at once,** since the README now names it. Sessions can't make tags or releases: the git proxy refuses their tags, and GitHub refuses their releases ("not permitted for this session type", 2026-10-18). A workflow can, so the downloads workflow (`.github/workflows/downloads.yml`) makes the release, as a draft. With `gh`, from the terra-sprites folder in PowerShell:
 
    ```powershell
-   gh workflow run downloads.yml -f tag=v0.2.0 -f commit=<the version PR's merge commit>
+   gh workflow run downloads.yml -f tag=v0.2.0
    ```
 
-   Or on GitHub: Actions, "Downloads", "Run workflow", with the tag and the commit. It builds the game from that commit for Windows, Mac (Apple silicon) and Linux, in about 3 minutes, and makes a draft release for the tag holding one zip for each: the program, both licences, and a `README.txt` on running it (`.github/downloads/`), with a Mac's first-run steps for a program from an unknown developer. The draft takes its title from the notes file's first line and its description from the rest. The run's summary links to it.
+   Or on GitHub: Actions, "Downloads", "Run workflow", with the tag. It builds the newest commit on `main`, which is the version PR's merge as long as nothing else has merged since. It builds only the commit it runs on, so code from someone else's copy of the repo never runs with the release's permissions. To build an older commit, push its tag first and run the workflow from the tag (on GitHub, the tag under "Use workflow from"):
 
-   A draft release made by hand on GitHub beforehand works too: the workflow adds the zips to it, and builds the commit it names when no commit is given. Running it again replaces the zips. It refuses a release that's already published, and a tag that doesn't match the version in `Cargo.toml` at that commit.
+   ```powershell
+   git tag v0.2.0 <the version PR's merge commit>; git push origin v0.2.0
+   gh workflow run downloads.yml --ref v0.2.0 -f tag=v0.2.0
+   ```
+
+   It builds the game for Windows, Mac (Apple silicon) and Linux, in about 3 minutes, and makes a draft release for the tag holding one zip for each: the program, both licences, and a `README.txt` on running it (`.github/downloads/`), with a Mac's first-run steps for a program from an unknown developer. The draft takes its title from the notes file's first line and its description from the rest. The run's summary links to it.
+
+   A draft release made by hand on GitHub beforehand works too, when it names the commit being built or its branch: the workflow adds the zips to it. Running it again replaces the zips. It refuses a release that's already published, a tag already on GitHub on another commit, and a tag that doesn't match the version in `Cargo.toml`.
 
    To try the workflow without a release, give it a test tag with a hyphen, such as `v0.1.0-test.1`, which only warns that the version differs, then delete the draft it made. A draft never made a tag, so nothing else is left behind.
 3. **Check the draft, then publish it.** On GitHub, under Releases, the draft should hold the three zips, `terra-sprites-v0.2.0-windows-x86_64.zip`, `…-mac-apple-silicon.zip` and `…-linux-x86_64.zip`. Open the one for your computer, and check its `terra-sprites --version` names the release. Then "Edit" and "Publish release", or:
@@ -82,7 +89,7 @@ Only for a serious problem players hit in a release (a crash, a lost save, a wor
 
 1. The fix merges to `main` first, as usual.
 2. A branch `release/0.2`, made from the tag, takes the same change in a PR of its own, with the version raised to 0.2.1 and a short `docs/releases/v0.2.1.md`.
-3. The owner merges it and makes the release `v0.2.1` on that branch: the downloads workflow, as in "Making one", with the tag `v0.2.1` and the commit of that merge. A PR to `main` then points the README's and the manual's install commands at `v0.2.1`, and carries the notes file across.
+3. The owner merges it and makes the release `v0.2.1` on that branch: the downloads workflow, as in "Making one", with the tag `v0.2.1`, run from `release/0.2` (`--ref release/0.2`, or that branch under "Use workflow from"). A PR to `main` then points the README's and the manual's install commands at `v0.2.1`, and carries the notes file across.
 
 ## The first release
 

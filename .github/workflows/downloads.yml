@@ -7,18 +7,21 @@
 # but a workflow can. It never publishes one: the owner checks the zips and
 # publishes it (docs/agents/releases.md, "Making one").
 #
-# What it builds:
-# - The tag's commit, when the tag is already on GitHub.
-# - Otherwise the commit given; or, when there's none, the commit a draft
-#   release for the tag names; or else the newest commit on the branch it was
-#   run from (main). Publishing the release then makes the tag on that commit.
+# What it builds: the commit it runs on, the newest on the branch or tag
+# picked under "Use workflow from" (main, unless told otherwise). Only that,
+# so code from someone else's copy of the repository never runs here, where
+# it could leave a poisoned cache behind for main's other workflows.
+# - A tag already on GitHub must be on that commit: to build a tag's commit,
+#   run the workflow from the tag. Otherwise publishing the release makes
+#   the tag on the commit built.
 # - The game at that commit must say the tag's version, or nothing is built.
 #   A tag with a hyphen, such as a test's (v0.1.0-test.1), only warns.
 #
 # Where the zips go:
 # - Onto the draft release for the tag, when there's one (say, made by hand
-#   on GitHub), replacing any of the same name. The draft is pointed at the
-#   commit built, so publishing it tags what was built.
+#   on GitHub) and it names the commit built or its branch, replacing any
+#   zips of the same name. The draft is pinned to the commit built, so
+#   publishing it tags what was built.
 # - Otherwise onto a new draft release, titled from the first line of
 #   docs/releases/<tag>.md at that commit, with that file's text as its
 #   description. A tag with a hyphen, such as v0.3.0-beta.1, makes a
@@ -38,10 +41,6 @@ on:
       tag:
         description: The release's tag, such as v0.2.0
         required: true
-        type: string
-      commit:
-        description: The commit to build, when the tag isn't on GitHub yet (left empty, the draft release's, or the branch's newest)
-        required: false
         type: string
   pull_request:
     paths:
@@ -69,10 +68,9 @@ jobs:
       contents: write
     outputs:
       name: ${{ steps.resolve.outputs.name }}
-      commit: ${{ steps.resolve.outputs.commit }}
       has_draft: ${{ steps.resolve.outputs.has_draft }}
     steps:
-      - name: Find the commit and the release
+      - name: Check the tag and find its release
         id: resolve
         env:
           GH_TOKEN: ${{ github.token }}
@@ -80,16 +78,15 @@ jobs:
           EVENT: ${{ github.event_name }}
           PR: ${{ github.event.pull_request.number }}
           TAG: ${{ inputs.tag }}
-          COMMIT: ${{ inputs.commit }}
-          BRANCH_HEAD: ${{ github.sha }}
+          COMMIT: ${{ github.sha }}
         run: |
           set -euo pipefail
           fail() { echo "::error::$1"; exit 1; }
 
           if [ "$EVENT" = pull_request ]; then
             # A dry run: the zips are named after the pull request.
-            { echo "name=pr-$PR"; echo "commit=$BRANCH_HEAD"; echo "has_draft=false"; } >> "$GITHUB_OUTPUT"
-            echo "A dry run for pull request #$PR, from $BRANCH_HEAD: no release is touched." >> "$GITHUB_STEP_SUMMARY"
+            { echo "name=pr-$PR"; echo "has_draft=false"; } >> "$GITHUB_OUTPUT"
+            echo "A dry run for pull request #$PR, from $COMMIT: no release is touched." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
 
@@ -97,19 +94,25 @@ jobs:
           # queries and file names below.
           [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] \
             || fail "A release's tag looks like v0.2.0, or v0.3.0-beta.1."
-          [[ -z "$COMMIT" || "$COMMIT" =~ ^[0-9a-f]{7,40}$ ]] \
-            || fail "The commit is a commit's hash, such as 1a2b3c4, or left empty."
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            from="the commit of the tag $GITHUB_REF_NAME"
+          else
+            from="the newest commit on $GITHUB_REF_NAME"
+          fi
 
-          # The tag's commit, when it's on GitHub. An annotated tag points at
-          # a tag object, which points at the commit.
+          # A tag already on GitHub must be on the commit built. An annotated
+          # tag points at a tag object, which points at the commit.
           tag_object=$(gh api "repos/$GH_REPO/git/matching-refs/tags/$TAG" \
             --jq ".[] | select(.ref == \"refs/tags/$TAG\") | \"\(.object.type) \(.object.sha)\"")
-          tag_commit=""
+          tag_on_github=false
           if [ -n "$tag_object" ]; then
+            tag_on_github=true
             read -r type tag_commit <<<"$tag_object"
             if [ "$type" = tag ]; then
               tag_commit=$(gh api "repos/$GH_REPO/git/tags/$tag_commit" --jq .object.sha)
             fi
+            [ "$tag_commit" = "$COMMIT" ] \
+              || fail "The tag $TAG is on $tag_commit, but this run is on $COMMIT, $from. Run it from the tag instead (under \"Use workflow from\", or gh workflow run downloads.yml --ref $TAG -f tag=$TAG)."
           fi
 
           # The release for the tag: a draft takes the zips, a published one
@@ -125,46 +128,31 @@ jobs:
             [ "$is_draft" = true ] \
               || fail "The release for $TAG is already published. This only adds downloads to a draft release, so that nothing reaches players before it's been checked."
             has_draft=true
-          fi
-
-          if [ -n "$tag_commit" ]; then
-            commit=$tag_commit
-            from="the tag's commit"
-            if [ -n "$COMMIT" ]; then
-              given=$(gh api "repos/$GH_REPO/commits/$COMMIT" --jq .sha)
-              [ "$given" = "$tag_commit" ] \
-                || fail "The tag $TAG is already on GitHub, on $tag_commit, not on the commit given."
+            # Until the tag exists, the draft's own commit (or branch) is
+            # where publishing would make it, so it must be the one built.
+            if [ "$tag_on_github" = false ]; then
+              draft_commit=$(gh api "repos/$GH_REPO/commits/$draft_target" --jq .sha)
+              [ "$draft_commit" = "$COMMIT" ] \
+                || fail "The draft release for $TAG names $draft_commit, but this run is on $COMMIT, $from. Point the draft at this commit, or push the tag on that one and run this from the tag."
             fi
-          elif [ -n "$COMMIT" ]; then
-            commit=$COMMIT
-            from="the commit given"
-          elif [ -n "$draft_target" ]; then
-            commit=$draft_target
-            from="the commit the draft release names"
-          else
-            commit=$BRANCH_HEAD
-            from="the newest commit on ${GITHUB_REF_NAME}"
           fi
-          # A whole hash from here on, whether it was given short or as a
-          # branch.
-          commit=$(gh api "repos/$GH_REPO/commits/$commit" --jq .sha)
 
           # The game at that commit names the tag's version, so --version
           # says the release. Checked before anything's built. A tag with a
           # hyphen may differ, for a test (v0.1.0-test.1).
-          version=$(gh api "repos/$GH_REPO/contents/Cargo.toml?ref=$commit" -H "Accept: application/vnd.github.raw+json" \
+          version=$(gh api "repos/$GH_REPO/contents/Cargo.toml?ref=$COMMIT" -H "Accept: application/vnd.github.raw+json" \
             | sed -n '/^\[workspace.package\]/,/^\[/s/^version = "\(.*\)"$/\1/p')
           if [ "v$version" != "$TAG" ]; then
-            mismatch="The game at $commit says it's version $version, not ${TAG#v}."
+            mismatch="The game at $COMMIT says it's version $version, not ${TAG#v}."
             [[ "$TAG" == *-* ]] \
               || fail "$mismatch Raise its version first (docs/agents/releases.md, \"Making one\")."
             echo "::warning::$mismatch That's fine for a test tag."
             echo "$mismatch That's fine for a test tag." >> "$GITHUB_STEP_SUMMARY"
           fi
 
-          { echo "name=$TAG"; echo "commit=$commit"; echo "has_draft=$has_draft"; } >> "$GITHUB_OUTPUT"
+          { echo "name=$TAG"; echo "has_draft=$has_draft"; } >> "$GITHUB_OUTPUT"
           {
-            echo "Building $TAG from $commit, $from."
+            echo "Building $TAG from $COMMIT, $from."
             if [ "$has_draft" = true ]; then
               echo "The zips go on its draft release."
             else
@@ -208,7 +196,6 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
-          ref: ${{ needs.resolve.outputs.commit }}
           persist-credentials: false
       # No cache: each download is built from nothing, so nothing another
       # run left behind can end up in it.
@@ -271,12 +258,11 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
       TAG: ${{ needs.resolve.outputs.name }}
-      COMMIT: ${{ needs.resolve.outputs.commit }}
+      COMMIT: ${{ github.sha }}
       HAS_DRAFT: ${{ needs.resolve.outputs.has_draft }}
     steps:
       - uses: actions/checkout@v5
         with:
-          ref: ${{ needs.resolve.outputs.commit }}
           sparse-checkout: docs/releases
           persist-credentials: false
       - uses: actions/download-artifact@v4
