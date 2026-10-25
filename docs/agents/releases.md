@@ -49,7 +49,7 @@ At the end of the milestone's acceptance slice (M2's is Slice 30b, [#148](https:
 
    A draft release made by hand on GitHub beforehand works too, when it names the commit being built or its branch: the workflow adds the zips to it. Running it again replaces the zips. It refuses a release that's already published, a tag already on GitHub on another commit, and a tag that doesn't match the version in `Cargo.toml`.
 
-   To try the workflow without a release, give it a test tag with a hyphen, such as `v0.1.0-test.1`, which only warns that the version differs, then delete the draft it made. A draft never made a tag, so nothing else is left behind.
+   To try the workflow without a release, give it a test tag: the game's version with a label after a hyphen, such as `v0.1.0-test.1` while `Cargo.toml` says 0.1.0. A tag with a hyphen may differ from the version after the hyphen only, and then the run just warns. Delete the draft it made afterwards. A draft never made a tag, so nothing else is left behind.
 3. **Check the draft, then publish it.** On GitHub, under Releases, the draft should hold the three zips, `terra-sprites-v0.2.0-windows-x86_64.zip`, `…-mac-apple-silicon.zip` and `…-linux-x86_64.zip`. Open the one for your computer, and check its `terra-sprites --version` names the release. Then "Edit" and "Publish release", or:
 
    ```powershell
