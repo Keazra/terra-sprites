@@ -31,14 +31,33 @@ At the end of the milestone's acceptance slice (M2's is Slice 30b, [#148](https:
      ```
 
      `--locked` builds with the release's own `Cargo.lock`. Without it, `cargo install` picks the newest versions of every library, so an old release can stop building, or build differently, as libraries move on.
-2. **The owner merges it, then makes the release at once,** since the README now names it. Sessions can't: the git proxy refuses their tags, and GitHub refuses their releases ("not permitted for this session type", 2026-10-18). With `gh`, from the terra-sprites folder in PowerShell, on an up-to-date `main`, one command makes the tag and the release together:
+   - Say in the same places that players without Rust can download the game ready-made from the release's page instead, with a link to it (`https://github.com/Keazra/terra-sprites/releases/tag/v0.2.0`), which works once step 3 has published it.
+2. **The owner merges it, then runs the downloads workflow for the release at once,** since the README now names it. Sessions can't make tags or releases: the git proxy refuses their tags, and GitHub refuses their releases ("not permitted for this session type", 2026-10-18). A workflow can, so the downloads workflow (`.github/workflows/downloads.yml`) makes the release, as a draft. With `gh`, from the terra-sprites folder in PowerShell:
 
    ```powershell
-   gh release create v0.2.0 --target <the version PR's merge commit> --title "v0.2.0: Generations" --notes-file docs/releases/v0.2.0.md
+   gh workflow run downloads.yml -f tag=v0.2.0
    ```
 
-   Or on GitHub: Releases, "Draft a new release", a new tag `v0.2.0` on that commit, the same title, and the notes file's text as the description. When the tag is already pushed, as v0.1.0's was, `--verify-tag` in place of `--target` makes `gh` use it.
-3. **Check it installs:** the `cargo install` line above, on the owner's PC or in a cloud session, then `terra-sprites --version`.
+   Or on GitHub: Actions, "Downloads", "Run workflow", with the tag. It builds the newest commit on `main`, which is the version PR's merge as long as nothing else has merged since. It builds only the commit it runs on, so code from someone else's copy of the repo never runs with the release's permissions. To build an older commit, push its tag first and run the workflow from the tag (on GitHub, the tag under "Use workflow from"):
+
+   ```powershell
+   git tag v0.2.0 <the version PR's merge commit>; git push origin v0.2.0
+   gh workflow run downloads.yml --ref v0.2.0 -f tag=v0.2.0
+   ```
+
+   It builds the game for Windows, Mac (Apple silicon) and Linux, in about 3 minutes, and makes a draft release for the tag holding one zip for each: the program, both licences, and a `README.txt` on running it (`.github/downloads/`), with a Mac's first-run steps for a program from an unknown developer. The draft takes its title from the notes file's first line and its description from the rest. The run's summary links to it.
+
+   A draft release made by hand on GitHub beforehand works too, when it names the commit being built or its branch: the workflow adds the zips to it. Running it again replaces the zips. It refuses a release that's already published, a tag already on GitHub on another commit, and a tag that doesn't match the version in `Cargo.toml`.
+
+   To try the workflow without a release, give it a test tag: the game's version with a label after a hyphen, such as `v0.1.0-test.1` while `Cargo.toml` says 0.1.0. A tag with a hyphen may differ from the version after the hyphen only, and then the run just warns. Delete the draft it made afterwards. A draft never made a tag, so nothing else is left behind.
+3. **Check the draft, then publish it.** On GitHub, under Releases, the draft should hold the three zips, `terra-sprites-v0.2.0-windows-x86_64.zip`, `…-mac-apple-silicon.zip` and `…-linux-x86_64.zip`. Open the one for your computer, and check its `terra-sprites --version` names the release. Then "Edit" and "Publish release", or:
+
+   ```powershell
+   gh release edit v0.2.0 --draft=false
+   ```
+
+   Publishing makes the tag, on the commit the zips were built from. The workflow never publishes: until the owner does, only those who can push to the repo can see the draft.
+4. **Check it installs:** the `cargo install` line above, on the owner's PC or in a cloud session, then `terra-sprites --version`.
 
 ### The notes
 
@@ -57,9 +76,11 @@ One or two sentences: what this milestone is about, for someone who has never pl
 
 ## Install
 
-You need Rust 1.97.1 or newer, and a terminal of at least 100×30 (on Windows, Windows Terminal).
+Download the zip for your computer from this page's Assets, below: Windows, Mac (Apple silicon) or Linux. Each has a `README.txt` that says how to run it, and on a Mac how to open a program from a developer Apple doesn't know, the first time. Or, with Rust 1.97.1 or newer:
 
     cargo install --git https://github.com/Keazra/terra-sprites --tag v0.2.0 --locked terra-tui
+
+Either way, you need a terminal of at least 100×30 (on Windows, Windows Terminal).
 ```
 
 ## A fix to a release
@@ -68,7 +89,7 @@ Only for a serious problem players hit in a release (a crash, a lost save, a wor
 
 1. The fix merges to `main` first, as usual.
 2. A branch `release/0.2`, made from the tag, takes the same change in a PR of its own, with the version raised to 0.2.1 and a short `docs/releases/v0.2.1.md`.
-3. The owner merges it and makes the release `v0.2.1` on that branch. A PR to `main` then points the README's and the manual's install commands at `v0.2.1`, and carries the notes file across.
+3. The owner merges it and makes the release `v0.2.1` on that branch: the downloads workflow, as in "Making one", with the tag `v0.2.1`, run from `release/0.2` (`--ref release/0.2`, or that branch under "Use workflow from"). A PR to `main` then points the README's and the manual's install commands at `v0.2.1`, and carries the notes file across.
 
 ## The first release
 

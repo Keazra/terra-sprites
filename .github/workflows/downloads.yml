@@ -1,0 +1,211 @@
+# Downloads: ready-made copies of the game for a release, so players without
+# Rust can play (#345). The owner runs it from the Actions tab (Downloads >
+# Run workflow) with the release's tag, such as v0.2.0. It builds the game in
+# release mode on Windows, a Mac and Linux, zips each copy with both licences
+# and a README.txt on running it (from .github/downloads/), and puts the
+# three zips on a draft release for the tag. Sessions can't make releases,
+# but a workflow can. It never publishes one: the owner checks the zips and
+# publishes it (docs/agents/releases.md, "Making one").
+#
+# What it builds: the commit it runs on, the newest on the branch or tag
+# picked under "Use workflow from" (main, unless told otherwise). Only that,
+# so code from someone else's copy of the repository never runs here, where
+# it could leave a poisoned cache behind for main's other workflows.
+# - A tag already on GitHub must be on that commit: to build a tag's commit,
+#   run the workflow from the tag. Otherwise publishing the release makes
+#   the tag on the commit built.
+# - The game at that commit must say the tag's version, or nothing is built.
+#   A tag with a hyphen may differ after the hyphen only, with a warning: a
+#   test's v0.1.0-test.1 on 0.1.0 builds, a beta's v0.3.0-beta.1 on 0.2.0
+#   doesn't.
+#
+# Where the zips go:
+# - Onto the draft release for the tag, when there's one (say, made by hand
+#   on GitHub) and it names the commit built or its branch, replacing any
+#   zips of the same name. The draft is pinned to the commit built, so
+#   publishing it tags what was built.
+# - Otherwise onto a new draft release, titled from the first line of
+#   docs/releases/<tag>.md at that commit, with that file's text as its
+#   description. A tag with a hyphen, such as v0.3.0-beta.1, makes a
+#   pre-release.
+# - A release that's already published is refused, so nothing reaches
+#   players before the owner has checked it.
+#
+# The jobs' rules live in scripts/downloads/: resolve.sh finds what to do,
+# release.sh makes the draft, and test.sh runs both through their cases
+# against a stand-in for GitHub.
+#
+# A pull request that changes this file, those scripts or the READMEs runs
+# the scripts' cases and the builds as a dry run: the zips stay on the run,
+# under Artifacts, and no release is touched.
+
+name: Downloads
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: The release's tag, such as v0.2.0
+        required: true
+        type: string
+  pull_request:
+    paths:
+      - .github/workflows/downloads.yml
+      - .github/downloads/**
+      - scripts/downloads/**
+
+# The jobs only read the code, except the two below that look up and make
+# the release.
+permissions:
+  contents: read
+
+# One run at a time for a tag, so two can't both make its release. A pull
+# request's newer push stops its older run.
+concurrency:
+  group: downloads-${{ inputs.tag || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  resolve:
+    name: what to build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # GitHub lists draft releases only to a token that can write.
+    permissions:
+      contents: write
+    outputs:
+      name: ${{ steps.resolve.outputs.name }}
+      has_draft: ${{ steps.resolve.outputs.has_draft }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          sparse-checkout: scripts/downloads
+          persist-credentials: false
+      - name: The release scripts pass their cases
+        if: github.event_name == 'pull_request'
+        run: scripts/downloads/test.sh
+      - name: Check the tag and find its release
+        id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+          PR: ${{ github.event.pull_request.number }}
+          TAG: ${{ inputs.tag }}
+          COMMIT: ${{ github.sha }}
+        run: scripts/downloads/resolve.sh
+
+  build:
+    name: build (${{ matrix.name }})
+    needs: resolve
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows-x86_64
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            program: terra-sprites.exe
+            readme: windows
+            # Builds Microsoft's C runtime into the program, so it runs on a
+            # PC that hasn't got the Visual C++ runtime installed.
+            rustflags: -C target-feature=+crt-static
+          - name: mac-apple-silicon
+            os: macos-latest
+            target: aarch64-apple-darwin
+            program: terra-sprites
+            readme: mac
+          - name: linux-x86_64
+            # The oldest Ubuntu GitHub offers, since a program built against
+            # an older glibc (2.35) runs on more Linuxes. Move it on when
+            # GitHub retires this one.
+            os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            program: terra-sprites
+            readme: linux
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    env:
+      # Not ZIP, which zip reads as options of its own.
+      FOLDER: terra-sprites-${{ needs.resolve.outputs.name }}-${{ matrix.name }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      # No cache: each download is built from nothing, so nothing another
+      # run left behind can end up in it.
+      - uses: dtolnay/rust-toolchain@stable
+      # Three of the four targets CI's determinism check proves play a seed
+      # the same (design §2.6, §7.5).
+      - name: The runner builds for the promised target
+        shell: bash
+        run: |
+          host=$(rustc -vV | sed -n 's/^host: //p')
+          if [ "$host" != "${{ matrix.target }}" ]; then
+            echo "expected ${{ matrix.target }}, but this runner builds for $host"
+            exit 1
+          fi
+          echo "${{ matrix.name }}: built with $(rustc -V)" >> "$GITHUB_STEP_SUMMARY"
+      - name: Build
+        run: cargo build --release --locked -p terra-tui
+        env:
+          RUSTFLAGS: ${{ matrix.rustflags }}
+      - name: The program says its version and commit
+        shell: bash
+        run: |
+          said=$("target/release/${{ matrix.program }}" --version)
+          echo "$said"
+          commit=$(git rev-parse --short HEAD)
+          if [[ "$said" != *"($commit)" ]]; then
+            echo "expected it to name the commit it was built from, $commit"
+            exit 1
+          fi
+      - name: Zip it with the licences and its README
+        shell: bash
+        run: |
+          mkdir "$FOLDER"
+          cp "target/release/${{ matrix.program }}" LICENSE-MIT LICENSE-APACHE "$FOLDER/"
+          cp ".github/downloads/README-${{ matrix.readme }}.txt" "$FOLDER/README.txt"
+          if [ "$RUNNER_OS" = Windows ]; then
+            7z a -tzip "$FOLDER.zip" "$FOLDER"
+            7z l "$FOLDER.zip"
+          else
+            # zip keeps the program executable.
+            zip -r -X "$FOLDER.zip" "$FOLDER"
+            unzip -l "$FOLDER.zip"
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.FOLDER }}
+          path: ${{ env.FOLDER }}.zip
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: draft release
+    if: github.event_name == 'workflow_dispatch'
+    needs: [resolve, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ needs.resolve.outputs.name }}
+      COMMIT: ${{ github.sha }}
+      HAS_DRAFT: ${{ needs.resolve.outputs.has_draft }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          sparse-checkout: |
+            docs/releases
+            scripts/downloads
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: terra-sprites-*
+          path: zips
+          merge-multiple: true
+      - name: Put the zips on a draft release
+        run: scripts/downloads/release.sh
