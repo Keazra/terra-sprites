@@ -34,8 +34,10 @@ M3 was planned on the map [Finishing M2 and planning M3](https://github.com/Keaz
 | 18 | **A gentle world on the title screen** ([#326](https://github.com/Keazra/terra-sprites/issues/326)) is a question for First steps | #233 round 1, Q5 | §23 |
 | 19 | **M3 ships whole as v0.3.0,** after the new look's last v0.2.x release; the patron betas ([#344](https://github.com/Keazra/terra-sprites/issues/344)) wait until the owner says the game's foundation is solid | #233 round 1, Q6; #232 round 1 Q5 | §1.3, §2 |
 | 20 | **Look 10 lays M3's screen out again,** late in M3, after the event log and before First steps | #233, the owner's ask, 2026-10-26 | §3, §6.7 |
+| 21 | **A hurt limb heals in about half an hour,** and clumsiness is gentle: a sore limb works three quarters as well, a hurt lands on the limb the act used, and a sore head or arm fumbles some tries | [#359](https://github.com/Keazra/terra-sprites/issues/359)'s round | §5.2, §6.4, §7.4 |
+| 22 | **Grief is a feeling you can see,** felt most for a partner, its own young or a parent; giving up brings a quieter grief; **calls are drawn as waves** of sound | [#360](https://github.com/Keazra/terra-sprites/issues/360)'s round, and the owner's ask in it | §1.1, §3, §8.4, §8.5 |
 
-Rows 14 to 20 are #233's round 1, which the owner settled on 2026-10-26: rows 14 to 18 as recommended, row 19 in the owner's own answer, and row 20 the slice the owner asked for in it.
+Rows 14 to 20 are #233's round 1, which the owner settled on 2026-10-26: rows 14 to 18 as recommended, row 19 in the owner's own answer, and row 20 the slice the owner asked for in it. Rows 21 and 22 are the rounds of Slices 33 and 34, settled with the owner on 2026-10-26: Slice 33's as recommended, and Slice 34's as recommended but for a little more of the search's second option, with calls drawn as waves the owner's ask.
 
 ---
 
@@ -60,7 +62,7 @@ The owner's principles carry over unchanged (`docs/agents/how-we-work.md`). Four
 | Item | Slice | Issue |
 |---|---|---|
 | Limbs that hurt and heal, with the little picture of the sprite ([#314](https://github.com/Keazra/terra-sprites/issues/314)) | 33 | [#164](https://github.com/Keazra/terra-sprites/issues/164), [#227](https://github.com/Keazra/terra-sprites/issues/227) |
-| Grief for what a sprite sees, with what it can see on the map ([#316](https://github.com/Keazra/terra-sprites/issues/316)) and deaths keeping where they happened ([#268](https://github.com/Keazra/terra-sprites/issues/268)'s world half) | 34 | [#231](https://github.com/Keazra/terra-sprites/issues/231), from [#206](https://github.com/Keazra/terra-sprites/issues/206) |
+| Grief for what a sprite sees, with what it can see on the map ([#316](https://github.com/Keazra/terra-sprites/issues/316)), deaths keeping where they happened ([#268](https://github.com/Keazra/terra-sprites/issues/268)'s world half) and calls drawn as waves ([#273](https://github.com/Keazra/terra-sprites/issues/273)) | 34 | [#231](https://github.com/Keazra/terra-sprites/issues/231), from [#206](https://github.com/Keazra/terra-sprites/issues/206) |
 | Hands: holding by size, carrying, dropping and throwing, with how close the other choices came ([#39](https://github.com/Keazra/terra-sprites/issues/39)) | 35 | [#135](https://github.com/Keazra/terra-sprites/issues/135), #164 |
 | Grab before eat | 36 | [#229](https://github.com/Keazra/terra-sprites/issues/229) |
 | Play as a feeling, with novelty as a sense ([#262](https://github.com/Keazra/terra-sprites/issues/262)), the Brain tab's habit wording ([#160](https://github.com/Keazra/terra-sprites/issues/160)) and the scuff question ([#46](https://github.com/Keazra/terra-sprites/issues/46)) | 37 | [#230](https://github.com/Keazra/terra-sprites/issues/230) |
@@ -128,7 +130,7 @@ Each slice is a GitHub issue in the "M3 — Body & verbs" milestone and its own 
 | # | Slice | Needs first | Rank | Checks |
 |---|---|---|---|---|
 | 33 | Limbs that hurt and heal, with the little picture | v0.2.0, Looks 1–6 | M | B1 |
-| 34 | Grief for what a sprite sees, with what it can see on the map | v0.2.0, Looks 1–6 | M | Grief's tests; Slice 32's family bars |
+| 34 | Grief for what a sprite sees, with what it can see on the map and calls drawn as waves | v0.2.0, Looks 1–6 | M | Grief's tests; Slice 32's family bars |
 | 35 | Hands, with how close the other choices came | 33 | M | B2 |
 | 36 | Grab before eat | 35 | **C** | B3 |
 | 37 | Play as a feeling, with novelty as a sense | 35 | **C** | B7, B9 |
@@ -191,7 +193,7 @@ From #231 Q1:
 
 | # | What you'd see | How it's checked, and the bar |
 |---|---|---|
-| **B1** | **Hurt limbs** (Slice 33). A pricked or hit sprite limps, grabs badly or crawls, and in time walks normally again | Tests for the rules: a hurt arm grabs and throws worse; hurt legs walk slowly; a sprite with both legs badly hurt crawls; a limb hurt badly enough is useless until it heals; a sprite with no usable arm can't grab, grip, push, pull, throw or drop, and eats off the ground; a hurt head makes eating and drinking harder and never kills; every limb heals. In the viability run: **seen**, a sprite with a hurt limb at half or more of the population counts, in at least 9 of 10 seeds; **not crippling**, on average at most 1 sprite in 10 has a useless limb. The slice's number: how long healing takes |
+| **B1** | **Hurt limbs** (Slice 33). A pricked or hit sprite limps, grabs badly or crawls, and in time walks normally again | Tests for the rules: a hurt arm grabs and throws worse; hurt legs walk slowly; a sprite with both legs badly hurt crawls; a limb hurt badly enough is useless until it heals; a sprite with no usable arm can't grab, grip, push, pull, throw or drop, and eats off the ground; a hurt head makes eating and drinking harder and never kills; every limb heals. In the viability run: **seen**, a sprite with a hurt limb at half or more of the population counts, in at least 9 of 10 seeds; **not crippling**, on average at most 1 sprite in 10 has a useless limb. The slice's number: healing takes **about half an hour of play** (§7.4) |
 | **B2** | **Hands** (Slice 35). Sprites pick up, carry, drop and throw things on their own | In every seed of the viability run, sprites carry a berry somewhere, carry a ball in both arms, drop things and throw a ball, all on their own. How often each happens is reported |
 | **B3** | **Manners** (Slice 36). Grown sprites mostly pick a fallen berry up before eating it, and the young learn it from their elders | Of grown sprites' meals of fallen berries, at least **3 in 4** were picked up first, all seeds of the viability run together. By the time they grow up, young raised among sprites pick berries up first more often than unattended young (the unattended run), in the middle seed. For information: squishes per seed, and meals eaten off the ground by sprites with no usable arm |
 | **B4** | **Eggs: carried, and sometimes broken** (Slice 40). Parents carry their eggs; a due egg hatches beside the sprite holding it; a thrown egg can break, and kin who see it grieve | Tests for §14's rules. In the viability run: at least **1 egg in 10** laid by a pair is carried by a parent at some point; at most **1 in 20** is carried off by a sprite outside its family; at most **1 egg in 20** laid breaks, all seeds together. For information: who broke them (a parent, other kin, a stranger), and G5's young counted from laying as well as from hatching |
@@ -306,7 +308,7 @@ This applies to the Cursor's teaching and to what's learned by watching as well 
 
 ### 6.4 Each act's odds, in one place
 
-Every chance an act has (a berry squished when eaten off the ground, a grip taken, breaking free, an egg breaking where it lands) is read from the thing's data and worked out by one part of the engine, never inside each act. So skills ([#48](https://github.com/Keazra/terra-sprites/issues/48)), when they come, change how an act goes by changing that one part, and the world's single random source (M1 design §2.3) keeps replays exact.
+Every chance an act has (a sore limb's fumble, a berry squished when eaten off the ground, a grip taken, breaking free, an egg breaking where it lands) is read from the thing's data and worked out by one part of the engine, never inside each act. So skills ([#48](https://github.com/Keazra/terra-sprites/issues/48)), when they come, change how an act goes by changing that one part, and the world's single random source (M1 design §2.3) keeps replays exact.
 
 ### 6.5 Old genomes, saves and mods that say Play
 
@@ -361,13 +363,23 @@ From #164, #227 Q2 and Q9, and #231's B1.
 - Its colours come through the theme's palette, so themes still decide every colour, and the tile front end can later draw real art behind the same slots.
 - It grows with the sprite's life stage.
 
-### 7.4 Left for its round
+### 7.4 Hurts and healing
 
-- How long healing takes (B1's number), and whether rest or sleep speeds it.
-- What hurts which limb: a hit, a prick, a crash, a fall from a throw.
-- How hurt is how clumsy: the soft gates' numbers, and how slow a crawl is.
+Settled in the slice's round with the owner, 2026-10-26, all as recommended ([#359](https://github.com/Keazra/terra-sprites/issues/359)).
+
+- **A hurt limb heals in about half an hour of play** (B1's number), an old sprite's more slowly, as its body heals more slowly now. With it, about 1 sprite in 10 has a sore limb at any moment in a full world, and under 1 in 100 is hurt twice at once, measured before the slice on `main` at 42a4411. The body's injury heals a prick in about 4 minutes, too quick for a limp to be seen.
+- **Rest doesn't speed healing** in Slice 33. Real sleep decides in its own round whether sleep heals faster (§13.2).
+- **A hurt lands on the limb the act used,** written in each thing's data: eating a thornbush pricks the head; touching, playing with or hitting one pricks the arm that did it, or the leg if it kicked. A hit from another sprite, or the Cursor's shove into thorns, hurts a limb picked by the world's dice. Hunger, thirst and old age still hurt the body alone, and every hurt still adds to the body's injury as it does today, so dying of injuries doesn't change. Nothing throws a sprite in M3, since sprites are too big to hold, so there's no fall from a throw.
+- **Clumsiness is gentle.** A sore limb works about three quarters as well. One useless leg walks at half speed, and both useless crawl at a quarter. A limb gets better bit by bit as it heals, so a limp fades. A second hurt while a limb is still sore can make it useless for up to a quarter of an hour, before it heals back to sore. The gentle side, since grown sprites already go hungry and thirsty a little more than they should (§5.4).
+- **A sore head or arm fumbles some tries,** by the world's dice in §6.4's one place: a sore head misses about one bite or sip in four, more the worse it's hurt, and the berry stays for another try; a sore arm misses some hits and plays the same way. A sprite uses its better arm, and kicks if neither works. A fumble is the sprite's own clumsiness, so it teaches nothing about the thing it missed.
+- **The brain feels three things of its own body:** how well its legs work, its better arm, and its head. Walking depends on both legs together, and an act needing one arm uses the better one.
+
+### 7.5 Left for its second round
+
+Once Look 1's layout is in, with mock-ups of each choice:
+
 - How the map shows a limp or a crawl, in every theme and the ASCII look.
-- What the little picture shows beyond the limbs, since there's no body colour gene, and where it sits once Look 1's layout is in.
+- What the little picture shows beyond the limbs, since there's no body colour gene, and where it sits.
 
 ---
 
@@ -391,11 +403,36 @@ From #231 Q15, Q20 and Q21, which brought part of [#206](https://github.com/Keaz
 
 - **A key tints the tiles the selected sprite's senses reach,** so the player sees why one parent grieves and another only worries. Tests check the tinted tiles are exactly those its senses reach, and from Slice 39 a sleeping sprite's are fewer.
 
-### 8.4 Left for its round
+### 8.4 How grief feels and shows
 
-- How the tint sits beside the remembered places and lineage colours on the map.
-- The key, and what the Body tab says of a sprite that's missing someone or has given up.
-- How strongly the starter genes grieve each kind of kin.
+Settled in the slice's round with the owner, 2026-10-26 ([#360](https://github.com/Keazra/terra-sprites/issues/360)): as recommended, with the search taking a little of its second option, and calls drawn as waves added by the owner (§8.5).
+
+- **Grief is a drive and a second-order need, as anxiety is:** a bar on the Body tab, and its own colour on the map when it's the strongest. In the starter genes it holds arousal down as today, leans the sprite away from play, turns its curiosity down for a while (as pain's wariness does), draws its eye to its family and leads it to go to them, and fades faster in company, so the sprite learns that its family helps. Hunger and thirst past 0.4 drain it, as they drain anxiety, so a grieving sprite still eats and drinks. A sad emote flashes when it sees the death.
+- **The young grieve too.** Half the times a sprite sees one of its kin die, it's a young one watching its parent go (measured before the slice on `main` at a874a95), and grief that only held arousal down would change nothing for them.
+- **How hard each loss hits** is in the genes, set by who the dead one was and how well the sprite knew it. A full spell, sad for about 20 minutes and coloured for the first 10 or so, for its partner, its own young and, while it's young itself, a parent; a light spell of about 5 minutes, too faint to colour it, for a brother or sister, a grown child or a grown sprite's parent. Either way it grieves less for one it knew less well. The world gives a sense for each kind of kin seen dying, each as strong as how well the sprite knew them, so the genes weigh each and evolution can change them. From Slice 40, an egg of its family breaking counts as its young, or as a brother or sister.
+- **Giving up** after the hour is a sense of its own, and brings half the grief of seeing the death: a quiet spell of about 8 minutes, too faint to colour the sprite. Nearly half of those given up on would be alive somewhere.
+- **The search.** The sprite goes back to where it last saw the one it's missing. If nobody's there, it goes on missing them and calling for them, as an anxious sprite does today, until it finds them or the hour is up. The spot isn't forgotten at once: it stays as a fainter pull, half as strong after each empty visit, so a worried sprite with nothing more pressing drifts back now and then and pines there. It's a lean in the genes' weights, like every other pull.
+- **On screen.** The log says `Pip #12 saw Bo #7 die` and `Pip #12 gave up on Bo #7`, and the death's own line stays as it is. `Pip #12 lost Bo #7` goes, since a partner no longer knows of a death at once. The doing line says `Looking for Bo #7 · 12 tiles to go`. The Body tab says whom it's missing and for how long (`missing Bo #7 · 12 min`) and whom it's grieving (`grieving Bo #7`); the partner line still says `· died`, for the player.
+- **The tint** (§8.3) shows what the sprite sees: the square of tiles within its sight, walls or not, which is how it knows its family is there. How far it hears a call isn't tinted; it would cover much of the map.
+- **Depression proper,** a low mood that outlasts the loss, waits for #206's lasting memory and M5's stress hormone ([#261](https://github.com/Keazra/terra-sprites/issues/261)).
+
+### 8.5 Calls drawn as waves ([#273](https://github.com/Keazra/terra-sprites/issues/273))
+
+The owner's ask in the slice's round (2026-10-26): calls seen as waves of sound rolling across the land. #273's own round (2026-10-17) settled the rest.
+
+- **Rings roll out from a call** round walls and rock and through doorways, as the sound itself travels (M2 design §15.1), for the selected sprite's calls and the calls it hears. A key shows every call. A full world makes 2,000 to 3,000 calls an hour, so rings for all of them by default would cover the map.
+- **A short flourish over both dancers** when a dance is answered.
+- **Front end only:** the screen works out the spread from each terrain's sound, which is public, and the information policy decides whether rings show, as it does for emotes.
+- **Look 5's "a call ripples out"** ([#306](https://github.com/Keazra/terra-sprites/issues/306)) is the same rings' motion, so it waits for this slice.
+
+### 8.6 Left for its second round
+
+Once Look 1's layout is in, with mock-ups of each choice:
+
+- The tint's colour in each theme and the plain ASCII look, and its key; it shades the ground while the lineage colours colour the sprites, so both can be on at once.
+- Grief's colour and its emote.
+- Where the Body tab's lines for missing and grieving sit.
+- The rings' glyphs, colour and timing in real time, and how they sit with the tint; the flourish's glyph.
 
 The rest of the owner's note stays on #206: a shortlist of who matters, a lasting memory whose pain fades, and mourning places.
 
