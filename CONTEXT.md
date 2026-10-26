@@ -119,7 +119,7 @@ A rolling item turning away from what it ran into: straight back if it met it he
 _Avoid_: collision, rebound
 
 **Size**:
-How big an object type, or a sprite, is: small, medium or large. What a rolling item does to what it meets depends on their sizes. Planned (M3, Slice 35): Size also gains tiny, berries become tiny, and how many arms a sprite needs to grab and hold a thing depends on size: tiny things stack in one arm up to the handful; a small thing, such as an egg, needs one arm; a medium thing, such as the ball, needs both; a large thing isn't held (M3 design §9.1).
+How big an object type, or a sprite, is: small, medium or large. What a rolling item does to what it meets depends on their sizes. Planned (M3, Slice 35): Size also gains tiny, berries become tiny, and how many arms a sprite needs to grab and hold a thing depends on size: tiny things stack in one arm up to the handful of three, and share a tile as a heap; a small thing, such as an egg, needs one arm; a medium thing, such as the ball, needs both; a large thing isn't held (M3 design §9.1).
 
 **Hardness**:
 How hard an object type is, from 0 to 1. A rolling item crushes something smaller and softer than itself.
@@ -273,7 +273,11 @@ The sprite whose hit a sprite has just felt: the source of its `was_hit` pulse. 
 _Avoid_: aggressor, enemy
 
 **Trait**:
-A body property the genome sets, within limits and at a cost that physiology fixes: speed, sense radius, when it grows up or when it grows old.
+A body property the genome sets, within limits and at a cost that physiology fixes: speed, sense radius, when it grows up or when it grows old. Planned (M3, Slice 35): strength.
+
+**Strength** (M3, Slice 35):
+A trait: how strong a sprite is, from 4 to 12, the middle 8. A throw reaches half its strength in tiles, three quarters of that for a young sprite or with a sore arm, and costs more energy the stronger the sprite is, as a step does the faster it is. Grips (Slice 38) and lifting heavy things (M5, [#96](https://github.com/Keazra/terra-sprites/issues/96)) use it later. Planned (M3 design §9.4).
+_Avoid_: power, might
 
 **Physiology**:
 The body's fixed rules: metabolism, digestion, water loss, healing, and the injury that starvation, dehydration and old age cause. Genes can't change them.
@@ -396,7 +400,7 @@ The action of a female laying an egg with no partner, its genes hers with one of
 _Avoid_: parthenogenesis in what the player reads, cloning, self-mating
 
 **Call** (M2, Slice 32):
-An action with no target: the sprite calls once, at a little cost in energy, then stands a moment listening. A call travels like a wave, round rock and walls and through doorways, about 30 tiles over open ground, three times as far as a sprite sees, and each terrain says how much sound it soaks up. A hearer knows who called and where from, and can go there as on a trip. Sprites call to find a mate and to keep their family in touch.
+An action with no target: the sprite calls once, at a little cost in energy, then stands a moment listening. A call travels like a wave, round rock and walls and through doorways, about 30 tiles over open ground, three times as far as a sprite sees, and each terrain says how much sound it soaks up. A hearer knows who called and where from, and can go there as on a trip. Sprites call to find a mate and to keep their family in touch. Planned (M3, Slice 34): the map draws the selected sprite's calls, and the calls it hears, as rings of sound rolling out round walls and through doorways, and a key shows every call (M3 design §8.5).
 _Avoid_: cry, song, speech (that's M6's Speak)
 
 **Courtship** (M2, Slice 32):
@@ -424,7 +428,7 @@ A drive and second-order need that rises while a sprite's family is out of sight
 _Avoid_: fear (fear is of someone), worry, loneliness (that's for any company)
 
 **Grief** (M2, Slice 32):
-The starter genes' hormone for losing a partner, which holds arousal down for a while before the sprite may pair again. Planned (M3, Slice 34): felt for any kin a sprite sees die, an egg breaking included, and for one it gives up on after an hour missing, no longer only a lost partner. No sprite knows of a death it didn't see (M3 design §8).
+The starter genes' hormone for losing a partner, which holds arousal down for a while before the sprite may pair again. Planned (M3, Slice 34): felt for any kin a sprite sees die, an egg breaking included, and for one it gives up on after an hour missing, no longer only a lost partner. No sprite knows of a death it didn't see. It becomes a drive and second-order need, as anxiety is, with its own colour on the map: the starter genes grieve a partner, their own young or, while young, a parent most, and other kin lightly; it keeps the sprite from play and mating, draws it to its family, whose company eases it, and fades in about 20 minutes (M3 design §8).
 _Avoid_: sadness, mourning (as a name for the hormone)
 
 **Most sprites** (M2):
@@ -458,8 +462,12 @@ Injury or pain that something did to a sprite: a thornbush it touched, another s
 _Avoid_: damage, pricked (a thornbush word; the data names things, the screen says "hurt")
 
 **Limb** (M3, Slice 33):
-A part of a sprite's body that can be hurt and heals: the head, the left arm, the right arm, the left leg and the right leg, each tracked on its own. A hurt arm grabs and throws worse; hurt legs walk slowly, and a sprite with both legs badly hurt crawls; a limb hurt badly enough is useless until it heals, and with no usable arm a sprite can't grab, grip, push, pull, throw or drop. A hurt head makes eating and drinking harder, but never kills: a sprite still dies when its injury reaches 1. None is lost for good in M3; limb loss is [#235](https://github.com/Keazra/terra-sprites/issues/235). Planned (M3 design §7).
+A part of a sprite's body that can be hurt and heals: the head, the left arm, the right arm, the left leg and the right leg, each tracked on its own. A hurt arm grabs and throws worse; hurt legs walk slowly, and a sprite with both legs badly hurt crawls; a limb hurt badly enough is useless until it heals, and with no usable arm a sprite can't grab, gather, grip, push, pull, throw or drop. A hurt head makes eating and drinking harder, but never kills: a sprite still dies when its injury reaches 1. None is lost for good in M3; limb loss is [#235](https://github.com/Keazra/terra-sprites/issues/235). A hurt lands on the limb the act used, as each thing's data says, and heals in about half an hour of play; a sore limb works about three quarters as well, so a limp fades as it heals. Planned (M3 design §7).
 _Avoid_: appendage, extremity, organ (organs are a separate design, #31)
+
+**Fumble** (M3, Slice 33):
+A try that a sore head or arm misses, by the world's dice: a bite, a sip, a hit, a play or a grab. The thing stays as it was, ready for another try, and the sprite learns nothing about it from the miss, since the clumsiness was its own. A sore head misses about one bite in four. Planned (M3 design §7.4).
+_Avoid_: failed try (failing is an outcome), slip
 
 ### Actions and movement
 
@@ -472,7 +480,7 @@ What a sprite does with no action running: since Slice 29 it acts only when some
 _Avoid_: idle, waiting (that's an action stuck behind another sprite), resting (that's an action)
 
 **Verb**:
-A kind of action a sprite can take: Approach, Eat, Drink, Hit, Play, Retreat, Rest or Wander. Mate and BreedAlone join in M2 (Slice 23), and Call and Court in Slice 32. Planned (M3 design §6.1): Grab, Throw and Drop join with hands (Slice 35); Touch takes Play's place, Play becoming a feeling, boredom eased (Slice 37); Grip, Push and Pull join in Slice 38; and Take in replaces Eat and Drink in Slice 46. Speak is reserved for M6 (Words).
+A kind of action a sprite can take: Approach, Eat, Drink, Hit, Play, Retreat, Rest or Wander. Mate and BreedAlone join in M2 (Slice 23), and Call and Court in Slice 32. Planned (M3 design §6.1): Grab, Gather, Throw and Drop join with hands (Slice 35); Touch takes Play's place, Play becoming a feeling, boredom eased (Slice 37); Grip, Push and Pull join in Slice 38; and Take in replaces Eat and Drink in Slice 46. Speak is reserved for M6 (Words).
 _Avoid_: command (the player's commands are different), move
 
 **Take in** (M3, Slice 46):
@@ -480,8 +488,16 @@ The one verb for eating and drinking, in place of Eat and Drink: each thing's da
 _Avoid_: consume, ingest
 
 **Holding** (M3, Slice 35):
-A sprite keeping things in its arms after one or more Grabs: each arm is its own slot (tiny things stack in one arm up to the handful, a small thing takes one arm, a medium thing both). Holding is a state, not a verb, and the sprite feels it. On screen, a thing is **in its arms**. Moving while holding is carrying, which isn't the Cursor's Hold or Lead. A sprite's Grab, Throw and Drop are verbs; the Cursor's Grab, Hold and Throw are separate entries under The Cursor. Planned (M3 design §9).
+A sprite keeping things in its arms after one or more Grabs or Gathers: each arm is its own slot (tiny things stack in one arm up to the handful of three, a small thing takes one arm, a medium thing both). Holding is a state, not a verb, and the sprite feels it. On screen, a thing is **in its arms**. Moving while holding is carrying, which isn't the Cursor's Hold or Lead. A sprite's Grab, Gather, Throw and Drop are verbs; the Cursor's Grab, Hold and Throw are separate entries under The Cursor. Planned (M3 design §9).
 _Avoid_: Carry (as a verb), inventory (that's the keeper's), inventory slot, grip (that's without lifting)
+
+**Heap** (M3, Slice 35):
+Tiny things sharing one tile, up to three: the one way a tile holds more than one object. Nothing else shares the tile with them, and a rolling ball crushes the whole heap. Planned (M3 design §9.4).
+_Avoid_: pile, stack (that's in an arm)
+
+**Gather** (M3, Slice 35):
+The verb that picks up a heap in one go, as much as one arm has room for, where a Grab takes the one thing the sprite is looking at. Which a sprite uses is its own leaning, learned and picked up by its young by watching. Planned (M3 design §9.4).
+_Avoid_: scoop, collect, harvest
 
 **Hand-over** (M3, Slice 43):
 A Drop aimed at another sprite: the thing goes into its free arm, or at its feet. Both feel it, the giver that it gave and the other that it was given something. It's how families share food. Planned (M3 design §17).
