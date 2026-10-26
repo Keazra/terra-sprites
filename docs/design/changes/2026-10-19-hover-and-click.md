@@ -1,6 +1,6 @@
 # What the pointer is over, and a click on a log line
 
-Whatever the pointer is over says what it is on the status line, and a click on a line of the event log selects its sprite. Fauxpaw settled it in the UI lessons round of 2026-10-19 (question 4), as Look 3 ([#304](https://github.com/Keazra/terra-sprites/issues/304)) of the Look slices ([#301](https://github.com/Keazra/terra-sprites/issues/301)). The tabs' clicks came in Look 1 ([#302](https://github.com/Keazra/terra-sprites/issues/302)).
+Whatever the pointer is over says what it is on the status line, and a click on a line of the event log selects its sprite. Fauxpaw settled it in the UI lessons round of 2026-10-19 (question 4), as Look 3 ([#304](https://github.com/Keazra/terra-sprites/issues/304)) of the Look slices ([#301](https://github.com/Keazra/terra-sprites/issues/301)). The tabs' clicks came in Look 1 ([#302](https://github.com/Keazra/terra-sprites/issues/302)); the rest was built in [#388](https://github.com/Keazra/terra-sprites/pull/388).
 
 ## M1 "A Sprite Lives"
 
