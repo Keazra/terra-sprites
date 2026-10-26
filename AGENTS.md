@@ -2,7 +2,7 @@
 
 ## Project
 
-Terra Sprites is an ASCII artificial-life game in Rust. The spec is the design docs in `docs/design/`: M1's (`m1-a-sprite-lives.md`) for the game as built, and M2's (`m2-generations.md`) for milestone 2, which builds on it; see `docs/agents/domain.md` for how to read them.
+Terra Sprites is an ASCII artificial-life game in Rust. The spec is the design docs in `docs/design/`: M1's (`m1-a-sprite-lives.md`) for the game as built, M2's (`m2-generations.md`) for milestone 2, which builds on it, and M3's (`m3-body-and-verbs.md`) for milestone 3; see `docs/agents/domain.md` for how to read them.
 
 Before pushing, run the checks CI runs: `scripts/check.sh`, or `.\scripts\check.ps1` in PowerShell. In a cloud session, run `rustup update stable` first, since the container's Rust can be older than CI's (`docs/agents/how-we-work.md`, "Cloud sessions"). The checks run, as CI's test job does (`.github/workflows/ci.yml` is the source of truth):
 

@@ -21,7 +21,7 @@ In `.review/`:
 - `docs/agents/review-checklist.md`: the slips earlier outside reviews kept finding. Check every row.
 - `docs/agents/how-we-work.md`: the owner's design principles, and the testing lessons under "The slice loop".
 - `CONTEXT.md`: the glossary. Code, tests, comments and docs use its terms, not the ones on its _Avoid_ lists.
-- The design the PR touches, by section: `docs/design/m1-a-sprite-lives.md` or `docs/design/m2-generations.md`, and the PR's file in `docs/design/changes/`, if it has one.
+- The design the PR touches, by section: `docs/design/m1-a-sprite-lives.md`, `docs/design/m2-generations.md` or `docs/design/m3-body-and-verbs.md`, and the PR's file in `docs/design/changes/`, if it has one.
 
 ## 3. Review
 
