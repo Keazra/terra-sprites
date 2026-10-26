@@ -25,14 +25,14 @@ CI holds the game to that: on every change, four kinds of computer run the same 
 
 ## Try it
 
-You need [Rust](https://rustup.rs) 1.97.1 or newer, and a terminal of at least 100×30 (on Windows, Windows Terminal). Then:
+You need a terminal of at least 100×30 (on Windows, Windows Terminal). Download the game for Windows, Mac or Linux from the [v0.2.0 release](https://github.com/Keazra/terra-sprites/releases/tag/v0.2.0), with no Rust needed: the zip's `README.txt` says how to run it. Or, with [Rust](https://rustup.rs) 1.97.1 or newer:
 
 ```bash
-cargo install --git https://github.com/Keazra/terra-sprites terra-tui
+cargo install --git https://github.com/Keazra/terra-sprites --tag v0.2.0 --locked terra-tui
 terra-sprites
 ```
 
-Run the same `cargo install` again to update, or `cargo uninstall terra-tui` to remove it (your saves stay until you delete them; the manual's [Uninstalling](docs/manual.md#uninstalling) says where). On the title screen, pick **New world**, and then:
+Leave out `--tag v0.2.0` to install the newest work in progress instead. To update, run it again with a newer release's tag, or `cargo uninstall terra-tui` to remove it (your saves stay until you delete them; the manual's [Uninstalling](docs/manual.md#uninstalling) says where). On the title screen, pick **New world**, and then:
 
 - Click a sprite (`☺`) to select it, and press `]` for its Brain tab: what it's paying attention to, and why.
 - `space` pauses and `+` speeds up. Lives are long at 1×, so try 4×.
@@ -48,7 +48,7 @@ The ground, the plants and toys, a sprite's body and instincts, and how the map 
 
 ## Where it's going
 
-Milestone 1, *A Sprite Lives*, is done, and milestone 2, *Generations*, is nearly there. Next come bodies (limbs that let sprites grab, push, pull and carry things), then the terrarium turns out to be a ship, then a wilder world, and one day words. The [roadmap](docs/manual.md#roadmap) has the list, and the [designs](docs/design/) have the details.
+Milestone 1, *A Sprite Lives*, and milestone 2, *Generations*, are done, and v0.2.0 is the second's release. Next come bodies (limbs that let sprites grab, push, pull and carry things), then the terrarium turns out to be a ship, then a wilder world, and one day words. The [roadmap](docs/manual.md#roadmap) has the list, and the [designs](docs/design/) have the details.
 
 Curious what goes on inside a sprite? [How a sprite lives](https://claude.ai/artifact/GyyEVVjN6TbKhPASDFwRmy) walks through it.
 
