@@ -236,7 +236,7 @@ A need that comes before a sprite's likes: hunger or thirst. The more it presses
 _Avoid_: primary need, survival need, blocker (it quiets, never blocks)
 
 **Sleepiness** (M3, Slice 39):
-A drive of its own, apart from tiredness: it builds the whole time a sprite is awake, whatever it does, and only sleep eases it. Sleep comes in a few long stretches, costs a fifth less energy than standing awake, and dulls the senses to what's close or loud. Tiredness from exertion stays, eased by short rests. Planned (M3 design §13).
+A drive of its own, apart from tiredness: it builds the whole time a sprite is awake, whatever it does, and only sleep eases it. Sleep comes in a few long stretches, costs a fifth less energy than standing awake, and dulls the senses, so a sleeping sprite notices only what's close or loud. Tiredness from exertion stays, eased by short rests. Planned (M3 design §13).
 _Avoid_: tiredness (that's from exertion), fatigue, rest (a rest is a breather)
 
 **Needs gene** (M2, #237):

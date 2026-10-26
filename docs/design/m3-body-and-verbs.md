@@ -4,7 +4,7 @@
 - **Date:** 2026-10-26
 - **History:** edited in place; each change is a file in [`changes/`](changes/)
 - **Builds on:** [M1 design](m1-a-sprite-lives.md), the rulebook for everything M2 and M3 don't change, and [M2 design](m2-generations.md), whose generations, families and harsher world this keeps
-- **Covers:** what milestone 3 contains, when it starts and how it reaches players, its slices and their order, content safety, what "M3 is done" means, the rules every new verb shares, and the settled rules of each piece: limbs (Slice 33), grief (34), hands (35), grab before eat (36), play as a feeling (37), grip, push and pull (38), real sleep (39), eggs in arms (40), pregnancy (41), dead bodies (42), sharing food (43), parents correcting their young (44), water play and thornbushes you can eat (45), one "take in" verb (46), the event log (47), the data checker (48), first steps (49), old worlds, and M3's acceptance (50)
+- **Covers:** what milestone 3 contains, when it starts and how it reaches players, its slices and their order, content safety, what "M3 is done" means, the rules every new verb shares, and the settled rules of each piece: limbs (Slice 33), grief (34), hands (35), grab before eat (36), play as a feeling (37), grip, push and pull (38), real sleep (39), eggs in arms (40), pregnancy (41), dead bodies (42), sharing food (43), parents correcting their young (44), water play and thornbushes you can eat (45), one "take in" verb (46), the event log (47), the data checker (48), first steps (49), Look 10's new layout for M3's screen, old worlds, and M3's acceptance (50)
 
 ---
 
@@ -28,13 +28,14 @@ M3 was planned on the map [Finishing M2 and planning M3](https://github.com/Keaz
 | 12 | **M3 starts once v0.2.0 is out and Looks 1–6 are in;** no M3 code merges before v0.2.0 | #232 round 1 Q5 | §2 |
 | 13 | **M3 is about the sprites; the ship builds on it.** Its checks are on its own things; M4's T5 is the first to try a panel | #231 Q5, Q13 | §0, M4 design |
 | 14 | **The slices' rounds run a slice or two ahead** of building, starting with Slices 33–35 | #233 round 1, Q1 | §2 |
-| 15 | **The three bars held over to [#332](https://github.com/Keazra/terra-sprites/issues/332)** are judged against `main` until a look halfway through M3 | #233 round 1, Q2 | §5.4 |
+| 15 | **What's held over to [#332](https://github.com/Keazra/terra-sprites/issues/332),** three bars and G4, is judged against `main` until a look halfway through M3 | #233 round 1, Q2; Slice 30b | §5.3, §5.4 |
 | 16 | **An old world stays as it was made** | #233 round 1, Q3 | §24 |
 | 17 | **Eggs that need warmth** ([#325](https://github.com/Keazra/terra-sprites/issues/325)) join pregnancy | #233 round 1, Q4 | §15 |
 | 18 | **A gentle world on the title screen** ([#326](https://github.com/Keazra/terra-sprites/issues/326)) is a question for First steps | #233 round 1, Q5 | §23 |
-| 19 | **The new look is the first patron beta,** and M3 reaches players in betas, v0.3.0 being the last | #233 round 1, Q6; [#344](https://github.com/Keazra/terra-sprites/issues/344) | §2 |
+| 19 | **M3 ships whole as v0.3.0,** after the new look's last v0.2.x release; the patron betas ([#344](https://github.com/Keazra/terra-sprites/issues/344)) wait until the owner says the game's foundation is solid | #233 round 1, Q6; #232 round 1 Q5 | §1.3, §2 |
+| 20 | **Look 10 lays M3's screen out again,** late in M3, after the event log and before First steps | #233, the owner's ask, 2026-10-26 | §3, §6.7 |
 
-Rows 14 to 19 are #233's round 1, written here as recommended while the owner reads it; the round is settled once the owner says so, and this table says so then.
+Rows 14 to 20 are #233's round 1, which the owner settled on 2026-10-26: rows 14 to 18 as recommended, row 19 in the owner's own answer, and row 20 the slice the owner asked for in it.
 
 ---
 
@@ -73,6 +74,7 @@ The owner's principles carry over unchanged (`docs/agents/how-we-work.md`). Four
 | Water play and thornbushes you can eat | 45 | [#64](https://github.com/Keazra/terra-sprites/issues/64), without juicy berries |
 | One "take in" verb | 46 | [#91](https://github.com/Keazra/terra-sprites/issues/91) |
 | An event log that says where | 47 | #268 |
+| M3's screen laid out again, with an action pop-up ([#312](https://github.com/Keazra/terra-sprites/issues/312)) | Look 10 | #233 |
 | A checker for modders' data | 48 | [#276](https://github.com/Keazra/terra-sprites/issues/276) |
 | First steps, with the gentle world's question ([#326](https://github.com/Keazra/terra-sprites/issues/326)) | 49 | [#317](https://github.com/Keazra/terra-sprites/issues/317) |
 | M3 acceptance, and v0.3.0 | 50 | opened with the others |
@@ -85,21 +87,22 @@ Each waits for something that comes later, as #232 round 1 Q3 settled:
 
 | Until | What waits |
 |---|---|
-| After M3 | Skills, practice making an act go better ([#48](https://github.com/Keazra/terra-sprites/issues/48)); ball games ([#45](https://github.com/Keazra/terra-sprites/issues/45)); choosing where to stand ([#246](https://github.com/Keazra/terra-sprites/issues/246)); rewiring chemistry genes ([#260](https://github.com/Keazra/terra-sprites/issues/260)); the young copying acts as such ([#277](https://github.com/Keazra/terra-sprites/issues/277)); learned combined ideas ([#71](https://github.com/Keazra/terra-sprites/issues/71)); hesitating, then committing ([#103](https://github.com/Keazra/terra-sprites/issues/103)); favourite things ([#65](https://github.com/Keazra/terra-sprites/issues/65)), with a parent learning its child's likes |
+| After M3 | Skills, practice making an act go better ([#48](https://github.com/Keazra/terra-sprites/issues/48)); ball games ([#45](https://github.com/Keazra/terra-sprites/issues/45)); choosing where to stand ([#246](https://github.com/Keazra/terra-sprites/issues/246)); rewiring chemistry genes ([#260](https://github.com/Keazra/terra-sprites/issues/260)); the young copying acts as such ([#277](https://github.com/Keazra/terra-sprites/issues/277)); learned combined ideas ([#71](https://github.com/Keazra/terra-sprites/issues/71)); hesitating, then committing ([#103](https://github.com/Keazra/terra-sprites/issues/103)) |
 | Between M3 and M4 | A mod file ([#73](https://github.com/Keazra/terra-sprites/issues/73)) |
 | M4 | Chasing the light ([#104](https://github.com/Keazra/terra-sprites/issues/104)); selecting any thing ([#90](https://github.com/Keazra/terra-sprites/issues/90)); area effects ([#61](https://github.com/Keazra/terra-sprites/issues/61)); a revealed map ([#134](https://github.com/Keazra/terra-sprites/issues/134)); the Cursor's powers ([#271](https://github.com/Keazra/terra-sprites/issues/271)) |
 | M5 | Weight and hard hits ([#96](https://github.com/Keazra/terra-sprites/issues/96), [#43](https://github.com/Keazra/terra-sprites/issues/43)); a stress hormone ([#261](https://github.com/Keazra/terra-sprites/issues/261)); stress damaging genes ([#195](https://github.com/Keazra/terra-sprites/issues/195)); what boredom does to the body ([#133](https://github.com/Keazra/terra-sprites/issues/133)); organs ([#31](https://github.com/Keazra/terra-sprites/issues/31)); losing a limb for good ([#235](https://github.com/Keazra/terra-sprites/issues/235)); Spriggans ([#55](https://github.com/Keazra/terra-sprites/issues/55)); how far fear makes a sprite run ([#53](https://github.com/Keazra/terra-sprites/issues/53)); a memory of danger ([#266](https://github.com/Keazra/terra-sprites/issues/266)) |
 | M6 | Language ([#68](https://github.com/Keazra/terra-sprites/issues/68)); family voices ([#278](https://github.com/Keazra/terra-sprites/issues/278)) |
 
+- **Favourite things** ([#65](https://github.com/Keazra/terra-sprites/issues/65)) stays open without a milestone. Slice 37 reports how varied sprites' favourite play is; tastes in the genes, and a parent learning its child's likes, wait.
 - **Nothing new in the meadow** (#227 Q4). Berries become tiny, and the new verbs act on what's there. New toys are Wild Terra's (M5), and panels come with the ship.
 - **Thrown and pushed things never hurt anyone,** as a rolling ball doesn't today (#227 Q7). The one exception is a push into something that hurts, such as thorns. Size stands in for weight.
 - **Juicy berries** wait (#232 round 1 Q1): thirst is what makes childhood hard since #225, so berries that quench it would undo the unattended band.
-- **The leftover halves** are filed as new issues by the slices that close their issues: juicy berries (#64, by Slice 45), a parent learning its child's likes (#67, by 44), pets and pricks meaning less each time (#72, by 38), and roughhousing as its own thing (#46's second half, by 37).
+- **The leftover halves** are filed as new issues by the slices that close their issues: juicy berries (#64, by Slice 45), a parent learning its child's likes (#67, by 44), and pets and pricks meaning less each time (#72, by 38). Roughhousing as its own thing (#46's second half) stays later, though bored sprites gripping and hitting each other is a start (#230).
 
 ### 1.3 Alongside M3
 
-- **Looks 7–9** (the population graph's zoom, Windows Terminal's extras, a title screen that says where you stand; [#308](https://github.com/Keazra/terra-sprites/issues/308)–[#310](https://github.com/Keazra/terra-sprites/issues/310)) run beside M3's first slices, since they touch nothing M3 changes. First steps (Slice 49) waits for Look 9.
-- **The patron betas** ([#344](https://github.com/Keazra/terra-sprites/issues/344)): from v0.2.0 on, the work happens in a private repository, `Keazra/terra-sprites-dev`, and each beta reaches this repository six weeks after patrons get it. M3's issues stay here, in public, and its pull requests name them in full (`Keazra/terra-sprites#233`).
+- **Looks 7–9** (the population graph's zoom, Windows Terminal's extras, a title screen that says where you stand; [#308](https://github.com/Keazra/terra-sprites/issues/308)–[#310](https://github.com/Keazra/terra-sprites/issues/310)) run beside M3's first slices, since they touch nothing M3 changes. First steps (Slice 49) waits for Look 9. **Look 10** is M3's own (§6.7).
+- **The patron betas** ([#344](https://github.com/Keazra/terra-sprites/issues/344)) wait until the owner says the game's foundation is solid, which isn't yet (#233 round 1 Q6). M3 is built here, in public, as M1 and M2 were.
 - **Upkeep** that isn't a slice goes on as before: the file split ([#286](https://github.com/Keazra/terra-sprites/issues/286)), the smaller-code findings ([#136](https://github.com/Keazra/terra-sprites/issues/136)), and the `afk` issues.
 
 ---
@@ -109,11 +112,10 @@ Each waits for something that comes later, as #232 round 1 Q3 settled:
 - **No M3 code merges before v0.2.0** (#232 round 1 Q5). Slice 30 measures M2's world on `main`, and v0.2.0 ships M2 alone.
 - **M3's first slice starts once v0.2.0 is out and Looks 1–6 are in,** since they change the panels, colours, help, clicking, small screens, motion and palettes M3's new screens are drawn with.
 - **The slices' rounds run ahead of building** (#233 round 1 Q1). The rounds for Slices 33, 34 and 35 run first, one at a time, so the three are ready the day M3 opens. After that, each slice's round runs while the slice before it is built, so it can use what that slice measured. A question about how something looks on screen waits until Look 1's new layout is in.
-- **M3 reaches players in betas** (#233 round 1 Q6, squaring #232's release plan with #344's betas):
-  - **The new look is the first beta.** Looks 1–6 become 0.3.0-beta.1 for patrons, free six weeks later. This replaces #232's "last v0.2.x release carries Looks 1–6".
-  - **M3's slices follow in later betas,** whenever something worth playing merges, as the owner picks. Every slice is complete and playable, so a beta can follow any of them.
-  - **v0.3.0 is M3's last beta,** made once Slice 50's play-through passes. Looks 7–9 ship in whichever beta comes after they merge.
-  - **A fix that can't wait** goes public at once as a patch beta, without the six weeks, as #344 has it.
+- **M3 reaches players as v0.3.0** (#232 round 1 Q5, round 2; #233 round 1 Q6):
+  - **The new look ships first,** free, as the last v0.2.x release, before M3's first slice.
+  - **M3 ships whole as v0.3.0,** once Slice 50's play-through passes, with Looks 7–10.
+  - **No betas in between.** The patron betas (#344) start only once the owner says the game's foundation is solid, and this section changes then.
 
 ---
 
@@ -140,13 +142,15 @@ Each slice is a GitHub issue in the "M3 — Body & verbs" milestone and its own 
 | 45 | Water play and thornbushes you can eat | 36, 37 | M | B16 |
 | 46 | One "take in" verb | 36, 45 | M | B17 |
 | 47 | An event log that says where | Look 3 | M | B18 |
+| Look 10 | M3's screen laid out again | 47, Looks 1–9 | **C** | its tests (§6.7) |
 | 48 | A checker for modders' data | 38 | m | B19 |
-| 49 | First steps | 38, Look 9 | M | B20 |
+| 49 | First steps | 38, Look 9, Look 10 | M | B20 |
 | 50 | M3 acceptance, and v0.3.0 | all | the play-through | B11, and every check again |
 
 - **Why this order** (#232): the body first, so every verb is built asking how usable each limb is; then hands, since eating, play, eggs and sharing all hold things; the critical slices one at a time, so only one proper playtest is ever waiting; and danger before help, since 96–100% of young in families grow up today, against M3's band of 60–90%.
-- **Side by side:** 33 with 34, 38 with 39, 41 with 43, 44 with 45, 46 with 48, and 47 beside any of them once Look 3 is in. The critical slices (36, 37, 39, 40, 41) go one at a time.
+- **Side by side:** 33 with 34, 38 with 39, 41 with 43, 44 with 45, 46 with 48, 47 beside any of them once Look 3 is in, and Look 10 beside 48. The critical slices (36, 37, 39, 40, 41 and Look 10) go one at a time.
 - **Slice 41 is critical** since eggs that need warmth join it: an egg left to go cold is a new way to die (#233 round 1 Q4). It was medium in #232.
+- **Look 10 comes late** (the owner, 2026-10-26), once everything M3 adds is on screen, so the layout is designed once with the whole picture, and First steps teaches the finished screen.
 - **Slice 46 waits for 45,** since both rewrite water's list of what each verb does to it.
 - **Every slice also keeps** M1's A9 (each new field documented with a working example, and the plain explanation Look 3 asks of every data entry), the speed rule (§5.5), and every check from the slices before it. From Slice 48 on, a slice that adds a new kind of data adds the checker's warnings for it.
 - **Each new verb's words come with its slice,** and each new field is documented with its slice.
@@ -228,7 +232,7 @@ From #231 Q1:
 | G1 | Left alone for 220 hours, at least 9 of 10 seeds last | **Holds,** run again on the owner's PC on M3's finished world |
 | G2 | The family tree | **Holds** (tests) |
 | G3 | The population graph | **Holds** (tests) |
-| G4 | The species changes over the generations | **Holds** as [#226](https://github.com/Keazra/terra-sprites/issues/226) leaves it, read from the same 220-hour run, with the race against the starter's genes as its second test (M2 design §19.6) |
+| G4 | The species changes over the generations | **Held over to #332** (§5.4). Otherwise as [#226](https://github.com/Keazra/terra-sprites/issues/226) leaves it, read from the same 220-hour run, with the race against the starter's genes as its second test (M2 design §19.6) |
 | G5 | Unattended newborns: 10–30% grow up. Young raised among sprites: 60–90%. Adults dying of hunger or thirst: under 1 in 20 of grown deaths | **Holds, the same three bands,** on M3's world, the adults' bar as §5.4 says |
 | G6 | Fast-forward | **Holds** (tests) |
 | G7 | A child is never a mating target | **Holds.** Its tests with random genomes cover every verb M3 adds (§4) |
@@ -236,13 +240,13 @@ From #231 Q1:
 
 **For information in M3's long run** (#225, noted on #233): left alone for 100 hours, 92% of seed 5's sprites had lost the gene that sends a parent looking for its young, and parents without it raised 1.27 times as many grown young, since nothing in M2 threatens the young. The long run reports whether the gene comes back once M3's dangers, and eggs that need warmth, give it a use.
 
-### 5.4 The three bars held over to #332
+### 5.4 What's held over to #332
 
-Three of M2's bars were held over to [Revisit harshness once more features are in](https://github.com/Keazra/terra-sprites/issues/332) by the owner's calls of 2026-10-20 and 2026-10-24 (M2 design §10.9, §19.6, §19.8): grown sprites dying of hunger or thirst (under 1 in 20 of grown deaths: 5.8% in the viability run since room nearby, mostly while a world fills), bites tried while too full (at most 1 in 10, missed in one seed of the long run), and partners in each other's sight (at least half the time: 44%). M3's checks say all three hold, so as written every slice would fail them before it had changed anything. Until #332 is settled (#233 round 1 Q2):
+Three of M2's bars and one of its checks were held over to [Revisit harshness once more features are in](https://github.com/Keazra/terra-sprites/issues/332) by the owner's calls of 2026-10-20, 2026-10-24 and 2026-10-26 (M2 design §10.9, §19.6, §19.8). The three bars are grown sprites dying of hunger or thirst (under 1 in 20 of grown deaths: 5.8% in the viability run since room nearby, mostly while a world fills), bites tried while too full (at most 1 in 10, missed in one seed of the long run), and partners in each other's sight (at least half the time: 44%). The check is G4, the species changing: Slice 30b's 220-hour run moved 1 of the starter's 148 gene numbers (how long a sprite takes to grow old, about 2.5 times the starter's), and the race was won in 2 seeds of 10, against the 8 it needed. M3's checks say all of these hold, so as written every slice would fail them before it had changed anything. Until #332 is settled (#233 round 1 Q2):
 
-- **Each slice does no worse than `main`** on these three, allowing a tenth for noise, as the thornbushes' move into the bushes did ([#77](https://github.com/Keazra/terra-sprites/issues/77)). A slice that does worse goes back to the owner with the numbers before it merges.
-- **A look halfway, once Slices 39 and 43 are in** (real sleep, and parents sharing food, which change how grown sprites rest and eat): the 220-hour run on the owner's PC, with #332's bars, is #332's revisit. If they still miss, the numbers go to the owner, and a fix goes into a slice before M3's acceptance.
-- **At M3's acceptance,** the three hold as G5 and Slice 32's bars ask, unless the owner has changed them by then.
+- **Each slice does no worse than `main`** on the three bars, allowing a tenth for noise, as the thornbushes' move into the bushes did ([#77](https://github.com/Keazra/terra-sprites/issues/77)). A slice that does worse goes back to the owner with the numbers before it merges.
+- **A look halfway, once Slices 39 and 43 are in** (real sleep, and parents sharing food, which change how grown sprites rest and eat): the 220-hour run on the owner's PC, with #332's bars, G4 and the race, is #332's revisit. G4 and the race are only measured on runs that long. If they still miss, the numbers go to the owner, and a fix goes into a slice before M3's acceptance.
+- **At M3's acceptance,** the three bars hold as G5 and Slice 32's bars ask, and G4 as M2 design §19.6 does, unless the owner has changed them by then.
 
 ### 5.5 Speed
 
@@ -254,7 +258,7 @@ From #231 Q4:
 
 ### 5.6 How much each piece is playtested
 
-From #231 Q12, Q18, Q19, as `docs/agents/how-we-work.md` has it: **critical**, the owner plays it before the slice merges, a proper session with a checklist written for it, its lines joining M3's play-through; **medium**, a short look, 10 to 15 minutes with 3 to 5 lines to check; **minor**, no playtest, tests, runs and snapshots being enough. A slice takes the highest rank of what's in it.
+From #231 Q12, Q18, Q19, as `docs/agents/how-we-work.md` has it: **critical**, the owner plays it before the slice merges, a proper session with a checklist written for it, the PR's "Try it on your PC" saying what to watch, its lines joining M3's play-through; **medium**, a short look, 10 to 15 minutes with 3 to 5 lines to check, before merging or alongside the next slice's playtest; **minor**, no playtest, tests, runs and snapshots being enough, and the PR says so. A slice takes the highest rank of what's in it.
 
 | Piece | Rank | Why |
 |---|---|---|
@@ -263,12 +267,13 @@ From #231 Q12, Q18, Q19, as `docs/agents/how-we-work.md` has it: **critical**, t
 | Real sleep | **Critical** | Long sleeps change much of what's on screen, and a sleeping young sprite is a new way to die |
 | Eggs in arms, breaking, grief | **Critical** | A new way to die and a new sadness, and only playing shows whether it's a moment or a slaughter |
 | Eggs that need warmth | **Critical** | A new way to die, for eggs left alone |
+| Look 10, M3's screen laid out again | **Critical** | It moves what every slice before it put on screen, and First steps teaches it |
 | Hands: holding by size, carrying, dropping, throwing | Medium | Seen all through the critical playtests anyway |
 | Hurt limbs | Medium | Limping and crawling must read clearly on the map and the Body tab |
 | Grip: push, pull, breaking free | Medium | New and visible, but its rules are exact and tests pin them down |
 | Pregnancy, dead bodies, sharing, correcting, water play, take in, the event log, first steps | Medium | A moment to see once; the runs count how often |
 | Curiosity, and teaching Push and Pull | Medium | Teaching is tried once |
-| Things saying what verbs do; the data checker; words for the new verbs; docs for the new data; speed | Minor | Tests prove it, and nothing new shows on screen that the critical playtests don't show anyway |
+| Things saying what verbs do; the data checker; words for the new verbs, and the Brain tab's list; docs for the new data; speed | Minor | Tests prove it, and nothing new shows on screen that the critical playtests don't show anyway |
 
 ---
 
@@ -318,6 +323,18 @@ From #230 Q7:
 - **A fruitless try** reads "Tried to eat the water, but nothing happened", not "…, but it was empty", which was written for a bush with no fruit (#91's wording fix, with M3's words for the new verbs).
 - **The exact words are each slice's,** with its verb.
 - **The Body tab is full** (about 23 lines in 21 rows at 100×30), so the little picture (§7.3) shows the limbs and what each arm holds without taking rows.
+
+### 6.7 Look 10: M3's screen, laid out again
+
+The owner asked for a UI redesign slice in M3 (#233, 2026-10-26), and chose to have it late. The new look (Looks 1–9, [#301](https://github.com/Keazra/terra-sprites/issues/301)) is laid out for M2's screen, and M3's slices each fit their own piece into it: hurt limbs and the little picture, what each arm holds, play, grip, sleep, pregnancy, grief, bodies and the event log. Look 10 lays it all out again, once, with the whole picture.
+
+- **When:** after the event log (Slice 47), with Looks 1–9 in, and before First steps (Slice 49), which teaches the screen, so it teaches the finished one. Slice 50's play-through then plays the screen M3 ships with.
+- **What it covers:** the inspector's tabs, since the Body tab is full before M3 starts and M3 adds the most to it; how holding, gripping, sleeping, pregnancy and grief show on the map, gathered from each slice's answers so they read as one set; and the help and hints for what M3 added.
+- **With it, the action pop-up** ([#312](https://github.com/Keazra/terra-sprites/issues/312)): one key opens a short menu of what the player can do with the selected sprite, each with its key, so the keys are learned in one place.
+- **Front end only,** in `terra-tui`, by the look's rules (#301): the game's text stays in CP437, and Windows Terminal is the terminal that matters.
+- **Rank: critical** (§5.6), so the owner plays it before it merges.
+
+**Left for its round:** what moves where, with mock-ups of each choice first; whether the inspector gains a tab; the pop-up's key, and how it sits beside Look 2's command palette; its check, at least UI tests that every screen size Look 4 steps down to shows each thing M3 added.
 
 ---
 
@@ -376,7 +393,7 @@ From #231 Q15, Q20 and Q21, which brought part of [#206](https://github.com/Keaz
 
 ### 8.4 Left for its round
 
-- Whether the tint is the senses' real reach (the perception flood, which walls shape) or a ring, and how it sits beside the remembered places and lineage colours on the map.
+- How the tint sits beside the remembered places and lineage colours on the map.
 - The key, and what the Body tab says of a sprite that's missing someone or has given up.
 - How strongly the starter genes grieve each kind of kin.
 
@@ -404,7 +421,7 @@ From #164, #227, #229 and #230.
 
 ### 9.2 Dropping and throwing
 
-- **Drop** puts what's in its arms on a free tile beside it; aimed at a sprite, it's a hand-over (§17).
+- **Drop** puts what's in its arms down at its feet; aimed at a sprite, it's a hand-over, into that sprite's free arm or at its feet (§17).
 - **Throw is aimed at what the sprite is looking at** (#230 Q12), so "throw the ball to Pip" is one choice. A sprite throws less far than the Cursor, and a thrown thing never hurts what it hits (§1.2).
 - **A berry that rots in a sprite's arm falls where the sprite stands,** and may sprout like any rotting berry: 1 in 10, where there's room (#229).
 - **Planting:** a carried berry dropped on grass can sprout, the same 1 in 10. Beds that always grow it are M4's.
@@ -438,7 +455,7 @@ From #229, settled 2026-10-15, with #164's rule that fruit on a bush and water a
 - **Why it matters, measured:** fallen berries are most of what sprites eat, 57–71% of meals in a world's first 50 hours on the owner's PC (`main` at a5fd7ad), rising to 78–85% where genes changed. Fallen berries that rot uneaten are also how new bushes grew before Slice 29's seedlings, so this touches how the bushes renew.
 - **Skills stay later.** The owner's end goal is skills, "basically memories but for the body, that decay very slowly", and "habit might be the better word for it than Skill". So what M3 builds is habits; practice making an act go better (fewer squishes) comes later, through §6.4.
 
-**Left for its round:** how strong each instinct is; whether the squish chance should differ by life stage; B3's information lines.
+**Left for its round:** how strong each instinct is; whether the squish chance should differ by life stage; any information lines beyond B3's.
 
 ---
 
@@ -451,6 +468,7 @@ From #230, settled 2026-10-17, with #262 and #160 joining from #232.
 - **Play is a feeling, not a verb:** boredom eased by something a sprite does. Nothing in the game's code knows what a toy is. Each thing's data says which acts on it are play, by sending the `played` feeling, so a modder makes a new toy with data alone.
 - **The built-in ball:** any act that sets it moving is play. A touch bats it a little way, a hit kicks it further, a throw tosses it, and pushing or pulling one it grips moves it a tile. Picking it up or putting it down isn't play, so sprites don't carry balls about for nothing.
 - **Everything else is as today.** Sprites are the only other playmates. A thornbush hurts whatever is done to it, touches and grips included. Touching anything else does nothing, so a bored sprite that touches a bush learns "touching bushes doesn't work". A berry a bored sprite picks up and tosses isn't a toy: it neither eases boredom nor disappoints, and a tossed berry that rots may sprout where it landed.
+- **One play feeling eases boredom the same, whatever the act.** A kick feeling better than a touch is ball games' "how hard to play" (#45).
 - **An egg is never a toy:** throwing one never counts as play, by its data (§14).
 
 ### 11.2 What a bored sprite does
@@ -479,12 +497,12 @@ The owner: "A bored Sprite will try anything, up to and including hitting, kicki
 - **No pang when hitting back** at a sprite that has just hurt it, or one it's afraid of. Sprites still stand up for themselves, and the lesson lands on picking fights.
 - **How strongly a sprite feels it is a gene,** so sprites differ, and evolution can change it. Spriggans ([#55](https://github.com/Keazra/terra-sprites/issues/55)) "will notably lack or have severely reduced empathy".
 - It also works on the deliberate mistake: crowded grown sprites that hit a neighbour now learn not to, by themselves as well as from the player.
-- **The slice watches** that the pang, which also makes the one it hurt seem a little bad to the sprite for a while, doesn't drive friends apart; and that sprites that feel little don't win too many fights.
+- **The slice watches** that the pang, which also makes the one it hurt seem a little bad to the sprite for a while, doesn't drive friends apart. Sprites that feel little will win more of the fights there are, as expected.
 
 ### 11.6 Company and boredom
 
-- **Touching another sprite is social play:** both feel it, they get to know each other, and it eases loneliness as today. It eases boredom about as much as today (a touch 0.15, a ball 0.5), a little less at most. The owner: "Playing with other Sprites shouldn't be incredibly nerfed, just not as fun as a toy."
-- **A ball that reaches another sprite** is social play for both: a ball a sprite kicked, threw or pushed that reaches another eases loneliness and lets them get to know each other, and eases boredom a little more on top of the kick's own play. The one it reaches feels less of it than the one that sent it (the owner: "Joy for both, but less for the one being hit"). It's the ball's data that says so, so a modder's toy can do the same. Playing with another sprite with a ball becomes the most fun there is, and the start of ball games ([#45](https://github.com/Keazra/terra-sprites/issues/45)).
+- **Touching another sprite is social play:** both feel it, they get to know each other, and it eases loneliness as today. It eases boredom about as much as today (a touch 0.15, a ball 0.5), a little less at most, and isn't cut until sprites go looking for balls. The owner: "Playing with other Sprites shouldn't be incredibly nerfed, just not as fun as a toy."
+- **A ball that reaches another sprite** is social play for both: a ball a sprite kicked, threw or pushed that reaches another eases loneliness and lets them get to know each other, and eases boredom a little more on top of the kick's own play. Both count it as having touched the other, as a crash counts as touching what a sprite crashes into, so each learns to like the other. The one it reaches feels less of it than the one that sent it (the owner: "Joy for both, but less for the one being hit"). It's the ball's data that says so, so a modder's toy can do the same, and an egg that reaches a sprite still just breaks. Playing with another sprite with a ball becomes the most fun there is, and the start of ball games ([#45](https://github.com/Keazra/terra-sprites/issues/45)).
 - **Kicks and pushes go straight on,** away from the side the sprite walked up to, as today; a kick reaches another sprite by luck. Choosing where to stand waits ([#246](https://github.com/Keazra/terra-sprites/issues/246)).
 - The slice reports the share of play that's with a ball (1% before M3). If it stays that low, more balls in the default world (a preset number, nothing new in the meadow) is the next thing to try.
 
@@ -494,7 +512,7 @@ The owner: "A bored Sprite will try anything, up to and including hitting, kicki
 
 ### 11.8 Left for its round
 
-- How far a touch, a kick and a throw send a ball, and how much each eases boredom.
+- How far a touch, a kick and a throw send a ball.
 - How strong each rung of the ladder is, how strong the leaning against hurting family is, how small the reward for play is, and how much company eases boredom.
 - How big the empathy pang is, the starter species' empathy gene, and how "just hurt me" and "afraid of" are read for hitting back.
 - How much less a ball's social play is for the one it reaches.
@@ -608,7 +626,7 @@ From #293 and #232's B13, with #325 joining in #233 round 1 Q4.
 
 ### 15.1 Pregnancy
 
-- **A mating that works starts a pregnancy, not an egg,** a pair's or one alone. She carries the egg inside her for a while, hungrier and slower, and the Body tab says so. Then she lays it beside her.
+- **A mating that works starts a pregnancy, not an egg.** She carries the egg inside her for a while, hungrier and slower, and the Body tab says so. Then she lays it beside her.
 - **She can't conceive again until she has laid.**
 - **If she dies pregnant, the egg dies with her,** with its own cause of death in the data, and kin who see it grieve both.
 - **Pregnancy changes nothing about who is drawn to whom** (§4).
@@ -628,6 +646,7 @@ From #293 and #232's B13, with #325 joining in #233 round 1 Q4.
 - Where pregnancy lives: the body (the engine) or the genes.
 - How long an egg can be left before it goes cold, whether it can be warmed again, and whether a carried egg counts as warm.
 - What happens to an egg the Cursor carries away from its parents.
+- Whether a sprite breeding alone carries its egg too.
 
 ---
 
@@ -663,7 +682,7 @@ From #227 Q5, Q12 and Q13, with #263 joining from #232. Slice 32 left gifting fo
 From #67's correcting half and #232's B15.
 
 - **A parent near its young steps in when the young tries something the parent has learned is bad,** like touching a thornbush or throwing an egg. The young stops, and learns from it as from the Cursor's Correct, as a lesson of its own, not one learned by watching (M2 design §19.7 keeps those apart).
-- **Correcting is a leaning in the genes, not a rule,** and **a sprite corrects only a try it judges bad itself,** by what it has learned of that thing and that verb. Any sprite fond of another may correct, but the starter species leans to its own young.
+- **Correcting is a leaning in the genes, not a rule,** and **a sprite corrects only a try it judges bad itself,** by what it has learned of that thing and that verb. #67's idea is that any sprite fond of another may correct; B15 asks that at least 3 in 4 corrections are by the young's own parent, so the starter species leans to its own young.
 - **A correction never injures.** The Cursor's Correct stings without injuring; how much a sprite's correction stings is the round's.
 - **Nothing about mating is ever taught by a correction** (§4).
 - It's the sprites' own version of the Cursor's Correct, and what the owner hoped for in #229: "they can start teaching each other good manners!"
@@ -706,7 +725,7 @@ From #268, whose round settled its shape on 2026-10-17, and #232's B18. Front en
 - **Each line says where it happened,** as X and Y, and the sector's name beside them once sectors exist (M4).
 - **A click on a line takes the view there** and the tile flashes; a line about a living sprite also selects it.
 - **Deaths record a place** (§8.2).
-- **The full log opens on `j`,** beside `k` (family tree) and `l` (sprite list). A click on the log's title could open it too.
+- **The full log opens on `j`,** beside `k` (family tree) and `l` (sprite list). A click on the log's border could open it too.
 - **Designed beside the fading alerts** ([#290](https://github.com/Keazra/terra-sprites/issues/290)): if events become alerts over the map that fade away (Look 5's motion), the full log is how to read what has faded.
 
 **Left for its round:** how many events the full log keeps (at least the last hour of play, B18), and whether it's saved with the world; filters in the full view; how places show (a column, or on hover).
@@ -743,9 +762,9 @@ From #317, and #232's B20, with #326's gentle world from #233 round 1 Q5.
 
 From #233 round 1 Q3, the question #230 and #231 left for this design.
 
-- **A world keeps the rules it was made with.** A save carries its own copy of the data pack, and loading always uses that copy, never the game's newest (M1 design §2.8). Each sprite carries its own genes. So a world made in M2, or in an earlier M3 beta, opens and plays as it was made: its eggs keep `throwable: false`, its berries their size, its sprites their M2 instincts.
+- **A world keeps the rules it was made with.** A save carries its own copy of the data pack, and loading always uses that copy, never the game's newest (M1 design §2.8). Each sprite carries its own genes. So a world made in M2, or partway through M3, opens and plays as it was made: its eggs keep `throwable: false`, its berries their size, its sprites their M2 instincts.
 - **Each new rule's data has a default that keeps an old world as it was,** as M2's did for M1's worlds (room nearby's numbers, M2 design §10.9).
-- **M3's new rules and instincts show in new worlds.** Each beta's notes say to start a new world to see what's new.
+- **M3's new rules and instincts show in new worlds.** v0.3.0's release notes say to start a new world to see what's new.
 - **Not done: moving only the rules.** Sprites from before M3 have no instinct to pick a berry up, so in M3's rules they'd eat fallen berries where they lie and squish about half of them; fallen berries being most of what they eat, such a world would likely go hungry.
 - What does carry over is §6.5's: lessons and habits about Play read as Touch, and from Slice 46, Eat and Drink as Take in.
 - M4 takes the same line for its ship (M4 design §11, T6).
@@ -760,7 +779,7 @@ From #231 Q1 and Q12, and #232.
 - **The runs:** the viability and unattended runs in the cloud; the lone-world run, the soak and the speed check on the owner's PC.
 - **A golden save from M3's end** joins M1's and M2's, so M4's A6 can open it.
 - **B11's play-through:** Story mode on the default world, the critical pieces' lines plus a few medium ones, and every first-steps world.
-- **v0.3.0,** M3's last beta, once the play-through passes (§2).
+- **v0.3.0,** once the play-through passes (§2).
 - **The issues it closes** are listed on its issue when it's opened.
 
 ---
