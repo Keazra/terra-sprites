@@ -366,15 +366,16 @@ fn golden_a_save_with_eggs_from_before_they_were_items_loads_them_as_items() {
 }
 
 /// The golden save from M2's end (#148, #226 Q5), as `write_the_m2_golden_save`
-/// wrote it with M2's last build: every later build must load it, as M3's
-/// A6 and M4's T6 ask. M1's golden save is from before sprites bred.
+/// wrote it: every later build must load it, as M3's A6 and M4's T6 ask.
+/// M1's golden save is from before sprites bred, and from before worlds had
+/// a mode, so this one is a Lab world.
 const GOLDEN_V1_M2: &[u8] = include_bytes!("golden/save-v1-m2.tspr");
 
 /// The tick the M2 golden save's world was left alone until.
 const M2_LEFT_ALONE: u64 = 20_000;
 
 /// The world in the M2 golden save: the default preset on a 48 by 32 map,
-/// with 20 first sprites and room for 30, from seed 1, left alone for
+/// with 20 first sprites and room for 30, a Lab world from seed 1, left alone for
 /// 20,000 ticks, about four and a half hours of play at 1×. Then a sprite is
 /// named, the Cursor picks up the egg there is, a second name waits for the
 /// next tick, and it's saved with the view where the game would keep it.
@@ -386,7 +387,7 @@ fn golden_m2_world() -> (World, Pos) {
     let config = WorldConfig::from_ron(&preset, &data)
         .expect("the default preset, changed, is valid")
         .sized(48, 32);
-    let mut world = World::new(config, data, 1);
+    let mut world = World::new_in(config, data, 1, Mode::Lab);
     run_for(&mut world, M2_LEFT_ALONE);
     let ids: Vec<EntityId> = world.sprites().map(|s| s.id()).collect();
     world.submit(Command::Rename {
@@ -410,7 +411,13 @@ fn golden_the_save_from_m2_s_end_still_loads_and_carries_on() {
     let mut world = World::load(GOLDEN_V1_M2).expect("the M2 golden save loads");
     assert_eq!(world.tick(), M2_LEFT_ALONE + 1);
     assert_eq!(world.seed(), 1);
-    assert_eq!(world.mode(), Mode::Story);
+    assert_eq!(world.mode(), Mode::Lab, "the mode, not the default");
+    assert_eq!(
+        world.most_sprites(),
+        30,
+        "the preset's limit, not the default"
+    );
+    assert_eq!((world.map().width(), world.map().height()), (48, 32));
     assert_eq!(world.view(), Some(at(24, 16)));
     world.check_invariants().expect("invariants hold");
     let stage = |stage: LifeStage| world.sprites().filter(|s| s.life_stage() == stage).count();
@@ -452,9 +459,11 @@ fn write_the_golden_save() {
     std::fs::write(path, golden_world().save()).expect("the golden save is written");
 }
 
-/// Writes the golden save from M2's end. It was run by hand once, with M2's
-/// last build (#148): `cargo test -p terra-sim --test save -- --ignored
-/// write_the_m2_golden_save`. Don't run it again: the file is M2's.
+/// Writes the golden save from M2's end, by hand: `cargo test -p terra-sim
+/// --test save -- --ignored write_the_m2_golden_save`. Slice 30b wrote it
+/// (#148), and v0.2.0's version PR writes it once more, so the build it
+/// names is the release's. After that, don't run it again: the file is
+/// M2's.
 #[test]
 #[ignore = "writes the M2 golden save; run by hand once, at M2's end"]
 #[allow(clippy::disallowed_methods)] // the sim has no filesystem; its tests may

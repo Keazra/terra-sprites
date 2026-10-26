@@ -189,7 +189,7 @@ A species that has become worse at living than the starter's genes in the same w
 _Avoid_: wear and decay for this (those are a sprite's), genetic decline, degeneration
 
 **The race** (M2, Slice 30b):
-G4's second test, which the long run runs every time: after each seed that lasted, that seed's fresh world runs as the viability run twice, once with the starter's sprites and once with sprites taking after the hatched sprites alive at the long run's end, on the same tiles at the same ages, so only the genes differ. A seed is won when the evolved side's young grow up more often; the race is won with at least 8 of the seeds raced. Lost, the species has fallen behind (M2 design §19.6).
+G4's second test, which the long run runs every time: after each seed whose world didn't die out, that seed's fresh world runs as the viability run twice, once with the starter's sprites and once with sprites taking after the hatched sprites alive at the long run's end, on the same tiles, with their ages and starting levels drawn as the starter's sprites' are, so only the genes differ. A seed is won when the evolved side's young grow up more often; the race is won with at least 8 of the seeds that lasted and were judged. Lost, the species has fallen behind (M2 design §19.6).
 _Avoid_: competition, tournament; lone newborns (that's the unattended run given the end's genes, a reading with no bar)
 
 **Careful copying** (M2, held in reserve):
