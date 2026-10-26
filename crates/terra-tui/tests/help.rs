@@ -8,9 +8,10 @@ use common::{
 };
 
 use ratatui::buffer::Buffer;
+use ratatui::layout::Position;
 use ratatui::style::Color;
 use terra_sim::World;
-use terra_tui::app::{Flow, Screen};
+use terra_tui::app::{App, Flow, Screen};
 use terra_tui::input::Action;
 use terra_tui::theme::Theme;
 
@@ -227,12 +228,60 @@ fn help_opens_at_the_page_for_where_the_player_is_and_goes_back_there() {
     assert_eq!(app.help_page().label(), "Inspector");
     let all = lines(&render(&app, &world)).join("\n");
     assert!(all.contains("THE POINTER"), "{all}");
+    assert!(all.contains("open the tab clicked"), "{all}");
     assert!(all.contains("BRAIN TAB"), "{all}");
     app.apply(Action::Back, &world);
     // Back on the map, the world's page again.
     app.apply(Action::Scroll { dx: 1, dy: 0 }, &world);
     app.apply(Action::Help, &world);
     assert_eq!(app.help_page().label(), "World");
+}
+
+#[test]
+fn the_top_bar_names_the_page_question_mark_would_open() {
+    let world = field();
+    let mut app = app_on(&world);
+    let ends = |app: &App, hint: &str| {
+        let bar = lines(&render(app, &world))[0].trim_end().to_string();
+        assert!(bar.ends_with(&format!("  {hint}")), "{bar}");
+    };
+    ends(&app, "? help (World)");
+    app.apply(Action::SpriteList, &world);
+    ends(&app, "? help (Sprite list)");
+    app.apply(Action::Back, &world);
+    app.apply(Action::NextTab, &world);
+    ends(&app, "? help (Inspector)");
+    // Open, `?` closes it, so it names no page.
+    app.apply(Action::Help, &world);
+    ends(&app, "? help");
+}
+
+#[test]
+fn a_click_on_a_page_s_name_opens_it_and_ends_a_search() {
+    let world = field();
+    let mut app = app_on(&world);
+    app.apply(Action::Help, &world);
+    let edge = lines(&render(&app, &world))[1].clone();
+    let column = |name: &str| {
+        let at = edge
+            .find(name)
+            .unwrap_or_else(|| panic!("{name} in {edge}"));
+        edge[..at].chars().count() as u16
+    };
+    let click = |app: &mut App, x: u16, y: u16| {
+        app.apply(Action::left_click(Position::new(x, y)), &world);
+    };
+    click(&mut app, column("Family tree") + 10, 1);
+    assert_eq!(app.help_page().label(), "Family tree");
+    type_in(&mut app, &world, "pause");
+    click(&mut app, column("Inspector") - 1, 1);
+    assert_eq!(app.help_page().label(), "Inspector", "the space before it");
+    assert_eq!(app.help_search(), None, "the search ended");
+    click(&mut app, column("Help"), 1);
+    assert_eq!(app.help_page().label(), "Inspector", "the help's own name");
+    click(&mut app, column("World"), 2);
+    assert_eq!(app.help_page().label(), "Inspector", "below the edge");
+    assert_eq!(app.screen(), Screen::Help);
 }
 
 #[test]

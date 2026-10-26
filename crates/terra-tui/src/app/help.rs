@@ -1,12 +1,13 @@
 //! The help screen's pages and its search, and the command palette (design
 //! §6.1, #303).
 
+use ratatui::layout::Position;
 use terra_sim::World;
 
 use super::{App, Draft, Flow, Screen, WHEEL_LINES, along, highlight_moved, typeable};
 use crate::controls::{self, PaletteRow};
 use crate::help::HelpPage;
-use crate::input::Action;
+use crate::input::{Action, Button};
 use crate::sprite_list;
 
 /// The most characters help's search or the palette takes.
@@ -50,20 +51,25 @@ impl App {
     /// those, the inspector's once the player last pointed at it or used
     /// its keys, and otherwise the world's.
     pub(super) fn open_help(&mut self) {
-        let page = match self.screen {
+        self.end_aim();
+        self.help = HelpView {
+            page: self.help_page_here(),
+            from: self.screen,
+            ..HelpView::default()
+        };
+        self.screen = Screen::Help;
+    }
+
+    /// The help's page for where the player is, which `?` opens and the top
+    /// bar names beside it (#303).
+    pub fn help_page_here(&self) -> HelpPage {
+        match self.screen {
             Screen::SpriteList => HelpPage::SpriteList,
             Screen::Population => HelpPage::Graph,
             Screen::FamilyTree => HelpPage::Tree,
             _ if self.on_inspector => HelpPage::Inspector,
             _ => HelpPage::World,
-        };
-        self.end_aim();
-        self.help = HelpView {
-            page,
-            from: self.screen,
-            ..HelpView::default()
-        };
-        self.screen = Screen::Help;
+        }
     }
 
     /// The help's page.
@@ -84,9 +90,10 @@ impl App {
     /// What an action does while the help screen is open (#303): `←` and
     /// `→`, or `Tab` and `Shift+Tab`, turn its pages, `↑` and `↓` or the
     /// wheel scroll one too long to fit, and typing searches it,
-    /// `Backspace` rubbing a letter out. `Esc` clears the search, then
-    /// closes the help, as `?` does at once, going back to what was open.
-    /// The mouse still points.
+    /// `Backspace` rubbing a letter out. A click on a page's name opens it,
+    /// ending a search. `Esc` clears the search, then closes the help, as
+    /// `?` does at once, going back to what was open. The mouse still
+    /// points.
     pub(super) fn apply_in_help(&mut self, action: Action, world: &World) -> Flow {
         let last = self.help_scroll_room(world);
         let help = &mut self.help;
@@ -123,10 +130,35 @@ impl App {
                 help.scroll = help.scroll.saturating_add_signed(lines).min(last);
                 self.point(at);
             }
+            Action::Click {
+                at,
+                button: Button::Left,
+                ..
+            } => {
+                if let Some(page) = self.help_page_at(at) {
+                    self.help = HelpView {
+                        page,
+                        from: self.help.from,
+                        ..HelpView::default()
+                    };
+                }
+                self.point(at);
+            }
             Action::Point(cell) => self.point(cell),
             _ => {}
         }
         Flow::Continue
+    }
+
+    /// The page whose name the help's top edge writes at `at`, if any
+    /// (#303).
+    fn help_page_at(&self, at: Position) -> Option<HelpPage> {
+        let area = self.overlay()?;
+        let column = at.x.checked_sub(area.x + crate::ui::HELP_TITLE_AT)?;
+        if at.y != area.y {
+            return None;
+        }
+        crate::help::page_at(usize::from(column))
     }
 
     /// How far the help can scroll down: as far as brings its last line to

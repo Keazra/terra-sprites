@@ -694,7 +694,7 @@ fn the_status_line_shows_a_sprite_under_the_cursor_by_its_id() {
 #[test]
 fn the_top_bar_ends_with_how_to_open_help() {
     // Design §6.1.
-    assert!(top_bar(&default_app()).ends_with("     ? help"));
+    assert!(top_bar(&default_app()).ends_with("     ? help (World)"));
 }
 
 #[test]

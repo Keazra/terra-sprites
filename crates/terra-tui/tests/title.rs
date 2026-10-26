@@ -892,6 +892,12 @@ fn help_opens_the_help_screen_which_searches_and_esc_closes_it() {
     assert!(text(&render(&title)).contains("search: egg_"));
     title.apply(Action::Back);
     assert!(text(&render(&title)).contains("type to search"));
+    // A click on a page's name opens it, where it's drawn here, on the
+    // screen's top row.
+    let at = find(&render(&title), "Family tree").expect("the page's name");
+    assert_eq!(at.y, 0);
+    title.apply(Action::left_click(Position::new(at.x + 2, at.y)));
+    assert!(text(&render(&title)).contains("FAMILY TREE"));
     title.apply(Action::Back);
     assert!(!text(&render(&title)).contains("EMOTES"));
 }

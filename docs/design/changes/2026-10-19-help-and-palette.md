@@ -14,3 +14,5 @@ The key hints, the help and a new command palette are built from one list of con
 | 6 | **`:` opens a command palette** near the top of the map view: typing finds any control that works in the world by the starts of the words of what it does, each with its key, and `Enter` does the one chosen. The pointer's controls are listed to teach their keys, which it can't press. | #303 | §6.1, §6.5 |
 | 7 | **The hints and help write keys in lower case,** `esc` and `tab`, as the hints did, and `+/-` for the speed keys. | #303 | §6.1 |
 | 8 | **A menu has hints of its own,** `↑↓ choose  enter pick  esc close`, where the world's showed, and `?` opens help over it. Every screen's hints drop whole from the end when short of room, as the world's do. | #303 | §6.1, §6.5 |
+| 9 | **The top bar names the help's page `?` would open,** `? help (Inspector)`, and a click on a page's name in help opens it, as Fauxpaw asked on the first playtest (2026-10-26). | #303 | §6.1 |
+| 10 | **The pointer's controls list a click on the inspector's tabs,** which opens one, from Look 1 (#302). | #303 | §6.1 |

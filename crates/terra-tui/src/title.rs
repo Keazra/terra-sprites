@@ -13,7 +13,7 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use terra_sim::{Mode, Pos, World};
 
-use crate::app::{self, App, Draft, highlight_moved, shown};
+use crate::app::{self, App, Areas, Draft, highlight_moved, shown};
 use crate::clock::Speed;
 use crate::controls::{self, Context};
 use crate::input::Action;
@@ -185,8 +185,7 @@ impl Title {
     /// saves and only the default preset until told of more.
     pub fn new(world: World, theme: Theme, seed: u64, screen: Size) -> Title {
         let map = world.map();
-        let areas = ui::areas(ui::MIN_SIZE);
-        let help = App::new(map, theme.clone(), world.seed(), areas);
+        let help = App::new(map, theme.clone(), world.seed(), help_areas(screen));
         Title {
             theme,
             shown_for: Duration::ZERO,
@@ -291,6 +290,7 @@ impl Title {
     /// it, or put a box over it (M2 design §8.1).
     pub fn resize(&mut self, size: Size) {
         self.size = size;
+        self.help.fit(help_areas(size));
         let (columns, rows) = clear_of_boxes(&self.world, size);
         let hidden = !columns.contains(&self.light.x) || !rows.contains(&self.light.y);
         // Under "Terminal too small" there's no Cursor drawn to hide.
@@ -940,6 +940,18 @@ fn draw_load(buf: &mut Buffer, title: &Title, choice: usize) {
             buf.set_string(ago_x, y, ago, Style::default().fg(Color::Gray));
         }
     }
+}
+
+/// Where the help is drawn on a terminal of `size`, over everything but
+/// the status line, so a click finds its pages' names where they're drawn.
+fn help_areas(size: Size) -> Areas {
+    let parts = ui::Parts {
+        top_bar: false,
+        inspector: false,
+        event_log: false,
+        status_line: true,
+    };
+    ui::areas_with(size, parts)
 }
 
 /// The help screen, as a world shows it, over everything but the status

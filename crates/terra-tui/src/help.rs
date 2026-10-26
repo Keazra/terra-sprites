@@ -32,6 +32,23 @@ listed_enum! {
     pub fn label(self) -> &'static str;
 }
 
+/// What the help's top edge says before its pages' names.
+pub(crate) const TITLE: &str = " Help ─";
+
+/// The page whose name the help's top edge writes at `column`, counting
+/// from where the title starts (#303).
+pub(crate) fn page_at(column: usize) -> Option<HelpPage> {
+    let mut start = TITLE.chars().count();
+    for page in HelpPage::ALL {
+        let end = start + page.label().chars().count() + 2;
+        if (start..end).contains(&column) {
+            return Some(page);
+        }
+        start = end;
+    }
+    None
+}
+
 impl HelpPage {
     /// The headings of the page's keys, a column of them at a time.
     fn columns(self) -> &'static [&'static [Heading]] {

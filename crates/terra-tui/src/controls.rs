@@ -540,6 +540,13 @@ pub const TAB_SCROLL: Control = control(
     &[Heading::Inspector],
     "page",
 );
+pub const TAB_CLICK: Control = control(
+    "click",
+    &[],
+    "open the tab clicked",
+    &[Heading::Pointer],
+    "body brain chem genome world",
+);
 pub const TAB_WHEEL: Control = control(
     "wheel",
     &[],
@@ -691,6 +698,7 @@ pub const CONTROLS: &[Control] = &[
     EXPORT_GENOME,
     TABS,
     TAB_SCROLL,
+    TAB_CLICK,
     TAB_WHEEL,
     MEMORY,
     MEMORY_ENTER,

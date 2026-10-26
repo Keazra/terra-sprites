@@ -1,4 +1,4 @@
- Terra Sprites │ tick 3 │ ► 1x │ seed 7 │ sprites 3 │ not saved                              ? help
+ Terra Sprites │ tick 3 │ ► 1x │ seed 7 │ sprites 3 │ not saved                  ? help (Inspector)
                              *       ∙                  Sprite #5     Body  Brain  Chem Genome World
            ··   ∙                     ·       *         ATTENTION
    ·           ∙                 ·            ·  ∙  ∙   ► berry                                 .72

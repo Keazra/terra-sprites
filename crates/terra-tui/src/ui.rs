@@ -682,6 +682,10 @@ fn render_menu(buf: &mut Buffer, screen: Rect, app: &App, world: &World) {
     }
 }
 
+/// How far into the help's top edge its title starts, past the corner and
+/// a line.
+pub(crate) const HELP_TITLE_AT: u16 = 2;
+
 /// Draws the help screen in `area`, over everything between the top bar
 /// and the status line (design §6.1): its pages named in its top edge, the
 /// open one in the theme's style for what's chosen, and in its bottom edge
@@ -696,7 +700,7 @@ pub(crate) fn draw_help(buf: &mut Buffer, area: Rect, app: &App, world: &World) 
         None => controls::CLOSE.corner(),
     };
     let inner = clear_box(buf, area, "", corner, look);
-    let mut title = vec![Span::raw(" Help ─")];
+    let mut title = vec![Span::raw(crate::help::TITLE)];
     for page in HelpPage::ALL {
         let label = format!(" {} ", page.label());
         if search.is_none() && page == app.help_page() {
@@ -706,7 +710,7 @@ pub(crate) fn draw_help(buf: &mut Buffer, area: Rect, app: &App, world: &World) 
         }
     }
     let room = area.width.saturating_sub(3);
-    buf.set_line(area.x + 2, area.y, &Line::from(title), room);
+    buf.set_line(area.x + HELP_TITLE_AT, area.y, &Line::from(title), room);
     let bottom = match search {
         Some(typed) => Line::raw(format!(" search: {typed}_ ")),
         None => Line::styled(" type to search ", look.muted),
@@ -1054,26 +1058,55 @@ fn top_bar_line(app: &App, world: &World, width: u16) -> Line<'static> {
         thousands(world.tick()),
         app.seed,
     );
-    let help_hint = controls::hints_of(&controls::HELP, app, world);
-    let help = hint_width(&help_hint) + 1;
-    let gap = usize::from(width).saturating_sub(text.chars().count() + help);
-    // At least a space between the two, so `? help` never runs into them.
+    // `? help`, naming the page `?` would open, `? help (Inspector)`, or
+    // without it if the bar's short of room (#303). At least a space comes
+    // between it and the rest, so it never runs into them.
+    let room = usize::from(width).saturating_sub(text.chars().count());
     let mut spans = vec![Span::raw(text)];
-    if gap > 0 {
-        spans.push(Span::raw(" ".repeat(gap)));
-        // Its key bold, as every hint's is (design §6.2), unless `?` would
-        // type rather than open help (#303); the rest stays in the bar's
-        // reverse video, where muting would hide it.
-        let key = app.theme.text().key;
-        for hint in help_hint {
-            let key = if hint.ready { key } else { Style::default() };
-            spans.extend([
-                Span::styled(hint.key, key),
-                Span::raw(format!(" {} ", hint.does)),
-            ]);
-        }
+    let help = help_hint(app, world);
+    let wide = |hint: &Vec<Span>| hint.iter().map(Span::width).sum::<usize>();
+    if let Some(hint) = [help.named, help.plain]
+        .into_iter()
+        .find(|hint| wide(hint) < room)
+    {
+        spans.push(Span::raw(" ".repeat(room - wide(&hint))));
+        spans.extend(hint);
     }
     Line::from(spans).style(Style::default().add_modifier(Modifier::REVERSED))
+}
+
+/// The top bar's `? help`, as it's drawn with the page `?` would open
+/// named after it, and without.
+struct HelpHint {
+    named: Vec<Span<'static>>,
+    plain: Vec<Span<'static>>,
+}
+
+/// The top bar's `? help` (#303): its key bold, as every hint's is (design
+/// §6.2), unless `?` would type rather than open help; the rest in the
+/// bar's reverse video, where muting would hide it. While help is open, `?`
+/// closes it, so no page is named.
+fn help_hint(app: &App, world: &World) -> HelpHint {
+    let key = app.theme.text().key;
+    let mut named = Vec::new();
+    let mut plain = Vec::new();
+    for hint in controls::hints_of(&controls::HELP, app, world) {
+        let key = if hint.ready { key } else { Style::default() };
+        let page = if hint.ready && app.screen() != Screen::Help {
+            format!(" ({})", app.help_page_here().label())
+        } else {
+            String::new()
+        };
+        named.extend([
+            Span::styled(hint.key, key),
+            Span::raw(format!(" {}{page} ", hint.does)),
+        ]);
+        plain.extend([
+            Span::styled(hint.key, key),
+            Span::raw(format!(" {} ", hint.does)),
+        ]);
+    }
+    HelpHint { named, plain }
 }
 
 /// How many columns `hints` take, two spaces between each: `Z select  X

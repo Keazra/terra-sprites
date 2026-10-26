@@ -1,4 +1,4 @@
- Terra Sprites │ tick 3,000 │ ► 1x │ seed 7 │ sprites 4 │ not saved                          ? help
+ Terra Sprites │ tick 3,000 │ ► 1x │ seed 7 │ sprites 4 │ not saved       ? help (Population graph)
 ┌─ Population ── ticks 0 to 3,000 ───────────────────────────────────────────────────── esc close ─┐
 │ 100% ┤##############################                                                             │
 │      │##############################                                                             │
