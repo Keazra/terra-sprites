@@ -1,13 +1,14 @@
 //! The map view (design §6.1, M2 design §11): where the viewport is and
 //! how it scrolls, which tile or what past the wall a screen cell shows,
-//! where the pointer points, and the view tracking the selected sprite.
+//! tiles one cell wide or two, where the pointer points, the view tracking
+//! the selected sprite, and the inspector beside it or over it.
 
 use std::time::Duration;
 
 use ratatui::layout::{Position, Rect};
 use terra_sim::{Pos, World};
 
-use super::{App, Areas, Origin, Selection};
+use super::{App, Areas, Origin, Screen, Selection};
 use crate::input::Action;
 use crate::space::Place;
 use crate::spots::Spot;
@@ -37,10 +38,47 @@ impl App {
     /// its view to, as in a frame drawn just after the terminal grew.
     pub(crate) fn place_from(&self, corner: Position, cell: Position) -> Place {
         Place::at(
-            self.viewport.x + i32::from(cell.x - corner.x),
+            self.viewport.x + i32::from((cell.x - corner.x) / self.tile_width()),
             self.viewport.y + i32::from(cell.y - corner.y),
             self.map_size,
         )
+    }
+
+    /// How many screen cells wide a tile is drawn: two while zoomed, so
+    /// tiles are square, and one otherwise (M2 design §11.7, #305).
+    pub fn tile_width(&self) -> u16 {
+        if self.zoom { 2 } else { 1 }
+    }
+
+    /// Whether tiles are drawn two cells wide (`o`, M2 design §11.7).
+    pub fn zoomed(&self) -> bool {
+        self.zoom
+    }
+
+    /// How many tiles the map view shows across, a tile cut in half at its
+    /// right edge included.
+    pub(super) fn view_columns(&self) -> u16 {
+        self.tile_area.width.div_ceil(self.tile_width())
+    }
+
+    /// `o`: tiles two cells wide, or back to one, keeping the tile at the
+    /// middle of the view where it is (M2 design §11.7, #305).
+    pub(super) fn toggle_zoom(&mut self) {
+        let middle = Origin {
+            x: self.viewport.x + i32::from(self.view_columns() / 2),
+            y: self.viewport.y,
+        };
+        self.zoom = !self.zoom;
+        self.viewport = Origin {
+            x: middle.x - i32::from(self.view_columns() / 2),
+            y: middle.y,
+        };
+        self.settle();
+        self.tell_player(if self.zoom {
+            "Tiles two cells wide, so they're square".into()
+        } else {
+            "Tiles one cell wide".into()
+        });
     }
 
     /// The tile drawn at screen cell `cell`, if the map view draws one there.
@@ -78,6 +116,11 @@ impl App {
         if area.is_empty() || !reach.contains(cell) {
             return None;
         }
+        // Over the inspector where it's drawn over the map, it points at
+        // nothing on the map (#305).
+        if self.covers_map(cell) {
+            return None;
+        }
         let pointed = Position::new(
             cell.x.saturating_sub(1).max(area.x),
             cell.y.saturating_sub(1).max(area.y),
@@ -85,7 +128,7 @@ impl App {
         if self.spot_at(pointed) == Some(Spot::PopUp) {
             return None;
         }
-        let (col, row) = (pointed.x - area.x, pointed.y - area.y);
+        let (col, row) = ((pointed.x - area.x) / self.tile_width(), pointed.y - area.y);
         Some((
             self.viewport.x + i32::from(col),
             self.viewport.y + i32::from(row),
@@ -97,24 +140,27 @@ impl App {
     pub(super) fn pointed_at_map(&self, action: &Action) -> bool {
         match *action {
             Action::Wheel { at, .. } => {
-                self.pointed_place(at).is_some() && !self.inspector.is_some_and(|i| i.contains(at))
+                self.pointed_place(at).is_some() && !self.on_the_inspector(at)
             }
             _ => false,
         }
     }
 
-    /// The screen cell where `tile` is drawn, if it is in view.
+    /// The screen cell where `tile` is drawn, its first while tiles are two
+    /// cells wide, if it is in view.
     pub fn cell_of(&self, tile: Pos) -> Option<Position> {
         let (area, origin) = (self.tile_area, self.viewport);
         let col = u16::try_from(i32::from(tile.x) - origin.x).ok()?;
         let row = u16::try_from(i32::from(tile.y) - origin.y).ok()?;
-        (col < area.width && row < area.height).then(|| Position::new(area.x + col, area.y + row))
+        let x = col.checked_mul(self.tile_width())?;
+        (x < area.width && row < area.height).then(|| Position::new(area.x + x, area.y + row))
     }
 
     /// Refits the app to where its panels are now drawn, as after a resize.
     pub fn fit(&mut self, areas: Areas) {
         self.tile_area = areas.tiles;
-        self.inspector = areas.inspector;
+        self.inspector_room = areas.inspector;
+        self.pops_over = areas.pops_over;
         self.event_log_area = areas.event_log;
         self.overlay = areas.overlay;
         self.settle();
@@ -124,6 +170,60 @@ impl App {
     /// has room for the game.
     pub fn overlay(&self) -> Option<Rect> {
         self.overlay
+    }
+
+    /// Where the inspector is drawn just now, if it is: filling the screen,
+    /// beside the map view, or over it while it's open there (design §6.1,
+    /// #305).
+    pub fn inspector_area(&self) -> Option<Rect> {
+        match self.screen {
+            Screen::Inspector => self.overlay,
+            _ if self.pops_over && !self.inspector_open => None,
+            _ => self.inspector_room,
+        }
+    }
+
+    /// Whether the inspector is open over the map view, where it pops
+    /// over it on a screen under 100 columns (#305).
+    pub fn inspector_open(&self) -> bool {
+        self.pops_over && self.inspector_open
+    }
+
+    /// Whether the inspector would pop over the map view, and is shut
+    /// (#305).
+    pub fn inspector_shut(&self) -> bool {
+        self.pops_over && !self.inspector_open && self.inspector_room.is_some()
+    }
+
+    /// Whether screen cell `cell` is on the inspector, as it's drawn just
+    /// now.
+    pub(super) fn on_the_inspector(&self, cell: Position) -> bool {
+        self.inspector_area()
+            .is_some_and(|area| area.contains(cell))
+    }
+
+    /// Whether the inspector is drawn over the map view at screen cell
+    /// `cell`, so the map beneath it can't be pointed at there (#305).
+    fn covers_map(&self, cell: Position) -> bool {
+        let over = self.screen == Screen::Inspector || self.inspector_open();
+        over && self.on_the_inspector(cell)
+    }
+
+    /// `i`: the inspector, bigger (design §6.1, #305). Where it pops over
+    /// the map view and is shut, it opens there; otherwise it fills the
+    /// screen, and `i` again, or `Esc`, takes it back. With no room for it
+    /// at all, it's refused.
+    pub(super) fn bigger_inspector(&mut self) {
+        if self.inspector_room.is_none() {
+            return self.refuse("No room for the inspector".into());
+        }
+        self.on_inspector = true;
+        if self.pops_over && !self.inspector_open {
+            self.inspector_open = true;
+        } else {
+            self.end_aim();
+            self.screen = Screen::Inspector;
+        }
     }
 
     /// `T`: the view follows the selected sprite, or stops (design v21
@@ -165,10 +265,9 @@ impl App {
     /// Scrolls the viewport so that `tile` is at its centre, as far as the
     /// margin past the wall allows (M2 design §11.1).
     pub(super) fn centre_on(&mut self, tile: Pos) {
-        let area = self.tile_area;
         self.viewport = Origin {
-            x: i32::from(tile.x) - i32::from(area.width / 2),
-            y: i32::from(tile.y) - i32::from(area.height / 2),
+            x: i32::from(tile.x) - i32::from(self.view_columns() / 2),
+            y: i32::from(tile.y) - i32::from(self.tile_area.height / 2),
         };
         self.settle();
     }
@@ -186,7 +285,7 @@ impl App {
     fn settle(&mut self) {
         let (map, area) = (self.map_size, self.tile_area);
         self.viewport = Origin {
-            x: clamp_origin(self.viewport.x, area.width, map.width),
+            x: clamp_origin(self.viewport.x, self.view_columns(), map.width),
             y: clamp_origin(self.viewport.y, area.height, map.height),
         };
         if let Some(cell) = self.pointer {

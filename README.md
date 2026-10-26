@@ -25,7 +25,7 @@ CI holds the game to that: on every change, four kinds of computer run the same 
 
 ## Try it
 
-You need a terminal of at least 100×30 (on Windows, Windows Terminal). Download the game for Windows, Mac (Apple silicon) or Linux from the [v0.2.0 release](https://github.com/Keazra/terra-sprites/releases/tag/v0.2.0), with no Rust needed: the zip's `README.txt` says how to run it. Or, with [Rust](https://rustup.rs) 1.97.1 or newer:
+It's best in a terminal of 100×30 or more (on Windows, Windows Terminal), and plays on a smaller one too. Download the game for Windows, Mac (Apple silicon) or Linux from the [v0.2.0 release](https://github.com/Keazra/terra-sprites/releases/tag/v0.2.0), with no Rust needed: the zip's `README.txt` says how to run it. Or, with [Rust](https://rustup.rs) 1.97.1 or newer:
 
 ```bash
 cargo install --git https://github.com/Keazra/terra-sprites --tag v0.2.0 --locked terra-tui

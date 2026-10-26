@@ -8,7 +8,6 @@ use terra_sim::{DataPack, EntityId, Event, EventKind, Pos, ScriptedAction, World
 use terra_tui::app::App;
 use terra_tui::input::Action;
 use terra_tui::theme::Theme;
-use terra_tui::ui;
 
 use super::{
     LONE, WorldBuilder, at, inspector_rows, pack, pack_changing, render_on, run, sized_app,
@@ -18,25 +17,28 @@ pub fn generated_world() -> World {
     World::new(WorldConfig::builtin(&pack()), pack(), 7)
 }
 
-/// A UI for `world` sized for a `width`×`height` screen. The game draws
-/// nothing smaller than 100×30 (design §6.1), so a smaller screen is a
-/// corner of one that size: see `render`.
+/// A UI for `world` sized for a `width`×`height` screen. A smaller screen
+/// than 100×30 is a corner of one that size, with every panel: see
+/// `render`.
 pub fn app_for(world: &World, theme: Theme, width: u16, height: u16) -> App {
     sized_app(world, theme, at_least_min(width, height))
 }
 
-/// A screen of at least the smallest size the game draws on.
+/// The smallest screen with room for every panel beside the map view
+/// (design §6.1): the size the game drew on, at least, before smaller
+/// screens stepped down (#305).
+pub const EVERY_PANEL: Size = Size::new(100, 30);
+
+/// A screen of at least the smallest size with every panel.
 pub fn at_least_min(width: u16, height: u16) -> Size {
-    Size::new(
-        width.max(ui::MIN_SIZE.width),
-        height.max(ui::MIN_SIZE.height),
-    )
+    Size::new(width.max(EVERY_PANEL.width), height.max(EVERY_PANEL.height))
 }
 
-/// One frame on a `width`×`height` screen. Smaller than 100×30, which the
-/// game doesn't draw on (design §6.1), it's the top-left `width`×`height`
-/// of a frame that size, with its status line as the last row: so the tests
-/// of small maps read as they did before the minimum.
+/// One frame on a `width`×`height` screen. Smaller than 100×30, where the
+/// panels step down (design §6.1), it's the top-left `width`×`height` of a
+/// frame that size, with its status line as the last row: so the tests of
+/// small maps read as they did before the minimum. A test of the steps
+/// down draws on a screen its own size, with `render_on`.
 pub fn render(app: &App, world: &World, width: u16, height: u16) -> Buffer {
     let full = at_least_min(width, height);
     let drawn = render_on(app, world, full);

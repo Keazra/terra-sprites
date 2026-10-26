@@ -717,6 +717,10 @@ _Avoid_: headless mode, turbo, skip ahead
 The panel that shows the map.
 _Avoid_: map (for the panel)
 
+**Square tiles**:
+Each tile drawn two cells wide, as `o` switches, so the world looks its true shape, since a terminal's cell is about twice as tall as it's wide (M2 design §11.7, #305). The code calls the switch `zoom`.
+_Avoid_: wide tiles, double width
+
 **Viewport**:
 The part of the map currently shown in the map view. It can go a quarter of the map view past the wall, where the glass and space show; a map small enough to fit with its glass sits in the middle of it, with space all round (Slice 31, #180).
 _Avoid_: camera
@@ -766,7 +770,7 @@ The two corners of the Cursor, top right and bottom left, that report on it: in 
 _Avoid_: indicators, lights, flash (on its own)
 
 **Inspector**:
-The side panel of tabs about the selected sprite (Body, Brain, Chem, Genome) or the world (World). With an egg selected, the sprite tabs show its card: when it hatches and its parents.
+The side panel of tabs about the selected sprite (Body, Brain, Chem, Genome) or the world (World). With an egg selected, the sprite tabs show its card: when it hatches and its parents. On a screen under 100 columns it pops over the map view's right side while it's open, and `i` fills the screen with it, its lines in columns (#305).
 _Avoid_: sidebar, details
 
 **Observed list**:

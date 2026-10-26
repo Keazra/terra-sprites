@@ -10,12 +10,12 @@
 │ b          sprite colours       middle     follow a sprite      k          family tree           │
 │ m          event filter         wheel      change mode          r          name it               │
 │ v          exact detail         C again    the Place menu       g          save its genome       │
-│ ?          this help            hold E     aim, let go to send  INSPECTOR                        │
-│ :          find a command       FILES                           [ ]        switch tabs           │
-│ esc        let go, back, quit?  F5 F9      quicksave / load     PgUp PgDn  scroll a tab          │
-│ Ctrl+C     quit at once         Ctrl+S     save as...           DEBUG                            │
-│                                 Ctrl+O     load a save          F3         how it's running      │
-│                                 Ctrl+T     pick a theme                                          │
+│ o          square tiles         hold E     aim, let go to send  INSPECTOR                        │
+│ ?          this help            FILES                           [ ]        switch tabs           │
+│ :          find a command       F5 F9      quicksave / load     PgUp PgDn  scroll a tab          │
+│ esc        let go, back, quit?  Ctrl+S     save as...           i          open, or full screen  │
+│ Ctrl+C     quit at once         Ctrl+O     load a save          DEBUG                            │
+│                                 Ctrl+T     pick a theme         F3         how it's running      │
 │                                 Ctrl+R     take over a replay                                    │
 │                                                                                                  │
 │ COLOURS: a sprite's strongest drive, once it's above half                                        │

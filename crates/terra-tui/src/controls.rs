@@ -113,6 +113,11 @@ impl Heading {
 pub enum Context {
     /// The map and the panels, with nothing open over them.
     World,
+    /// The map, on a screen where the inspector pops over it, while it's
+    /// shut (#305).
+    InspectorShut,
+    /// The inspector, filling the screen (#305).
+    Inspector,
     /// Aiming a throw (design v25 §6.5).
     Throwing,
     /// Aiming a shove.
@@ -275,6 +280,14 @@ pub const DETAIL: Control = control(
     "exact detail",
     &[Heading::View],
     "numbers",
+);
+// M2 design §11.7, #305.
+pub const ZOOM: Control = control(
+    "o",
+    &[presses("o", "square tiles", Action::Zoom)],
+    "square tiles",
+    &[Heading::View],
+    "zoom two cells wide bigger",
 );
 pub const HELP: Control = control(
     "?",
@@ -533,6 +546,15 @@ pub const TABS: Control = control(
     &[Heading::Inspector],
     "body brain chem genome world",
 );
+// #305.
+pub const INSPECTOR: Control = control(
+    "i",
+    &[presses("i", "inspector bigger", Action::Inspector)],
+    "open, or full screen",
+    &[Heading::Inspector],
+    "show pop-over whole screen expand",
+)
+.saying(Says::Word("inspector"));
 pub const TAB_SCROLL: Control = control(
     "PgUp PgDn",
     &[
@@ -683,6 +705,7 @@ pub const CONTROLS: &[Control] = &[
     COLOURS,
     EVENT_FILTER,
     DETAIL,
+    ZOOM,
     HELP,
     PALETTE,
     BACK,
@@ -713,6 +736,7 @@ pub const CONTROLS: &[Control] = &[
     EXPORT_GENOME,
     TABS,
     TAB_SCROLL,
+    INSPECTOR,
     TAB_CLICK,
     TAB_WHEEL,
     MEMORY,
@@ -736,6 +760,8 @@ pub const CONTROLS: &[Control] = &[
 pub fn hints(context: Context) -> &'static [Control] {
     match context {
         Context::World => &[MODES, SCROLL, PAUSE, STEP, SPEED, BACK],
+        Context::InspectorShut => &[MODES, INSPECTOR, SCROLL, PAUSE, STEP, SPEED, BACK],
+        Context::Inspector => &[TABS, TAB_SCROLL, PAUSE, SPEED, CLOSE],
         Context::Throwing => &[THROW, CANCEL],
         Context::Shoving => &[SHOVE, CANCEL],
         Context::Placing => &[PLACE, PUT_AWAY],
@@ -770,11 +796,13 @@ pub fn context(app: &App, world: &World) -> Context {
         Screen::Naming => Context::Naming,
         Screen::SaveNaming => Context::SaveNaming,
         Screen::QuitPrompt => Context::Quitting,
+        Screen::Inspector => Context::Inspector,
         _ if app.aiming() => match app.grip(world) {
             Some(Grip::Leads(_)) => Context::Shoving,
             _ => Context::Throwing,
         },
         _ if app.placing().is_some() && app.mode() == CursorMode::Grab => Context::Placing,
+        _ if app.inspector_shut() => Context::InspectorShut,
         _ => Context::World,
     }
 }

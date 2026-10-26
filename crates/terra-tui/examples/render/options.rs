@@ -623,7 +623,7 @@ mod tests {
         };
         refused("title", "-o <file>");
         refused("title -o title.png", ".gif, .mp4 or .svg");
-        refused("world --size 54x48 -o a.gif", "--map-view");
+        refused("world --size 19x48 -o a.gif", "--map-view");
         refused(
             "title --map-view -o a.gif",
             "--map-view is for a world's clip",

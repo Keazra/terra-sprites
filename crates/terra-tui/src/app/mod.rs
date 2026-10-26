@@ -95,6 +95,9 @@ pub enum Screen {
     FamilyTree,
     /// The command palette is open (#303).
     Palette,
+    /// The inspector fills the screen, between the top bar and the status
+    /// line (`i`, design §6.1, #305).
+    Inspector,
 }
 
 listed_enum! {
@@ -338,8 +341,11 @@ pub struct Areas {
     /// what's past its wall.
     pub tiles: Rect,
     /// The inspector, its title row included, if the screen has room for
-    /// it.
+    /// it: where it's drawn while it's shown.
     pub inspector: Option<Rect>,
+    /// Whether the inspector pops over the map view's right side, shown
+    /// only while it's open, rather than beside it (design §6.1, #305).
+    pub pops_over: bool,
     /// The event log, its title row included, if the screen has room for
     /// it.
     pub event_log: Option<Rect>,
@@ -430,8 +436,17 @@ pub struct App {
     /// its wall.
     tile_area: Rect,
     /// The inspector, its title row included, if the screen has room for
-    /// it.
-    inspector: Option<Rect>,
+    /// it: where it's drawn while it's shown.
+    inspector_room: Option<Rect>,
+    /// Whether the inspector pops over the map view's right side rather
+    /// than sitting beside it, on a screen under 100 columns (#305).
+    pops_over: bool,
+    /// Whether the inspector is open over the map, where it pops over it
+    /// (`i`, #305).
+    inspector_open: bool,
+    /// Whether each tile is drawn two cells wide, so tiles are square
+    /// (`o`, M2 design §11.7, #305). Not part of the world.
+    zoom: bool,
     /// The screen cell under the mouse pointer, while it's over the map
     /// view.
     pointer: Option<Position>,
@@ -748,7 +763,10 @@ impl App {
             viewport: Origin { x: 0, y: 0 },
             map_size: Size::new(map.width(), map.height()),
             tile_area: areas.tiles,
-            inspector: areas.inspector,
+            inspector_room: areas.inspector,
+            pops_over: areas.pops_over,
+            inspector_open: false,
+            zoom: false,
             pointer: None,
             pointer_past_wall: false,
             drift: Duration::ZERO,
@@ -936,7 +954,15 @@ impl App {
             Screen::SpriteList => return self.apply_in_list(action, world),
             Screen::Population => return self.apply_in_graph(action, world),
             Screen::FamilyTree => return self.apply_in_tree(action, world),
-            Screen::Normal | Screen::QuitPrompt => {}
+            // Filling the screen, the inspector takes the inspector's keys,
+            // time's and the pointer's, and `i` or `Esc` takes it back
+            // (#305).
+            Screen::Inspector if matches!(action, Action::Inspector | Action::Back) => {
+                self.screen = Screen::Normal;
+                return Flow::Continue;
+            }
+            Screen::Inspector if !works_full_screen(&action) => return Flow::Continue,
+            Screen::Normal | Screen::QuitPrompt | Screen::Inspector => {}
         }
         if self.screen == Screen::QuitPrompt {
             match action {
@@ -1061,13 +1087,15 @@ impl App {
             // the cursor modes (design v22 §6.5).
             Action::Wheel { at, notches } => {
                 self.point(at);
-                if self.inspector.is_some_and(|area| area.contains(at)) {
+                if self.on_the_inspector(at) {
                     self.scroll_tab(notches * WHEEL_LINES, world);
                 } else if self.pointed_place(at).is_some() {
                     self.mode = self.mode.along(notches);
                 }
             }
             Action::ToggleDetail => self.detail = !self.detail,
+            Action::Inspector => self.bigger_inspector(),
+            Action::Zoom => self.toggle_zoom(),
             Action::Track => self.toggle_tracking(world),
             Action::CycleEventFilter => self.next_filter(),
             Action::Help => self.open_help(),
@@ -1101,6 +1129,8 @@ impl App {
             // first, in any mode (design v33 §6.5); then returns to Select;
             // from Select it asks to quit (design v21 §6.5).
             Action::Back if self.aim.is_some() => self.end_aim(),
+            // Then it closes the inspector open over the map (#305).
+            Action::Back if self.pops_over && self.inspector_open => self.inspector_open = false,
             Action::Back if self.placing.is_some() => self.placing = None,
             Action::Back if self.grip(world).is_some() => self.let_go(world),
             Action::Back if self.mode != CursorMode::Select => self.mode = CursorMode::Select,
@@ -1154,7 +1184,7 @@ impl App {
     fn note_focus(&mut self, action: &Action) {
         match *action {
             Action::Point(at) | Action::Click { at, .. } | Action::Wheel { at, .. } => {
-                if self.inspector.is_some_and(|area| area.contains(at)) {
+                if self.on_the_inspector(at) {
                     self.on_inspector = true;
                 } else if self.tile_area.contains(at) {
                     self.on_inspector = false;
@@ -1204,6 +1234,35 @@ pub(crate) fn spoken_duration(time: Duration) -> String {
         (h, 0) => format!("{h}h"),
         (h, m) => format!("{h}h {m}m"),
     }
+}
+
+/// Whether `action` works while the inspector fills the screen (#305): its
+/// tabs, scrolling and memory headings, the pointer over it, time, choosing
+/// a sprite, the detail view and help. The rest are the map's, which is
+/// hidden.
+fn works_full_screen(action: &Action) -> bool {
+    matches!(
+        action,
+        Action::TogglePause
+            | Action::StepOnce
+            | Action::Faster { .. }
+            | Action::Slower { .. }
+            | Action::Point(_)
+            | Action::Click {
+                button: Button::Left,
+                ..
+            }
+            | Action::Release { .. }
+            | Action::Wheel { .. }
+            | Action::Enter
+            | Action::NextTab
+            | Action::PreviousTab
+            | Action::ScrollTab { .. }
+            | Action::SelectNext
+            | Action::SelectPrevious
+            | Action::ToggleDetail
+            | Action::Help
+    )
 }
 
 /// Whether `action` would change the world, or lead to changing it, which a

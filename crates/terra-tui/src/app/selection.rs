@@ -53,10 +53,10 @@ impl App {
         self.tab_scroll = 0;
     }
 
-    /// The rows a tab has in the inspector: a page.
+    /// The lines a tab shows at once in the inspector: a page.
     pub(super) fn inspector_rows(&self) -> usize {
-        self.inspector
-            .map_or(0, |area| usize::from(inspector::tab_area(area).height))
+        self.inspector_area()
+            .map_or(0, |area| inspector::Pages::of(area).lines())
     }
 
     /// Scrolls the open tab by `lines` from where it's shown, down being

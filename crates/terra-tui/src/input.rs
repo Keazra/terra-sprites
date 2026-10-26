@@ -85,6 +85,12 @@ pub enum Action {
     Confirm,
     /// Switch the detail view on or off (`v`).
     ToggleDetail,
+    /// The inspector, bigger: open over the map where it pops over it, or
+    /// else filling the screen, and back (`i`, design §6.1, #305).
+    Inspector,
+    /// Tiles two cells wide, so they're square, or back to one (`o`, M2
+    /// design §11.7, #305).
+    Zoom,
     /// Switch to the next colour mode for sprites (`b`, design §6.3).
     CycleColours,
     /// Have the view follow the selected sprite, or stop (`T`, design v21
@@ -431,6 +437,8 @@ impl Keys {
             KeyCode::Char('f') => (!held).then_some(Action::Follow { at: None }),
             // A held `v` would flicker the detail view on and off.
             KeyCode::Char('v') => (!held).then_some(Action::ToggleDetail),
+            KeyCode::Char('i') => (!held).then_some(Action::Inspector),
+            KeyCode::Char('o') => (!held).then_some(Action::Zoom),
             // Likewise a held `h`, whether sprites see the Cursor.
             KeyCode::Char('h') => (!held).then_some(Action::ToggleVisible),
             KeyCode::Char('r') => (!held).then_some(Action::Rename),

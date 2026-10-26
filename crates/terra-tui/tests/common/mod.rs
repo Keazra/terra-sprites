@@ -226,6 +226,7 @@ pub fn map_only(tiles: Rect) -> Areas {
     Areas {
         tiles,
         inspector: None,
+        pops_over: false,
         event_log: None,
         overlay: None,
     }
@@ -252,7 +253,8 @@ pub fn map_app(world: &World, tiles: Rect) -> App {
     App::new(world.map(), Theme::cp437(), world.seed(), map_only(tiles))
 }
 
-/// The smallest screen the game draws on (design §6.1).
+/// The smallest screen with every panel beside the map view (design
+/// §6.1).
 pub const SCREEN: Size = Size::new(100, 30);
 
 /// An app on `world` in the default theme, on a 100×30 screen.

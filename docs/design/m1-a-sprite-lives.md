@@ -1210,8 +1210,13 @@ The species is dropped into a world it doesn't know and has to learn about it. I
 
 ### 6.1 Layout
 
-- The minimum terminal size is **100×30**; 140×40 is recommended.
-- A smaller terminal shows only "Terminal too small" and "needs 100x30, this is 80x24", in the middle, and the game carries on as it was set: shrinking the window doesn't pause it, and `Esc` still asks to quit, with the question under the message (v30). At 100×30 and up, every panel always shows.
+- **At 100×30 and up, every panel shows**; 140×40 is recommended. A smaller terminal steps down, a part at a time, rather than giving up (#305):
+  - **Under 100 columns, the inspector pops over the map view's right side,** and the map view takes the whole width. It's shut at first, and the status line's hints add `i inspector` after the mode keys while there's room. `i` opens it, drawn as it is beside the map, over what's beneath; `Esc` closes it once there's no aim to cancel (§6.5). While it's open the pointer over it is on it, not on the map: a click or the wheel there reaches the inspector, and the map beneath can't be pointed at.
+  - **Under 30 rows, the event log goes,** as it did.
+  - **With fewer than 8 rows for the inspector between the bars, the map view is drawn alone** with the top bar and the status line, and `i` is refused: "No room for the inspector".
+  - **The top bar, short of room for `? help`,** drops the seed, then the game's name, when it was saved and how many sprites there are, so the time and the help's key stay. **The help** puts its columns of keys one under another where they don't fit side by side, so none is cut.
+  - **The smallest screen is 20×5,** where the map view has 3 rows. A smaller one shows only "Terminal too small" and "needs 20x5, this is 18x4", in the middle, on two lines where one is too wide, and the game carries on as it was set: shrinking the window doesn't pause it, and `Esc` still asks to quit, with the question under the message (v30). The title screen needs 60×20, its boxes' room (M2 design §8.2).
+- **`i` fills the screen with the inspector** (#305), between the top bar and the status line; where it pops over the map and is shut, `i` opens it there first. Its tab's lines are in as many columns of 45 as fit side by side, two columns apart, read down each and on to the next: two at 100×30, three at 140×40, which suits the long Brain and Genome tabs. `PgUp` and `PgDn` turn a page of all its columns. Its title row, tabs and memory headings work as beside the map, with the pointer over it, the wheel, `Tab` and `Shift+Tab`, `v`, `?` and the time keys; the map's keys do nothing, since the map is hidden. The status line's hints read `[ ] switch tabs  PgUp PgDn scroll a tab  space pause  +/- speed  esc close`. `i` again, or `Esc`, takes it back.
 - All text uses only CP437 characters (§6.2).
 - **The panels have no boxes** (#302). The map view has no frame and runs to the screen's edges, the glass and space showing where the world ends (M2 design §11.2). In a theme with shades (§6.2), such as the default, the inspector and the event log sit on a background a shade lighter than the terminal's black, and their title rows, the inspector's tabs and the log's "Events" with its filters, a shade lighter again, with no lines at all. In a theme without, such as ASCII, one line instead: `│` down the inspector's left, and a `─` rule over the log with its title and filters in it, the two meeting at `┴`, as drawn below. At 100×30 the map view shows 54×24 tiles, the inspector 23 rows of 45 columns under its title row, and the event log its title row and three events. Pop-ups keep their boxes, since they sit over the map: menus, the overlays (help, the sprite list, the population graph and the family tree) and the debug overlay. Pictures of a tab's lines in these designs drawn between `│` edges were drawn before #302: the edges only show where the text sits.
 
@@ -1436,12 +1441,12 @@ The species is dropped into a world it doesn't know and has to learn about it. I
     │ b          sprite colours       middle     follow a sprite      k          family tree           │
     │ m          event filter         wheel      change mode          r          name it               │
     │ v          exact detail         C again    the Place menu       g          save its genome       │
-    │ ?          this help            hold E     aim, let go to send  INSPECTOR                        │
-    │ :          find a command       FILES                           [ ]        switch tabs           │
-    │ esc        let go, back, quit?  F5 F9      quicksave / load     PgUp PgDn  scroll a tab          │
-    │ Ctrl+C     quit at once         Ctrl+S     save as...           DEBUG                            │
-    │                                 Ctrl+O     load a save          F3         how it's running      │
-    │                                 Ctrl+T     pick a theme                                          │
+    │ o          square tiles         hold E     aim, let go to send  INSPECTOR                        │
+    │ ?          this help            FILES                           [ ]        switch tabs           │
+    │ :          find a command       F5 F9      quicksave / load     PgUp PgDn  scroll a tab          │
+    │ esc        let go, back, quit?  Ctrl+S     save as...           i          open, or full screen  │
+    │ Ctrl+C     quit at once         Ctrl+O     load a save          DEBUG                            │
+    │                                 Ctrl+T     pick a theme         F3         how it's running      │
     │                                 Ctrl+R     take over a replay                                    │
     │                                                                                                  │
     │ COLOURS: a sprite's strongest drive, once it's above half                                        │
@@ -1684,7 +1689,7 @@ N ═ M
   - A flash under way carries on through a change of mode, in the new mode's colour.
 - **Nothing to act on:** a click in Train or Grab mode, a right click in Select mode, or `F`, with nothing to act on sends no command and flashes `?` at once. The status line says so (§6.1): "No sprite here to pet".
 - **Switching modes keeps each mode's state.** What the Cursor holds or leads, or a Place item not yet put down, waits in reserve while other modes are in use, and a led sprite keeps following the Cursor (v23); the selection and Follow stay in every mode. While the Cursor holds or leads something, the status line shows it in every mode (`leading: Mira #12`, `holding: berry`), because a led sprite can't eat or drink (§2.4) and a held berry can expire.
-- **`Esc`** (v33) does the first of these that applies, a step a press: closes an open menu or overlay; cancels an aim; lets go of what the Cursor has hold of, in any mode (a Place menu item waiting on it is put away first, then a led sprite is let go, or a held item put down on the Cursor's tile, as a click there would, and refused with the usual reason where it can't go); returns to Select, keeping Follow; and from Select asks to quit (§6.6). So leading a sprite in Grab mode, `Esc` lets go, then returns to Select, then asks. A right click no longer returns to Select (v21).
+- **`Esc`** (v33) does the first of these that applies, a step a press: closes an open menu or overlay, or the inspector filling the screen; cancels an aim; closes the inspector open over the map (§6.1, #305); lets go of what the Cursor has hold of, in any mode (a Place menu item waiting on it is put away first, then a led sprite is let go, or a held item put down on the Cursor's tile, as a click there would, and refused with the usual reason where it can't go); returns to Select, keeping Follow; and from Select asks to quit (§6.6). So leading a sprite in Grab mode, `Esc` lets go, then returns to Select, then asks. A right click no longer returns to Select (v21).
 - **Pausing queues actions.** Commands are stamped for the next tick (§2.5), so clicks made while paused apply, in click order, when time next moves (`space` or `.`). Grab mode's marks follow the queue: after a queued `TakeHold` or `PickUp`, `Y` shows `↓` and `N` the thing being grabbed; after a queued `Throw` or `Shove` (v25), they show the Cursor empty. The map follows it too (#203): an item a queued `PickUp` takes is gone from its tile, and one a queued `PutDown` or `Throw` lets go of shows on the tile it's put down on. So do the status line's word on the Cursor's tile, the leash and aim line's dots, which run over the ground as the map shows it, and the next click, which acts on an item where the map shows it. If the sim rejects it, `?` flashes and the marks and the map return to the world's real state.
 
 **Other keys:**
@@ -1705,6 +1710,8 @@ N ═ M
 | `p` | Open or close the population graph (M2 design §14) |
 | `k` | Open or close the family tree of the selected sprite or egg (M2 design §17) |
 | `v` | Switch the detail view on or off: the exact action line (§6.1) |
+| `i` | The inspector, bigger: open it over the map where it pops over it, or else fill the screen with it, and back (§6.1, #305) |
+| `o` | Square tiles: each tile two cells wide, or back to one (M2 design §11.7, #305) |
 | `F3` | Show or hide the debug overlay: how the game is running (§6.1, #311) |
 | `F5` / `F9` | Quicksave / quickload (§6.7, v32) |
 | `Ctrl+S` / `Ctrl+O` | Save by name / load a save from a list (§6.7, v32) |
@@ -1712,7 +1719,7 @@ N ═ M
 | `Ctrl+R` | In a replay, take it over: play on from where it has reached (§2.7, v36) |
 | `?` | Open or close help, at the page for where the player is; typing in it searches it (§6.1, #303) |
 | `:` | Open the command palette: find any key by what it does, and do it (§6.1, #303) |
-| `Esc` | Close a menu or overlay; cancel an aim; let go of what the Cursor has hold of; back to Select; from Select, ask to quit (v33) |
+| `Esc` | Close a menu, an overlay or the full-screen inspector; cancel an aim; close the inspector over the map (#305); let go of what the Cursor has hold of; back to Select; from Select, ask to quit (v33) |
 | `Ctrl+C` | Quit at once |
 
 - A rejected command shows its reason on the status line, for about 3 seconds in the key hints' place (§6.1, v22), and in the event log.
