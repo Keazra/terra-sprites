@@ -193,7 +193,7 @@ G4's second test, which the long run runs every time: after each seed whose worl
 _Avoid_: competition, tournament; lone newborns (that's the unattended run given the end's genes, a reading with no bar)
 
 **Careful copying** (M2, held in reserve):
-Copying the needs genes so that they're lost or changed a tenth as often as other genes, as *Creatures*' gene flags do. It's built only if a world in the long run fails a bar (or the race is lost overall) while more than half its living lack a needs gene.
+Copying the needs genes so that they're lost or changed a tenth as often as other genes, as *Creatures*' gene flags do. It's built only if a world in the long run fails a bar while more than half its living lack a needs gene. A bar held over to a later revisit, the race among them, doesn't count.
 _Avoid_: protected genes, mutation bias (it changes how often, never which way)
 
 **Flagged gene**:
