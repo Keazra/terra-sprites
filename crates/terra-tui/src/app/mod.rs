@@ -34,6 +34,7 @@ use crate::theme::{Emote, Theme};
 mod aim;
 mod cursor;
 mod events;
+mod help;
 mod list;
 mod menus;
 mod naming;
@@ -46,6 +47,7 @@ mod tree;
 mod view;
 
 pub(crate) use cursor::{ItemLook, ShownItems, item_look};
+pub(crate) use help::finds;
 
 /// Whether the game carries on after an action.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -87,6 +89,8 @@ pub enum Screen {
     Population,
     /// The family tree is open (M2 design §17.2).
     FamilyTree,
+    /// The command palette is open (#303).
+    Palette,
 }
 
 listed_enum! {
@@ -142,13 +146,13 @@ listed_enum! {
     /// Every filter, in the order `m` goes through them.
     pub const ALL;
 
-    /// Its name on the event log's border.
+    /// Its name on the event log's title row.
     pub fn label(self) -> &'static str;
 }
 
 impl EventFilter {
-    /// The event log's border's label: every filter, the one in use in
-    /// brackets, as the inspector's title shows its tabs.
+    /// The filters on the event log's title row: every filter, the one in
+    /// use in brackets.
     pub fn labels(self) -> String {
         let labels: Vec<String> = EventFilter::ALL
             .iter()
@@ -326,12 +330,14 @@ pub(crate) fn highlight_moved(index: usize, by: i32, count: usize) -> usize {
 /// Where on screen the panels the app works with are drawn.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Areas {
-    /// The screen cells inside the map view's border, where it draws the
-    /// map's tiles and what's past its wall.
+    /// The map view's screen cells, where it draws the map's tiles and
+    /// what's past its wall.
     pub tiles: Rect,
-    /// The inspector, border included, if the screen has room for it.
+    /// The inspector, its title row included, if the screen has room for
+    /// it.
     pub inspector: Option<Rect>,
-    /// The event log, border included, if the screen has room for it.
+    /// The event log, its title row included, if the screen has room for
+    /// it.
     pub event_log: Option<Rect>,
     /// Where the help screen and the sprite list are drawn: between the top
     /// bar and the status line, if the screen has room for the game.
@@ -416,10 +422,11 @@ pub struct App {
     viewport: Origin,
     /// The map's size, in tiles.
     map_size: Size,
-    /// The screen cells inside the map view's border, where it draws the
-    /// map and what's past its wall.
+    /// The map view's screen cells, where it draws the map and what's past
+    /// its wall.
     tile_area: Rect,
-    /// The inspector, border included, if the screen has room for it.
+    /// The inspector, its title row included, if the screen has room for
+    /// it.
     inspector: Option<Rect>,
     /// The screen cell under the mouse pointer, while it's over the map
     /// view.
@@ -521,7 +528,8 @@ pub struct App {
     /// Whether the view follows the selected sprite (`T`, design v21
     /// §6.1).
     tracking: bool,
-    /// The event log, border included, if the screen has room for it.
+    /// The event log, its title row included, if the screen has room for
+    /// it.
     event_log_area: Option<Rect>,
     /// Where the help screen and the sprite list are drawn.
     overlay: Option<Rect>,
@@ -573,6 +581,14 @@ pub struct App {
     taken_over: bool,
     /// The debug overlay (`F3`, design §6.1, #311).
     debug: DebugOverlay,
+    /// The help screen's page and search (#303), while it's open or as it
+    /// was last.
+    help: help::HelpView,
+    /// The command palette, while it's open (#303).
+    palette: Option<help::Palette>,
+    /// Whether the player last pointed at the inspector or used its keys,
+    /// rather than the map's, so help opens at the inspector's page (#303).
+    on_inspector: bool,
 }
 
 /// A replay as the screen follows it (design §2.7).
@@ -621,7 +637,7 @@ struct Naming {
 /// there so far, and whether the player has typed it, rather than it being
 /// the one offered, which the first letter typed replaces. The title
 /// screen's seed is typed so too (M2 design §8.3).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub(crate) struct Draft {
     text: String,
     typed: bool,
@@ -783,6 +799,9 @@ impl App {
             replay: None,
             taken_over: false,
             debug: DebugOverlay::default(),
+            help: help::HelpView::default(),
+            palette: None,
+            on_inspector: false,
         };
         app.centre_on(cursor);
         app
@@ -890,7 +909,8 @@ impl App {
             Screen::Naming => return self.apply_naming(action, world),
             Screen::SaveNaming => return self.apply_save_naming(action, world),
             Screen::LoadPrompt => return self.apply_load_prompt(action),
-            Screen::Help => return self.apply_in_help(action),
+            Screen::Help => return self.apply_in_help(action, world),
+            Screen::Palette => return self.apply_in_palette(action, world),
             Screen::SpriteList => return self.apply_in_list(action, world),
             Screen::Population => return self.apply_in_graph(action, world),
             Screen::FamilyTree => return self.apply_in_tree(action, world),
@@ -920,6 +940,7 @@ impl App {
                 }
             }
         }
+        self.note_focus(&action);
         if self.replay.is_some() && changes_the_world(&action, self.pointed_at_map(&action)) {
             self.refuse(REPLAY_REFUSAL.into());
             return Flow::Continue;
@@ -946,6 +967,16 @@ impl App {
             } if self.filter_label().is_some_and(|label| label.contains(at)) => {
                 self.next_filter();
             }
+            // A click on an inspector tab opens it (design §6.1).
+            Action::Click {
+                at,
+                button: Button::Left,
+                ..
+            } if self.tab_at(at).is_some() => {
+                if let Some(tab) = self.tab_at(at) {
+                    self.open(tab);
+                }
+            }
             Action::Click {
                 at,
                 button,
@@ -953,8 +984,9 @@ impl App {
             } => {
                 self.point(at);
                 // A click on a memory heading toggles it (design v40 §6.1).
-                // The inspector sits outside the map view's reach, so the
-                // same click is never also a tile.
+                // The map view's reach takes in the inspector's left column
+                // (#302), but the open tab starts a column in, so the same
+                // click is never also a tile.
                 if button == Button::Left {
                     self.toggle_lesson(at, world);
                 }
@@ -1032,10 +1064,8 @@ impl App {
             Action::ToggleDetail => self.detail = !self.detail,
             Action::Track => self.toggle_tracking(world),
             Action::CycleEventFilter => self.next_filter(),
-            Action::Help => {
-                self.end_aim();
-                self.screen = Screen::Help;
-            }
+            Action::Help => self.open_help(),
+            Action::Palette => self.open_palette(),
             Action::SpriteList => {
                 self.end_aim();
                 self.open_list(world);
@@ -1110,15 +1140,28 @@ impl App {
         }
     }
 
-    /// What an action does while the help screen is open: `?` or `Esc`
-    /// closes it, and the mouse still points.
-    fn apply_in_help(&mut self, action: Action) -> Flow {
-        match action {
-            Action::Help | Action::Back => self.screen = Screen::Normal,
-            Action::Point(cell) => self.point(cell),
+    /// Notes whether `action` was the player's at the inspector or at the
+    /// map, so help opens at the page for the one they were at (#303): the
+    /// pointer over either, or the inspector's keys or the map's.
+    fn note_focus(&mut self, action: &Action) {
+        match *action {
+            Action::Point(at) | Action::Click { at, .. } | Action::Wheel { at, .. } => {
+                if self.inspector.is_some_and(|area| area.contains(at)) {
+                    self.on_inspector = true;
+                } else if self.tile_area.contains(at) {
+                    self.on_inspector = false;
+                }
+            }
+            Action::NextTab | Action::PreviousTab | Action::ScrollTab { .. } => {
+                self.on_inspector = true;
+            }
+            Action::Scroll { .. }
+            | Action::Mode(_)
+            | Action::Press { .. }
+            | Action::Follow { .. }
+            | Action::Track => self.on_inspector = false,
             _ => {}
         }
-        Flow::Continue
     }
 
     /// What the keys for time do, whatever's open: pause, step, faster and
@@ -1160,7 +1203,7 @@ pub(crate) fn spoken_duration(time: Duration) -> String {
 /// only points and selects), the wheel over the map view, which changes mode,
 /// naming a sprite, showing the Cursor to sprites, and loading a save.
 /// Saving, and exporting a genome, only read it.
-fn changes_the_world(action: &Action, wheel_on_map: bool) -> bool {
+pub(crate) fn changes_the_world(action: &Action, wheel_on_map: bool) -> bool {
     match action {
         Action::Mode(mode) => *mode != CursorMode::Select,
         Action::Wheel { .. } => wheel_on_map,

@@ -2,7 +2,7 @@
 //! `inspector_tabs.rs` and `event_log.rs` share (#136): screens of any
 //! size, the worlds and sprites they show, and the inspector's lines.
 
-use ratatui::buffer::Buffer;
+use ratatui::buffer::{Buffer, Cell};
 use ratatui::layout::{Position, Rect, Size};
 use terra_sim::{DataPack, EntityId, Event, EventKind, Pos, ScriptedAction, World, WorldConfig};
 use terra_tui::app::App;
@@ -53,6 +53,22 @@ pub fn render(app: &App, world: &World, width: u16, height: u16) -> Buffer {
     corner
 }
 
+/// The cells of `hint`, such as `. step`, where it first shows on the
+/// status line, the bottom row of `screen`.
+pub fn hint_cells<'a>(screen: &'a Buffer, hint: &str) -> Vec<&'a Cell> {
+    let y = screen.area.height - 1;
+    let line: String = (0..screen.area.width)
+        .map(|x| screen[(x, y)].symbol())
+        .collect();
+    let at = line
+        .find(hint)
+        .unwrap_or_else(|| panic!("no {hint:?} in {line:?}"));
+    let x = line[..at].chars().count() as u16;
+    (0..hint.chars().count() as u16)
+        .map(|i| &screen[(x + i, y)])
+        .collect()
+}
+
 /// The screen cell the pointer is on to point at `world`'s map tile (x, y)
 /// on a 100×30 screen, not scrolled, as `cell` places the tile.
 pub fn pointer_on(world: &World, x: u16, y: u16) -> Position {
@@ -91,8 +107,18 @@ pub fn inside(row: &str) -> &str {
     row.trim_start_matches('│').trim_end_matches('│').trim()
 }
 
-/// The inspector's rows on a 100×30 screen: its title, then the text inside
-/// its border, trimmed.
+/// The event log's three lines on a screen of `rows`, as from `lines`:
+/// the rows between its title row and the status line, trimmed (design
+/// §6.1).
+pub fn log_rows(rows: &[String]) -> Vec<String> {
+    rows[rows.len() - 4..rows.len() - 1]
+        .iter()
+        .map(|row| row.trim().to_string())
+        .collect()
+}
+
+/// The inspector's rows on a 100×30 screen: its title row, then the open
+/// tab's lines, trimmed.
 pub fn inspector(app: &App, world: &World) -> (String, Vec<String>) {
     inspector_on(app, world, 30)
 }

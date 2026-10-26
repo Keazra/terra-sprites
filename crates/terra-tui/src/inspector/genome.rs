@@ -1,7 +1,7 @@
 //! The Genome tab (design §6.1): what's new in a sprite with parents (M2
 //! design §12), then its genes, grouped under headings, as plain lines.
 
-use ratatui::style::{Color, Style};
+use ratatui::style::Style;
 use ratatui::text::Line;
 use terra_sim::{
     CopyChangeView, EmitterMode, Expression, GeneView, LifeStage, SpriteView, Switch, Whom,
@@ -69,6 +69,8 @@ pub(super) fn genome_tab(sprite: &SpriteView, app: &App) -> Vec<Line<'static>> {
         .zip(sprite.gene_health().iter().copied())
         .map(|(((gene, how), switch), health)| (gene, how, switch, health))
         .collect();
+    let look = app.theme.text();
+    let plain = Style::default();
     let mut lines = whats_new(sprite, app);
     for group in GeneGroup::ALL {
         let members: Vec<&(GeneView, Expression, Switch, f32)> = genes
@@ -78,7 +80,7 @@ pub(super) fn genome_tab(sprite: &SpriteView, app: &App) -> Vec<Line<'static>> {
         if members.is_empty() {
             continue;
         }
-        lines.push(Line::from(format!(" {}", group.heading())));
+        lines.push(Line::styled(format!(" {}", group.heading()), look.heading));
         let (together, apart): (Vec<_>, Vec<_>) =
             members.into_iter().partition(|(gene, how, ..)| {
                 matches!(gene, GeneView::Trait { .. }) && *how == Expression::Expressed
@@ -88,7 +90,7 @@ pub(super) fn genome_tab(sprite: &SpriteView, app: &App) -> Vec<Line<'static>> {
                 .iter()
                 .map(|(gene, _, _, health)| format!("{}{}", gene_text(gene), health_text(*health)))
                 .collect();
-            lines.extend(wrapped(&listed(&traits), 1, Style::default()));
+            lines.extend(wrapped(&listed(&traits), 1, plain, look.muted));
         }
         for (gene, how, switch, health) in apart {
             let text = format!(
@@ -99,7 +101,7 @@ pub(super) fn genome_tab(sprite: &SpriteView, app: &App) -> Vec<Line<'static>> {
             );
             let reason = match how {
                 Expression::Expressed => {
-                    lines.extend(wrapped(&text, 1, Style::default()));
+                    lines.extend(wrapped(&text, 1, plain, look.muted));
                     continue;
                 }
                 Expression::Flagged(reason) => format!("flagged: {reason}"),
@@ -110,9 +112,9 @@ pub(super) fn genome_tab(sprite: &SpriteView, app: &App) -> Vec<Line<'static>> {
                 }
                 Expression::Dormant => "dormant: switched off at this life stage".into(),
             };
-            let dim = Style::default().fg(Color::DarkGray);
-            lines.extend(wrapped(&text, 1, dim));
-            lines.extend(wrapped(&reason, 3, dim));
+            // A gene with no effect is minor, and says why (design §6.2).
+            lines.extend(wrapped(&text, 1, look.muted, look.muted));
+            lines.extend(wrapped(&reason, 3, look.muted, look.muted));
         }
     }
     lines
@@ -135,7 +137,9 @@ fn whats_new(sprite: &SpriteView, app: &App) -> Vec<Line<'static>> {
         [mother] => format!("FROM {mother} ALONE"),
         parents => format!("FROM {}", parents.join(" AND ")),
     };
-    let mut lines = wrapped(&from, 1, Style::default());
+    let look = app.theme.text();
+    let plain = Style::default();
+    let mut lines = wrapped(&from, 1, look.heading, look.muted);
     let genes = sprite.genes();
     let switches = sprite.switches();
     let (mut doubled, mut lost) = (Vec::new(), Vec::new());
@@ -152,7 +156,7 @@ fn whats_new(sprite: &SpriteView, app: &App) -> Vec<Line<'static>> {
                 let how = if on_copy { "from" } else { "was" };
                 let now = named(&genes[gene].0, switches[gene]);
                 let text = format!("new: {now}, {how} {}", named(&was, switch));
-                lines.extend(wrapped(&text, 1, Style::default()));
+                lines.extend(wrapped(&text, 1, plain, look.muted));
             }
             CopyChangeView::Doubled { gene } => {
                 doubled.push(named(&genes[gene].0, switches[gene]));
@@ -163,13 +167,13 @@ fn whats_new(sprite: &SpriteView, app: &App) -> Vec<Line<'static>> {
     for (label, names) in [("doubled", doubled), ("lost", lost)] {
         if !names.is_empty() {
             let text = format!("{label}: {}", listed(&names));
-            lines.extend(wrapped(&text, 1, Style::default()));
+            lines.extend(wrapped(&text, 1, plain, look.muted));
         }
     }
     for (index, was) in sprite.copying_errors() {
         let now = &genes[index].0;
         let text = format!("{}, was {}", gene_text(now), was_text(now, &was));
-        lines.extend(wrapped(&text, 1, Style::default()));
+        lines.extend(wrapped(&text, 1, plain, look.muted));
     }
     let flaws = sprite.flaws();
     for (flawed, label) in [(2, "broken"), (1, "carries flaws")] {
@@ -181,7 +185,7 @@ fn whats_new(sprite: &SpriteView, app: &App) -> Vec<Line<'static>> {
             .collect();
         if !names.is_empty() {
             let text = format!("{label}: {}", listed(&names));
-            lines.extend(wrapped(&text, 1, Style::default()));
+            lines.extend(wrapped(&text, 1, plain, look.muted));
         }
     }
     lines.push(Line::from(""));

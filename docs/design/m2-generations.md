@@ -535,7 +535,7 @@ The terrarium is a ship flying through space (#181, a milestone of its own after
 ### 11.2 The glass
 
 - **The wall is drawn as a line of glass one tile outside the map,** all round: `═` along the top and bottom, `║` down the sides and `╔ ╗ ╚ ╝` at the corners, light cyan (round 1, Q3, Q4). It isn't a tile: sprites, objects and the Cursor never reach it.
-- **The map view's border is single-lined on every side,** since the glass shows where the wall is. Its double-lined sides go (M1 design §6.1).
+- **The map view's border is single-lined on every side,** since the glass shows where the wall is. Its double-lined sides go (M1 design §6.1). From #302 it has no border at all, and runs to the screen's edges: the glass and space still show where the world ends.
 
 ### 11.3 Space and the stars
 
@@ -568,7 +568,7 @@ Both built-in themes gain the glass's six glyphs and the stars' three depths, as
 
 ### 11.6 How we know it worked
 
-- **UI tests** (ratatui's `TestBackend`): scrolling stops at the margin on every side; the glass runs all round the map, one tile out; the border is single-lined; stars appear only on space; stars stand still while paused and drift as far at 16× as at 4× in the same time; a small map is centred, and one as wide as the map view, or a tile narrower, scrolls to show its glass; with the pointer moved over space after the Cursor was on a sprite, the Cursor isn't drawn and a click, `Q` or `E` sends no command (`docs/agents/how-we-work.md`: test every input that reaches a rule); with Follow on, a click over space and `Q` still reach the followed sprite.
+- **UI tests** (ratatui's `TestBackend`): scrolling stops at the margin on every side; the glass runs all round the map, one tile out; the map view has no border (#302; single-lined before); stars appear only on space; stars stand still while paused and drift as far at 16× as at 4× in the same time; a small map is centred, and one as wide as the map view, or a tile narrower, scrolls to show its glass; with the pointer moved over space after the Cursor was on a sprite, the Cursor isn't drawn and a click, `Q` or `E` sends no command (`docs/agents/how-we-work.md`: test every input that reaches a rule); with Follow on, a click over space and `Q` still reach the followed sprite.
 - **The simulation is untouched:** its tests and golden files pass unchanged.
 - **Played** in Windows Terminal at 140×40 and at the smallest size the game allows.
 

@@ -189,7 +189,7 @@ impl App {
     /// What an action does while a menu is open: a number or `Enter` picks
     /// an item, the arrow keys or the wheel move the highlight, a click
     /// picks the item under it or, off the menu, closes it, and `Esc`
-    /// closes it.
+    /// closes it. `?` opens help over it (#303).
     pub(super) fn apply_in_menu(&mut self, action: Action, world: &World) -> Flow {
         let count = self.menu_items(world).len();
         match action {
@@ -219,6 +219,8 @@ impl App {
             }
             Action::Point(cell) => self.point(cell),
             Action::Back => self.screen = Screen::Normal,
+            // Closing help goes back to the menu (#303).
+            Action::Help => self.open_help(),
             _ => {}
         }
         self.settle_cursor(world);

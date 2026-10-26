@@ -684,6 +684,38 @@ fn while_typing_letting_go_of_the_question_mark_says_so() {
 }
 
 #[test]
+fn while_typing_esc_enter_and_the_question_mark_act_once_a_press() {
+    // Held, they'd clear help's search and then close it, or close help
+    // and then act on what's under it (#303).
+    for (code, action) in [
+        (KeyCode::Esc, Action::Back),
+        (KeyCode::Enter, Action::Enter),
+        (KeyCode::Char('?'), Action::Type('?')),
+    ] {
+        let mut keys = Keys::kitty();
+        assert_eq!(keys.typed_action(press(code)), Some(action), "{code:?}");
+        let again = kind(code, KeyEventKind::Repeat);
+        assert_eq!(keys.typed_action(again), None, "{code:?} repeating");
+        // Where releases are reported, a second press without one is held,
+        // and still held once typing has ended.
+        let mut keys = Keys::with_release_reporting(true);
+        assert_eq!(keys.typed_action(press(code)), Some(action), "{code:?}");
+        assert_eq!(keys.typed_action(press(code)), None, "{code:?} again");
+        assert_eq!(keys.action_for(press(code)), None, "{code:?} after");
+        keys.typed_action(kind(code, KeyEventKind::Release));
+        assert_eq!(keys.typed_action(press(code)), Some(action), "{code:?}");
+    }
+    // Letters still repeat as they type.
+    let mut keys = Keys::with_release_reporting(true);
+    for _ in 0..2 {
+        assert_eq!(
+            keys.typed_action(press(KeyCode::Char('a'))),
+            Some(Action::Type('a'))
+        );
+    }
+}
+
+#[test]
 fn slash_starts_the_sprite_list_s_filter_once_per_press() {
     // #313: holding it doesn't start it again and again.
     let mut keys = Keys::with_release_reporting(true);

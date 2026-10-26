@@ -1,9 +1,9 @@
  Terra Sprites │ tick 3 │ ► 1x │ seed 7 │ sprites 3 │ not saved                              ? help
-┌─ Help ─────────────────────────────────────────────────────────────────────────────── esc close ─┐
+┌─ Help ─ World  Inspector  Sprite list  Population graph  Family tree ──────────────── esc close ─┐
 │ TIME                            CURSOR                          SPRITES                          │
-│ space      pause / resume       Z X C      select/train/grab    Tab        next sprite           │
-│ .          step                 Q E        left / right click   Shift+Tab  previous sprite       │
-│ + -        faster / slower      Shift+Q E  hug / shock          l          sprite list           │
+│ space      pause / resume       Z X C      select/train/grab    tab        next sprite           │
+│ .          step                 Q E        left / right click   Shift+tab  previous sprite       │
+│ +/-        faster / slower      Shift+Q E  hug / shock          l          sprite list           │
 │ VIEW                            Ctrl+click hug / shock          l then /   filter the list       │
 │ WASD       scroll (Shift: 5)    H          show to sprites      p          population graph      │
 │ T          track the selected   F          follow a sprite      k          family tree           │
@@ -11,14 +11,12 @@
 │ m          event filter         wheel      change mode          g          save its genome       │
 │ v          exact detail         C again    the Place menu       INSPECTOR                        │
 │ ?          this help            hold E     aim, let go to send  [ ]        switch tabs           │
-│ Esc        let go, back, quit?                                  PgUp PgDn  scroll a tab          │
-│ Ctrl+C     quit at once                                         DEBUG                            │
-│ FILES                                                           F3         how it's running      │
-│ F5 F9      quicksave / load                                                                      │
-│ Ctrl+S     save as...                                                                            │
-│ Ctrl+O     load a save                                                                           │
-│ Ctrl+T     pick a theme                                                                          │
-│ Ctrl+R     take over a replay                                                                    │
+│ :          find a command       FILES                           PgUp PgDn  scroll a tab          │
+│ esc        let go, back, quit?  F5 F9      quicksave / load     DEBUG                            │
+│ Ctrl+C     quit at once         Ctrl+S     save as...           F3         how it's running      │
+│                                 Ctrl+O     load a save                                           │
+│                                 Ctrl+T     pick a theme                                          │
+│                                 Ctrl+R     take over a replay                                    │
 │                                                                                                  │
 │ COLOURS: a sprite's strongest drive, once it's above half                                        │
 │ ☺ hunger  ☺ thirst  ☺ pain  ☺ tiredness  ☺ boredom  ☺ loneliness  ☺ crowdedness  ☺ arousal       │
@@ -26,5 +24,7 @@
 │ EMOTES   ! hurt  ‼ zapped  ? gave up  z resting  ♥ pleased  ♫ danced  ♪ called                   │
 │ LINEAGE  ☺ parents, grandparents  ☺ brothers, sisters  ☺ young, theirs  ☺ the rest               │
 │ FILES    /home/player/.local/share/terra-sprites                                                 │
-└──────────────────────────────────────────────────────────────────────────────────────────────────┘
- (12,4) grass │ SELECT       Z select  X train  C grab  WASD scroll  space pause  . step  +/- speed
+│                                                                                                  │
+│                                                                                                  │
+└─ type to search ─────────────────────────────────────────────────────────────────────────────────┘
+ (12,4) grass │ SELECT                                           ←→ page  type to search  esc close

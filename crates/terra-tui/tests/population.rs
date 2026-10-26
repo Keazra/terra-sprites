@@ -521,7 +521,6 @@ fn other_keys_do_nothing_while_the_graph_is_open() {
         Action::CycleEventFilter,
         Q,
         Action::Rename,
-        Action::Help,
         Action::SpriteList,
         Action::FamilyTree,
         Action::Enter,

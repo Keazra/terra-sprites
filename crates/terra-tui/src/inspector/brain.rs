@@ -4,13 +4,16 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use ratatui::layout::{Margin, Position};
+use ratatui::layout::Position;
+use ratatui::style::Style;
+use ratatui::text::{Line, Span};
 use terra_sim::{Dir, EntityId, Explanation, Learned, Part, Pos, SpriteView, Thing, Verb, World};
 
 use super::actions::verb_name;
-use super::{CURSOR, WIDTH, counted, first_shown, shown};
+use super::{CURSOR, WIDTH, counted, dotted, first_shown, shown};
 use crate::app::{App, Tab};
 use crate::text::{BOUND, Words, display_name, level, signed_level, unbroken};
+use crate::theme::TextLook;
 
 /// How many concepts the Brain tab lists under the decision.
 const CONCEPTS_SHOWN: usize = 5;
@@ -38,8 +41,7 @@ pub(crate) fn lesson_at(app: &App, world: &World, at: Position) -> Option<Memory
     if app.tab() != Tab::Brain {
         return None;
     }
-    let area = app.inspector_bounds()?;
-    let inner = area.inner(Margin::new(1, 1));
+    let inner = super::tab_area(app.inspector_bounds()?);
     if at.y < inner.y || at.y >= inner.bottom() || at.x < inner.x || at.x >= inner.right() {
         return None;
     }
@@ -56,22 +58,19 @@ pub(crate) fn lesson_at(app: &App, world: &World, at: Position) -> Option<Memory
 /// "Being led: it decides nothing"; then its memory, grouped under each
 /// thing (v40), which it can have before it first decides. A line that
 /// opens or shuts a block carries that block.
-pub(super) fn brain_rows(
-    sprite: &SpriteView,
-    app: &App,
-    world: &World,
-) -> Vec<(String, Option<MemoryOpen>)> {
+pub(super) fn brain_rows(sprite: &SpriteView, app: &App, world: &World) -> Vec<Row> {
     let data = &app.words(world);
+    let look = app.theme.text();
     // Led, it decides nothing, so its last decision would mislead (design
     // v23 §2.4). Sliding, likewise (design v25 §2.4).
-    let mut lines: Vec<(String, Option<MemoryOpen>)> = match sprite.explain() {
+    let mut lines: Vec<Row> = match sprite.explain() {
         _ if sprite.slide().is_some() => vec![(" Shoved: it decides nothing".into(), None)],
         _ if sprite.lead_steps_left().is_some() => {
             vec![(" Being led: it decides nothing".into(), None)]
         }
-        Some(explained) => explained_lines(&explained, data)
+        Some(explained) => explained_lines(&explained, data, look)
             .into_iter()
-            .map(|text| (text, None))
+            .map(|line| (line, None))
             .collect(),
         None => vec![(" Nothing decided yet".into(), None)],
     };
@@ -93,10 +92,10 @@ pub(super) fn brain_rows(
     let mut gap = true;
     let blocks = memory_blocks(remembered, &known);
     if !blocks.is_empty() {
-        lines.push((String::new(), None));
+        lines.push((Line::default(), None));
         gap = false;
         for block in blocks {
-            push_block(&mut lines, block, data, app.lessons_open(), &known);
+            push_block(&mut lines, block, data, app.lessons_open(), &known, look);
         }
     }
     // Its remembered places, best remembered first (M2 design §7.5): what,
@@ -108,9 +107,9 @@ pub(super) fn brain_rows(
         .collect();
     if !places.is_empty() {
         if gap {
-            lines.push((String::new(), None));
+            lines.push((Line::default(), None));
         }
-        lines.push((" PLACES".into(), None));
+        lines.push((Line::styled(" PLACES", look.heading), None));
     }
     for place in places {
         let name = format!(
@@ -118,12 +117,16 @@ pub(super) fn brain_rows(
             thing_name(&place.thing, data),
             how_far(sprite.pos(), place.at)
         );
-        for row in scored("   ", &name, &level(place.recall)) {
+        let number = level(place.recall);
+        for row in scored_lines("   ", &name, &number, Style::default(), look) {
             lines.push((row, None));
         }
     }
     lines
 }
+
+/// A row of the Brain tab, and the memory block it opens or shuts, if any.
+type Row = (Line<'static>, Option<MemoryOpen>);
 
 /// One learned value, already in the memory list's order: furthest from
 /// nothing first, a tie as it was listed (design v40 §5.9).
@@ -243,33 +246,59 @@ fn lesson_home(learned: &Learned) -> Home {
 }
 
 fn push_block(
-    lines: &mut Vec<(String, Option<MemoryOpen>)>,
+    lines: &mut Vec<Row>,
     block: Block,
     data: &Words,
     open: &BTreeSet<MemoryOpen>,
     known: &BTreeMap<EntityId, f32>,
+    look: TextLook,
 ) {
     match block {
         Block::Headed { key, lessons } => {
             let name = heading_name(&key, data);
-            push_headed(lines, " ", &name, None, lessons, key, data, open);
+            let block = Headed {
+                head: " ",
+                name: &name,
+                familiarity: None,
+                lessons,
+                key,
+            };
+            push_headed(lines, block, data, open, look);
         }
         Block::Sprites {
             general,
             individuals,
         } => {
-            lines.push((" SPRITES".into(), None));
+            lines.push((Line::styled(" SPRITES", look.heading), None));
             for lesson in general {
-                push_lesson(lines, &lesson, "   ", data);
+                push_lesson(lines, &lesson, "   ", data, look);
             }
             for (id, lessons) in individuals {
-                let key = MemoryOpen::Sprite(id);
                 let name = sprite_heading(id, data);
-                let familiarity = known.get(&id).copied();
-                push_headed(lines, "   ", &name, familiarity, lessons, key, data, open);
+                let block = Headed {
+                    head: "   ",
+                    name: &name,
+                    familiarity: known.get(&id).copied(),
+                    lessons,
+                    key: MemoryOpen::Sprite(id),
+                };
+                push_headed(lines, block, data, open, look);
             }
         }
     }
+}
+
+/// A memory block under a heading of its own.
+struct Headed<'a> {
+    /// What the heading starts with: its indent.
+    head: &'a str,
+    /// The heading's words.
+    name: &'a str,
+    /// How well it knows a remembered sprite, if it's one.
+    familiarity: Option<f32>,
+    lessons: Vec<Lesson>,
+    /// What opens or shuts it.
+    key: MemoryOpen,
 }
 
 /// A heading's words: the thing in capitals, or `NEW THINGS`.
@@ -282,18 +311,21 @@ fn heading_name(key: &MemoryOpen, data: &Words) -> String {
 }
 
 /// A heading, then how well it knows a remembered sprite, if it does, and
-/// its lessons: three of them, or all if `key` is open.
-#[expect(clippy::too_many_arguments, reason = "a heading and all it holds")]
+/// its lessons: three of them, or all if its key is open.
 fn push_headed(
-    lines: &mut Vec<(String, Option<MemoryOpen>)>,
-    head: &str,
-    name: &str,
-    familiarity: Option<f32>,
-    lessons: Vec<Lesson>,
-    key: MemoryOpen,
+    lines: &mut Vec<Row>,
+    block: Headed,
     data: &Words,
     open: &BTreeSet<MemoryOpen>,
+    look: TextLook,
 ) {
+    let Headed {
+        head,
+        name,
+        familiarity,
+        lessons,
+        key,
+    } = block;
     let folds = lessons.len() > LESSONS_SHOWN;
     let opened = open.contains(&key);
     let marker = folds.then_some(if opened { "▼" } else { "►" });
@@ -302,7 +334,7 @@ fn push_headed(
         None => format!("{head}{name}"),
     };
     let toggle = folds.then_some(key.clone());
-    lines.push((heading, toggle));
+    lines.push((Line::styled(heading, look.heading), toggle));
     let shown = if folds && !opened {
         &lessons[..LESSONS_SHOWN]
     } else {
@@ -311,27 +343,25 @@ fn push_headed(
     // Lessons sit two columns in from the heading.
     let lesson_indent = format!("{head}  ");
     if let Some(familiarity) = familiarity {
-        for row in scored(&lesson_indent, "known", &level(familiarity)) {
+        let number = level(familiarity);
+        for row in scored_lines(&lesson_indent, "known", &number, Style::default(), look) {
             lines.push((row, None));
         }
     }
     for lesson in shown {
-        push_lesson(lines, lesson, &lesson_indent, data);
+        push_lesson(lines, lesson, &lesson_indent, data, look);
     }
     if folds && !opened {
         let rest = lessons.len() - LESSONS_SHOWN;
-        lines.push((format!("{lesson_indent}and {rest} more"), Some(key)));
+        let more = format!("{lesson_indent}and {rest} more");
+        lines.push((Line::styled(more, look.muted), Some(key)));
     }
 }
 
-fn push_lesson(
-    lines: &mut Vec<(String, Option<MemoryOpen>)>,
-    lesson: &Lesson,
-    indent: &str,
-    data: &Words,
-) {
+fn push_lesson(lines: &mut Vec<Row>, lesson: &Lesson, indent: &str, data: &Words, look: TextLook) {
     let text = lesson_text(&lesson.learned, lesson.amount, data);
-    for row in scored(indent, &text, &signed_level(lesson.amount)) {
+    let number = signed_level(lesson.amount);
+    for row in scored_lines(indent, &text, &number, Style::default(), look) {
         lines.push((row, None));
     }
 }
@@ -393,10 +423,11 @@ fn how_far(from: Pos, to: Pos) -> String {
 /// kept doing, with its score, and the concepts adding most to it, largest
 /// first, or "none" for a sprite standing with nothing to do (M2 design
 /// §19.2).
-fn explained_lines(explained: &Explanation, data: &Words) -> Vec<String> {
-    let mut lines = vec![" ATTENTION".to_string()];
+fn explained_lines(explained: &Explanation, data: &Words, look: TextLook) -> Vec<Line<'static>> {
+    let plain = Style::default();
+    let mut lines = vec![Line::styled(" ATTENTION", look.heading)];
     if explained.attention.is_empty() {
-        lines.push("   nothing in sight".into());
+        lines.push(Line::styled("   nothing in sight", look.muted));
     }
     for (thing, score) in &explained.attention {
         let marker = if explained.attended.as_ref() == Some(thing) {
@@ -404,19 +435,22 @@ fn explained_lines(explained: &Explanation, data: &Words) -> Vec<String> {
         } else {
             " "
         };
-        lines.extend(scored(
+        lines.extend(scored_lines(
             &format!(" {marker} "),
             &thing_name(thing, data),
             &level(*score),
+            plain,
+            look,
         ));
     }
-    lines.push(String::new());
+    lines.push(Line::default());
     match explained.decision {
         Some((verb, score)) => {
             let head = format!("DECISION: {}", verb_name(verb));
-            lines.extend(scored(" ", &head, &level(score)));
+            let number = level(score);
+            lines.extend(scored_lines(" ", &head, &number, look.heading, look));
         }
-        None => lines.push(" DECISION: none".into()),
+        None => lines.push(Line::styled(" DECISION: none", look.heading)),
     }
     // A part that rounds to nothing adds nothing worth showing.
     let shown = explained
@@ -436,7 +470,7 @@ fn explained_lines(explained: &Explanation, data: &Words) -> Vec<String> {
                 format!("habit: {} {}", verb.to_lowercase(), thing_name(thing, data))
             }
         };
-        lines.extend(scored("   ", &name, &amount));
+        lines.extend(scored_lines("   ", &name, &amount, plain, look));
     }
     lines
 }
@@ -565,6 +599,33 @@ pub(super) fn scored(head: &str, name: &str, number: &str) -> Vec<String> {
         } else {
             lines.push(format!("{indent}{text}"));
         }
+    }
+    lines
+}
+
+/// `scored`'s rows as lines: the name in `style`, each `·` in it muted,
+/// and the number on the first row in `style` too, or as a gain or a loss
+/// if it's signed (design §6.2): `+.99` good, `-.19` bad.
+fn scored_lines(
+    head: &str,
+    name: &str,
+    number: &str,
+    style: Style,
+    look: TextLook,
+) -> Vec<Line<'static>> {
+    let number_style = look.signed(number, style);
+    let mut lines = Vec::new();
+    for (i, row) in scored(head, name, number).into_iter().enumerate() {
+        if i > 0 {
+            lines.push(dotted(&row, style, look.muted));
+            continue;
+        }
+        let split = row.chars().count() - number.chars().count();
+        let text: String = row.chars().take(split).collect();
+        let mut line = dotted(&text, style, look.muted);
+        line.spans
+            .push(Span::styled(number.to_string(), number_style));
+        lines.push(line);
     }
     lines
 }

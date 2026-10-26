@@ -6,32 +6,56 @@ use terra_sim::{
 };
 
 use super::actions::{action_line, logged_line};
-use super::body::bar;
+use super::body::bar_parts;
 use super::brain::{concept_name, scored};
 use super::*;
 use crate::text::Words;
 
-// No sprite's number or name is long enough yet to crowd the tabs, so
-// this tests the title's fitting directly.
 #[test]
 fn a_label_too_long_for_the_title_is_shortened_before_the_tabs_are() {
-    let tabs = "[Body] Chem Genome World";
-    let fit = |label: &str, short: &str| fitted_title(Some((label, short)), tabs);
+    // The five tabs take 30 of the row's 45 columns, the open one's spaces
+    // included, which leaves 15: a label of 13 with a space each side.
+    let fit = |sprite| fitted_label(sprite, 15);
+    assert_eq!(fit(Some(("Sprite #530", "Sprite #530"))), " Sprite #530   ");
+    assert_eq!(fit(Some(("Mira #12", "Mira"))), " Mira #12      ");
     assert_eq!(
-        fit("Sprite #530", "#530"),
-        " Sprite #530 ── [Body] Chem Genome World "
+        fit(Some(("WWWWWWWWA #538", "WWWWWWWWA"))),
+        " WWWWWWWWA     ",
+        "the name alone, when the number doesn't fit beside it"
     );
     assert_eq!(
-        fit("Sprite #1234567", "#1234567"),
-        " #1234567 ── [Body] Chem Genome World "
+        fit(Some(("Abcdefghijklmnop #538", "Abcdefghijklmnop"))),
+        " Abcdefghij... ",
+        "as much of the name as fits"
     );
-    let crowded = "[Body] Brain Chem Genome World Lineage";
     assert_eq!(
-        fitted_title(Some(("Sprite #1234567", "#1234567")), crowded),
-        format!(" {crowded} "),
-        "with no room for even the number, the tabs alone"
+        fit(Some(("Old Bo of Mira #538", "Old Bo of Mira"))),
+        " Old Bo of...  ",
+        "with no space before the dots"
     );
-    assert_eq!(fitted_title(None, tabs), format!(" {tabs} "));
+    assert_eq!(fit(None), " ".repeat(15));
+}
+
+#[test]
+fn a_tab_is_found_in_the_columns_the_title_row_writes_it_in() {
+    // The tabs fill the row's last 30 columns, from column 15: with Body
+    // open, " Body  Brain Chem Genome World".
+    let body_open = |column| tab_at(Tab::Body, column);
+    assert_eq!(body_open(14), None);
+    assert_eq!(body_open(15), Some(Tab::Body), "the open tab's space");
+    assert_eq!(body_open(20), Some(Tab::Body));
+    assert_eq!(body_open(21), None, "between two tabs");
+    assert_eq!(body_open(22), Some(Tab::Brain));
+    assert_eq!(body_open(44), Some(Tab::World));
+    assert_eq!(body_open(45), None);
+    // With World open, "Body Brain Chem Genome  World ".
+    let world_open = |column| tab_at(Tab::World, column);
+    assert_eq!(world_open(18), Some(Tab::Body));
+    assert_eq!(world_open(19), None);
+    assert_eq!(world_open(31), Some(Tab::Genome));
+    assert_eq!(world_open(37), None);
+    assert_eq!(world_open(38), Some(Tab::World));
+    assert_eq!(world_open(44), Some(Tab::World));
 }
 
 fn wander(progress: Progress) -> ActionView {
@@ -759,7 +783,7 @@ fn a_scored_name_too_long_for_its_row_wraps_under_itself() {
     assert_eq!(
         lines,
         [
-            "   not attended sprite &               +.40",
+            "   not attended sprite &                +.40",
             "     not target adjacent & hunger",
         ],
         "each input kept whole"
@@ -779,7 +803,7 @@ fn a_wrapped_line_has_the_room_the_number_leaves_on_the_first() {
     assert_eq!(
         scored("   ", &name, "+.40"),
         [
-            "   not attended sprite &               +.40",
+            "   not attended sprite &                +.40",
             "     not target distance & not tiredness",
         ]
     );
@@ -789,8 +813,8 @@ fn a_wrapped_line_has_the_room_the_number_leaves_on_the_first() {
 // screen if one ever did.
 #[test]
 fn a_drive_bar_is_ten_cells_whatever_the_level() {
-    assert_eq!(bar(0.42), "████░░░░░░");
-    assert_eq!(bar(1.05), "██████████");
-    assert_eq!(bar(-0.3), "░░░░░░░░░░");
-    assert_eq!(bar(f32::NAN), "░░░░░░░░░░");
+    assert_eq!(bar_parts(0.42).concat(), "████░░░░░░");
+    assert_eq!(bar_parts(1.05).concat(), "██████████");
+    assert_eq!(bar_parts(-0.3).concat(), "░░░░░░░░░░");
+    assert_eq!(bar_parts(f32::NAN).concat(), "░░░░░░░░░░");
 }

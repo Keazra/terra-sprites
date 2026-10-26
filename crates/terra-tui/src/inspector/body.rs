@@ -3,14 +3,15 @@
 //! observed it do; and the card every sprite tab shows for an egg (M2 design
 //! §10.7).
 
-use ratatui::text::Line;
+use ratatui::style::Style;
+use ratatui::text::{Line, Span};
 use terra_sim::{
     ChemicalKind, ChemicalLevel, EggView, EntityId, Fertility, LifeStage, Pos, SpriteView, Target,
     Trait, World,
 };
 
 use super::actions::action_line;
-use super::{CURSOR, WIDTH, counted, object_type};
+use super::{CURSOR, WIDTH, counted, dotted, object_type};
 use crate::app::App;
 use crate::family_tree;
 use crate::text::{Words, change, display_name, level, significant, thousands, whole, wrap};
@@ -21,58 +22,77 @@ use crate::text::{Words, change, display_name, level, significant, thousands, wh
 /// genes' average health, once any has weakened) after them, and what the
 /// player has observed it do.
 pub(super) fn body_tab(sprite: &SpriteView, app: &App, world: &World) -> Vec<Line<'static>> {
+    let look = app.theme.text();
+    let line = |text: String| dotted(&text, Style::default(), look.muted);
     let traits = sprite.traits();
     let doing = doing_line(sprite, app, world).map(|line| format!(" {line}"));
-    let mut lines: Vec<String> = doing.into_iter().collect();
-    lines.extend([
-        format!(" age {} · {}", thousands(sprite.age()), {
-            let stage = sprite.life_stage();
-            match stage {
-                LifeStage::Young => {
-                    format!("young · {}", trait_text(Trait::GrowsUp, traits.grows_up))
+    let mut lines: Vec<Line<'static>> = doing.into_iter().map(line).collect();
+    lines.extend(
+        [
+            format!(" age {} · {}", thousands(sprite.age()), {
+                let stage = sprite.life_stage();
+                match stage {
+                    LifeStage::Young => {
+                        format!("young · {}", trait_text(Trait::GrowsUp, traits.grows_up))
+                    }
+                    LifeStage::Adult => {
+                        format!(
+                            "adult · {}",
+                            trait_text(Trait::GrowsOld, sprite.grows_old_at())
+                        )
+                    }
+                    LifeStage::Old => stage.name().to_string(),
                 }
-                LifeStage::Adult => {
-                    format!(
-                        "adult · {}",
-                        trait_text(Trait::GrowsOld, sprite.grows_old_at())
-                    )
-                }
-                LifeStage::Old => stage.name().to_string(),
-            }
-        }),
-        format!(
-            " {} · {}",
-            trait_text(Trait::Speed, traits.speed),
-            trait_text(Trait::SenseRadius, traits.sense_radius)
-        ),
-    ]);
-    lines.extend(family_lines(sprite, &app.words(world)));
-    lines.push(String::new());
+            }),
+            format!(
+                " {} · {}",
+                trait_text(Trait::Speed, traits.speed),
+                trait_text(Trait::SenseRadius, traits.sense_radius)
+            ),
+        ]
+        .map(line),
+    );
+    lines.extend(
+        family_lines(sprite, &app.words(world))
+            .into_iter()
+            .map(line),
+    );
+    lines.push(Line::default());
     let chemicals: Vec<ChemicalLevel> = sprite.chemicals().collect();
     for drive in chemicals.iter().filter(|c| c.kind == ChemicalKind::Drive) {
-        let line = format!(
-            " {:<12}{} {} {}",
-            display_name(drive.name),
-            bar(drive.level),
-            level(drive.level),
-            trend(drive.change)
-        );
-        lines.push(line.trim_end().to_string());
+        // The bar filled in the drive's colour, as the map draws a sprite
+        // it drives, and the rest of it minor (design §6.2).
+        let filled = match app.theme.drive_colour(drive.name) {
+            Some(colour) => Style::default().fg(colour),
+            None => Style::default(),
+        };
+        let [full, empty] = bar_parts(drive.level);
+        let mut spans = vec![
+            Span::raw(format!(" {:<12}", display_name(drive.name))),
+            Span::styled(full, filled),
+            Span::styled(empty, look.muted),
+            Span::raw(format!(" {}", level(drive.level))),
+        ];
+        let arrow = trend(drive.change);
+        if !arrow.is_empty() {
+            spans.push(Span::raw(format!(" {arrow}")));
+        }
+        lines.push(Line::from(spans));
     }
-    lines.push(String::new());
+    lines.push(Line::default());
     let physical: Vec<String> = chemicals
         .iter()
         .filter(|c| c.kind == ChemicalKind::Physical)
         .map(|c| format!("{} {}", display_name(c.name), level(c.level)))
         .collect();
     for three in physical.chunks(3) {
-        lines.push(format!(" {}", three.join(" · ")));
+        lines.push(line(format!(" {}", three.join(" · "))));
     }
     // Its genes' average health shows once any has weakened (M2 design
     // §9.4, §9.6). A genome with nothing to weaken gives out when old
     // without any gene losing health, so that isn't shown.
     let weakened = sprite.gene_health().iter().any(|&health| health < 1.0);
-    lines.push(if weakened {
+    lines.push(line(if weakened {
         format!(
             " wear {} · genes {}",
             level(sprite.wear()),
@@ -80,10 +100,10 @@ pub(super) fn body_tab(sprite: &SpriteView, app: &App, world: &World) -> Vec<Lin
         )
     } else {
         format!(" wear {}", level(sprite.wear()))
-    });
-    lines.push(String::new());
+    }));
+    lines.push(Line::default());
     lines.extend(observed_lines(app, world.tick()));
-    lines.into_iter().map(Line::from).collect()
+    lines
 }
 
 /// What `sprite` is doing, as the Body tab's first line says it (design
@@ -190,7 +210,12 @@ fn generation_lines(whence: &str, generation: u32) -> Vec<String> {
 /// hatches, and who laid it, `egg · hatches in 750 ticks`, `parents Pip #12
 /// and Bo #7`. One that's due waits while the Cursor holds it or a sprite
 /// stands on it (§10.4).
-pub(super) fn egg_card(egg: &EggView, world: &World, data: &Words) -> Vec<Line<'static>> {
+pub(super) fn egg_card(
+    egg: &EggView,
+    world: &World,
+    data: &Words,
+    muted: Style,
+) -> Vec<Line<'static>> {
     let when = match hatching(egg, world) {
         Hatching::OncePutDown => "hatches once it's put down".to_string(),
         Hatching::OnceClear => "hatches once nothing stands on it".to_string(),
@@ -206,7 +231,10 @@ pub(super) fn egg_card(egg: &EggView, world: &World, data: &Words) -> Vec<Line<'
             egg.generation(),
         ));
     }
-    lines.into_iter().map(Line::from).collect()
+    lines
+        .into_iter()
+        .map(|line| dotted(&line, Style::default(), muted))
+        .collect()
 }
 
 /// When an egg hatches (M2 design §10.4).
@@ -241,8 +269,9 @@ pub(super) fn parents_text(parents: &[EntityId], data: &Words) -> Option<String>
 /// The observed list (design §6.1), newest first: how long ago each line's
 /// latest action finished, right-aligned, and what it did, wrapped under
 /// its own text. `now` is the world's tick counter.
-fn observed_lines(app: &App, now: u64) -> Vec<String> {
-    let mut lines = vec![" Observed".to_string()];
+fn observed_lines(app: &App, now: u64) -> Vec<Line<'static>> {
+    let look = app.theme.text();
+    let mut lines = vec![Line::styled(" Observed", look.heading)];
     let entries: Vec<(String, String)> = app
         .observed()
         .map(|o| {
@@ -263,14 +292,18 @@ fn observed_lines(app: &App, now: u64) -> Vec<String> {
         })
         .collect();
     if entries.is_empty() {
-        lines.push("   nothing yet".into());
+        lines.push(Line::styled("   nothing yet", look.muted));
     }
     let width = entries.iter().map(|(ago, _)| ago.chars().count()).max();
     for (ago, text) in &entries {
         let head = format!(" {ago:>width$} · ", width = width.unwrap_or(0));
         // Each later line is indented to where the text began.
         let indent = " ".repeat(head.chars().count());
-        lines.extend(wrap(&head, &indent, text, WIDTH));
+        lines.extend(
+            wrap(&head, &indent, text, WIDTH)
+                .into_iter()
+                .map(|line| dotted(&line, Style::default(), look.muted)),
+        );
     }
     lines
 }
@@ -309,11 +342,12 @@ fn led_line(sprite: &SpriteView, detail: bool, world: &World) -> Option<String> 
     })
 }
 
-/// A level as a bar ten cells long, filled to the nearest tenth.
-pub(super) fn bar(level: f32) -> String {
+/// A level as a bar ten cells long, filled to the nearest tenth: its filled
+/// part and its empty part.
+pub(super) fn bar_parts(level: f32) -> [String; 2] {
     // `as` makes a NaN 0.
     let filled = ((level * 10.0).round() as usize).min(10);
-    format!("{}{}", "█".repeat(filled), "░".repeat(10 - filled))
+    ["█".repeat(filled), "░".repeat(10 - filled)]
 }
 
 /// An arrow for which way a level went over the last tick, or nothing when

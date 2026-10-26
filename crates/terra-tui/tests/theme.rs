@@ -1,12 +1,14 @@
 mod common;
 use common::{DRIVE_COLOURS, pack};
 
-use ratatui::style::Color;
+use ratatui::buffer::Buffer;
+use ratatui::layout::Rect;
+use ratatui::style::{Color, Modifier, Style};
 use terra_sim::Terrain;
 use terra_tui::app::{CursorMode, StatusMark};
 use terra_tui::cp437;
 use terra_tui::space::{Depth, Pane};
-use terra_tui::theme::{SemanticTile, Theme};
+use terra_tui::theme::{self, SemanticTile, Theme};
 
 #[test]
 fn the_themes_draw_terrain_as_the_design_table_says() {
@@ -635,4 +637,187 @@ fn a_theme_draws_the_lineage_colours_it_leaves_out_as_the_default_theme_does() {
     let misspelt = ascii_with("others: dark_gray", "strangers: dark_gray");
     let error = Theme::from_ron(&misspelt, &pack).expect_err("refused");
     assert!(error.contains("strangers"), "{error}");
+}
+
+#[test]
+fn a_theme_colour_can_be_one_of_the_16_names_or_exact() {
+    // Design §6.2, #302: `"#rrggbb"`, for what no name fits, such as a
+    // shade a little lighter than black.
+    let pack = pack();
+    let edited = ascii_with(
+        "\"ball\":      { \"default\": (glyph: 'o', fg: white) }",
+        "\"ball\":      { \"default\": (glyph: 'o', fg: \"#1A2b3c\") }",
+    );
+    let theme = Theme::from_ron(&edited, &pack).expect("loads");
+    assert_eq!(
+        theme.object_glyph("ball", "default").fg,
+        Color::Rgb(0x1a, 0x2b, 0x3c)
+    );
+    // A name may be quoted too.
+    let quoted = ascii_with(
+        "attention_marker: dark_gray",
+        "attention_marker: \"dark_gray\"",
+    );
+    let theme = Theme::from_ron(&quoted, &pack).expect("loads");
+    assert_eq!(theme.attention_marker(), Color::DarkGray);
+}
+
+#[test]
+fn a_colour_neither_named_nor_exact_is_refused_saying_what_is() {
+    // Design §6.2, #302.
+    let pack = pack();
+    for (wrong, named) in [
+        ("purple", "purple"),
+        ("\"#12\"", "#12"),
+        ("\"#12345g\"", "#12345g"),
+        ("\"1a2b3c\"", "1a2b3c"),
+        // A number or a tuple is named as RON writes it.
+        ("5", "5"),
+        ("(1, 2, 3)", "[1,2,3]"),
+    ] {
+        let edited = ascii_with(
+            "attention_marker: dark_gray",
+            &format!("attention_marker: {wrong}"),
+        );
+        let error = Theme::from_ron(&edited, &pack).expect_err(wrong);
+        assert!(error.contains(named), "{wrong}: {error}");
+        assert!(error.contains("#rrggbb"), "{wrong}: {error}");
+    }
+}
+
+/// A theme's text styles: heading, muted, good, bad, key and selected.
+fn text(theme: &Theme) -> [Style; 6] {
+    let look = theme.text();
+    [
+        look.heading,
+        look.muted,
+        look.good,
+        look.bad,
+        look.key,
+        look.selected,
+    ]
+}
+
+#[test]
+fn the_themes_style_text_by_its_job_as_the_design_table_says() {
+    // Design §6.2, #302: headings, minor text, gains and losses, the key in
+    // each hint, and what's chosen.
+    let styles = [
+        Style::default()
+            .fg(Color::LightCyan)
+            .add_modifier(Modifier::BOLD),
+        Style::default().fg(Color::DarkGray),
+        Style::default().fg(Color::LightGreen),
+        Style::default().fg(Color::LightRed),
+        Style::default().add_modifier(Modifier::BOLD),
+        Style::default().add_modifier(Modifier::REVERSED),
+    ];
+    assert_eq!(text(&Theme::cp437()), styles);
+    assert_eq!(text(&Theme::ascii()), styles);
+}
+
+#[test]
+fn a_theme_from_before_text_styles_styles_it_as_the_default_theme_does() {
+    // Design §6.2, #302.
+    let theme = ascii_from_before("    // The screen's text", "text:");
+    assert_eq!(text(&theme), text(&Theme::cp437()));
+}
+
+#[test]
+fn a_theme_styles_the_text_it_leaves_out_as_the_default_theme_does() {
+    // Design §6.2, #302: a style at a time.
+    let pack = pack();
+    let edited = ascii_with("        muted:    (fg: dark_gray),\n", "");
+    let edited = edited.replacen(
+        "heading:  (fg: light_cyan, bold: true)",
+        "heading:  (fg: \"#ffaa00\")",
+        1,
+    );
+    let theme = Theme::from_ron(&edited, &pack).expect("loads");
+    let look = theme.text();
+    assert_eq!(
+        look.heading,
+        Style::default().fg(Color::Rgb(0xff, 0xaa, 0x00))
+    );
+    assert_eq!(look.muted, Theme::cp437().text().muted);
+    // A key the game doesn't know is refused, rather than quietly styled
+    // as the default.
+    let misspelt = ascii_with("muted:", "dim:");
+    let error = Theme::from_ron(&misspelt, &pack).expect_err("refused");
+    assert!(error.contains("dim"), "{error}");
+}
+
+#[test]
+fn the_default_theme_shades_its_panels_and_the_ascii_one_draws_lines() {
+    // Design §6.1, #302: no named colour is close enough to black for a
+    // shade, so they're exact.
+    let panels = Theme::cp437().panels().expect("shaded");
+    assert_eq!(panels.shade, Color::Rgb(0x18, 0x1a, 0x22));
+    assert_eq!(panels.title, Color::Rgb(0x28, 0x2c, 0x3a));
+    assert_eq!(Theme::ascii().panels(), None);
+    // A theme of the player's own may shade them.
+    let shaded = ascii_with(
+        "    text: (",
+        "    panels: (shade: black, title: \"#303030\"),\n    text: (",
+    );
+    let theme = Theme::from_ron(&shaded, &pack()).expect("loads");
+    let panels = theme.panels().expect("shaded");
+    assert_eq!(
+        (panels.shade, panels.title),
+        (Color::Black, Color::Rgb(0x30, 0x30, 0x30))
+    );
+}
+
+#[test]
+fn a_gain_is_good_a_loss_bad_and_a_zero_neither() {
+    // Design §6.2, #302.
+    let look = Theme::cp437().text();
+    let plain = Style::default();
+    assert_eq!(look.signed("+.99", plain), look.good);
+    assert_eq!(look.signed("-.0020", plain), look.bad);
+    for zero in ["+.00", "-.0000"] {
+        assert_eq!(look.signed(zero, plain), plain, "{zero}");
+    }
+    assert_eq!(look.signed(".50", plain), plain, "no sign");
+}
+
+#[test]
+fn exact_colours_are_shown_where_the_terminal_says_it_can_and_on_windows() {
+    // Design §6.2: most terminals say so in COLORTERM; macOS's Terminal
+    // doesn't, and draws them wrongly; Windows' console has since Windows 10.
+    assert!(theme::shows_exact_colours(Some("truecolor"), false));
+    assert!(theme::shows_exact_colours(Some("24bit"), false));
+    assert!(!theme::shows_exact_colours(None, false));
+    assert!(!theme::shows_exact_colours(Some(""), false));
+    assert!(theme::shows_exact_colours(None, true));
+}
+
+#[test]
+fn exact_colours_become_the_nearest_of_256_where_they_cant_be_shown() {
+    let mut buffer = Buffer::empty(Rect::new(0, 0, 4, 1));
+    let colours = [
+        // The default theme's shades come out as dark greys.
+        (Color::Rgb(0x18, 0x1a, 0x22), Color::Indexed(234)),
+        (Color::Rgb(0x28, 0x2c, 0x3a), Color::Indexed(236)),
+        // The colour cube's corners and middles are themselves.
+        (Color::Rgb(255, 0, 0), Color::Indexed(196)),
+        (Color::Rgb(0x5f, 0x87, 0xaf), Color::Indexed(67)),
+    ];
+    for (x, &(exact, _)) in colours.iter().enumerate() {
+        let cell = &mut buffer[(x as u16, 0)];
+        cell.set_fg(exact).set_bg(exact);
+    }
+    theme::in_256_colours(&mut buffer);
+    for (x, &(_, nearest)) in colours.iter().enumerate() {
+        let cell = &buffer[(x as u16, 0)];
+        assert_eq!((cell.fg, cell.bg), (nearest, nearest), "{:?}", colours[x].0);
+    }
+    // Named colours are the terminal's own, and stay.
+    let mut named = Buffer::empty(Rect::new(0, 0, 1, 1));
+    named[(0, 0)].set_fg(Color::LightCyan).set_bg(Color::Reset);
+    theme::in_256_colours(&mut named);
+    assert_eq!(
+        (named[(0, 0)].fg, named[(0, 0)].bg),
+        (Color::LightCyan, Color::Reset)
+    );
 }

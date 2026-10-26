@@ -1,27 +1,41 @@
 //! The Chem tab (design §6.1): each chemical's level and its change per
 //! tick, and the hormones.
 
-use ratatui::text::Line;
+use ratatui::style::Style;
+use ratatui::text::{Line, Span};
 use terra_sim::{ChemicalKind, ChemicalLevel, SpriteView};
 
 use crate::text::{change, display_name, level, signed_level};
+use crate::theme::TextLook;
 
 /// The Chem tab (design §6.1): each chemical on its own line with its level
 /// and its change per tick, the physical chemicals, then the signal
 /// chemicals, with what the sprite felt on the reward line; then the
-/// hormones' levels, four to a line.
-pub(super) fn chem_tab(sprite: &SpriteView) -> Vec<Line<'static>> {
+/// hormones' levels, four to a line. What was felt is in the theme's good
+/// colour when it's a reward and its bad when it's a punishment, and the
+/// hormones' heading in its heading colour (design §6.2). A change stays
+/// plain: a rise is good for food and bad for hunger.
+pub(super) fn chem_tab(sprite: &SpriteView, look: TextLook) -> Vec<Line<'static>> {
     let chemicals: Vec<ChemicalLevel> = sprite.chemicals().collect();
     let line = |c: &ChemicalLevel| {
+        let name = display_name(c.name);
+        let mut spans = vec![Span::raw(format!(" {name:<13}{:>4}", level(c.level)))];
         // Reward is used up every tick, so its line shows what learning
         // took in instead of a change: `last_r` (design §6.1).
-        let amount = match c.name {
-            "reward" => format!("felt {}", signed_level(sprite.felt())),
-            _ => change(c.change).unwrap_or_default(),
+        let (words, number, felt) = match c.name {
+            "reward" => ("felt ", Some(signed_level(sprite.felt())), true),
+            _ => ("", change(c.change), false),
         };
-        let name = display_name(c.name);
-        let text = format!(" {name:<13}{:>4}  {amount}", level(c.level));
-        text.trim_end().to_string()
+        if let Some(number) = number {
+            spans.push(Span::raw(format!("  {words}")));
+            let style = if felt {
+                look.signed(&number, Style::default())
+            } else {
+                Style::default()
+            };
+            spans.push(Span::styled(number, style));
+        }
+        Line::from(spans)
     };
     let of_kinds = |kinds: &[ChemicalKind]| {
         chemicals
@@ -29,11 +43,11 @@ pub(super) fn chem_tab(sprite: &SpriteView) -> Vec<Line<'static>> {
             .filter(|c| kinds.contains(&c.kind))
             .collect::<Vec<_>>()
     };
-    let mut lines: Vec<String> = of_kinds(&[ChemicalKind::Physical])
+    let mut lines: Vec<Line<'static>> = of_kinds(&[ChemicalKind::Physical])
         .into_iter()
         .map(line)
         .collect();
-    lines.push(String::new());
+    lines.push(Line::default());
     lines.extend(
         of_kinds(&[ChemicalKind::Drive])
             .into_iter()
@@ -42,7 +56,7 @@ pub(super) fn chem_tab(sprite: &SpriteView) -> Vec<Line<'static>> {
     );
     // The genes' own hormones, h0 to h15, four to a line; one with a
     // meaning of its own, as the feminiser (M2 design §10), has a line.
-    lines.push(" HORMONES".into());
+    lines.push(Line::styled(" HORMONES", look.heading));
     let (numbered, named): (Vec<&ChemicalLevel>, Vec<_>) = of_kinds(&[ChemicalKind::Hormone])
         .into_iter()
         .partition(|c| {
@@ -54,8 +68,8 @@ pub(super) fn chem_tab(sprite: &SpriteView) -> Vec<Line<'static>> {
             .iter()
             .map(|c| format!("{:<4}{:>4}", display_name(c.name), level(c.level)))
             .collect();
-        lines.push(format!(" {}", cells.join("   ")));
+        lines.push(Line::from(format!(" {}", cells.join("   "))));
     }
     lines.extend(named.into_iter().map(line));
-    lines.into_iter().map(Line::from).collect()
+    lines
 }

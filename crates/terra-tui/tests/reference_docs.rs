@@ -7,7 +7,7 @@
 mod reference_example;
 use reference_example::example;
 
-use ratatui::style::Color;
+use ratatui::style::{Color, Style};
 use terra_sim::DataPack;
 use terra_tui::space::{Depth, Pane};
 use terra_tui::theme::{SemanticTile, Theme};
@@ -26,4 +26,10 @@ fn the_theme_example_loads() {
     let (graph, default) = (theme.population(), default.population());
     assert_eq!((graph.old, graph.limit.fg), (Color::White, Color::Gray));
     assert_eq!((graph.young, graph.half), (default.young, default.half));
+    let text = theme.text();
+    assert_eq!(text.heading, Style::new().fg(Color::LightYellow).bold());
+    assert_eq!(text.muted, Style::new().fg(Color::Gray));
+    assert_eq!(text.good, Theme::cp437().text().good);
+    let panels = theme.panels().expect("shaded");
+    assert_eq!(panels.shade, Color::Rgb(0x1c, 0x1c, 0x1c));
 }

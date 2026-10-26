@@ -1,6 +1,7 @@
 // The `--ascii` theme (design §6.2): the cp437 theme's meanings in plain ASCII
 // glyphs. It changes only what themes cover (the map's tiles and the cursor);
-// frames and text stay the same.
+// the text stays the same. It has no panel shades, so a line runs between the
+// panels and the map.
 (
     tiles: {
         terrain(grass):         (glyph: '.', fg: green),
@@ -113,4 +114,14 @@
     // stand out on grass, dirt, sand and water alike. What a theme leaves out
     // of this section, it draws as the default theme does.
     lineage: (elders: light_blue, siblings: light_red, young: light_magenta, others: dark_gray),
+    // The screen's text, by the job it does (design §6.2), as the default
+    // theme styles it.
+    text: (
+        heading:  (fg: light_cyan, bold: true),
+        muted:    (fg: dark_gray),
+        good:     (fg: light_green),
+        bad:      (fg: light_red),
+        key:      (bold: true),
+        selected: (reversed: true),
+    ),
 )

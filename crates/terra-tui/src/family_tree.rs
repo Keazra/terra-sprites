@@ -8,7 +8,7 @@
 use std::collections::BTreeMap;
 use std::ops::Range;
 
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use terra_sim::{DeadView, DeathCause, EggView, EntityId, LifeStage, Origin, SpriteView, World};
 
@@ -557,17 +557,19 @@ fn find_again(places: &[Place], spot: Option<Spot>) -> Spot {
 /// Draws `family_tree` `width` columns wide, its rows that scroll as far along
 /// as `scroll` says, with the card `chosen`, or the one in the middle,
 /// blinking: its label in reverse video while `blink` is on (M2 design
-/// §17.3).
+/// §17.3). The dead are in `muted` (design §6.2).
 pub(crate) fn draw(
     family_tree: &FamilyTree,
     width: usize,
     scroll: Scroll,
     chosen: Option<Spot>,
     blink: bool,
+    muted: Style,
 ) -> Drawn {
     let mut tree = Tree {
         canvas: Canvas::new(width, SIBLINGS + 1 + TEXT_ROWS),
         places: Vec::new(),
+        muted,
     };
     // Four grandparents side by side, each parent centred over its own.
     let quarter = width / 4;
@@ -708,6 +710,8 @@ fn strip_columns(count: usize, width: usize, first: usize) -> (Vec<i32>, Range<u
 struct Tree {
     canvas: Canvas,
     places: Vec<Place>,
+    /// How the dead are drawn.
+    muted: Style,
 }
 
 impl Tree {
@@ -717,7 +721,7 @@ impl Tree {
     fn card(&mut self, card: &Card, band: Band, index: usize, x: i32, width: usize, row: usize) {
         let room = width - 1;
         let style = if card.gone {
-            Style::default().fg(Color::DarkGray)
+            self.muted
         } else {
             Style::default()
         };

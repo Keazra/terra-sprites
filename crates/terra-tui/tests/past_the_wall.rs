@@ -15,9 +15,9 @@ use terra_tui::app::{App, CursorMode};
 use terra_tui::input::{Action, Button};
 use terra_tui::space::Place;
 
-/// The map view's tiles on `SCREEN`, the screen every test draws: 52×21
-/// of them from screen cell (1, 2).
-const TILES: Rect = Rect::new(1, 2, 52, 21);
+/// The map view's tiles on `SCREEN`, the screen every test draws: 54×24
+/// of them from screen cell (0, 1), under the top bar (design §6.1).
+const TILES: Rect = Rect::new(0, 1, 54, 24);
 
 /// An all-grass world `width`×`height`, with starter sprites on `sprites`.
 fn field(width: usize, height: usize, sprites: &[Pos]) -> World {
@@ -72,7 +72,7 @@ fn holding_a_ball_from(tile: Pos) -> (World, App) {
 
 /// The screen cell of the small field's `tile`.
 fn cell(tile: Pos) -> Position {
-    Position::new(22 + tile.x, 9 + tile.y)
+    Position::new(22 + tile.x, 10 + tile.y)
 }
 
 /// Where the pointer rests to point at the small field's `tile`: a cell
@@ -87,7 +87,7 @@ fn on(tile: Pos) -> Position {
 /// space.
 fn past(x: i32, y: i32) -> Position {
     let on_screen = |offset: i32| u16::try_from(offset).expect("on screen");
-    Position::new(on_screen(23 + x), on_screen(10 + y))
+    Position::new(on_screen(23 + x), on_screen(11 + y))
 }
 
 /// A cell over space, well clear of the small field and its glass.

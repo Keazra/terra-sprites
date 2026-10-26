@@ -12,7 +12,8 @@ impl App {
     /// What an action does while the family tree is open (M2 design §17.3):
     /// the arrows or the pointer choose a sprite on it, and `Enter` or a
     /// click centres the tree on that one and selects it; `Tab` selects as
-    /// ever, time runs as usual, and `k` or `Esc` closes it.
+    /// ever, time runs as usual, `?` opens the help at the tree's page
+    /// (#303), and `k` or `Esc` closes it.
     pub(super) fn apply_in_tree(&mut self, action: Action, world: &World) -> Flow {
         if self.apply_time(&action, world) {
             return Flow::Continue;
@@ -55,6 +56,7 @@ impl App {
             Action::SelectNext => self.redraw_tree_along(world, Direction::Next),
             Action::SelectPrevious => self.redraw_tree_along(world, Direction::Previous),
             Action::FamilyTree | Action::Back => self.screen = Screen::Normal,
+            Action::Help => self.open_help(),
             _ => {}
         }
         Flow::Continue
@@ -83,6 +85,7 @@ impl App {
             self.tree_scroll,
             self.tree_choice,
             self.flash_on(),
+            self.theme.text().muted,
         ))
     }
 

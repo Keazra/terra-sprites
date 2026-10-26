@@ -723,7 +723,7 @@ _Avoid_: camera
 
 **Glass**:
 How the wall is drawn where it faces space: a line of light cyan one tile outside the map (Slice 31). It isn't a tile, so nothing on the map reaches it. On the ship (#181), it's drawn one tile outside a sector, over a tile of space.
-_Avoid_: window, border (that's the map view's)
+_Avoid_: window, border
 
 **Track**:
 The viewport following the selected sprite, or egg, so it stays in the middle of the map view. `T` turns it on or off; scrolling by hand turns it off. It follows whichever is selected, and does nothing while nothing is, or while the Cursor holds the selected egg.
@@ -798,7 +798,7 @@ The panel that lists what just happened to sprites, newest first.
 _Avoid_: events panel, console, feed
 
 **Event filter**:
-Which events the event log shows: all of them, the selected sprite's (what it did and what was done to it), or the major ones (deaths, lessons learned, refused commands). `m`, or a click on the filters on the log's border, goes to the next.
+Which events the event log shows: all of them, the selected sprite's (what it did and what was done to it), or the major ones (deaths, lessons learned, refused commands). `m`, or a click on the filters at the right of the log's title row, goes to the next.
 _Avoid_: log level, view
 
 **Colour mode**:
@@ -806,8 +806,20 @@ What colours a sprite on the map: its strongest drive once one is above half (ea
 _Avoid_: tint, palette
 
 **Help screen**:
-The overlay `?` opens: every key, grouped, the colour and emote legends, and the game's folder for its files.
+The overlay `?` opens, in pages: the World page, every key grouped, the colour, emote and lineage legends, and the game's folder for its files; the Inspector page, the inspector's keys and the open tab's legend; and a page each for the sprite list, the population graph and the family tree. It opens at the page for where the player is, and typing in it searches every page (#303).
 _Avoid_: manual, cheat sheet
+
+**Control** (#303):
+A key or keys and what they do, such as `space` pausing, on one list that the key hints, the help screen and the command palette are all built from, so they can't drift apart.
+_Avoid_: command (that's what a click sends the world), shortcut, binding (that's the key alone)
+
+**Key hints**:
+The controls at the right of the status line that work where the player is, each a key with a word on what it does. A hint whose key would do nothing just now is greyed rather than hidden, such as `. step` while time runs (#303).
+_Avoid_: shortcut bar, legend (the help's legends are of colours and emotes)
+
+**Command palette** (#303):
+The box `:` opens near the top of the map view: typing finds any control that works in the world by the starts of the words of what it does, each shown with its key, and `Enter` does the one chosen. Its name is what such a box is called elsewhere; what it finds are controls, not commands.
+_Avoid_: command line, console, search (that's the help's)
 
 **Sprite list**:
 The overlay `l` opens: every sprite, one to a row, with its age, life stage, strongest drive, generation and what it's doing, sorted by number, name, age or drive. `/` filters it to the rows with a column that has the words typed, from their start. Choosing one selects it and centres the viewport on it.
@@ -833,8 +845,16 @@ _Avoid_: icon, bubble, flash
 What the map view draws for a tile, named by meaning (such as grass terrain) rather than by character.
 
 **Theme**:
-A mapping from semantic tiles to glyphs and colours. Two are built in; the player's own go in the themes folder and are picked with `Ctrl+T`.
+A mapping from semantic tiles to glyphs and colours, and from each text role to a style; it may also give the panel shades. Two are built in; the player's own go in the themes folder and are picked with `Ctrl+T`.
 _Avoid_: skin
+
+**Text role** (#302):
+What a piece of the screen's text is for, which the theme styles: a heading, muted (minor) text, good (a gain, or a reward felt), bad (a loss, or a punishment felt), a key in a hint, or selected (what's chosen, such as the open tab). Colour never carries a meaning alone: the signs, arrows and capitals stay.
+_Avoid_: colour scheme, highlight (for a role)
+
+**Panel shade** (#302):
+The background a theme may give the inspector and the event log, a little lighter than the terminal's black, with their title rows lighter again, in place of lines between the panels. A theme without shades, such as ASCII, draws a line instead.
+_Avoid_: border, frame, box (pop-ups have boxes; the panels don't)
 
 ### The Cursor
 

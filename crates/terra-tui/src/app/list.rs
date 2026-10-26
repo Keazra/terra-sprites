@@ -25,7 +25,8 @@ impl App {
     /// What an action does while the sprite list is open (design §6.1): the
     /// arrow keys or the wheel move the highlight, `Tab` changes the order,
     /// `Enter` or a click on a row goes to that sprite, `/` starts a filter
-    /// (#313), and `l` or `Esc` closes the list.
+    /// (#313), `?` opens the help at the list's page (#303), and `l` or
+    /// `Esc` closes the list.
     pub(super) fn apply_in_list(&mut self, action: Action, world: &World) -> Flow {
         let Some(action) = self.apply_in_filter(action, world) else {
             return Flow::Continue;
@@ -59,6 +60,7 @@ impl App {
             }
             Action::Point(cell) => self.point(cell),
             Action::FilterList => self.list_filter = Some(Draft::offered(String::new())),
+            Action::Help => self.open_help(),
             Action::SpriteList | Action::Back => self.screen = Screen::Normal,
             _ => {}
         }

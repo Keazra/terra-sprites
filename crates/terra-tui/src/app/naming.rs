@@ -8,10 +8,13 @@ use crate::input::Action;
 
 impl App {
     /// Whether keys type letters, rather than act: while naming a sprite or
-    /// a save, or filtering the sprite list (#313).
+    /// a save, filtering the sprite list (#313), or in the help or the
+    /// command palette, which search what's typed (#303).
     pub fn typing(&self) -> bool {
-        matches!(self.screen, Screen::Naming | Screen::SaveNaming)
-            || self.screen == Screen::SpriteList && self.list_filter.is_some()
+        matches!(
+            self.screen,
+            Screen::Naming | Screen::SaveNaming | Screen::Help | Screen::Palette
+        ) || self.screen == Screen::SpriteList && self.list_filter.is_some()
     }
 
     /// The name being typed, while naming (design §6.5).

@@ -1213,54 +1213,52 @@ The species is dropped into a world it doesn't know and has to learn about it. I
 - The minimum terminal size is **100×30**; 140×40 is recommended.
 - A smaller terminal shows only "Terminal too small" and "needs 100x30, this is 80x24", in the middle, and the game carries on as it was set: shrinking the window doesn't pause it, and `Esc` still asks to quit, with the question under the message (v30). At 100×30 and up, every panel always shows.
 - All text uses only CP437 characters (§6.2).
+- **The panels have no boxes** (#302). The map view has no frame and runs to the screen's edges, the glass and space showing where the world ends (M2 design §11.2). In a theme with shades (§6.2), such as the default, the inspector and the event log sit on a background a shade lighter than the terminal's black, and their title rows, the inspector's tabs and the log's "Events" with its filters, a shade lighter again, with no lines at all. In a theme without, such as ASCII, one line instead: `│` down the inspector's left, and a `─` rule over the log with its title and filters in it, the two meeting at `┴`, as drawn below. At 100×30 the map view shows 54×24 tiles, the inspector 23 rows of 45 columns under its title row, and the event log its title row and three events. Pop-ups keep their boxes, since they sit over the map: menus, the overlays (help, the sprite list, the population graph and the family tree) and the debug overlay. Pictures of a tab's lines in these designs drawn between `│` edges were drawn before #302: the edges only show where the text sits.
 
 ```
- Terra Sprites │ tick 48,210 │ ► 4x │ seed 7 │ sprites 27 │ saved 2m ago                     ? help
-┌─ Map ────────────────────────────────────────────┐┌─ Mira #12 ── [Body] Brain Chem Genome World ┐
-│..,,,..~~~~≈≈≈≈~~..........♣....#########........ ││ Going to eat the berry bush · 3 tiles to go │
-│.,,,...~~~≈≈≈≈≈~~....♣.........########....♠..... ││ age 3,410 · speed 7 · sense 10              │
-│..,,...~~~~≈≈≈~~..........☺.......#####.......♣.. ││ hunger     ███████░░░ .71 ▲                 │
-│...,....~~~~~~~.....•.........☺.....##....☺...... ││ thirst     ██░░░░░░░░ .18                   │
-│.....,...................♣.............♠......... ││ pain       ░░░░░░░░░░ .00                   │
-│....☺....○....................................... ││ tiredness  ████░░░░░░ .39                   │
-│..........................♣.......☺.............♠ ││ energy .42 · hydration .77 · injury .05     │
-└──────────────────────────────────────────────────┘└─────────────────────────────────────────────┘
-┌─ Events ─────────────────────────────────────────────────────────────── [all] selected major ─┐
-│ 48,207  Mira was pricked by a thornbush                                                        │
-│ 48,190  Mira learned: thornbushes are bad                                                      │
-│ 48,102  Kel died (starvation, age 6,020)                                                       │
-└────────────────────────────────────────────────────────────────────────────────────────────────┘
+ Terra Sprites │ tick 48,210 │ ► 4x │ seed 7 │ sprites 27 │ saved 2m ago             ? help (World)
+..,,,..~~~~≈≈≈≈~~..........♣....#########...........♣.│ Mira #12       Body  Brain Chem Genome World
+.,,,...~~~≈≈≈≈≈~~....♣.........########....♠..........│ Going to eat the berry bush · 3 tiles to go
+..,,...~~~~≈≈≈~~..........☺.......#####.......♣.......│ age 3,410 · speed 7 · sense 10
+...,....~~~~~~~.....•.........☺.....##....☺...........│ hunger     ███████░░░ .71 ▲
+.....,...................♣.............♠..............│ thirst     ██░░░░░░░░ .18
+....☺....○............................................│ pain       ░░░░░░░░░░ .00
+..........................♣.......☺.............♠.....│ tiredness  ████░░░░░░ .39
+...,,.....................................☺...........│ energy .42 · hydration .77 · injury .05
+─ Events ─────────────────────────────────────────────┴───────────────────── [all] selected major ──
+  48,207  Mira was pricked by a thornbush
+  48,190  Mira learned: thornbushes are bad
+  48,102  Kel died (starvation, age 6,020)
  (61,40) grass · Mira #12 │ SELECT │ following Mira #12 │ holding: berry   Z select  X train  C grab
 ```
 
 **Brain tab** (v16; the memory layout is v40, [#160](https://github.com/Keazra/terra-sprites/issues/160)):
 
 ```
-┌─ #12 ── Body [Brain] Chem Genome World ────┐
-│ ATTENTION                                  │
-│ ► water                                .62 │
-│   berries                              .21 │
-│                                            │
-│ DECISION: drink                        .71 │
-│                                            │
-│ ► WATER                                    │
-│   good for thirst                     +.70 │
-│   playing with it                     -.38 │
-│   drinking from it                    +.12 │
-│   and 1 more                               │
-│ SPRITES                                    │
-│   frightening                         -.30 │
-│   hitting them                        -.22 │
-│   #7                                       │
-│     frightening                       -.80 │
-│   Mira                                     │
-│     good for loneliness               +.41 │
-│ THE CURSOR                                 │
-│   frightening                         -.55 │
-│                                            │
-│ PLACES                                     │
-│   water · 13 tiles S                   .89 │
-└────────────────────────────────────────────┘
+ Mira #12  Body  Brain  Chem Genome World
+ ATTENTION
+ ► water                                 .62
+   berries                               .21
+
+ DECISION: drink                         .71
+
+ ► WATER
+   good for thirst                      +.70
+   playing with it                      -.38
+   drinking from it                     +.12
+   and 1 more
+ SPRITES
+   frightening                          -.30
+   hitting them                         -.22
+   #7
+     frightening                        -.80
+   Mira
+     good for loneliness                +.41
+ THE CURSOR
+   frightening                          -.55
+
+ PLACES
+   water · 13 tiles S                    .89
 ```
 
 - **Attention** lists each category in reach with its score, highest first, and marks the attended one `►`. With nothing in reach it reads "nothing in sight". Each row names the thing it scored (v19): the object type, "berry bush", or for sprites the sprite (v18), as the event log names sprites, "Sprite #7", "Mira #12". That's the one a running action is aimed at, or else the one that draws the eye most (§3.6, §5.3).
@@ -1274,20 +1272,20 @@ The species is dropped into a world it doesn't know and has to learn about it. I
 - Before a sprite's first decision, attention and the decision read "Nothing decided yet", as they do while a sprite in a hand-made world works through its scripted actions. Its memory still shows below (v17), since such a sprite can learn before it decides:
 
   ```
-  │ Nothing decided yet                        │
-  │                                            │
-  │ THORNBUSHES                                │
-  │   bad                                 -.93 │
+   Nothing decided yet
+
+   THORNBUSHES
+     bad                                  -.93
   ```
 
 **Panels:**
-- **Top bar:** tick, speed, seed, population, save status, and at the right end `? help` (v30). The speed is followed by `lab` in a Lab world (M2 design §16.1). The save status (v32) is `not saved`, `saved just now` (under a minute), `saved 3m ago` or `saved 1h 5m ago`, from the last save, autosave or load. In a replay (v35) it shows how playback stands instead: `replay to tick 48,210`, then `replay ended`, or `replay diverged by tick 2,000` once it has. Object counts, food included, are the World tab's job.
+- **Top bar:** tick, speed, seed, population, save status, and at the right end `? help` (v30), naming the help's page `?` would open, `? help (Inspector)`, unless help is open or the bar is short of room (#303). The speed is followed by `lab` in a Lab world (M2 design §16.1). The save status (v32) is `not saved`, `saved just now` (under a minute), `saved 3m ago` or `saved 1h 5m ago`, from the last save, autosave or load. In a replay (v35) it shows how playback stands instead: `replay to tick 48,210`, then `replay ended`, or `replay diverged by tick 2,000` once it has. Object counts, food included, are the World tab's job.
 - **Map view:**
   - Its viewport scrolls with `W` `A` `S` `D` or the arrow keys, or follows the selected sprite (`T`, "track", v21): Track keeps it in the middle of the map view, as far as the wall allows (from Slice 31, as far as the margin past the wall allows: M2 design §11.1), and follows whichever sprite is selected. Scrolling by hand turns it off (v30).
   - A map smaller than the space gets a map view shrunk to fit it, at the top-left. From Slice 31, it's drawn in the middle of a full map view instead, with space around it (M2 design §11.1).
-  - Its border is **double-lined** (`═ ║`) on any side where the terrarium's wall is in view, and single-lined where the map carries on. From Slice 31, it's single-lined all round, and the wall is drawn as glass just past the map (M2 design §11.2).
+  - Its border is **double-lined** (`═ ║`) on any side where the terrarium's wall is in view, and single-lined where the map carries on. From Slice 31, it's single-lined all round, and the wall is drawn as glass just past the map (M2 design §11.2). From #302 it has no border at all.
   - The Cursor is 3×3 tiles and follows the pointer, or the sprite it follows (§6.5).
-- **Inspector tabs** (`[` and `]`, wrapping around). The game starts on World. The inspector's title is the selected sprite and the tabs, with the open one in brackets; with no sprite selected, it's the tabs alone. A sprite's label too long to fit is shortened, never the tab names.
+- **Inspector tabs** (`[` and `]`, wrapping around, or a click on one, #302). The game starts on World. The inspector's title row is the selected sprite at its left and the tabs at its right, so selecting a sprite never moves them, with the open one in the theme's style for what's chosen, reverse video in the built-in themes, as a selected sprite is, and a space wider each side, as brackets were (#302); with no sprite selected, it's the tabs alone. The tabs leave a sprite's label 13 columns. A label too long for them, as "Bramblewick #538" is, gives the sprite's name alone, and a name too long for them as much of it as fits, ending `...` since CP437 has no `…`; the tab names are never cut.
 
 | Tab | Shows |
 |---|---|
@@ -1319,7 +1317,7 @@ The species is dropped into a world it doesn't know and has to learn about it. I
   - **But a row is never stretched past a tenth,** one cell of the bar: averages that lie within a tenth of each other are drawn as if they spanned a tenth, placed as the level sits between 0 and 1. So a row that hardly moves keeps the shade of its level, `░` under a quarter, `▒` under a half, `▓` under three quarters and `█` above, as stamina's does, and a small drift stays a step or two. In numbers: with the averages' lowest `lo` and highest `hi`, `span` the greater of `hi − lo` and 0.1, and `low = lo − (span − (hi − lo)) × (lo + hi) / 2`, an average `a` is shade `⌊4 × (a − low) / span⌋`, at most 3, where 0 is `░` and 3 is `█`.
   - **A stretch not yet seen is blank,** so a row fills from the right: a hatchling's, and every sprite's once a world is made or loaded.
   - **Every chemical on a line of its own has one:** on the Chem tab the physical chemicals, the drives and the named hormones, such as the feminiser. Reward and punishment don't, since they're used up every tick and always read 0 between ticks, nor do the hormone grid and the Body tab's physical levels, three to a line, which have no room. It's drawn from the data, so a pack's new drive or chemical gets one with no new code.
-  - **It starts in the 33rd column inside the inspector on both tabs,** two after the longest drive line, so the rows line up and nothing already on a line moves: a line is then 40 of the inspector's 44 columns. A name too long for its column, from a data pack, pushes it right.
+  - **It starts in the 33rd column inside the inspector on both tabs,** two after the longest drive line, so the rows line up and nothing already on a line moves: a line is then 40 of the tab's 45 columns (#302). A name too long for its column, from a data pack, pushes it right.
   - **It's `░▒▓█` in every theme,** as the bar is (§6.2: text stays CP437), and a drive's is drawn in its bar's colour on both tabs, any other in its line's.
   - **The screen keeps it, not the world** (§6.8): after every tick the game runs, for every living sprite, so selecting a sprite shows its past at once. A replay's ticks count; fast-forward's don't, since it has no screen. It's never saved and isn't part of `state_hash`, and the open tab's policy shows or hides it with the rest of the tab (§6.4). Past 4×, in Lab mode, it turns over faster than it can be read, as the numbers beside it do.
 
@@ -1398,41 +1396,58 @@ The species is dropped into a world it doesn't know and has to learn about it. I
   - Selecting a sprite while the World tab is open switches to Body. From any other tab, the tab stays.
   - When the selected sprite dies, its tabs read "Mira #12 died of dehydration at age 4,012" until another sprite is selected.
   - A tab too long to fit scrolls a page with `PgUp` / `PgDn`, or 3 lines per notch of the mouse wheel over the inspector. It stops at the top and at the end, and goes back to the top when the tab or the selection changes.
-- **Event log:** each event shows its sprite by name and ID, as "Mira #12", or "Sprite #530" for a sprite with no name (§6.5). Newest first, filtered to all / the selected sprite / major events only (deaths, learning milestones, rejected commands). The filters sit on the log's top border, ` [all] selected major `, the shown one in brackets; `m`, or a click on them, goes to the next (v30). "Selected" is the events the selected sprite did or had done to it. It never shows object events (`ObjectSpawned`, `ObjectRemoved`): they happen dozens of times a minute and would bury everything else, and the World tab counts objects instead. Nor does it show most action events (`ActionStarted`, `ActionEnded`): with 30 sprites they come about 3 for every tick. The Body tab shows the selected sprite's action instead, and emotes show resting and giving up on the map (§6.3). **The exceptions** (from slice 7a) are every Play and Hit that applied, and any action in which a sprite was hurt (not Retreat, which does nothing to anyone), worded as the Body tab words them: "Sprite #4 kicked a ball", "Sprite #9 played with Sprite #2", "Sprite #7 hit Sprite #12", "Sprite #3 tried to eat a thornbush and got hurt". They're rare enough not to bury deaths; if they do, the major-events filter is the answer.
+- **Event log:** each event shows its sprite by name and ID, as "Mira #12", or "Sprite #530" for a sprite with no name (§6.5). Newest first, filtered to all / the selected sprite / major events only (deaths, learning milestones, rejected commands). The filters sit at the right of the log's title row (#302), ` [all] selected major `, the shown one in brackets; `m`, or a click on them, goes to the next (v30). "Selected" is the events the selected sprite did or had done to it. It never shows object events (`ObjectSpawned`, `ObjectRemoved`): they happen dozens of times a minute and would bury everything else, and the World tab counts objects instead. Nor does it show most action events (`ActionStarted`, `ActionEnded`): with 30 sprites they come about 3 for every tick. The Body tab shows the selected sprite's action instead, and emotes show resting and giving up on the map (§6.3). **The exceptions** (from slice 7a) are every Play and Hit that applied, and any action in which a sprite was hurt (not Retreat, which does nothing to anyone), worded as the Body tab words them: "Sprite #4 kicked a ball", "Sprite #9 played with Sprite #2", "Sprite #7 hit Sprite #12", "Sprite #3 tried to eat a thornbush and got hurt". They're rare enough not to bury deaths; if they do, the major-events filter is the answer.
   - **The Cursor's touch** (v21) is logged, spoken to the player: "You petted Sprite #12", "You hugged Sprite #12", "You zapped Sprite #12", "You shocked Sprite #12". So is a refusal: "Couldn't pet Sprite #12: it's gone".
   - **Grabbing** (v23) is logged the same way: "You took hold of Mira #12", "You let go of Mira #12", "You picked up a ball", "You put the ball down", and from slice 11b "You threw the ball", "You shoved Mira #12", and "Mira #12 was shoved into a thornbush and got hurt" (`Threw`, `Shoved`, and a `Crashed` that hurt, v25; a crash that doesn't hurt isn't logged). A held item that expires: "The berry you were holding expired". A led sprite that dies has only its death line. Refusals say what stood in the way: "Couldn't take hold of Sprite #7: it's gone", "Couldn't take hold of Sprite #7: you're already leading Mira #12" (or "…holding something"), "Couldn't put the ball down: a berry is there" (or "…: it can't go on rock", "…: it can't go in deep water"). Letting go of a sprite can't fail: it's already standing somewhere. The screen's clicks follow what the Cursor has hold of, so the "already" refusals come only from clicks queued in a race; the one players meet is putting something down where it can't go.
   - **Lines that read the same in a row merge** into one with a count, "You petted Sprite #12 x10", as the observed list's do; its tick is the latest one's. Spam-clicking would otherwise fill the log.
 - **Status line:** the tile under the Cursor, the cursor mode, followed by `· seen` while sprites can see the Cursor in it (v29, `TRAIN · seen`), the sprite the Cursor follows (`following Mira #12`, v26), what the Cursor holds or leads (`holding: berry`, `leading: Mira #12`, v23, in every mode), and hints for the active keys. A prompt such as "Quit? (y/n)" takes its place while open.
-  - **The key hints** (v22) sit at the right and lead with the mode keys, `Z select  X train  C grab`, then `WASD scroll  space pause  . step  +/- speed  esc quit`. Short of room, whole hints drop from the end, so the mode keys are the last to go, together.
-  - **While aiming** (v25), the key hints read `let go to throw  esc cancel`, or `let go to shove  esc cancel`. **While the sprite list is open** (v30), they read `/ filter  ↑↓ choose  enter go to it  tab sort  esc close`, dropping `/ filter` first when short of room, or while it's filtered, `↑↓ choose  enter go to it  tab sort  esc clear` (#313), and while the population graph is (Slice 26), `←→ pick a moment  space pause  +/- speed  esc close` (M2 design §14.3). While the family tree is (Slice 25), they read `←→↑↓ choose  enter centre on it  space pause  esc close` (M2 design §17.2).
+  - **The key hints** (v22) sit at the right and lead with the mode keys, `Z select  X train  C grab`, then `WASD scroll  space pause  . step  +/- speed  esc quit`. Short of room, whole hints drop from the end, so the mode keys are the last to go, together; so do every screen's hints (#303).
+  - **One list of controls** (#303), each a key or keys and what they do, makes the key hints, the help screen and the command palette (below), so they can't drift apart. **A hint whose key would do nothing just now is greyed** rather than hidden, its key muted like its word: `. step` while time runs, `↑↓ choose` with nothing to choose, and in a replay the keys it refuses (§2.7), such as `X train` and `C grab`. The top bar's `? help` loses its bold while `?` would type, into a name or a search, or answer a question.
+  - **While aiming** (v25), the key hints read `let go to throw  esc cancel`, or `let go to shove  esc cancel`. **While the sprite list is open** (v30), they read `/ filter  ↑↓ choose  enter go to it  tab sort  esc close`, dropping `/ filter` first when short of room, or while it's filtered, `↑↓ choose  enter go to it  tab sort  esc clear` (#313), and while the population graph is (Slice 26), `←→ pick a moment  space pause  +/- speed  esc close` (M2 design §14.3). While the family tree is (Slice 25), they read `←→↑↓ choose  enter centre on it  space pause  esc close` (M2 design §17.2). While help is open (#303), they read `←→ page  type to search  esc close`, or while it searches, `type to search  esc clear`; while the command palette is open, `↑↓ choose  enter do it  esc close`; and while a menu is, such as the Place menu, `↑↓ choose  enter pick  esc close`. The title screen's menu reads `↑↓ choose  enter go  esc quit`.
   - **A refused click's reason** (v22) takes the key hints' place for about 3 seconds of real time, worded as the event log words it: "Couldn't pet Sprite #12: it's gone". A Train click with nothing to act on says so the same way: "No sprite here to pet" (or hug, zap, shock). So do an `F` or a middle click with nothing to follow (v26), "No sprite here to follow", and a right click in Select mode while there's nothing to activate, "Nothing here to activate". So does a Grab click (v23): "Nothing here to grab", or on a fixture, "Can't grab the berry bush: it's rooted to the ground"; and a Grab right click with nothing held, led or under the Cursor (v25): "Nothing here to throw or shove", or on a fixture, "Can't throw the thornbush: it's rooted to the ground". On a line too full for it, such as when the Cursor follows a sprite standing on a berry, the reason still shows, and the tile's part of the line is cut short to make room.
   - The tile names its terrain and any object on it, with the object's stage if it has stages: `(61,40) grass · berry bush (mature)`.
   - **Display names** are the data's names with `_` shown as a space (`berry_bush` → "berry bush"), so `objects.ron` needs no separate display name. Its `plural` is the one other form the screen needs (§3.5.1).
 - **Overlays** (v30) fill the screen between the top bar and the status line, inside a single-lined border with their name at the left of its top edge and ` esc close ` at the right. The status line stays.
-  - **The help screen** (`?`): every key in three columns of groups (time and view; the Cursor; sprites and the inspector), then the colour legend, a sprite glyph in each of the data pack's drives' colours and "none", the emote legend, from Slice 25 the lineage colours (M2 design §17.4), and the game's folder for its files (§6.7). It fits at 100×30, so it doesn't scroll. `?` or `Esc` closes it; other keys do nothing while it's open, but `F3` (below).
+  - **The help screen** (`?`) has five pages (#303), named in its top edge after `Help`, the open one in the style for what's chosen. **World:** every key in three columns of groups (time and view; the Cursor and files; sprites, the inspector and debug), then the colour legend, a sprite glyph in each of the data pack's drives' colours and "none", the emote legend, from Slice 25 the lineage colours (M2 design §17.4), and the game's folder for its files (§6.7). **Inspector:** its keys, what the pointer does over it, and a legend for the open tab, such as the Brain tab's on the Brain tab. **Sprite list**, **Population graph** and **Family tree:** that screen's keys, its time keys where time runs, and what it shows.
+    - **`?` opens it at the page for where the player is:** over the sprite list, the population graph or the family tree, their page; the Inspector page once the player last pointed at the inspector or used its keys (`[`, `]`, `PgUp`, `PgDn`); otherwise the World page. `←` and `→`, or `Tab` and `Shift+Tab`, turn the pages, round from the last to the first, and a click on a page's name opens it, either ending a search; `↑`, `↓` and the wheel scroll a page too long to fit. The top bar names the page `?` would open (above).
+    - **Typing searches every page** (#303): the bottom edge, ` type to search ` until then, shows ` search: egg_ `, and the help lists each key and legend line that has a word starting with each word typed, under its page's name and its legend's heading, or says `Nothing in the help has "…"`. Since typing searches, keys do nothing else while help is open: `p` and space type. `Backspace` rubs out; `Esc` clears the search, its corner saying ` esc clear ` meanwhile, then closes the help, as `?` does at once, going back to what was open. `F3` still works (below), and `?` opens help over a menu too.
 
     ```
-    ┌─ Help ─────────────────────────────────────────────────────────────────────────────── esc close ─┐
+    ┌─ Help ─ World  Inspector  Sprite list  Population graph  Family tree ──────────────── esc close ─┐
     │ TIME                            CURSOR                          SPRITES                          │
-    │ space      pause / resume       Z X C      select/train/grab    Tab        next sprite           │
-    │ .          step                 Q E        left / right click   Shift+Tab  previous sprite       │
-    │ + -        faster / slower      Shift+Q E  hug / shock          l          sprite list           │
-    │ VIEW                            Ctrl+click hug / shock          p          population graph      │
-    │ WASD       scroll (Shift: 5)    H          show to sprites      k          family tree           │
-    │ T          track the selected   F          follow a sprite      r          name it               │
-    │ b          sprite colours       middle     follow a sprite      g          save its genome       │
-    │ m          event filter         wheel      change mode          INSPECTOR                        │
-    │ v          exact detail         C again    the Place menu       [ ]        switch tabs           │
-    │ ?          this help            hold E     aim, let go to send  PgUp PgDn  scroll a tab          │
-    │ Esc        let go, back, quit?                                  DEBUG                            │
-    │ Ctrl+C     quit at once                                         F3         how it's running      │
+    │ space      pause / resume       Z X C      select/train/grab    tab        next sprite           │
+    │ .          step                 Q E        left / right click   Shift+tab  previous sprite       │
+    │ +/-        faster / slower      Shift+Q E  hug / shock          l          sprite list           │
+    │ VIEW                            Ctrl+click hug / shock          l then /   filter the list       │
+    │ WASD       scroll (Shift: 5)    H          show to sprites      p          population graph      │
+    │ T          track the selected   F          follow a sprite      k          family tree           │
+    │ b          sprite colours       middle     follow a sprite      r          name it               │
+    │ m          event filter         wheel      change mode          g          save its genome       │
+    │ v          exact detail         C again    the Place menu       INSPECTOR                        │
+    │ ?          this help            hold E     aim, let go to send  [ ]        switch tabs           │
+    │ :          find a command       FILES                           PgUp PgDn  scroll a tab          │
+    │ esc        let go, back, quit?  F5 F9      quicksave / load     DEBUG                            │
+    │ Ctrl+C     quit at once         Ctrl+S     save as...           F3         how it's running      │
+    │                                 Ctrl+O     load a save                                           │
+    │                                 Ctrl+T     pick a theme                                          │
+    │                                 Ctrl+R     take over a replay                                    │
     │                                                                                                  │
     │ COLOURS: a sprite's strongest drive, once it's above half                                        │
-    │ ☺ hunger  ☺ thirst  ☺ pain  ☺ tiredness  ☺ boredom  ☺ loneliness  ☺ crowdedness  ☺ none          │
-    │ EMOTES   ! hurt  ‼ zapped  ? gave up  z resting  ♥ pleased                                       │
+    │ ☺ hunger  ☺ thirst  ☺ pain  ☺ tiredness  ☺ boredom  ☺ loneliness  ☺ crowdedness  ☺ arousal       │
+    │ ☺ anxiety  ☺ none                                                                                │
+    │ EMOTES   ! hurt  ‼ zapped  ? gave up  z resting  ♥ pleased  ♫ danced  ♪ called                   │
     │ LINEAGE  ☺ parents, grandparents  ☺ brothers, sisters  ☺ young, theirs  ☺ the rest               │
     │ FILES    C:\Users\Player\AppData\Roaming\terra-sprites                                           │
-    └──────────────────────────────────────────────────────────────────────────────────────────────────┘
+    └─ type to search ─────────────────────────────────────────────────────────────────────────────────┘
+    ```
+
+  - **The command palette** (`:`, #303) is a box near the top of the map view, ` Commands `, with ` esc close ` in its corner. It lists every control that works in the world, a key to a row, with what it does and its help heading, dimmed, and the key at the right. Typing finds them by the starts of their words, in any order (`tree` finds the family tree, `gen sav` saving a genome), unlike the sprite list's filter, which keeps a row's words in order: it searches the key, what it does, its heading and other words for it, so `egg` finds the Place menu, the population graph, the family tree and saving a genome. `↑`, `↓` and the wheel choose; `Enter` closes the palette and does what's chosen, as its key would; `Esc` closes it. The pointer's controls and keys written together, such as `C again` for the Place menu, `hold E` and `WASD`, are listed to teach their keys, which are muted: the palette can't press them, so `enter do it` is greyed on them and `Enter` just closes it. In a replay, so are the keys it refuses (§2.7), such as `r name it`, as their hints are. With nothing found it says ` Nothing found`, and `enter do it` is greyed. Controls that work only in an overlay, such as the sprite list's sorting, aren't in it.
+
+    ```
+      ┌─ Commands ───────────────────────── esc close ─┐
+      │:tree_                                          │
+      │ family tree · sprites                        k │
+      └────────────────────────────────────────────────┘
     ```
 
   - **The sprite list** (`l`): a row per sprite the policy lets it show (§6.4), with its label, age, life stage (M2 design §9.6), strongest drive above .5 in the map's colour (or `-`), generation (M2 design §17.1, #313), and what it's doing as the Body tab's first line says it, in the detail view too.
@@ -1461,7 +1476,7 @@ The species is dropped into a world it doesn't know and has to learn about it. I
       `Backspace` rubs a character out. The arrows, the wheel, `Tab` and `Shift+Tab`, `Enter` and a click work as they do unfiltered; the highlight stays on its sprite while it matches, or else goes to the first that does. `Esc` clears the filter, leaving the list open on every sprite with the highlight where it was, and a second `Esc` closes the list. With none matching, it reads "No sprite matches". The list always opens unfiltered.
   - **The population graph** (`p`, from Slice 26): the world's population over its whole run, each column split by the share of each life stage and of eggs, with a moment picked and read under it (M2 design §14).
   - **The family tree** (`k`, from Slice 25): the selected sprite's grandparents, parents, young, and brothers and sisters, living or dead, walked with the arrows (M2 design §17).
-- **The debug overlay** (`F3`, in every build, [#311](https://github.com/Keazra/terra-sprites/issues/311)) isn't one of these: it's a small box inside the map view's border, at its top right, until `F3` hides it again. In a world it's drawn over any menu or overlay, at 100×30 and up; `F3` works whatever's open, a name being typed included, even where other keys do nothing. It says how the game is running on the player's computer, so "it feels slow at Max" becomes numbers in a screenshot:
+- **The debug overlay** (`F3`, in every build, [#311](https://github.com/Keazra/terra-sprites/issues/311)) isn't one of these: it's a small box at the map view's top right, until `F3` hides it again. In a world it's drawn over any menu or overlay, at 100×30 and up; `F3` works whatever's open, a name being typed included, even where other keys do nothing. It says how the game is running on the player's computer, so "it feels slow at Max" becomes numbers in a screenshot:
 
   ```
   ┌─ Debug ────────────── F3 ─┐
@@ -1513,7 +1528,21 @@ The species is dropped into a world it doesn't know and has to learn about it. I
 | Attention marker | the tile's own glyph | the tile's own glyph | dark grey background |
 
 - Every **terrain and object type** on the map, and sprites, has a unique glyph. Colour is used only for **state**, and the status line always names what's under the Cursor. The Cursor's arrows and marks are UI drawn over the map, and may share glyphs with each other (grab and release are arrows).
-- **`--ascii` swaps only what themes cover:** the map's glyphs, the Cursor and the emotes. Frames and text stay CP437 in every theme.
+- **Colours** (#302) are the 16 terminal colours by name, which follow the player's terminal scheme, or exact, `"#rrggbb"`. The default theme keeps names for the map and uses exact colours only where no name fits: the panels' shades, and Look 5's fades once they're built (#306). A terminal that doesn't say it shows exact colours, in `COLORTERM`, such as macOS's Terminal, which draws them wrongly, is given the nearest of the 256 colours nearly every terminal shows instead; on Windows, every terminal shows them.
+- **Text has colours by its job** (#302): a theme's `text` section styles six roles, and every built-in theme sets them. A role a theme leaves out is styled as the default theme styles it. Colour never carries a meaning alone: the signs, the arrows and the capitals stay, so the screen reads the same in ASCII and to a colour-blind player.
+
+  | Role | What it styles | Default and ASCII themes |
+  |---|---|---|
+  | Heading | `ATTENTION`, `WATER`, `Observed`, `HORMONES`, help's headings, the sprite list's heading, the World tab's graph's heading | light cyan, bold |
+  | Muted | Minor text: a log line's tick, `and 3 more`, a `·` between parts, a bar's empty part, what a hint's key does, the dead on the family tree, the population graph's "as shares of each column" | dark grey |
+  | Good | A gain, `+.99` on the Brain tab, and a reward felt, on the Chem tab | light green |
+  | Bad | A loss, `-.19`, and a punishment felt | light red |
+  | Key | The key in a hint, as `Z` in `Z select`, the top bar's `?`, the keys in a question such as `(y/n)` and in an overlay's corner, and help's keys | bold |
+  | Selected | What's chosen: the open tab, a menu's highlighted item, the sprite list's highlighted row | reverse video |
+
+  A zero, `+.00`, is neither good nor bad, and a chemical's change on the Chem tab stays plain, since a rise is good for food and bad for hunger. A drive's bar on the Body tab is drawn in the colour the theme gives that drive, its empty part muted.
+- **Panels** (#302): a theme's `panels` section gives the shade the inspector and the event log sit on, and their title rows' shade: `#181a22` and `#282c3a` in the default theme. A theme without one, such as ASCII, draws lines between the panels instead (§6.1).
+- **`--ascii` swaps only what themes cover:** the map's glyphs, the Cursor, the emotes, and from #302 the text's colours and the panels, which ASCII draws with lines. Frames and text stay CP437 in every theme.
 
 ### 6.3 Body language (UI only)
 
@@ -1561,7 +1590,7 @@ The species is dropped into a world it doesn't know and has to learn about it. I
 - **Following a sprite while visible** (v29), the Cursor sits on it and the sprite sees it there like anything else. A sprite that fears it backs away from a Cursor that keeps following, and gets used to it if it stays and does nothing (§5.6).
 
 - **Scrolling:** `W` `A` `S` `D` or the arrow keys scroll the viewport one tile, and Shift makes it 5. Holding a key keeps scrolling. The viewport stops at the wall (from Slice 31, a quarter of the map view past it: M2 design §11.1). There is **no keyboard cursor**.
-- **The Cursor follows the pointer,** unless it follows a sprite (below). It sits on the tile the pointer **points at** (v27): one up and one left of the tile under the pointer, so the pointer's arrow rests on the Cursor's lower-right corner rather than hiding the tile. On the map view's top row the tile pointed at stays in that row, and on its left column in that column; and on the map view's border just right of or below the tiles, the pointer points at the last column or row, so every tile in view can be pointed at. The Cursor changes as the map scrolls beneath a still pointer. When the pointer leaves the map view, the Cursor stays on its last tile (from Slice 31, also when it points past the wall, where the Cursor isn't drawn: M2 design §11.4). A click acts on the tile pointed at, as the cursor mode says.
+- **The Cursor follows the pointer,** unless it follows a sprite (below). It sits on the tile the pointer **points at** (v27): one up and one left of the tile under the pointer, so the pointer's arrow rests on the Cursor's lower-right corner rather than hiding the tile. On the map view's top row the tile pointed at stays in that row, and on its left column in that column; and on the cell just right of or below the map view, the inspector's left column or the event log's title row (#302; the map view's border before), the pointer points at the last column or row, so every tile in view can be pointed at. The Cursor changes as the map scrolls beneath a still pointer. When the pointer leaves the map view, the Cursor stays on its last tile (from Slice 31, also when it points past the wall, where the Cursor isn't drawn: M2 design §11.4). A click acts on the tile pointed at, as the cursor mode says.
 - **`Q` and `E` are the left and right click** (v21), in every mode, acting where the Cursor is: on the tile the pointer points at, or on the sprite it follows. So a following Cursor keeps the keys on its sprite: in Select mode `Q` can't pick up a sprite the pointer happens to rest on. Each acts once per press: holding one doesn't repeat, so a held key can't pour out pets. In Grab mode `E` also has a release, as the right button does: holding it aims a throw or a shove, and letting it go sends it (v25, below). Keyboard players can train without the mouse: `Tab` to a sprite, `F` to follow it, `X` for Train, `Q` to pet.
 - **Reach:** the Cursor reaches anywhere on the map.
 - **Ownership:** **the Cursor lives in the sim** as far as it touches the world: `World` owns the item it holds or the sprite it leads, one thing at a time, and while it leads, its tile (v23).
@@ -1668,7 +1697,8 @@ N ═ M
 | `Ctrl+S` / `Ctrl+O` | Save by name / load a save from a list (§6.7, v32) |
 | `Ctrl+T` | Pick a theme from the built-in ones and the themes folder (§6.7, v34) |
 | `Ctrl+R` | In a replay, take it over: play on from where it has reached (§2.7, v36) |
-| `?` | Open or close help |
+| `?` | Open or close help, at the page for where the player is; typing in it searches it (§6.1, #303) |
+| `:` | Open the command palette: find any key by what it does, and do it (§6.1, #303) |
 | `Esc` | Close a menu or overlay; cancel an aim; let go of what the Cursor has hold of; back to Select; from Select, ask to quit (v33) |
 | `Ctrl+C` | Quit at once |
 

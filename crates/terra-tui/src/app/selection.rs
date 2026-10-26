@@ -4,7 +4,7 @@
 
 use std::collections::BTreeSet;
 
-use ratatui::layout::{Margin, Position, Rect};
+use ratatui::layout::{Position, Rect};
 use terra_sim::{EntityId, World};
 
 use super::{App, Direction, Selection, Tab};
@@ -54,10 +54,21 @@ impl App {
         self.tab_scroll = 0;
     }
 
-    /// The rows inside the inspector's border: a page.
+    /// The tab whose name is drawn at `at` in the inspector's title row,
+    /// if any (design §6.1).
+    pub(super) fn tab_at(&self, at: Position) -> Option<Tab> {
+        let area = self.inspector?;
+        let column = at.x.checked_sub(area.x + 1)?;
+        if at.y != area.y {
+            return None;
+        }
+        inspector::tab_at(self.tab, usize::from(column))
+    }
+
+    /// The rows a tab has in the inspector: a page.
     pub(super) fn inspector_rows(&self) -> usize {
         self.inspector
-            .map_or(0, |area| usize::from(area.inner(Margin::new(1, 1)).height))
+            .map_or(0, |area| usize::from(inspector::tab_area(area).height))
     }
 
     /// Scrolls the open tab by `lines` from where it's shown, down being
@@ -94,7 +105,7 @@ impl App {
         }
     }
 
-    /// The inspector, border included, if the screen has room for it.
+    /// The inspector, its title row included, if the screen has room for it.
     pub(crate) fn inspector_bounds(&self) -> Option<Rect> {
         self.inspector
     }

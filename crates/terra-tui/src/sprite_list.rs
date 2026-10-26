@@ -3,7 +3,7 @@
 //! it's doing, sorted as the player chooses and filtered by what they type
 //! (#313).
 
-use ratatui::style::{Modifier, Style};
+use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use terra_sim::{EntityId, LifeStage, SpriteView, World};
 
@@ -89,7 +89,7 @@ impl<'a> Row<'a> {
 
 /// The words of `text`, in lower case, split at whatever isn't a letter or a
 /// digit: `Tobek #12` is `tobek` and `12`.
-fn words(text: &str) -> Vec<String> {
+pub(crate) fn words(text: &str) -> Vec<String> {
     text.split(|c: char| !c.is_alphanumeric())
         .filter(|word| !word.is_empty())
         .map(str::to_lowercase)
@@ -180,7 +180,9 @@ pub(crate) fn title(app: &App, world: &World) -> String {
 }
 
 /// The list's heading and its rows, from row `first`, as many as `rows`,
-/// `width` columns wide, with the highlighted sprite in reverse video.
+/// `width` columns wide: the heading in the theme's heading colour and the
+/// highlighted sprite in its style for what's chosen, reverse video in the
+/// built-in themes (design §6.2).
 pub(crate) fn lines(
     app: &App,
     world: &World,
@@ -219,10 +221,8 @@ pub(crate) fn lines(
          {:>generation_width$}  Doing",
         "Sprite", "Age", "Life stage", "Drive", "Generation"
     );
-    let mut lines = vec![Line::styled(
-        clipped(&heading, width),
-        Style::default().add_modifier(Modifier::BOLD),
-    )];
+    let look = app.theme.text();
+    let mut lines = vec![Line::styled(clipped(&heading, width), look.heading)];
     let chosen = app.list_row(world);
     for (index, row) in shown.enumerate().skip(first).take(rows) {
         let colour = row.drive.and_then(|drive| app.theme.drive_colour(drive));
@@ -245,13 +245,14 @@ pub(crate) fn lines(
         ] {
             let text = clipped(&text, room);
             room -= text.chars().count();
-            spans.push(Span::styled(text, style));
+            // The dots in what it's doing minor (design §6.2).
+            spans.extend(inspector::dotted(&text, style, look.muted).spans);
         }
         // The highlight runs the width of the list.
         spans.push(Span::raw(" ".repeat(room)));
         let mut line = Line::from(spans);
         if index == chosen {
-            line = line.style(Style::default().add_modifier(Modifier::REVERSED));
+            line = line.style(look.selected);
         }
         lines.push(line);
     }

@@ -61,7 +61,8 @@ pub enum Action {
     Mode(CursorMode),
     /// Select the sprite with the next ID (`Tab`).
     SelectNext,
-    /// Select the sprite with the previous ID (`Shift+Tab`).
+    /// Select the sprite with the previous ID (`Shift+Tab`); in help, the
+    /// page before (#303).
     SelectPrevious,
     /// Open the next inspector tab (`]`).
     NextTab,
@@ -93,6 +94,8 @@ pub enum Action {
     CycleEventFilter,
     /// Open or close the help screen (`?`, design §6.1).
     Help,
+    /// Open the command palette (`:`, #303).
+    Palette,
     /// Open or close the sprite list (`l`, design §6.1).
     SpriteList,
     /// In the sprite list, start filtering it (`/`, design §6.1, #313).
@@ -137,7 +140,8 @@ pub enum Action {
     /// While naming, the last letter rubbed out (`Backspace`).
     Erase,
     /// While naming, another random name to start from (`Tab`); while
-    /// filtering the sprite list, the next order.
+    /// filtering the sprite list, the next order; in help, the next page
+    /// (#303).
     AnotherName,
     /// While typing, `?` let go of, where the terminal says so: in the New
     /// world box, the mode's explanation goes (M2 design §16).
@@ -282,7 +286,8 @@ impl Keys {
     /// the arrows pick from a list or a row beside it, and `Shift+Tab` goes
     /// back through the sprite list's orders while it's filtered (#313).
     /// `F3` still shows or hides the debug overlay (design §6.1).
-    /// Only presses count, and `Ctrl+C` still quits, but letting go of `?`
+    /// Only presses count, `Esc`, `Enter` and `?` once a press as `F3` does,
+    /// and `Ctrl+C` still quits, but letting go of `?`
     /// says so, as New world explains a mode while it's held (M2 design
     /// §16). Releases are still tracked, so the `r` that opened the prompt
     /// counts as let go after it, and a key already down when the prompt
@@ -302,6 +307,17 @@ impl Keys {
             return matches!(key.code, KeyCode::Char('c' | 'C')).then_some(Action::Quit);
         }
         match key.code {
+            // `Esc`, `Enter` and `?` can close what's typed into, so each
+            // acts once a press, noted as down as `action_for` notes keys:
+            // held, it would close help and then act on what's under it.
+            KeyCode::Esc | KeyCode::Enter | KeyCode::Char('?') => {
+                self.down.insert(physical);
+                (key.kind != KeyEventKind::Repeat).then_some(match key.code {
+                    KeyCode::Esc => Action::Back,
+                    KeyCode::Enter => Action::Enter,
+                    _ => Action::Type('?'),
+                })
+            }
             KeyCode::Char(c) => Some(Action::Type(c)),
             KeyCode::Backspace => Some(Action::Erase),
             // Shift+Tab as `action_for` reads it, either way it's reported.
@@ -310,8 +326,6 @@ impl Keys {
                 Some(Action::SelectPrevious)
             }
             KeyCode::Tab => Some(Action::AnotherName),
-            KeyCode::Enter => Some(Action::Enter),
-            KeyCode::Esc => Some(Action::Back),
             // `F3` types nothing, so it shows or hides the debug overlay
             // while typing too (design §6.1, #311), once a press: noted as
             // down, it does nothing pressed again with no release between.
@@ -413,6 +427,7 @@ impl Keys {
             KeyCode::Char('t') => (!held).then_some(Action::Track),
             KeyCode::Char('m') => (!held).then_some(Action::CycleEventFilter),
             KeyCode::Char('?') => (!held).then_some(Action::Help),
+            KeyCode::Char(':') => (!held).then_some(Action::Palette),
             KeyCode::Char('l') => (!held).then_some(Action::SpriteList),
             KeyCode::Char('/') => (!held).then_some(Action::FilterList),
             KeyCode::Char('p') => (!held).then_some(Action::Population),
@@ -479,6 +494,7 @@ fn physical_key(code: KeyCode) -> KeyCode {
         KeyCode::Char('_') => KeyCode::Char('-'),
         KeyCode::Char('>') => KeyCode::Char('.'),
         KeyCode::Char('?') => KeyCode::Char('/'),
+        KeyCode::Char(':') => KeyCode::Char(';'),
         KeyCode::Char(c) => KeyCode::Char(c.to_ascii_lowercase()),
         other => other,
     }
