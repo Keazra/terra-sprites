@@ -1,6 +1,6 @@
 # Help for the screen you're on, and a command palette
 
-The key hints, the help and a new command palette are built from one list of controls, each a key or keys and what they do. Fauxpaw settled it in the UI lessons round of 2026-10-19 (question 3, answer A), as Look 2 ([#303](https://github.com/Keazra/terra-sprites/issues/303)) of the Look slices ([#301](https://github.com/Keazra/terra-sprites/issues/301)).
+The key hints, the help and a new command palette are built from one list of controls, each a key or keys and what they do. Fauxpaw settled it in the UI lessons round of 2026-10-19 (question 3, answer A), as Look 2 ([#303](https://github.com/Keazra/terra-sprites/issues/303)) of the Look slices ([#301](https://github.com/Keazra/terra-sprites/issues/301)), and it was built in [#384](https://github.com/Keazra/terra-sprites/pull/384).
 
 ## M1 "A Sprite Lives"
 
