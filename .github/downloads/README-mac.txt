@@ -61,8 +61,23 @@ Your worlds
 The game keeps your saves, autosaves and replays in a folder of its own,
 ~/Library/Application Support/terra-sprites (the last line of the help
 screen, ?, shows it too). A newer version finds them there, so to
-update, unzip the new one and run that instead. To remove the game,
-delete this folder, and that one too if you don't want your worlds.
+update, unzip the new one and run that instead.
+
+
+Removing it
+-----------
+
+1. Drag this folder to the Trash, and the zip too if Safari kept it.
+   That removes the game.
+
+2. To remove your worlds too, delete the game's own folder. In Finder,
+   choose Go, then Go to Folder, type ~/Library/Application Support and
+   press Return, then drag the terra-sprites folder there to the Trash.
+   Or in Terminal:
+
+       rm -rf ~/Library/Application\ Support/terra-sprites
+
+That's everything: the game writes nothing anywhere else.
 
 
 Licence
