@@ -28,7 +28,7 @@ use crate::listed::listed_enum;
 use crate::policy::{InfoPolicy, Omniscient, Panel, Subject};
 use crate::saves::{QUICKSAVE, SaveFile};
 use crate::space::Place;
-use crate::spots::Spots;
+use crate::spots::{Spot, Spots};
 use crate::sprite_list::SortBy;
 use crate::text::{Names, Words};
 use crate::theme::{Emote, Theme};
@@ -51,6 +51,7 @@ mod view;
 
 pub(crate) use cursor::{ItemLook, ShownItems, item_look};
 pub(crate) use help::finds;
+pub(crate) use spots::in_the_world;
 
 /// Whether the game carries on after an action.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -307,7 +308,7 @@ listed_enum! {
 
 impl Tab {
     /// What the tab shows, as the status line says it while the pointer is
-    /// on its name (#304).
+    /// on its name (design §6.1).
     pub fn about(self) -> &'static str {
         match self {
             Tab::Body => "what it's doing, its drives and its body",
@@ -563,7 +564,7 @@ pub struct App {
     graph_pick: Option<u64>,
     /// The card the family tree's arrows are on, if not the one in the
     /// middle (M2 design §17.3).
-    tree_choice: Option<family_tree::Spot>,
+    tree_choice: Option<family_tree::Seat>,
     /// How far along the family tree's rows that scroll are.
     tree_scroll: family_tree::Scroll,
     /// The game's folder for its files (design §6.7), which the help
@@ -604,7 +605,7 @@ pub struct App {
     /// Whether the player last pointed at the inspector or used its keys,
     /// rather than the map's, so help opens at the inspector's page (#303).
     on_inspector: bool,
-    /// The spots of the frame last drawn (#304), which drawing replaces each
+    /// The spots of the frame last drawn (design §6.1), which drawing replaces each
     /// frame: what the pointer is over, and what a click lands on.
     spots: RefCell<Spots>,
 }
@@ -977,10 +978,17 @@ impl App {
                 self.scroll(dx, dy);
             }
             Action::Point(cell) => self.point(cell),
-            // A click on the event log's filters goes to the next, one on an
-            // inspector tab opens it (design §6.1), and one on a line of the
-            // log selects the sprite it's about (#304), where the last
-            // frame drew them.
+            // A pop-up's box takes the pointer's clicks and the wheel, so
+            // they never land on the map beneath it (design §6.1).
+            Action::Click { at, .. }
+            | Action::Wheel { at, .. }
+            | Action::Follow { at: Some(at) }
+                if self.spot_at(at) == Some(Spot::PopUp) =>
+            {
+                self.point(at);
+            }
+            // A left click on a spot that takes one, where the last frame
+            // drew it, such as a tab or a line of the log (design §6.1).
             Action::Click {
                 at,
                 button: Button::Left,
@@ -992,13 +1000,6 @@ impl App {
                 amplified,
             } => {
                 self.point(at);
-                // A click on a memory heading toggles it (design v40 §6.1).
-                // The map view's reach takes in the inspector's left column
-                // (#302), but the open tab starts a column in, so the same
-                // click is never also a tile.
-                if button == Button::Left {
-                    self.toggle_lesson(at, world);
-                }
                 match self.pointed_place(at) {
                     // A click lands where the Cursor is: not past the leash
                     // (design v23 §6.5).
@@ -1118,9 +1119,11 @@ impl App {
             | Action::FilterList
             | Action::DebugOverlay
             | Action::Quit => {}
+            // `Enter` opens or shuts the memory block under the pointer
+            // (design v40 §6.1).
             Action::Enter => {
-                if let Some(at) = self.mouse {
-                    self.toggle_lesson(at, world);
+                if let Some(Spot::Memory(which)) = self.pointed_spot() {
+                    self.toggle_lesson(which);
                 }
             }
         }

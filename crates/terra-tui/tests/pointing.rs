@@ -81,6 +81,22 @@ fn a_chemical_says_what_it_is_on_its_line_and_in_the_hormones_grid() {
         status.starts_with(" h3: a spare hormone its genes may use for anything"),
         "{status:?}"
     );
+    // A later cell in the grid, to its last column, and not the gap after.
+    let h7 = cell_of_text(&app, &world, SCREEN, "h7 ");
+    apply(
+        &mut app,
+        &world,
+        Action::Point(Position::new(h7.x + 7, h7.y)),
+    );
+    let status = status_line(&app, &world);
+    assert!(status.starts_with(" h7: "), "{status:?}");
+    apply(
+        &mut app,
+        &world,
+        Action::Point(Position::new(h7.x + 8, h7.y)),
+    );
+    let status = status_line(&app, &world);
+    assert!(!status.starts_with(" h"), "{status:?}");
     // The named hormones are lower down.
     let (world, mut app, _) = selected(TALL, Tab::Chem);
     let status = pointing_at_text(&mut app, &world, TALL, "receptivity");
@@ -91,7 +107,7 @@ fn a_chemical_says_what_it_is_on_its_line_and_in_the_hormones_grid() {
 }
 
 #[test]
-fn a_chemical_its_pack_says_nothing_of_is_named_by_its_class() {
+fn a_chemical_its_pack_says_nothing_of_says_what_sort_it_is() {
     let quiet: &[(&str, &str)] = &[(
         r#"about: "rises as energy runs low, and eating brings it down at once""#,
         r#"about: """#,
@@ -105,6 +121,28 @@ fn a_chemical_its_pack_says_nothing_of_is_named_by_its_class() {
     let status = pointing_at_text(&mut app, &world, SCREEN, "hunger");
     assert!(
         status.starts_with(" hunger: a drive, an urge it feels"),
+        "{status:?}"
+    );
+}
+
+#[test]
+fn words_too_long_for_the_status_line_end_in_dots() {
+    let long = format!(r#"about: "{}""#, "ever so hungry, ".repeat(10));
+    let wordy: &[(&str, &str)] = &[(
+        r#"about: "rises as energy runs low, and eating brings it down at once""#,
+        &long,
+    )];
+    let world = WorldBuilder::grass(10, 6)
+        .data(pack_changing(&[("chemicals.ron", wordy)]))
+        .starters(&[at(2, 2)])
+        .build();
+    let mut app = app_on(&world);
+    select(&mut app, &world, sprite_on(&world, at(2, 2)));
+    let status = pointing_at_text(&mut app, &world, SCREEN, "hunger");
+    assert!(status.starts_with(" hunger: ever so hungry"), "{status:?}");
+    assert!(status.trim_end().ends_with("..."), "{status:?}");
+    assert!(
+        status.chars().count() <= usize::from(SCREEN.width),
         "{status:?}"
     );
 }
@@ -250,11 +288,96 @@ fn a_click_on_a_line_about_a_sprite_no_longer_living_selects_nothing() {
 }
 
 #[test]
+fn a_click_on_a_log_line_moves_the_view_only_if_its_sprite_is_out_of_view() {
+    let (near, far) = (at(60, 30), at(2, 2));
+    let world = WorldBuilder::grass(120, 60).starters(&[near, far]).build();
+    let mut app = app_on(&world);
+    let ids = [sprite_on(&world, near), sprite_on(&world, far)];
+    assert!(app.cell_of(near).is_some() && app.cell_of(far).is_none());
+    let grew_up = |id| Event {
+        tick: 1,
+        kind: EventKind::GrewUp { id },
+    };
+    app.record(&[grew_up(ids[0]), grew_up(ids[1])], &world);
+    let line = |app: &App, id: EntityId| {
+        cell_of_text(app, &world, SCREEN, &format!("Sprite #{} grew up", id.0))
+    };
+    let view = app.viewport();
+    let near_line = line(&app, ids[0]);
+    apply(&mut app, &world, Action::left_click(near_line));
+    assert_eq!(app.selection(), Some(Selection::Living(ids[0])));
+    assert_eq!(app.viewport(), view, "in view, the view stays");
+    let far_line = line(&app, ids[1]);
+    apply(&mut app, &world, Action::left_click(far_line));
+    assert_eq!(app.selection(), Some(Selection::Living(ids[1])));
+    assert!(
+        app.cell_of(far).is_some(),
+        "out of view, the view goes to it"
+    );
+}
+
+#[test]
+fn a_click_on_a_log_line_leaves_follow_as_it_is() {
+    let world = field(&[], &[at(2, 2), at(7, 4)]);
+    let mut app = app_on(&world);
+    let (followed, other) = (sprite_on(&world, at(2, 2)), sprite_on(&world, at(7, 4)));
+    let cell = app.cell_of(at(2, 2)).expect("in view");
+    apply(
+        &mut app,
+        &world,
+        Action::middle_click(Position::new(cell.x + 1, cell.y + 1)),
+    );
+    assert_eq!(app.followed(), Some(followed));
+    let grew_up = Event {
+        tick: 1,
+        kind: EventKind::GrewUp { id: other },
+    };
+    app.record(&[grew_up], &world);
+    let line = cell_of_text(&app, &world, SCREEN, "grew up");
+    apply(&mut app, &world, Action::left_click(line));
+    assert_eq!(app.selection(), Some(Selection::Living(other)));
+    assert_eq!(app.followed(), Some(followed));
+}
+
+#[test]
+fn a_click_on_the_debug_overlay_never_lands_on_the_map_beneath() {
+    // Where the overlay's box is drawn, over the map view's top right.
+    let empty = WorldBuilder::grass(60, 30).build();
+    let mut app = app_on(&empty);
+    apply(&mut app, &empty, Action::DebugOverlay);
+    let corner = cell_of_text(&app, &empty, SCREEN, " Debug ");
+    let cell = Position::new(corner.x + 3, corner.y + 2);
+    let tile = app.tile_at(cell).expect("a tile beneath the box");
+    // A sprite there, which a click selects with the overlay hidden.
+    let world = WorldBuilder::grass(60, 30).starters(&[tile]).build();
+    let id = sprite_on(&world, tile);
+    let click = Action::left_click(Position::new(cell.x + 1, cell.y + 1));
+    for shown in [false, true] {
+        let mut app = app_on(&world);
+        if shown {
+            apply(&mut app, &world, Action::DebugOverlay);
+        }
+        render(&app, &world);
+        apply(&mut app, &world, click);
+        let selected = app.selection() == Some(Selection::Living(id));
+        assert_eq!(selected, !shown, "overlay shown: {shown}");
+    }
+}
+
+#[test]
 fn a_pop_up_takes_the_pointer_before_what_is_under_it() {
-    let (world, mut app, _) = selected(SCREEN, Tab::Body);
-    let bar = cell_of_text(&app, &world, SCREEN, "hunger");
-    apply(&mut app, &world, Action::Help);
-    apply(&mut app, &world, Action::Point(bar));
-    let status = status_line(&app, &world);
-    assert!(!status.contains("hunger"), "{status:?}");
+    let opens = [
+        Action::Help,
+        Action::SpriteList,
+        Action::Population,
+        Action::FamilyTree,
+    ];
+    for open in opens {
+        let (world, mut app, _) = selected(SCREEN, Tab::Body);
+        let bar = cell_of_text(&app, &world, SCREEN, "hunger");
+        apply(&mut app, &world, open);
+        apply(&mut app, &world, Action::Point(bar));
+        let status = status_line(&app, &world);
+        assert!(!status.contains("hunger"), "{open:?}: {status:?}");
+    }
 }

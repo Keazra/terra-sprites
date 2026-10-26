@@ -17,7 +17,7 @@ use terra_sim::{DeathCause, EntityId, Pos, SpriteView, World};
 use crate::app::{App, Selection, Tab};
 use crate::policy::{Panel, Subject};
 use crate::spots::Spot;
-use crate::text::{BOUND, cause_name, thousands, unbroken, wrap};
+use crate::text::{BOUND, cause_name, fitted, thousands, unbroken, wrap};
 
 mod actions;
 mod body;
@@ -32,8 +32,8 @@ mod world;
 pub(crate) use actions::{done_to_line, observed_line};
 pub(crate) use body::{Hatching, doing_line, hatching};
 use body::{body_tab, egg_card};
+pub(crate) use brain::MemoryOpen;
 use brain::brain_rows;
-pub(crate) use brain::{MemoryOpen, lesson_at};
 use chem::chem_tab;
 pub(crate) use event_log::{crashed_into, event_line, event_sprites, refusal_sprites};
 use genome::genome_tab;
@@ -144,33 +144,25 @@ fn fitted_label(sprite: Option<(&str, &str)>, room: usize) -> String {
         Some((label, name)) => [label, name]
             .into_iter()
             .find(|text| text.chars().count() <= fits)
-            .map_or_else(|| shortened(name, fits), str::to_string),
+            .map_or_else(|| fitted(name, fits), str::to_string),
         None => String::new(),
     };
     format!("{:<room$}", format!(" {text}"))
 }
 
-/// The first of `text` that fits in `width` columns with "..." after it.
-fn shortened(text: &str, width: usize) -> String {
-    let kept: String = text.chars().take(width.saturating_sub(3)).collect();
-    format!("{}...", kept.trim_end())
-}
-
-/// A line of a tab as it's drawn: the memory block it opens or shuts, if it
-/// does (design v40 §6.1), and its spots, each with the columns it takes
-/// from the line's start (#304).
+/// A line of a tab as it's drawn, and its spots, each with the columns it
+/// takes from the line's start (design §6.1): a memory heading's is the
+/// block it opens or shuts (design v40 §6.1).
 pub(crate) struct TabLine {
     pub(crate) line: Line<'static>,
-    pub(crate) opens: Option<MemoryOpen>,
     pub(crate) spots: Vec<(Range<u16>, Spot)>,
 }
 
 impl From<Line<'static>> for TabLine {
-    /// A line that opens nothing and has no spot.
+    /// A line with no spot.
     fn from(line: Line<'static>) -> TabLine {
         TabLine {
             line,
-            opens: None,
             spots: Vec::new(),
         }
     }
@@ -181,7 +173,6 @@ impl TabLine {
     fn spotted(line: Line<'static>, spot: Spot) -> TabLine {
         TabLine {
             line,
-            opens: None,
             spots: vec![(0..WIDTH as u16, spot)],
         }
     }
@@ -195,9 +186,9 @@ pub fn lines(app: &App, world: &World) -> Vec<Line<'static>> {
         .collect()
 }
 
-/// The open tab's lines, which of them open or shut a memory block, and
-/// their spots. The policy is applied here, so drawing, the spots and what
-/// a click opens stay one list (design §6.4, v40 §6.1, #304).
+/// The open tab's lines and their spots. The policy is applied here, so
+/// drawing, the spots and what a click opens stay one list (design §6.1,
+/// §6.4).
 pub(crate) fn shown(app: &App, world: &World) -> Vec<TabLine> {
     // The policy may hide a tab (design §6.4).
     let subject = match (app.tab(), app.selection()) {
@@ -251,17 +242,17 @@ pub(crate) fn first_shown(scroll: usize, length: usize, rows: usize) -> usize {
     scroll.min(length.saturating_sub(rows))
 }
 
-/// A sprite tab's lines for `sprite`, the selection. Only the Brain tab's
-/// memory headings open anything, and only the Body, Chem and Genome tabs
-/// have spots (#304).
+/// A sprite tab's lines for `sprite`, the selection, with their spots
+/// (design §6.1): the Brain tab's memory headings, the Body tab's drives,
+/// the Chem tab's chemicals and the Genome tab's genes.
 fn sprite_tab(tab: Tab, sprite: &SpriteView, app: &App, world: &World) -> Vec<TabLine> {
     match tab {
         Tab::Body => body_tab(sprite, app, world),
         Tab::Brain => brain_rows(sprite, app, world)
             .into_iter()
-            .map(|(line, opens)| TabLine {
-                opens,
-                ..TabLine::from(line)
+            .map(|(line, opens)| match opens {
+                Some(opens) => TabLine::spotted(line, Spot::Memory(opens)),
+                None => line.into(),
             })
             .collect(),
         Tab::Chem => chem_tab(sprite, app.theme.text()),

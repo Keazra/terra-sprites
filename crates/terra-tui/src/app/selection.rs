@@ -4,8 +4,7 @@
 
 use std::collections::BTreeSet;
 
-use ratatui::layout::{Position, Rect};
-use terra_sim::{EntityId, World};
+use terra_sim::{EntityId, Pos, World};
 
 use super::{App, Direction, Selection, Tab};
 use crate::inspector;
@@ -87,16 +86,18 @@ impl App {
         let Some(&id) = chosen else {
             return;
         };
-        self.select(id);
         let pos = world.sprite(id).expect("a sprite just listed").pos();
-        if self.cell_of(pos).is_none() {
-            self.centre_on(pos);
-        }
+        self.select_in_view(id, Some(pos));
     }
 
-    /// The inspector, its title row included, if the screen has room for it.
-    pub(crate) fn inspector_bounds(&self) -> Option<Rect> {
-        self.inspector
+    /// Selects `id`, and centres the viewport on it, where it is at `pos`
+    /// if it's anywhere, only if it's out of view (design §6.5): as `Tab`
+    /// does, and a click on a line of the event log about it.
+    pub(super) fn select_in_view(&mut self, id: EntityId, pos: Option<Pos>) {
+        self.select(id);
+        if let Some(pos) = pos.filter(|&pos| self.cell_of(pos).is_none()) {
+            self.centre_on(pos);
+        }
     }
 
     /// Which memory block is open on the Brain tab.
@@ -104,15 +105,11 @@ impl App {
         &self.open_lessons
     }
 
-    /// Opens or shuts the memory block under `at`, if that line opens one.
-    /// A click on a lesson line, or off the Brain tab, does nothing.
-    pub(super) fn toggle_lesson(&mut self, at: Position, world: &World) -> bool {
-        let Some(which) = inspector::lesson_at(self, world, at) else {
-            return false;
-        };
+    /// Opens or shuts memory block `which` on the Brain tab (design v40
+    /// §6.1).
+    pub(super) fn toggle_lesson(&mut self, which: inspector::MemoryOpen) {
         if !self.open_lessons.remove(&which) {
             self.open_lessons.insert(which);
         }
-        true
     }
 }

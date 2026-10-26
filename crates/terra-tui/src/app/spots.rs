@@ -1,8 +1,9 @@
-//! What the pointer is over, and what a click on it does (#304): the
-//! spots of the frame last drawn, which drawing hands the app each frame.
+//! What the pointer is over, and what a click on it does (design §6.1):
+//! the spots of the frame last drawn, which drawing hands the app each
+//! frame.
 
 use ratatui::layout::Position;
-use terra_sim::{EntityId, World};
+use terra_sim::{EntityId, Pos, World};
 
 use super::App;
 use crate::family_tree::Known;
@@ -10,7 +11,7 @@ use crate::spots::{Spot, Spots};
 
 impl App {
     /// Keeps `spots`, the frame just drawn's, in place of the last's
-    /// (#304). Drawing calls it once it's done.
+    /// (design §6.1). Drawing calls it once it's done.
     pub(crate) fn keep_spots(&self, spots: Spots) {
         *self.spots.borrow_mut() = spots;
     }
@@ -31,43 +32,42 @@ impl App {
         self.spot_at(self.mouse?)
     }
 
-    /// The sprite the event log's line under the pointer is about, which
-    /// the map lights up (#304).
-    pub(crate) fn pointed_event(&self) -> Option<EntityId> {
-        match self.pointed_spot()? {
-            Spot::Event(id) => Some(id),
-            _ => None,
-        }
-    }
-
-    /// Whether a left click at `at` lands on a spot that takes a click: the
-    /// event log's filters, an inspector tab, or a line of the log.
+    /// Whether a left click at `at` lands on a spot that takes one, rather
+    /// than on the map.
     pub(super) fn clicks_spot(&self, at: Position) -> bool {
-        matches!(
-            self.spot_at(at),
-            Some(Spot::Filters | Spot::Tab(_) | Spot::Event(_))
-        )
+        self.spot_at(at).is_some_and(|spot| spot.takes_a_click())
     }
 
-    /// A left click on the spot at `at`: the filters go to the next, a tab
-    /// opens (design §6.1), and a line of the log selects the sprite it's
-    /// about while it lives, as the Tab key does (#304).
+    /// A left click on the spot at `at` (design §6.1): the filters go to the
+    /// next, a tab opens, a memory heading opens or shuts its block (design
+    /// v40 §6.1), and a line of the log selects the sprite or egg it's
+    /// about while it's in the world, as `Tab` does (§6.5).
     pub(super) fn click_spot(&mut self, at: Position, world: &World) {
-        match self.spot_at(at) {
-            Some(Spot::Filters) => self.next_filter(),
-            Some(Spot::Tab(tab)) => self.open(tab),
-            Some(Spot::Event(id)) => {
-                let pos = match Known::of(world, id) {
-                    Known::Living(sprite) => Some(sprite.pos()),
-                    Known::Egg(egg) => egg.pos(),
-                    Known::Dead(_) | Known::Forgotten => return,
-                };
-                self.select(id);
-                if let Some(pos) = pos.filter(|&pos| self.cell_of(pos).is_none()) {
-                    self.centre_on(pos);
+        self.point(at);
+        let Some(spot) = self.spot_at(at) else {
+            return;
+        };
+        match spot {
+            Spot::Filters => self.next_filter(),
+            Spot::Tab(tab) => self.open(tab),
+            Spot::Memory(which) => self.toggle_lesson(which),
+            Spot::LogLine(id) => {
+                if let Some(pos) = in_the_world(world, id) {
+                    self.select_in_view(id, pos);
                 }
             }
-            _ => {}
+            Spot::Chemical { .. } | Spot::Gene(_) | Spot::PopUp => {}
         }
+    }
+}
+
+/// Where sprite or egg `id` is, if it's in the world, living or laid:
+/// `None` once it has died or been forgotten, and `Some(None)` for an egg
+/// that's held, so has no tile of its own (M2 design §10.7).
+pub(crate) fn in_the_world(world: &World, id: EntityId) -> Option<Option<Pos>> {
+    match Known::of(world, id) {
+        Known::Living(sprite) => Some(Some(sprite.pos())),
+        Known::Egg(egg) => Some(egg.pos()),
+        Known::Dead(_) | Known::Forgotten => None,
     }
 }

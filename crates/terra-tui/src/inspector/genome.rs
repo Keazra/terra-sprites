@@ -4,11 +4,11 @@
 use ratatui::style::Style;
 use ratatui::text::Line;
 use terra_sim::{
-    CopyChangeView, EmitterMode, Expression, GeneView, LifeStage, SpriteView, Switch, Trait, Whom,
+    CopyChangeView, EmitterMode, Expression, GeneView, LifeStage, SpriteView, Switch, Whom,
 };
 
 use super::actions::verb_name;
-use super::body::{trait_name, trait_value};
+use super::body::{trait_about, trait_name, trait_value};
 use super::brain::concept_name;
 use super::{TabLine, listed, wrapped};
 use crate::app::App;
@@ -63,7 +63,7 @@ impl GeneGroup {
 /// order, as plain lines. The expressed traits share one line. A gene with
 /// no effect is dimmed, with the reason below it. The pointer on a gene's
 /// lines, or a trait's part of the line they share, says what it does
-/// (#304).
+/// (design §6.1).
 pub(super) fn genome_tab(sprite: &SpriteView, app: &App) -> Vec<TabLine> {
     let genes: Vec<(usize, GeneView, Expression, Switch, f32)> = sprite
         .genes()
@@ -505,7 +505,7 @@ fn emitter_source(locus: &str, mode: EmitterMode, invert: bool) -> String {
 }
 
 /// What `gene` does, in a sentence, as the status line says it while the
-/// pointer is on it (#304). What each kind of gene does is the engine's,
+/// pointer is on it (design §6.1). What each kind of gene does is the engine's,
 /// so the sentence's shape is the screen's; the names in it are the data
 /// pack's: `An emitter: hunger rises while energy is below .7`.
 pub(crate) fn gene_about(gene: &GeneView) -> String {
@@ -518,16 +518,9 @@ pub(crate) fn gene_about(gene: &GeneView) -> String {
         }
     };
     match *gene {
-        GeneView::Trait { which, .. } => format!(
-            "A trait: {} is {}",
-            trait_name(which),
-            match which {
-                Trait::Speed => "how fast it walks, and the faster the more energy a step costs",
-                Trait::SenseRadius => "how far it senses, and the further the more energy it costs",
-                Trait::GrowsUp => "the age it grows up at",
-                Trait::GrowsOld => "the age it grows old at",
-            }
-        ),
+        GeneView::Trait { which, .. } => {
+            format!("A trait: {} is {}", trait_name(which), trait_about(which))
+        }
         GeneView::HalfLife { chem, .. } => format!(
             "A half-life: {} fades by itself, by half {}",
             display_name(chem),

@@ -642,7 +642,7 @@ impl DataPack {
     }
 
     /// What the chemical called `name` is, in a sentence, as
-    /// `chemicals.ron` says beside its name (#304): for a drive, what
+    /// `chemicals.ron` says beside its name (design §6.1): for a drive, what
     /// raises it and what lowers it. `None` if the pack doesn't say.
     pub fn chemical_about(&self, name: &str) -> Option<&str> {
         self.chemical_named(name)

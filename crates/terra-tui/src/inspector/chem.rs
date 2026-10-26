@@ -17,7 +17,7 @@ use crate::theme::TextLook;
 /// colour when it's a reward and its bad when it's a punishment, and the
 /// hormones' heading in its heading colour (design §6.2). A change stays
 /// plain: a rise is good for food and bad for hunger. The pointer on a
-/// chemical, its line or its cell in the grid, says what it is (#304).
+/// chemical, its line or its cell in the grid, says what it is (design §6.1).
 pub(super) fn chem_tab(sprite: &SpriteView, look: TextLook) -> Vec<TabLine> {
     let chemicals: Vec<ChemicalLevel> = sprite.chemicals().collect();
     let line = |c: &ChemicalLevel| {
@@ -67,30 +67,26 @@ pub(super) fn chem_tab(sprite: &SpriteView, look: TextLook) -> Vec<TabLine> {
             !number.is_empty() && number.chars().all(|c| c.is_ascii_digit())
         });
     for four in numbered.chunks(4) {
-        let cells: Vec<String> = four
-            .iter()
-            .map(|c| format!("{:<4}{:>4}", display_name(c.name), level(c.level)))
-            .collect();
-        let mut row = TabLine::from(Line::from(format!(" {}", cells.join("   "))));
-        // Each cell is 8 columns, 3 apart, after a space.
-        row.spots = four
-            .iter()
-            .enumerate()
-            .map(|(i, c)| {
-                let start = 1 + 11 * i as u16;
-                (start..start + 8, spot(c))
-            })
-            .collect();
-        lines.push(row);
+        // Each cell is its spot, 3 apart, after a space.
+        let (mut text, mut spots) = (String::from(" "), Vec::new());
+        for (i, c) in four.iter().enumerate() {
+            if i > 0 {
+                text.push_str("   ");
+            }
+            let start = text.chars().count() as u16;
+            text.push_str(&format!("{:<4}{:>4}", display_name(c.name), level(c.level)));
+            spots.push((start..text.chars().count() as u16, spot(c)));
+        }
+        lines.push(TabLine {
+            line: Line::from(text),
+            spots,
+        });
     }
     lines.extend(named.into_iter().map(line));
     lines
 }
 
-/// The spot of chemical `c`'s line or cell (#304).
+/// The spot of chemical `c`'s line or cell (design §6.1).
 fn spot(c: &ChemicalLevel) -> Spot {
-    Spot::Chemical {
-        name: c.name.to_string(),
-        kind: c.kind,
-    }
+    Spot::chemical(c.name, c.kind)
 }

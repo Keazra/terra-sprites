@@ -406,11 +406,12 @@ const YOUNG: usize = BROOD_JOIN + 1;
 const SIBLINGS_HEADING: usize = YOUNG + 1 + TEXT_ROWS + 1;
 const SIBLINGS: usize = SIBLINGS_HEADING + 1;
 
-/// A card on the tree: whose it is, and where. A sprite can be on the tree
-/// twice, as a parent and a grandparent when its young had young together,
-/// so the arrows go from card to card, not from sprite to sprite.
+/// A card's seat on the tree: whose it is, and where. A sprite can be on
+/// the tree twice, as a parent and a grandparent when its young had young
+/// together, so the arrows go from card to card, not from sprite to
+/// sprite.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct Spot {
+pub(crate) struct Seat {
     pub(crate) id: EntityId,
     band: Band,
     /// Its order in its band, from the left.
@@ -420,7 +421,7 @@ pub(crate) struct Spot {
 /// Where a sprite's card is on the tree.
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Place {
-    spot: Spot,
+    seat: Seat,
     /// The column its card is centred on: in a row that scrolls, maybe off
     /// the tree's edge.
     x: i32,
@@ -464,93 +465,93 @@ pub(crate) struct Drawn {
     /// How many of the young, or of the brothers and sisters, fit across.
     across: usize,
     /// The card the arrows are on.
-    pub(crate) chosen: Spot,
+    pub(crate) chosen: Seat,
 }
 
 impl Drawn {
     /// The card the arrows reach from `from` by `step`: the one beside it in
     /// its band, or the nearest in the next band up or down that has any.
     /// A card the policy hides is passed by (M2 design §17.6).
-    pub(crate) fn step(&self, from: Spot, step: Step) -> Option<Spot> {
+    pub(crate) fn step(&self, from: Seat, step: Step) -> Option<Seat> {
         let here = self.place(from)?;
         let choosable = self.places.iter().filter(|place| !place.hidden);
         let band = |band: Band| {
             choosable
                 .clone()
-                .filter(move |place| place.spot.band == band)
+                .filter(move |place| place.seat.band == band)
         };
-        let (at, index) = (here.spot.band, here.spot.index);
+        let (at, index) = (here.seat.band, here.seat.index);
         let next = match step {
             Step::Left => band(at)
-                .filter(|place| place.spot.index < index)
-                .max_by_key(|place| place.spot.index),
+                .filter(|place| place.seat.index < index)
+                .max_by_key(|place| place.seat.index),
             Step::Right => band(at)
-                .filter(|place| place.spot.index > index)
-                .min_by_key(|place| place.spot.index),
+                .filter(|place| place.seat.index > index)
+                .min_by_key(|place| place.seat.index),
             Step::Up | Step::Down => {
                 let bands = choosable
                     .clone()
-                    .map(|place| place.spot.band)
+                    .map(|place| place.seat.band)
                     .filter(|&b| if step == Step::Up { b < at } else { b > at });
                 let to = if step == Step::Up {
                     bands.max()
                 } else {
                     bands.min()
                 }?;
-                band(to).min_by_key(|place| ((place.x - here.x).abs(), place.spot.index))
+                band(to).min_by_key(|place| ((place.x - here.x).abs(), place.seat.index))
             }
         };
-        next.map(|place| place.spot)
+        next.map(|place| place.seat)
     }
 
     /// The card at column `x` and row `y` of the tree, unless the policy
     /// hides it (M2 design §17.6).
-    pub(crate) fn at(&self, x: i32, y: usize) -> Option<Spot> {
+    pub(crate) fn at(&self, x: i32, y: usize) -> Option<Seat> {
         self.places
             .iter()
             .find(|place| !place.hidden && place.contains(x, y))
-            .map(|place| place.spot)
+            .map(|place| place.seat)
     }
 
-    /// Scrolls the row `spot` is in, if it's one that scrolls, the least
+    /// Scrolls the row `seat` is in, if it's one that scrolls, the least
     /// that brings it into view.
-    pub(crate) fn keep_in_view(&self, scroll: &mut Scroll, spot: Spot) {
-        let first = match spot.band {
+    pub(crate) fn keep_in_view(&self, scroll: &mut Scroll, seat: Seat) {
+        let first = match seat.band {
             Band::Young => &mut scroll.young,
             Band::Siblings => &mut scroll.siblings,
             _ => return,
         };
-        if spot.index < *first {
-            *first = spot.index;
-        } else if spot.index >= *first + self.across {
-            *first = spot.index + 1 - self.across;
+        if seat.index < *first {
+            *first = seat.index;
+        } else if seat.index >= *first + self.across {
+            *first = seat.index + 1 - self.across;
         }
     }
 
-    fn place(&self, spot: Spot) -> Option<&Place> {
-        self.places.iter().find(|place| place.spot == spot)
+    fn place(&self, seat: Seat) -> Option<&Place> {
+        self.places.iter().find(|place| place.seat == seat)
     }
 }
 
-/// The card `spot` was, on a tree whose cards are at `places`, which may
+/// The card `seat` was, on a tree whose cards are at `places`, which may
 /// have changed since: the same card, if it's there; or else, as young are
 /// born and die, the same sprite's card in the same band, or anywhere; or
 /// else the sprite in the middle's. Never one the policy hides now (M2
 /// design §17.6).
-fn find_again(places: &[Place], spot: Option<Spot>) -> Spot {
+fn find_again(places: &[Place], seat: Option<Seat>) -> Seat {
     let of = |id: EntityId| {
         places
             .iter()
-            .filter(move |place| place.spot.id == id && !place.hidden)
+            .filter(move |place| place.seat.id == id && !place.hidden)
     };
-    spot.and_then(|spot| {
-        of(spot.id)
-            .find(|place| place.spot == spot)
-            .or_else(|| of(spot.id).find(|place| place.spot.band == spot.band))
-            .or_else(|| of(spot.id).next())
+    seat.and_then(|seat| {
+        of(seat.id)
+            .find(|place| place.seat == seat)
+            .or_else(|| of(seat.id).find(|place| place.seat.band == seat.band))
+            .or_else(|| of(seat.id).next())
     })
-    .or_else(|| places.iter().find(|place| place.spot.band == Band::Centre))
-    .map(|place| place.spot)
+    .or_else(|| places.iter().find(|place| place.seat.band == Band::Centre))
+    .map(|place| place.seat)
     .expect("a tree has a sprite in the middle")
 }
 
@@ -562,7 +563,7 @@ pub(crate) fn draw(
     family_tree: &FamilyTree,
     width: usize,
     scroll: Scroll,
-    chosen: Option<Spot>,
+    chosen: Option<Seat>,
     blink: bool,
     muted: Style,
 ) -> Drawn {
@@ -674,7 +675,7 @@ pub(crate) fn draw(
         tree.strip(&siblings, Band::Siblings, &xs, &shown, SIBLINGS);
     }
     let chosen = find_again(&tree.places, chosen);
-    if blink && let Some(place) = tree.places.iter().find(|place| place.spot == chosen) {
+    if blink && let Some(place) = tree.places.iter().find(|place| place.seat == chosen) {
         tree.canvas
             .mark(place.row, place.label.clone(), Modifier::REVERSED);
     }
@@ -731,7 +732,7 @@ impl Tree {
             self.canvas.centred(x, row + 1 + below, line, room, style);
         }
         self.places.push(Place {
-            spot: Spot {
+            seat: Seat {
                 id: card.id,
                 band,
                 index,
@@ -753,7 +754,7 @@ impl Tree {
                 self.card(card, band, index, x, COLUMN, row);
             } else {
                 self.places.push(Place {
-                    spot: Spot {
+                    seat: Seat {
                         id: card.id,
                         band,
                         index,
@@ -1054,17 +1055,17 @@ mod tests {
         assert_eq!(strip_columns(3, 10, 1).1, 1..2);
     }
 
-    fn spot(id: u64, band: Band, index: usize) -> Spot {
-        Spot {
+    fn seat(id: u64, band: Band, index: usize) -> Seat {
+        Seat {
             id: EntityId(id),
             band,
             index,
         }
     }
 
-    fn place(spot: Spot) -> Place {
+    fn place(seat: Seat) -> Place {
         Place {
-            spot,
+            seat,
             x: 0,
             width: 1,
             row: 0,
@@ -1076,40 +1077,40 @@ mod tests {
 
     #[test]
     fn the_card_chosen_is_found_again_as_the_tree_changes() {
-        let centre = spot(9, Band::Centre, 0);
+        let centre = seat(9, Band::Centre, 0);
         let places = [
             place(centre),
-            place(spot(4, Band::Parents, 0)),
-            place(spot(4, Band::Siblings, 0)),
-            place(spot(5, Band::Young, 1)),
+            place(seat(4, Band::Parents, 0)),
+            place(seat(4, Band::Siblings, 0)),
+            place(seat(5, Band::Young, 1)),
         ];
-        let find_again = |spot| find_again(&places, spot);
+        let find_again = |seat| find_again(&places, seat);
         assert_eq!(find_again(None), centre);
-        let twice = spot(4, Band::Siblings, 0);
+        let twice = seat(4, Band::Siblings, 0);
         assert_eq!(find_again(Some(twice)), twice, "the card itself");
         assert_eq!(
-            find_again(Some(spot(5, Band::Young, 0))),
-            spot(5, Band::Young, 1),
+            find_again(Some(seat(5, Band::Young, 0))),
+            seat(5, Band::Young, 1),
             "moved along, as an egg joined a brood before it"
         );
         assert_eq!(
-            find_again(Some(spot(5, Band::Siblings, 2))),
-            spot(5, Band::Young, 1),
+            find_again(Some(seat(5, Band::Siblings, 2))),
+            seat(5, Band::Young, 1),
             "elsewhere"
         );
-        assert_eq!(find_again(Some(spot(6, Band::Young, 0))), centre, "gone");
+        assert_eq!(find_again(Some(seat(6, Band::Young, 0))), centre, "gone");
     }
 
     #[test]
     fn a_card_the_policy_hides_now_is_never_found_again() {
         // M2 design §17.6: one chosen before the policy hid it.
-        let centre = spot(9, Band::Centre, 0);
+        let centre = seat(9, Band::Centre, 0);
         let hidden = Place {
             hidden: true,
-            ..place(spot(5, Band::Young, 0))
+            ..place(seat(5, Band::Young, 0))
         };
         assert_eq!(
-            find_again(&[place(centre), hidden], Some(spot(5, Band::Young, 0))),
+            find_again(&[place(centre), hidden], Some(seat(5, Band::Young, 0))),
             centre
         );
     }

@@ -822,7 +822,7 @@ The box `:` opens near the top of the map view: typing finds any control that wo
 _Avoid_: command line, console, search (that's the help's)
 
 **Spot** (#304):
-A part of the screen that says what it is when the pointer is on it, such as an inspector tab, a drive's bar, a gene or a line of the event log, and which a click may land on. Each part notes its spots as it's drawn, afresh each frame, and a pop-up's box is one too, so it takes the pointer before what's under it. The status line says what the spot under the pointer is.
+A part of the screen that says what it is when the pointer is on it, such as an inspector tab, a drive's bar, a gene or a line of the event log, and which a click may land on. The inspector, the event log and each pop-up note their spots as they're drawn, afresh each frame, and a pop-up's box is one too, so it takes the pointer before what's under it. The status line says what the spot under the pointer is.
 _Avoid_: hotspot, hit box, tooltip (nothing pops up; the status line says it)
 
 **Sprite list**:

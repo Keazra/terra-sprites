@@ -80,11 +80,8 @@ pub(super) fn body_tab(sprite: &SpriteView, app: &App, world: &World) -> Vec<Tab
         if !arrow.is_empty() {
             spans.push(Span::raw(format!(" {arrow}")));
         }
-        // The pointer on it says what raises and lowers it (#304).
-        let spot = Spot::Chemical {
-            name: drive.name.to_string(),
-            kind: drive.kind,
-        };
+        // The pointer on it says what raises and lowers it (design §6.1).
+        let spot = Spot::chemical(drive.name, drive.kind);
         lines.push(TabLine::spotted(Line::from(spans), spot));
     }
     lines.push(Line::default().into());
@@ -384,6 +381,17 @@ pub(super) fn trait_name(which: Trait) -> &'static str {
         Trait::SenseRadius => "sense",
         Trait::GrowsOld => "grows old",
         Trait::GrowsUp => "grows up",
+    }
+}
+
+/// What a trait is, as the status line says it (design §6.1). Only what
+/// the engine makes it mean: what it costs is the data pack's.
+pub(super) fn trait_about(which: Trait) -> &'static str {
+    match which {
+        Trait::Speed => "how fast it walks",
+        Trait::SenseRadius => "how far it senses",
+        Trait::GrowsOld => "the age it grows old at",
+        Trait::GrowsUp => "the age it grows up at",
     }
 }
 

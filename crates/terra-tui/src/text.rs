@@ -22,6 +22,16 @@ pub(crate) fn unbroken(text: &str) -> String {
     text.replace(' ', &BOUND.to_string())
 }
 
+/// `text`, or as much of it as fits in `width` columns, ending "..." since
+/// CP437 has no "…" (design §6.2).
+pub(crate) fn fitted(text: &str, width: usize) -> String {
+    if text.chars().count() <= width {
+        return text.to_string();
+    }
+    let kept: String = text.chars().take(width.saturating_sub(3)).collect();
+    format!("{}...", kept.trim_end())
+}
+
 /// `text` after `first`, wrapped at its spaces to lines of at most `width`
 /// columns, each later line after `later`. A word after another needs a
 /// space before it; the first word on a line goes there whether it fits or

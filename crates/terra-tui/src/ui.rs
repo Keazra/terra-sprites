@@ -12,8 +12,8 @@ use ratatui::{
 use terra_sim::{ChemicalKind, EntityId, Grip, LifeStage, Mode, Pos, Progress, SpriteView, World};
 
 use crate::app::{
-    App, Areas, ColourMode, ItemLook, PlaceItem, Screen, Selection, ShownItems, item_look,
-    spoken_duration, strongest_drive,
+    App, Areas, ColourMode, ItemLook, PlaceItem, Screen, Selection, ShownItems, in_the_world,
+    item_look, spoken_duration, strongest_drive,
 };
 use crate::controls::{self, Context, Control, Hint, PaletteRow, Says};
 use crate::family_tree::{self, Lineage};
@@ -21,7 +21,7 @@ use crate::inspector::{self, INSPECTOR_WIDTH, NOTHING_SELECTED, first_shown};
 use crate::policy::{Panel, Subject};
 use crate::space::{self, Place};
 use crate::spots::{Spot, Spots};
-use crate::text::{display_name, terrain_name, thousands};
+use crate::text::{display_name, fitted, terrain_name, thousands};
 use crate::theme::{Glyph, PanelLook, SemanticTile, TextLook};
 
 /// The narrowest terminal that has room for the inspector beside the map view.
@@ -79,7 +79,7 @@ pub fn render_with(frame: &mut Frame, app: &App, world: &World, parts: Parts) {
         app.keep_spots(Spots::default());
         return render_too_small(frame.buffer_mut(), area, app, world);
     }
-    // What each part is, where it's drawn, noted as it's drawn (#304).
+    // What each part is, where it's drawn, noted as it's drawn (design §6.1).
     let mut spots = Spots::default();
     let [top_bar, _, status] = Layout::vertical([
         Constraint::Length(parts.top_rows()),
@@ -104,7 +104,7 @@ pub fn render_with(frame: &mut Frame, app: &App, world: &World, parts: Parts) {
     if let (Some(inspector), Some(event_log), None) = (inspector, event_log, app.theme.panels()) {
         frame.buffer_mut()[(inspector.x, event_log.y)].set_symbol("┴");
     }
-    // A pop-up takes the pointer before what's under it (#304).
+    // A pop-up takes the pointer before what's under it (design §6.1).
     let mut pop_ups = vec![render_menu(frame.buffer_mut(), area, app, world)];
     let overlay = app.overlay();
     match app.screen() {
@@ -144,6 +144,9 @@ pub fn render_with(frame: &mut Frame, app: &App, world: &World, parts: Parts) {
     }
     for pop_up in pop_ups.into_iter().flatten() {
         spots.note(pop_up, Spot::PopUp);
+    }
+    if let Some(Spot::LogLine(id)) = app.mouse().and_then(|cell| spots.at(cell)) {
+        light_up(frame.buffer_mut(), app, world, *id, &spots);
     }
     if parts.status_line {
         frame.render_widget(status_line(app, world, status.width, &spots), status);
@@ -358,9 +361,6 @@ fn draw_tiles(buf: &mut Buffer, inner: Rect, app: &App, world: &World) {
     // Out of reach in space, the Cursor isn't drawn (M2 design §11.4).
     let cursor = app.shown_cursor();
     let lineage = lineage_on_map(app, world);
-    // The sprite the log's line under the pointer is about, lit up as a
-    // selected one is (#304).
-    let lit = app.pointed_event();
     for y in inner.top()..inner.bottom() {
         for x in inner.left()..inner.right() {
             let pos = match app.place_from(inner.as_position(), Position::new(x, y)) {
@@ -382,8 +382,7 @@ fn draw_tiles(buf: &mut Buffer, inner: Rect, app: &App, world: &World) {
                 let emote = app
                     .emote(sprite.id())
                     .filter(|_| app.can_view(Panel::Emotes, Subject::Sprite(sprite.id())));
-                let selected = app.selection() == Some(Selection::Living(sprite.id()))
-                    || lit == Some(sprite.id());
+                let selected = app.selection() == Some(Selection::Living(sprite.id()));
                 let tile = match emote {
                     Some(emote) => SemanticTile::Emote(emote),
                     None => sprite_tile(sprite.life_stage(), selected),
@@ -397,8 +396,7 @@ fn draw_tiles(buf: &mut Buffer, inner: Rect, app: &App, world: &World) {
                 let glyph = app.theme.object_glyph(item.type_name, item.visual_state);
                 // Only an egg can be selected, and it's drawn in reverse
                 // video (M2 design §10.7).
-                let selected =
-                    app.selection() == Some(Selection::Living(item.id)) || lit == Some(item.id);
+                let selected = app.selection() == Some(Selection::Living(item.id));
                 Glyph {
                     reversed: glyph.reversed || selected,
                     ..glyph
@@ -1260,7 +1258,7 @@ fn status_line(app: &App, world: &World, width: u16, spots: &Spots) -> Line<'sta
     };
     let width = usize::from(width);
     // What the pointer is over, if it's a spot that says something, in
-    // place of the tile's part, cut to fit the line (#304).
+    // place of the tile's part, cut to fit the line (design §6.1).
     let pointed = app
         .mouse()
         .and_then(|cell| spots.at(cell))
@@ -1300,18 +1298,8 @@ fn status_line(app: &App, world: &World, width: u16, spots: &Spots) -> Line<'sta
     line
 }
 
-/// `text`, or as much of it as fits in `width` columns, ending "..." since
-/// CP437 has no "…" (design §6.2).
-fn fitted(text: &str, width: usize) -> String {
-    if text.chars().count() <= width {
-        return text.to_string();
-    }
-    let kept: String = text.chars().take(width.saturating_sub(3)).collect();
-    format!("{}...", kept.trim_end())
-}
-
 /// What the status line says of `spot`, the one the pointer is over
-/// (#304), if anything: a tab's name and what it shows, with its keys; a
+/// (design §6.1), if anything: a tab's name and what it shows, with its keys; a
 /// chemical's name and what its data says it is; what a gene does; and
 /// which sprite a line of the log is about. A pop-up says nothing, so the
 /// line says what it does without one.
@@ -1341,27 +1329,37 @@ fn spot_words(spot: &Spot, app: &App, world: &World) -> Option<String> {
             let (gene, _) = sprite.genes().into_iter().nth(*index)?;
             Some(inspector::gene_about(&gene))
         }
-        Spot::Event(id) => {
+        Spot::LogLine(id) => {
             let label = app.names().label(*id);
             let selected = app.selection().map(Selection::id) == Some(*id);
-            Some(match family_tree::Known::of(world, *id) {
-                family_tree::Known::Living(_) | family_tree::Known::Egg(_) if selected => {
-                    format!("About {label}, the selected sprite")
-                }
-                family_tree::Known::Living(_) | family_tree::Known::Egg(_) => {
-                    format!("About {label} · click to select it")
-                }
-                family_tree::Known::Dead(_) | family_tree::Known::Forgotten => {
-                    format!("About {label}, who has died")
-                }
+            Some(match in_the_world(world, *id) {
+                Some(_) if selected => format!("About {label}, the selected sprite"),
+                Some(_) => format!("About {label} · click to select it"),
+                None => format!("About {label}, who has died"),
             })
         }
-        Spot::PopUp => None,
+        Spot::Memory(_) | Spot::PopUp => None,
+    }
+}
+
+/// Lights up sprite or egg `id` on the map, in `buf`, as a selected one is
+/// drawn, in reverse video, while the pointer is on a line of the event log
+/// about it (design §6.1): unless a pop-up the frame drew, its `spots`, is
+/// over it.
+fn light_up(buf: &mut Buffer, app: &App, world: &World, id: EntityId, spots: &Spots) {
+    let Some(cell) = in_the_world(world, id)
+        .flatten()
+        .and_then(|pos| app.cell_of(pos))
+    else {
+        return;
+    };
+    if spots.at(cell).is_none() {
+        buf[cell].modifier.insert(Modifier::REVERSED);
     }
 }
 
 /// What a chemical of `kind` is, for one whose data pack doesn't say
-/// (#304).
+/// (design §6.1).
 fn kind_words(kind: ChemicalKind) -> &'static str {
     match kind {
         ChemicalKind::Physical => "part of its body",
@@ -1449,7 +1447,7 @@ fn render_inspector(buf: &mut Buffer, area: Rect, app: &App, world: &World, spot
     }
     let title = inspector::title(app);
     buf.set_line(area.x + 1, area.y, &title, area.width.saturating_sub(1));
-    // Each tab where its name is, so a click there opens it (#304).
+    // Each tab where its name is, so a click there opens it (design §6.1).
     for (tab, columns) in inspector::tab_places(app.tab()) {
         let start = area.x + 1 + columns.start as u16;
         let place = Rect::new(start, area.y, columns.len() as u16, 1);
@@ -1517,9 +1515,9 @@ fn render_event_log(buf: &mut Buffer, area: Rect, app: &App, world: &World, spot
     let muted = app.theme.text().muted;
     for (row, (tick, text, count, about)) in (inner.y..inner.bottom()).zip(lines) {
         // The line says which sprite it's about where the pointer is on
-        // it, and a click selects it (#304).
+        // it, and a click selects it (design §6.1).
         if let Some(id) = about {
-            spots.note(Rect::new(inner.x, row, inner.width, 1), Spot::Event(id));
+            spots.note(Rect::new(inner.x, row, inner.width, 1), Spot::LogLine(id));
         }
         let times = if count > 1 {
             // An x: CP437 has no × (design §6.2).
