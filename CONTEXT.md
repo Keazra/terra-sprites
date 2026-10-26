@@ -85,8 +85,8 @@ A property an object type either has or lacks. Having the tag means yes; lacking
 _Avoid_: flag, attribute, keyword
 
 **Contact**:
-A sprite touching a thing: eating it, hitting it, playing with it, or crashing into it. Walking past never counts.
-_Avoid_: collision, touch (for contact in general: Touch is a sprite verb under #164; the Cursor's touch is a pet or a shock)
+A sprite touching a thing: eating it, hitting it, playing with it, or crashing into it. Walking past never counts. Planned (M3): touching, grabbing, gripping, pushing and pulling it count too, and playing with it goes, since Play stops being a verb (M3 design §5.3, A1).
+_Avoid_: collision, touch (for contact in general: Touch is a sprite verb from M3's Slice 37; the Cursor's touch is a pet or a shock)
 
 **Stage**:
 A phase of an object's life, such as a bush's seedling and mature stages. Each lasts a random time within its type's range.
@@ -119,7 +119,7 @@ A rolling item turning away from what it ran into: straight back if it met it he
 _Avoid_: collision, rebound
 
 **Size**:
-How big an object type, or a sprite, is: small, medium or large. What a rolling item does to what it meets depends on their sizes. Under #164 (M3), Size also gains tiny, and how many arms a sprite needs to grab and hold a thing depends on size: tiny things stack in one arm up to a limit; a small thing needs one arm; a medium thing needs both; a large thing isn't held.
+How big an object type, or a sprite, is: small, medium or large. What a rolling item does to what it meets depends on their sizes. Planned (M3, Slice 35): Size also gains tiny, berries become tiny, and how many arms a sprite needs to grab and hold a thing depends on size: tiny things stack in one arm up to the handful; a small thing, such as an egg, needs one arm; a medium thing, such as the ball, needs both; a large thing isn't held (M3 design §9.1).
 
 **Hardness**:
 How hard an object type is, from 0 to 1. A rolling item crushes something smaller and softer than itself.
@@ -235,6 +235,10 @@ _Avoid_: want, desire
 A need that comes before a sprite's likes: hunger or thirst. The more it presses, the less what the sprite merely likes pulls on it, though never to nothing. The other needs are second-order.
 _Avoid_: primary need, survival need, blocker (it quiets, never blocks)
 
+**Sleepiness** (M3, Slice 39):
+A drive of its own, apart from tiredness: it builds the whole time a sprite is awake, whatever it does, and only sleep eases it. Sleep comes in a few long stretches, costs a fifth less energy than standing awake, and dulls the senses, so a sleeping sprite notices only what's close or loud. Tiredness from exertion stays, eased by short rests. Planned (M3 design §13).
+_Avoid_: tiredness (that's from exertion), fatigue, rest (a rest is a breather)
+
 **Needs gene** (M2, #237):
 One of the starter genome's genes that keeps a sprite fed, watered and rested: it raises or eases hunger, thirst or tiredness, fades one, or turns one into its action, as `drank → thirst` or `hunger → Eat`. The starter has twelve: for hunger, `energy → hunger`, `ate → hunger`, `fullness → hunger`, hunger's half-life and `hunger → Eat`; for thirst, `hydration → thirst`, `drank → thirst`, thirst's half-life and `thirst → Drink`; and for tiredness, its two emitters and `tiredness → Rest`. #237 named eleven, before Slice 29 added `fullness → hunger`. They're found from the data, not listed: the needs a starter gene raises from the body's own state are the body's needs, so another species' data pack has its own (M2 design §16.6). A species that lost one spread it because it did better without it, which is evolution, not wear.
 _Avoid_: vital gene, essential gene, survival gene, core gene
@@ -320,8 +324,12 @@ Lasting harm a hard life leaves on a sprite's body, from starving, going without
 _Avoid_: stress (that's what causes it), damage, injury (injury heals)
 
 **Egg** (M2):
-An item a mother lays on a free tile beside her, holding the sprite it hatches into: its genes, parents and name. It's an object, not a sprite: it feels, learns and needs nothing, and nothing a sprite does to it does anything. The Cursor picks it up and puts it down, but never throws, pets or zaps it. Other sprites see it as a thing of its own kind.
+An item a mother lays on a free tile beside her, holding the sprite it hatches into: its genes, parents and name. It's an object, not a sprite: it feels, learns and needs nothing, and nothing a sprite does to it does anything. The Cursor picks it up and puts it down, but never throws, pets or zaps it. Other sprites see it as a thing of its own kind. Planned (M3): a sprite can carry one in an arm, and a sprite or the Cursor can throw one; a thrown egg breaks 3 times in 4, by its data, and the sprite inside dies (Slice 40). From Slice 41 it starts inside its mother, and needs a parent beside it to grow once laid (M3 design §14, §15).
 _Avoid_: unborn sprite, larva, egg stage (an egg was a life stage until #196)
+
+**Pregnancy** (M3, Slice 41):
+The while a mother carries her egg inside her, after a mating that works and before she lays it beside her: she's hungrier and slower, and can't conceive again until she has laid. If she dies pregnant, the egg dies with her. Planned (M3 design §15).
+_Avoid_: gestation, carrying (that's having something in its arms)
 
 **Hatch** (M2):
 When an egg becomes a young sprite where it lies, as its type's stage ends (750 ticks after it was laid), with a newborn's body and the egg's ID; the item is gone. Its age counts from then. One that's due waits while the Cursor holds it or a sprite stands on it.
@@ -408,11 +416,11 @@ A sprite's partner, its parents while it's young, its young, and its eggs: those
 _Avoid_: clan, herd, kin (kin is by blood)
 
 **Anxiety** (M2, Slice 32):
-A drive and second-order need that rises while a sprite's family is out of sight, as the starter genes have it: fastest for an egg it left alone, then in a young sprite while no parent is in sight, then for its young or its partner, and slowest for an egg it left with the other parent by it. Finding the one it missed eases it, and hunger and thirst drain it. It's care: the starter's never comes from the breeding drive, and whatever the genes, the breeding drive draws no eye to a young sprite.
+A drive and second-order need that rises while a sprite's family is out of sight, as the starter genes have it: fastest for an egg it left alone, then in a young sprite while no parent is in sight, then for its young or its partner, and slowest for an egg it left with the other parent by it. Finding the one it missed eases it, and hunger and thirst drain it. It's care: the starter's never comes from the breeding drive, and whatever the genes, the breeding drive draws no eye to a young sprite. Planned (M3, Slice 34): one of its family who dies out of sight is still missed, as if only away, until the sprite gives up on it after an hour out of sight, and then grieves (M3 design §8).
 _Avoid_: fear (fear is of someone), worry, loneliness (that's for any company)
 
 **Grief** (M2, Slice 32):
-The starter genes' hormone for losing a partner, which holds arousal down for a while before the sprite may pair again.
+The starter genes' hormone for losing a partner, which holds arousal down for a while before the sprite may pair again. Planned (M3, Slice 34): felt for any kin a sprite sees die, an egg breaking included, and for one it gives up on after an hour missing, no longer only a lost partner. No sprite knows of a death it didn't see (M3 design §8).
 _Avoid_: sadness, mourning (as a name for the hormone)
 
 **Most sprites** (M2):
@@ -427,22 +435,26 @@ The counts the world keeps of its sprites by life stage, and of its eggs, over i
 _Avoid_: history, statistics, census
 
 **Record of the dead** (M2):
-What the world keeps of each sprite that dies: its name, parents, generation, origin, when it was born and died, how, at what life stage and as which sex. It's world state, but nothing in the world reads it. It keeps the newest 10,000, forgetting the longest dead first, but never one the player named (M2 design §17.1).
+What the world keeps of each sprite that dies: its name, parents, generation, origin, when it was born and died, how, at what life stage and as which sex. It's world state, but nothing in the world reads it. It keeps the newest 10,000, forgetting the longest dead first, but never one the player named (M2 design §17.1). Planned (M3, Slice 34): where each died, too.
 _Avoid_: graveyard, obituary, history
+
+**Body** (M3, Slice 42):
+What a dead sprite leaves where it died, as its species' data says: an object type of its own that fades after a while. The inspector shows who it was and how it died, and sprites can grip and drag it, but it isn't food. Planned (M3 design §16). A living sprite's body is its physiology.
+_Avoid_: corpse, carcass, remains
 
 **Lived long ago** (M2):
 What the family tree says of a dead sprite the world no longer remembers: forgotten from the record of the dead, or dead before a save that had no record. The tree names it from its young and knows nothing more of it.
 _Avoid_: unknown, lost
 
 **Cause of death**:
-What caused most of a sprite's recent injury, with the most recent counting most: starvation, dehydration, old age, or being hurt by an object type, such as a thornbush, or by another sprite.
+What caused most of a sprite's recent injury, with the most recent counting most: starvation, dehydration, old age, or being hurt by an object type, such as a thornbush, or by another sprite. Planned (M3): an egg broken (Slice 40) or dying with its mother (Slice 41), each named in the egg's data.
 
 **Hurt**:
 Injury or pain that something did to a sprite: a thornbush it touched, another sprite's hit, or the Cursor's zap or shock. A zap or shock hurts without injuring. Starvation, dehydration and old age injure a sprite but don't hurt it.
 _Avoid_: damage, pricked (a thornbush word; the data names things, the screen says "hurt")
 
-**Limb** (#164 / M3):
-A part of a sprite's body that can be damaged or lost: the head, the left arm, the right arm, the left leg and the right leg. Damaged limbs make some verbs harder: locomotion depends on legs (Approach, Retreat, Wander can soften to crawling), Hit soft-gates via arms or legs, and manipulation verbs need at least one usable arm. Losing the head is a planned cause of death under #164; today a sprite dies when its injury reaches 1.
+**Limb** (M3, Slice 33):
+A part of a sprite's body that can be hurt and heals: the head, the left arm, the right arm, the left leg and the right leg, each tracked on its own. A hurt arm grabs and throws worse; hurt legs walk slowly, and a sprite with both legs badly hurt crawls; a limb hurt badly enough is useless until it heals, and with no usable arm a sprite can't grab, grip, push, pull, throw or drop. A hurt head makes eating and drinking harder, but never kills: a sprite still dies when its injury reaches 1. None is lost for good in M3; limb loss is [#235](https://github.com/Keazra/terra-sprites/issues/235). Planned (M3 design §7).
 _Avoid_: appendage, extremity, organ (organs are a separate design, #31)
 
 ### Actions and movement
@@ -456,12 +468,24 @@ What a sprite does with no action running: since Slice 29 it acts only when some
 _Avoid_: idle, waiting (that's an action stuck behind another sprite), resting (that's an action)
 
 **Verb**:
-A kind of action a sprite can take: Approach, Eat, Drink, Hit, Play, Retreat, Rest or Wander. Mate and BreedAlone join in M2 (Slice 23), and Call and Court in Slice 32. Under #164 (M3), Play stops being a verb — it is boredom's relief, and the `played` pulse, that other verbs' effects can cause — and Touch, Grab, Push, Pull, Throw and Drop join. Speak is reserved for M6 (Words).
+A kind of action a sprite can take: Approach, Eat, Drink, Hit, Play, Retreat, Rest or Wander. Mate and BreedAlone join in M2 (Slice 23), and Call and Court in Slice 32. Planned (M3 design §6.1): Grab, Throw and Drop join with hands (Slice 35); Touch takes Play's place, Play becoming a feeling, boredom eased (Slice 37); Grip, Push and Pull join in Slice 38; and Take in replaces Eat and Drink in Slice 46. Speak is reserved for M6 (Words).
 _Avoid_: command (the player's commands are different), move
 
-**Holding** (#164 / M3):
-A sprite keeping things in its arms after one or more Grabs: each arm is its own slot (a small thing in one arm, another in the other; a medium thing needs both). Holding is a state, not a verb. Moving while holding is carrying — not the Cursor's Hold or Lead. A sprite's Grab, Throw and Drop are verbs; the Cursor's Grab, Hold and Throw are separate entries under The Cursor.
-_Avoid_: Carry (as a verb), inventory (that's the keeper's), inventory slot
+**Take in** (M3, Slice 46):
+The one verb for eating and drinking, in place of Eat and Drink: each thing's data says what taking it in is called ("eat", "drink") and what it does, so a sprite goes to drink the water, never to eat it. Planned (M3 design §20).
+_Avoid_: consume, ingest
+
+**Holding** (M3, Slice 35):
+A sprite keeping things in its arms after one or more Grabs: each arm is its own slot (tiny things stack in one arm up to the handful, a small thing takes one arm, a medium thing both). Holding is a state, not a verb, and the sprite feels it. On screen, a thing is **in its arms**. Moving while holding is carrying, which isn't the Cursor's Hold or Lead. A sprite's Grab, Throw and Drop are verbs; the Cursor's Grab, Hold and Throw are separate entries under The Cursor. Planned (M3 design §9).
+_Avoid_: Carry (as a verb), inventory (that's the keeper's), inventory slot, grip (that's without lifting)
+
+**Hand-over** (M3, Slice 43):
+A Drop aimed at another sprite: the thing goes into its free arm, or at its feet. Both feel it, the giver that it gave and the other that it was given something. It's how families share food. Planned (M3 design §17).
+_Avoid_: give (as a verb of its own), gift, trade
+
+**Grip** (M3, Slice 38):
+A sprite's hand on a thing without lifting it, so it can grip what it can't grab, such as another sprite. While gripping, a push moves the thing a tile straight away and the sprite steps after it; a pull is the reverse; a fixture doesn't move but does what its data says. Choosing anything but a push, a pull or a hit lets go. A gripped sprite struggles to get away, and breaks free by the world's dice. Planned (M3 design §12).
+_Avoid_: hold (that's the Cursor's), grab (that lifts), grapple
 
 **Outcome**:
 How an action went: still walking, applied, blocked, failed, timed out or too full.
@@ -470,6 +494,10 @@ _Avoid_: result, status
 **Too full** (M2, Slice 29):
 How an Eat or a Drink ends when the sprite is full. The food or water stays where it was, and unlike a fruitless try it teaches nothing. The Body tab reads "Too full to eat the berry", "Too full to eat from the berry bush" or "Too full to drink".
 _Avoid_: refused (the Cursor's word for a click that didn't apply), failed
+
+**Squish** (M3, Slice 36):
+What eating a fallen berry where it lies can do: the berry is destroyed, the sprite isn't fed, and the berry rots at once where it lay. It starts at 1 in 2, from each food's data, so picking a berry up before eating it wins as sprites learn. Planned (M3 design §10).
+_Avoid_: miss, fail, spill
 
 **Timeout**:
 The longest any action may last. An action still going at the timeout ends as timed out. A trip has as long as its walk takes on top.
@@ -564,7 +592,7 @@ What a sprite learns about something that hurt it when it touched it, such as a 
 _Avoid_: dangerous, harmful
 
 **Fear**:
-What a sprite learns about someone that hurt it by its own doing, such as a sprite that hit it. A frightening sprite catches its eye and makes it back away while it's near; fear never makes it attack. On screen: "Sprite #7 is frightening".
+What a sprite learns about someone that hurt it by its own doing, such as a sprite that hit it. A frightening sprite catches its eye and makes it back away while it's near; fear never makes it attack. On screen: "Sprite #7 is frightening". Planned (M3, Slice 38): fear of a sprite eases while it stays near without hurting, as fear of the Cursor does.
 _Avoid_: bad (bad is about touching), wariness (a passing mood), threat
 
 **Individual**:
@@ -580,7 +608,7 @@ The sprite category's summary: what a sprite thinks of sprites it doesn't know, 
 _Avoid_: the sprite kind (on screen), stereotype
 
 **Habit**:
-What a sprite has learned about doing one verb to one object type, or to sprites, such as "eating balls doesn't work" or "hitting sprites is bad".
+What a sprite has learned about doing one verb to one object type, or to sprites, such as "eating balls doesn't work" or "hitting sprites is bad". Planned (M3, Slice 36): habits are kept apart by whether the thing was in the sprite's arms, so "eating berries off the ground" and "eating berries in its arms" are two.
 _Avoid_: skill (a later design, #48), reflex
 
 **Taught habit**:
@@ -608,8 +636,20 @@ How well a sprite knows an object type, or sprites, from having attended to it. 
 _Avoid_: knowledge, acquaintance
 
 **Curiosity**:
-A sprite's pull towards things that are new to it. Being hurt when it investigates teaches it that new things are bad.
+A sprite's pull towards things that are new to it. Being hurt when it investigates teaches it that new things are bad. Planned (M3, Slice 37): an instinct, *looking at something new to it: touch it*, that quietens as the thing grows familiar; and novelty becomes a sense genes can read ([#262](https://github.com/Keazra/terra-sprites/issues/262)).
 _Avoid_: exploration (exploring is how sure its choices are)
+
+**Play** (M3, Slice 37):
+What a sprite feels when something it does eases its boredom as a toy does: each thing's data says which acts on it are play, by sending the `played` feeling, so the game's code never knows what a toy is. Until Slice 37, Play is a verb; from it, Play reads as Touch in old genomes, saves and mods. Planned (M3 design §11).
+_Avoid_: game, fun
+
+**Social play** (M3, Slice 37):
+Touching another sprite, or a ball one sprite sent reaching another: both feel it, get to know each other, and it eases loneliness, the one reached a little less. Planned (M3 design §11.6).
+_Avoid_: roughhousing (that's a later design, #46)
+
+**Empathy** (M3, Slice 37):
+The pang a sprite feels when its own act hurts another sprite, which the starter genes turn into a little punishment, unless it's hitting back at one that just hurt it or that it fears. How strongly it's felt is a gene. Planned (M3 design §11.5).
+_Avoid_: guilt, remorse, pity
 
 **Wariness**:
 A passing mood, raised by a run of hurts, that makes a sprite less curious for a while.
@@ -799,7 +839,7 @@ How far the Cursor may go from a sprite it leads, 5 tiles in a square, and the f
 _Avoid_: lead (that's the verb), rope, tether
 
 **Hold**:
-What the Cursor does with an item it has picked up: the item leaves the map, its life going on, until the Cursor **puts it down** on a tile. A sprite's holding is a different state under #164.
+What the Cursor does with an item it has picked up: the item leaves the map, its life going on, until the Cursor **puts it down** on a tile. A sprite's holding (M3) is a different state, and so is its grip.
 _Avoid_: carry (for the Cursor; a sprite's carrying is moving while holding), in hand
 
 **Throw**:
@@ -851,8 +891,12 @@ The Cursor's good touch, which raises the sprite's reward chemical: a **pet**, o
 _Avoid_: tickle, positive
 
 **Correct**:
-The Cursor's bad touch, which hurts the sprite without injuring it and raises its punishment chemical: a **zap**, or amplified, a **shock**.
+The Cursor's bad touch, which hurts the sprite without injuring it and raises its punishment chemical: a **zap**, or amplified, a **shock**. A sprite's own **correcting** of its young is its kin's version (M3).
 _Avoid_: slap, punish, negative
+
+**Correcting** (M3, Slice 44):
+A parent stepping in when its young tries something the parent has learned is bad: the young stops, and learns from it as from the Cursor's Correct, as a lesson of its own. It's a leaning in the genes, it never injures, and it never teaches anything about mating. Planned (M3 design §18).
+_Avoid_: punishing, scolding, Correct (that's the Cursor's)
 
 **Amplified**:
 A Reward or Correct given with Shift (on `Q` or `E`) or Ctrl (on a click): a hug rather than a pet, a shock rather than a zap.

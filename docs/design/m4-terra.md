@@ -3,7 +3,7 @@
 - **Status:** Draft: the plan, from the ship's design pass with the owner (rounds 1 to 6, 2026-10-12). Each slice adds what it settles as it's built.
 - **Date:** 2026-10-12
 - **History:** edited in place; each change is a file in [`changes/`](changes/)
-- **Builds on:** [M1 design](m1-a-sprite-lives.md), the rulebook for everything this doesn't change; [M2 design](m2-generations.md), whose Slice 31 (§11) draws the view past the wall; and M3, Body & verbs ([#164](https://github.com/Keazra/terra-sprites/issues/164)), which comes first: its Touch, Push and Pull are how sprites work panels and switches, and its Grab and Drop how they plant a garden
+- **Builds on:** [M1 design](m1-a-sprite-lives.md), the rulebook for everything this doesn't change; [M2 design](m2-generations.md), whose Slice 31 (§11) draws the view past the wall; and [M3 design](m3-body-and-verbs.md), Body & verbs, which comes first: its Touch, Push and Pull are how sprites work panels and switches, and its Grab and Drop how they plant a garden. M4 builds on M3's checks B8–B10 (things saying what verbs do, curiosity, and teaching Push and Pull, M3 design §5.2); M3 never tries a panel as such, so this design's T5 is the first check to (§12)
 - **Covers:** what the ship is, its sectors and how they're made, devices, sealed doors and how the ship opens, Story mode and Lab mode on the ship, the keeper's inventory, what the screen shows, what a bigger world costs, old worlds, and what "M4 is done" means. From [#181](https://github.com/Keazra/terra-sprites/issues/181), with [#26](https://github.com/Keazra/terra-sprites/issues/26)'s zones
 
 ---
@@ -25,7 +25,7 @@ The owner's principles carry over (`docs/agents/how-we-work.md`). Three matter m
 
 ### 1.1 In M4
 
-Slice numbers run on across milestones, so these get theirs when M3's slices are planned. Each gets an issue then, in a GitHub milestone "M4 — Terra".
+Slice numbers run on across milestones, so these are numbered on from M3's last, Slice 50, when M4 is planned. Each gets an issue then, in a GitHub milestone "M4 — Terra".
 
 | Slice | What it adds | Needs |
 |---|---|---|
@@ -190,7 +190,7 @@ Drawn by hand, tile by tile, in the game's data, as the tests' hand-drawn worlds
   - **Its beds are a terrain,** fertile like grass while the bay's lights and water are on. With either off, they dry out and nothing new takes root.
   - **At the start it's in disrepair:** its lights are off, the Reservoir's pump that waters it is off, and its beds hold only a few withered bushes. Switching both on brings it back, and it's the first thing a new keeper learns about devices.
   - **What's planted in a bed grows.** A berry dropped on a bed always sprouts, where on grass it's 1 in 10. Once other biomes have plants of their own, their fruit grows in beds too, so the garden holds whatever the keeper and the sprites bring.
-  - **Sprites tend it with M3's verbs:** a sprite that carries a berry and drops it on a bed has planted it, and learns to as it learns anything.
+  - **Sprites tend it with M3's verbs:** a sprite that carries a berry and drops it on a bed has planted it, and learns to as it learns anything (M3 design §9.2).
 
 ### 6.4 Wild Terra aboard
 
@@ -209,7 +209,7 @@ When Wild Terra comes (M5), its weather and critters are the ship's doing, and s
 
 ### 7.2 Panels
 
-- **Each sealed door has a panel on each side,** so it opens from whichever sector reaches it first: a device that a sprite works with M3's verbs: a plate that a touch opens, a button that's pushed, or a lever that's pulled, as its data says (round 4, Q5). Different doors can ask for different lessons, and a new panel needs no new code.
+- **Each sealed door has a panel on each side,** so it opens from whichever sector reaches it first: a device that a sprite works with M3's verbs: a plate that a touch opens, a button that's pushed, or a lever that's pulled, as its data says (round 4, Q5), which M3's B8 checks on a made-up thing of its own (M3 design §6.1). Different doors can ask for different lessons, and a new panel needs no new code.
 - **The first doors are the easiest.** The Engines' and the Scrub's doors, and the door from the aft deck to the middle deck, each take a touch, which sprites give new things anyway. The doors further forward take a push or a pull, which a sprite has to be taught.
 - **Once is enough:** one sprite working a panel once opens its door for good.
 - **In Story mode, only a sprite can work a panel.** The keeper's hard light can't work the ship's old locks: activating one does nothing, and the status line says "The lock doesn't answer you: only a sprite can work it". In Lab mode the keeper opens the door itself (§2.2).
