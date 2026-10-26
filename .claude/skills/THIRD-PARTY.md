@@ -1,6 +1,6 @@
 # Skills copied from mattpocock/skills
 
-These skills are copied from [mattpocock/skills](https://github.com/mattpocock/skills), plugin version 1.2.3, and adjusted for this project (below). The Claude Code plugin `mattpocock-skills` is turned off for this project in `.claude/settings.json`. When a session also loads the owner's account plugin (1.2.3 as of 2026-10-10, the same version as these copies), `AGENTS.md` says which to pick.
+These skills are copied from [mattpocock/skills](https://github.com/mattpocock/skills), plugin version 1.2.3, and adjusted for this project (below). A session on the owner's PC also loads the plugin itself (`mattpocock-skills` from Anthropic's official marketplace, 1.3.1 as of 2026-10-26), which updates itself while these copies stay at the version above. `AGENTS.md` says which to pick.
 
 | Skill | From |
 |---|---|
