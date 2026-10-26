@@ -58,7 +58,7 @@ At the end of the milestone's acceptance slice (M2's is Slice 30b, [#148](https:
    ```
 
    Publishing makes the tag, on the commit the zips were built from. The workflow never publishes: until the owner does, only those who can push to the repo can see the draft.
-4. **Check it installs:** the `cargo install` line above, on the owner's PC or in a cloud session, then `terra-sprites --version`.
+4. **Check it installs, and uninstalls cleanly:** the `cargo install` line above, on the owner's PC or in a cloud session, then `terra-sprites --version`; then the notes' uninstall steps leave neither the `terra-sprites` command nor the game's folder behind.
 
 ### The notes
 
@@ -82,7 +82,19 @@ Download the zip for your computer from this page's Assets, below: Windows, Mac 
     cargo install --git https://github.com/Keazra/terra-sprites --tag v0.2.0 --locked terra-tui
 
 Either way, you need a terminal of at least 100×30 (on Windows, Windows Terminal).
+
+## Uninstall
+
+Delete the folder you unzipped, or run `cargo uninstall terra-tui` if you installed it with Rust. Your worlds stay in the game's own folder, so a newer version finds them, until you delete that too:
+
+- Windows (PowerShell): `Remove-Item -Recurse "$env:APPDATA\terra-sprites"`
+- Mac: `rm -rf ~/Library/Application\ Support/terra-sprites`
+- Linux: `rm -rf ~/.local/share/terra-sprites`
+
+The game writes nothing anywhere else. A Rust install also leaves the code it downloaded in Cargo's folder: the manual's [Uninstalling](https://github.com/Keazra/terra-sprites/blob/v0.2.0/docs/manual.md#uninstalling) says how to clear it.
 ```
+
+Every release's notes end with these steps for a full, clean uninstall (the owner, 2026-10-26), and so does each download's `README.txt` (`.github/downloads/`). If a release makes the game write anywhere new, or install something else, add it to both, and to the manual's "Uninstalling".
 
 ## A fix to a release
 

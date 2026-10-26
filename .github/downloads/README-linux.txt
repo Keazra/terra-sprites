@@ -47,8 +47,23 @@ The game keeps your saves, autosaves and replays in a folder of its own,
 ~/.local/share/terra-sprites, or $XDG_DATA_HOME/terra-sprites if you've
 set that (the last line of the help screen, ?, shows it too). A newer
 version finds them there, so to update, unzip the new one and run that
-instead. To remove the game, delete this folder, and that one too if you
-don't want your worlds.
+instead.
+
+
+Removing it
+-----------
+
+1. Delete this folder, and terra-sprites from the folder on your PATH if
+   you moved it there (rm ~/.local/bin/terra-sprites). That removes the
+   game.
+
+2. To remove your worlds too, delete the game's own folder:
+
+       rm -rf ~/.local/share/terra-sprites
+
+   or $XDG_DATA_HOME/terra-sprites if you've set that.
+
+That's everything: the game writes nothing anywhere else.
 
 
 Licence
