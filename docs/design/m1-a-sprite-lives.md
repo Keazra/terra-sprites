@@ -1213,7 +1213,7 @@ The species is dropped into a world it doesn't know and has to learn about it. I
 - The minimum terminal size is **100×30**; 140×40 is recommended.
 - A smaller terminal shows only "Terminal too small" and "needs 100x30, this is 80x24", in the middle, and the game carries on as it was set: shrinking the window doesn't pause it, and `Esc` still asks to quit, with the question under the message (v30). At 100×30 and up, every panel always shows.
 - All text uses only CP437 characters (§6.2).
-- **The panels have no boxes** (#302). The map view has no frame and runs to the screen's edges, the glass and space showing where the world ends (M2 design §11.2). In a theme with shades (§6.2), such as the default, the inspector and the event log sit on a background a shade lighter than the terminal's black, and their title rows, the inspector's tabs and the log's "Events" with its filters, a shade lighter again, with no lines at all. In a theme without, such as ASCII, one line instead: `│` down the inspector's left, and a `─` rule over the log with its title and filters in it, the two meeting at `┴`, as drawn below. At 100×30 the map view shows 54×24 tiles, the inspector 23 rows of 45 columns under its title row, and the event log its title row and three events. Pop-ups keep their boxes, since they sit over the map: menus, the overlays (help, the sprite list, the population graph and the family tree), the quit prompt and the debug overlay. Pictures of a tab's lines in these designs drawn between `│` edges were drawn before #302: the edges only show where the text sits.
+- **The panels have no boxes** (#302). The map view has no frame and runs to the screen's edges, the glass and space showing where the world ends (M2 design §11.2). In a theme with shades (§6.2), such as the default, the inspector and the event log sit on a background a shade lighter than the terminal's black, and their title rows, the inspector's tabs and the log's "Events" with its filters, a shade lighter again, with no lines at all. In a theme without, such as ASCII, one line instead: `│` down the inspector's left, and a `─` rule over the log with its title and filters in it, the two meeting at `┴`, as drawn below. At 100×30 the map view shows 54×24 tiles, the inspector 23 rows of 45 columns under its title row, and the event log its title row and three events. Pop-ups keep their boxes, since they sit over the map: menus, the overlays (help, the sprite list, the population graph and the family tree) and the debug overlay. Pictures of a tab's lines in these designs drawn between `│` edges were drawn before #302: the edges only show where the text sits.
 
 ```
  Terra Sprites │ tick 48,210 │ ► 4x │ seed 7 │ sprites 27 │ saved 2m ago                     ? help
@@ -1511,19 +1511,19 @@ The species is dropped into a world it doesn't know and has to learn about it. I
 | Attention marker | the tile's own glyph | the tile's own glyph | dark grey background |
 
 - Every **terrain and object type** on the map, and sprites, has a unique glyph. Colour is used only for **state**, and the status line always names what's under the Cursor. The Cursor's arrows and marks are UI drawn over the map, and may share glyphs with each other (grab and release are arrows).
-- **Colours** (#302) are the 16 terminal colours by name, which follow the player's terminal scheme, or exact, `"#rrggbb"`. The default theme keeps names for the map and uses exact colours only where no name fits: the panels' shades here, and Look 5's fades. A terminal that doesn't say it shows exact colours, in `COLORTERM`, such as macOS's Terminal, which draws them wrongly, is given the nearest of the 256 colours nearly every terminal shows instead; on Windows, every terminal shows them.
+- **Colours** (#302) are the 16 terminal colours by name, which follow the player's terminal scheme, or exact, `"#rrggbb"`. The default theme keeps names for the map and uses exact colours only where no name fits: the panels' shades, and Look 5's fades once they're built (#306). A terminal that doesn't say it shows exact colours, in `COLORTERM`, such as macOS's Terminal, which draws them wrongly, is given the nearest of the 256 colours nearly every terminal shows instead; on Windows, every terminal shows them.
 - **Text has colours by its job** (#302): a theme's `text` section styles six roles, and every built-in theme sets them. A role a theme leaves out is styled as the default theme styles it. Colour never carries a meaning alone: the signs, the arrows and the capitals stay, so the screen reads the same in ASCII and to a colour-blind player.
 
   | Role | What it styles | Default and ASCII themes |
   |---|---|---|
   | Heading | `ATTENTION`, `WATER`, `Observed`, `HORMONES`, help's headings, the sprite list's heading, the World tab's graph's heading | light cyan, bold |
-  | Muted | Minor text: a log line's tick, `and 3 more`, a `·` between parts, a bar's empty part, what a hint's key does, the dead on the family tree, the graph's "as shares of each column" | dark grey |
-  | Good | A gain or a rise: `+.99` on the Brain tab, a chemical's `+.0017` on the Chem tab, a felt reward | light green |
-  | Bad | A loss or a fall: `-.19`, `-.0020` | light red |
-  | Key | The key in a hint, as `Z` in `Z select`, the top bar's `?`, and help's keys | bold |
+  | Muted | Minor text: a log line's tick, `and 3 more`, a `·` between parts, a bar's empty part, what a hint's key does, the dead on the family tree, the population graph's "as shares of each column" | dark grey |
+  | Good | A gain, `+.99` on the Brain tab, and a reward felt, on the Chem tab | light green |
+  | Bad | A loss, `-.19`, and a punishment felt | light red |
+  | Key | The key in a hint, as `Z` in `Z select`, the top bar's `?`, the keys in a question such as `(y/n)` and in an overlay's corner, and help's keys | bold |
   | Selected | What's chosen: the open tab, a menu's highlighted item, the sprite list's highlighted row | reverse video |
 
-  A drive's bar on the Body tab is drawn in the colour the theme gives that drive, its empty part muted.
+  A zero, `+.00`, is neither good nor bad, and a chemical's change on the Chem tab stays plain, since a rise is good for food and bad for hunger. A drive's bar on the Body tab is drawn in the colour the theme gives that drive, its empty part muted.
 - **Panels** (#302): a theme's `panels` section gives the shade the inspector and the event log sit on, and their title rows' shade: `#181a22` and `#282c3a` in the default theme. A theme without one, such as ASCII, draws lines between the panels instead (§6.1).
 - **`--ascii` swaps only what themes cover:** the map's glyphs, the Cursor, the emotes, and from #302 the text's colours and the panels, which ASCII draws with lines. Frames and text stay CP437 in every theme.
 

@@ -227,17 +227,19 @@ fn emote_legend(app: &App, width: usize) -> Vec<Line<'static>> {
         (Emote::Dancing, "danced"),
         (Emote::Calling, "called"),
     ];
-    const HEAD: &str = " EMOTES   ";
-    let indent = || vec![Span::raw(" ".repeat(HEAD.len()))];
+    const HEADING: &str = "EMOTES";
+    // The heading, with a space before it and three after.
+    const HEAD: usize = HEADING.len() + 4;
+    let indent = || vec![Span::raw(" ".repeat(HEAD))];
     let mut lines = Vec::new();
-    let mut spans = headed(HEAD.trim(), "   ", app.theme.text());
-    let mut used = HEAD.len();
+    let mut spans = headed(HEADING, "   ", app.theme.text());
+    let mut used = HEAD;
     for (emote, meaning) in emotes {
         let entry = format!(" {meaning}  ");
         let needs = 1 + entry.trim_end().chars().count();
-        if used > HEAD.len() && used + needs > width {
+        if used > HEAD && used + needs > width {
             lines.push(Line::from(std::mem::replace(&mut spans, indent())));
-            used = HEAD.len();
+            used = HEAD;
         }
         let glyph = app.theme.glyph(SemanticTile::Emote(emote));
         spans.push(Span::styled(

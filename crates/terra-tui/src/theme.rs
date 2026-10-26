@@ -1,4 +1,5 @@
-//! Themes map semantic tiles to glyphs and colours (design §6.2). They are UI
+//! Themes map semantic tiles to glyphs and colours, and each text role to a
+//! style, and may give the panels their shades (design §6.2). They are UI
 //! assets and never affect the simulation. Two are embedded in the binary,
 //! and `--theme <file>` loads one the player has edited (design v34 §6.7).
 
@@ -166,7 +167,7 @@ impl LineageLook {
     }
 }
 
-/// How a theme styles the screen's text by the job it does (design §6.2,
+/// How a theme styles the screen's text by its text role (design §6.2,
 /// #302): the headings, minor text, gains and losses, the key in each hint,
 /// and what's chosen, such as the open tab. Colour never carries a meaning
 /// alone: the signs, arrows and capitals stay.
@@ -189,9 +190,15 @@ pub struct TextLook {
 
 impl TextLook {
     /// The style of a signed number such as `+.99` or `-.19`: a gain good,
-    /// a loss bad, and anything else in `otherwise`.
+    /// a loss bad, and anything else, a zero such as `+.00` too, in
+    /// `otherwise`.
     pub fn signed(&self, number: &str, otherwise: Style) -> Style {
+        let zero = number
+            .chars()
+            .filter(char::is_ascii_digit)
+            .all(|d| d == '0');
         match number.chars().next() {
+            _ if zero => otherwise,
             Some('+') => self.good,
             Some('-') => self.bad,
             _ => otherwise,
@@ -301,7 +308,7 @@ pub struct Theme {
     population: PopulationLook,
     /// The lineage colours (M2 design §17.4).
     lineage: LineageLook,
-    /// The screen's text, by its job (design §6.2).
+    /// The screen's text, by its text role (design §6.2).
     text: TextLook,
     /// The panels' shades, if it has them (design §6.1).
     panels: Option<PanelLook>,
@@ -416,7 +423,7 @@ impl Theme {
         self.lineage
     }
 
-    /// How the screen's text is styled by its job (design §6.2, #302).
+    /// How the screen's text is styled by its text role (design §6.2, #302).
     pub fn text(&self) -> TextLook {
         self.text
     }
@@ -533,7 +540,7 @@ impl Theme {
             .text
             .unwrap_or_default()
             .look(builtin.text.unwrap_or_default())
-            .expect("the built-in cp437 theme styles text for every job");
+            .expect("the built-in cp437 theme styles every text role");
         let theme = Theme {
             tiles,
             objects,
@@ -733,7 +740,7 @@ struct ThemeFile {
     /// without some of them, draws the default theme's.
     #[serde(default, deserialize_with = "implicit_some")]
     lineage: Option<LineageFile>,
-    /// The screen's text, by its job (design §6.2, #302). A theme without
+    /// The screen's text, by its text role (design §6.2, #302). A theme without
     /// it, or without some of it, styles it as the default theme does.
     #[serde(default, deserialize_with = "implicit_some")]
     text: Option<TextFile>,
@@ -841,7 +848,7 @@ impl LineageFile {
     }
 }
 
-/// A theme file's `text` section: the screen's text, by its job (design
+/// A theme file's `text` section: the screen's text, by its text role (design
 /// §6.2, #302).
 #[derive(Default, Deserialize)]
 #[serde(deny_unknown_fields)]

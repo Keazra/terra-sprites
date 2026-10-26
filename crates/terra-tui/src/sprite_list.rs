@@ -245,7 +245,8 @@ pub(crate) fn lines(
         ] {
             let text = clipped(&text, room);
             room -= text.chars().count();
-            spans.push(Span::styled(text, style));
+            // The dots in what it's doing minor (design §6.2).
+            spans.extend(inspector::dotted(&text, style, look.muted).spans);
         }
         // The highlight runs the width of the list.
         spans.push(Span::raw(" ".repeat(room)));

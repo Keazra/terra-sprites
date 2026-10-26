@@ -23,10 +23,10 @@ use crate::text::{Words, change, display_name, level, significant, thousands, wh
 /// player has observed it do.
 pub(super) fn body_tab(sprite: &SpriteView, app: &App, world: &World) -> Vec<Line<'static>> {
     let look = app.theme.text();
-    let plain = |text: String| dotted(&text, Style::default(), look.muted);
+    let line = |text: String| dotted(&text, Style::default(), look.muted);
     let traits = sprite.traits();
     let doing = doing_line(sprite, app, world).map(|line| format!(" {line}"));
-    let mut lines: Vec<Line<'static>> = doing.into_iter().map(plain).collect();
+    let mut lines: Vec<Line<'static>> = doing.into_iter().map(line).collect();
     lines.extend(
         [
             format!(" age {} · {}", thousands(sprite.age()), {
@@ -50,18 +50,18 @@ pub(super) fn body_tab(sprite: &SpriteView, app: &App, world: &World) -> Vec<Lin
                 trait_text(Trait::SenseRadius, traits.sense_radius)
             ),
         ]
-        .map(plain),
+        .map(line),
     );
     lines.extend(
         family_lines(sprite, &app.words(world))
             .into_iter()
-            .map(plain),
+            .map(line),
     );
     lines.push(Line::default());
     let chemicals: Vec<ChemicalLevel> = sprite.chemicals().collect();
     for drive in chemicals.iter().filter(|c| c.kind == ChemicalKind::Drive) {
         // The bar filled in the drive's colour, as the map draws a sprite
-        // it drives, and the rest of it and the arrow minor (design §6.2).
+        // it drives, and the rest of it minor (design §6.2).
         let filled = match app.theme.drive_colour(drive.name) {
             Some(colour) => Style::default().fg(colour),
             None => Style::default(),
@@ -75,7 +75,7 @@ pub(super) fn body_tab(sprite: &SpriteView, app: &App, world: &World) -> Vec<Lin
         ];
         let arrow = trend(drive.change);
         if !arrow.is_empty() {
-            spans.push(Span::styled(format!(" {arrow}"), look.muted));
+            spans.push(Span::raw(format!(" {arrow}")));
         }
         lines.push(Line::from(spans));
     }
@@ -86,13 +86,13 @@ pub(super) fn body_tab(sprite: &SpriteView, app: &App, world: &World) -> Vec<Lin
         .map(|c| format!("{} {}", display_name(c.name), level(c.level)))
         .collect();
     for three in physical.chunks(3) {
-        lines.push(plain(format!(" {}", three.join(" · "))));
+        lines.push(line(format!(" {}", three.join(" · "))));
     }
     // Its genes' average health shows once any has weakened (M2 design
     // §9.4, §9.6). A genome with nothing to weaken gives out when old
     // without any gene losing health, so that isn't shown.
     let weakened = sprite.gene_health().iter().any(|&health| health < 1.0);
-    lines.push(plain(if weakened {
+    lines.push(line(if weakened {
         format!(
             " wear {} · genes {}",
             level(sprite.wear()),

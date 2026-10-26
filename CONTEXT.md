@@ -837,7 +837,7 @@ A mapping from semantic tiles to glyphs and colours, and from each text role to 
 _Avoid_: skin
 
 **Text role** (#302):
-What a piece of the screen's text is for, which the theme styles: a heading, muted (minor) text, good (a gain or a rise), bad (a loss or a fall), a key in a hint, or selected (what's chosen, such as the open tab). Colour never carries a meaning alone: the signs, arrows and capitals stay.
+What a piece of the screen's text is for, which the theme styles: a heading, muted (minor) text, good (a gain, or a reward felt), bad (a loss, or a punishment felt), a key in a hint, or selected (what's chosen, such as the open tab). Colour never carries a meaning alone: the signs, arrows and capitals stay.
 _Avoid_: colour scheme, highlight (for a role)
 
 **Panel shade** (#302):

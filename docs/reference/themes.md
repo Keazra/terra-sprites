@@ -119,13 +119,13 @@ The screen's text is coloured by what it is, so a tab reads at a glance (design 
 | Role | What it styles | Default theme |
 |---|---|---|
 | `heading` | Headings: `ATTENTION`, `WATER`, `Observed`, `HORMONES`, help's headings, the sprite list's heading, the World tab's graph's heading | `light_cyan`, bold |
-| `muted` | Minor text: a log line's tick, `and 3 more`, a `·` between parts, a bar's empty part, what a hint's key does, the dead on the family tree | `dark_gray` |
-| `good` | A gain or a rise: `+.99` on the Brain tab, `+.0017` on the Chem tab | `light_green` |
-| `bad` | A loss or a fall: `-.19`, `-.0020` | `light_red` |
-| `key` | The key in a hint, `Z` of `Z select`, and help's keys | bold |
+| `muted` | Minor text: a log line's tick, `and 3 more`, a `·` between parts, a bar's empty part, what a hint's key does, the dead on the family tree, the population graph's "as shares of each column" | `dark_gray` |
+| `good` | A gain, `+.99` on the Brain tab, and a reward felt, on the Chem tab | `light_green` |
+| `bad` | A loss, `-.19`, and a punishment felt | `light_red` |
+| `key` | The key in a hint, `Z` of `Z select`, the top bar's `?`, the keys in a question such as `(y/n)` and in an overlay's corner, and help's keys | bold |
 | `selected` | What's chosen: the open tab, a menu's highlighted item, the sprite list's highlighted row | reversed |
 
-A drive's bar on the Body tab is drawn in the colour `drives` gives the drive.
+A zero, `+.00`, is neither good nor bad, and a chemical's change on the Chem tab stays plain, since a rise is good for food and bad for hunger. A drive's bar on the Body tab is drawn in the colour `drives` gives the drive.
 
 ### `panels`
 

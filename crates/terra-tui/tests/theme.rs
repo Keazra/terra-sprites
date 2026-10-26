@@ -762,6 +762,19 @@ fn the_default_theme_shades_its_panels_and_the_ascii_one_draws_lines() {
 }
 
 #[test]
+fn a_gain_is_good_a_loss_bad_and_a_zero_neither() {
+    // Design §6.2, #302.
+    let look = Theme::cp437().text();
+    let plain = Style::default();
+    assert_eq!(look.signed("+.99", plain), look.good);
+    assert_eq!(look.signed("-.0020", plain), look.bad);
+    for zero in ["+.00", "-.0000"] {
+        assert_eq!(look.signed(zero, plain), plain, "{zero}");
+    }
+    assert_eq!(look.signed(".50", plain), plain, "no sign");
+}
+
+#[test]
 fn exact_colours_are_shown_where_the_terminal_says_it_can_and_on_windows() {
     // Design §6.2: most terminals say so in COLORTERM; macOS's Terminal
     // doesn't, and draws them wrongly; Windows' console has since Windows 10.

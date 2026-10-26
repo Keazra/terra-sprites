@@ -4,9 +4,10 @@
 
 mod common;
 use common::screen::{
-    HUNGRY_GENOME, app_for, garden, garden_with_sprites, one_sprite, one_sprite_among, render,
+    HUNGRY_GENOME, app_for, garden, garden_with_sprites, one_sprite, one_sprite_among, pointer_on,
+    render,
 };
-use common::{at, died, open, pack, row};
+use common::{at, died, open, pack, row, run};
 
 use ratatui::buffer::{Buffer, Cell};
 use ratatui::layout::Position;
@@ -149,28 +150,35 @@ fn the_body_tab_draws_each_drive_s_bar_in_its_colour_on_a_muted_track() {
 }
 
 #[test]
-fn the_chem_tab_colours_a_rise_good_and_a_fall_bad_under_its_headings() {
+fn the_chem_tab_colours_what_was_felt_and_leaves_each_change_plain() {
     let (world, mut app) = one_sprite(HUNGRY_GENOME, 1);
     open(&mut app, &world, Tab::Chem);
     let screen = render(&app, &world, 100, 40);
     let look = look();
-    let mut signs = Vec::new();
+    let mut changes = 0;
     for y in 2..35 {
-        let text = row(&screen, y);
-        for (x, c) in text.chars().enumerate() {
-            let starts = matches!(c, '+' | '-') && text.chars().nth(x + 1) == Some('.') && x > 54;
-            if starts {
-                let style = if c == '+' { look.good } else { look.bad };
-                assert!(styled(&screen[(x as u16, y)], style), "{text}");
-                signs.push(c);
-            }
+        let text: String = (55..100).map(|x| screen[(x, y)].symbol()).collect();
+        let Some(at) = text
+            .find(['+', '-'])
+            .filter(|&at| text[at + 1..].starts_with('.'))
+        else {
+            continue;
+        };
+        let number = text[at..].trim_end();
+        let cell = &screen[(55 + text[..at].chars().count() as u16, y)];
+        if text[..at].ends_with("felt ") {
+            // A reward or a punishment, or plain when nothing was.
+            assert!(
+                styled(cell, look.signed(number, Default::default())),
+                "{text}"
+            );
+        } else {
+            // A rise is good for food and bad for hunger, so it's plain.
+            assert_eq!(cell.fg, Color::Reset, "{text}");
+            changes += 1;
         }
     }
-    assert!(signs.contains(&'-'), "energy and water fall every tick");
-    assert!(
-        signs.contains(&'+'),
-        "and the reward line says what was felt"
-    );
+    assert!(changes > 0, "energy and water fall every tick");
     let heading = cells(&screen, "HORMONES", 2);
     assert!(heading.iter().all(|cell| styled(cell, look.heading)));
 }
@@ -216,6 +224,36 @@ fn a_hint_s_key_is_bold_and_what_it_does_is_muted() {
 }
 
 #[test]
+fn the_dots_between_the_status_line_s_parts_are_muted() {
+    let world = garden(pack());
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
+    app.apply(Action::Point(pointer_on(&world, 1, 1)), &world);
+    let screen = render(&app, &world, 100, 30);
+    let tile = cells(&screen, "grass · berry bush", 29);
+    assert!(styled(tile[6], look().muted), "the dot");
+    assert!(tile[..5].iter().all(|cell| cell.fg == Color::Reset));
+}
+
+#[test]
+fn the_quit_prompt_s_keys_and_an_overlay_s_corner_key_are_bold() {
+    let world = garden(pack());
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
+    app.apply(Action::Back, &world);
+    let screen = render(&app, &world, 100, 30);
+    for answer in ["y quit the game", "t title screen"] {
+        let answer = cells(&screen, answer, 29);
+        assert!(styled(answer[0], look().key));
+        assert!(answer[2..].iter().all(|cell| styled(cell, look().muted)));
+    }
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
+    app.apply(Action::Help, &world);
+    let screen = render(&app, &world, 100, 30);
+    let corner = cells(&screen, "esc close", 1);
+    assert!(corner[..3].iter().all(|cell| styled(cell, look().key)));
+    assert!(corner[4..].iter().all(|cell| styled(cell, look().muted)));
+}
+
+#[test]
 fn help_s_headings_and_keys_have_their_styles() {
     let world = garden(pack());
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
@@ -234,7 +272,8 @@ fn help_s_headings_and_keys_have_their_styles() {
 
 #[test]
 fn the_sprite_list_s_heading_and_highlight_have_their_styles() {
-    let world = garden_with_sprites();
+    let mut world = garden_with_sprites();
+    run(&mut world, 3);
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
     app.apply(Action::SpriteList, &world);
     let screen = render(&app, &world, 100, 30);
@@ -242,4 +281,7 @@ fn the_sprite_list_s_heading_and_highlight_have_their_styles() {
     assert!(heading.iter().all(|cell| styled(cell, look().heading)));
     let first = find_from(&screen, "Sprite #", 3);
     assert!(styled(&screen[first], look().selected), "the highlight");
+    // The dots in what each is doing are minor.
+    let dot = find_from(&screen, " · ", 3);
+    assert!(styled(&screen[(dot.x + 1, dot.y)], look().muted));
 }

@@ -118,8 +118,32 @@ pub fn render_with(frame: &mut Frame, app: &App, world: &World, parts: Parts) {
 }
 
 /// What the status line asks when `Esc` would leave a world (M2 design
-/// §8.4).
-pub(crate) const QUIT_PROMPT: &str = "Quit? y quit the game  t title screen  any other key stays";
+/// §8.4), each answer's key bold and what it does muted (design §6.2).
+fn quit_prompt(look: TextLook) -> Line<'static> {
+    const ANSWERS: &[Hint] = &[
+        ("y", "quit the game"),
+        ("t", "title screen"),
+        ("any other key", "stays"),
+    ];
+    let mut spans = vec![Span::raw("Quit? ")];
+    spans.extend(hint_spans(ANSWERS, look));
+    Line::from(spans)
+}
+
+/// `question`, which ends `(y/n)`, as the status line asks it, with the two
+/// keys bold (design §6.2).
+fn yes_or_no(question: &str, look: TextLook) -> Line<'static> {
+    let Some(asked) = question.strip_suffix("(y/n)") else {
+        return Line::from(format!(" {question}"));
+    };
+    Line::from(vec![
+        Span::raw(format!(" {asked}(")),
+        Span::styled("y", look.key),
+        Span::raw("/"),
+        Span::styled("n", look.key),
+        Span::raw(")"),
+    ])
+}
 
 /// The smallest screen the game draws on (design §6.1).
 pub const MIN_SIZE: Size = Size::new(100, 30);
@@ -136,7 +160,7 @@ fn render_too_small(buf: &mut Buffer, area: Rect, app: &App) {
     let mut questions = vec![];
     // `Esc` still asks to quit, so the question shows here too.
     if app.screen() == Screen::QuitPrompt {
-        questions.push(QUIT_PROMPT.into());
+        questions.push(quit_prompt(app.theme.text()).to_string());
     }
     if let Some(question) = app.load_question() {
         questions.push(question);
@@ -661,7 +685,7 @@ fn render_help(buf: &mut Buffer, app: &App, world: &World) {
     let Some(area) = app.overlay() else {
         return;
     };
-    let inner = clear_box(buf, area, " Help ", " esc close ");
+    let inner = clear_box(buf, area, " Help ", ESC_CLOSE, app.theme.text());
     let lines = crate::help::lines(app, world, usize::from(inner.width));
     draw_lines(buf, inner, &lines);
 }
@@ -674,10 +698,11 @@ fn render_sprite_list(buf: &mut Buffer, app: &App, world: &World) {
     };
     // While it's filtered, `Esc` clears the filter first (#313).
     let corner = match app.list_filter() {
-        Some(_) => " esc clear ",
-        None => " esc close ",
+        Some(_) => ("esc", "clear"),
+        None => ESC_CLOSE,
     };
-    let inner = clear_box(buf, area, &crate::sprite_list::title(app, world), corner);
+    let title = crate::sprite_list::title(app, world);
+    let inner = clear_box(buf, area, &title, corner, app.theme.text());
     let lines = crate::sprite_list::lines(
         app,
         world,
@@ -700,7 +725,7 @@ fn render_population(buf: &mut Buffer, app: &App, world: &World) {
     } else {
         " Population ".to_string()
     };
-    let inner = clear_box(buf, area, &title, " esc close ");
+    let inner = clear_box(buf, area, &title, ESC_CLOSE, app.theme.text());
     if !shown {
         return;
     }
@@ -728,7 +753,7 @@ fn render_family_tree(buf: &mut Buffer, app: &App, world: &World) {
         Some(label) => format!(" Family tree ── {label} "),
         None => " Family tree ".to_string(),
     };
-    let inner = clear_box(buf, area, &title, " esc close ");
+    let inner = clear_box(buf, area, &title, ESC_CLOSE, app.theme.text());
     if app.selection().is_none() {
         buf.set_string(inner.x, inner.y, NOTHING_SELECTED, Style::default());
     }
@@ -741,16 +766,20 @@ fn render_family_tree(buf: &mut Buffer, app: &App, world: &World) {
 /// Draws the debug overlay (`F3`, design §6.1, #311) in the map view's
 /// top-right corner, `map_view`, as far as the map view goes.
 fn render_debug_overlay(buf: &mut Buffer, map_view: Rect, app: &App) {
-    let inner = map_view;
     let lines = app.debug_lines();
     let width = crate::debug_overlay::WIDTH;
     let height = lines.len() as u16 + 2;
-    let area =
-        Rect::new(inner.right().saturating_sub(width), inner.y, width, height).intersection(inner);
+    let corner = Rect::new(
+        map_view.right().saturating_sub(width),
+        map_view.y,
+        width,
+        height,
+    );
+    let area = corner.intersection(map_view);
     if area.width < 3 || area.height < 3 {
         return;
     }
-    let inside = clear_box(buf, area, " Debug ", " F3 ");
+    let inside = clear_box(buf, area, " Debug ", ("F3", ""), app.theme.text());
     for (row, line) in (inside.y..inside.bottom()).zip(lines) {
         buf.set_stringn(
             inside.x,
@@ -790,13 +819,27 @@ pub(crate) fn top_right(area: Rect, width: u16) -> Option<Rect> {
 }
 
 /// Blanks `area` and draws a single-lined box round it, with `title` at
-/// the left of its top edge and `corner` at the right, as an overlay over
-/// the panels beneath. Gives the area inside the box.
-pub(crate) fn clear_box(buf: &mut Buffer, area: Rect, title: &str, corner: &str) -> Rect {
+/// the left of its top edge and the key hint `corner` at the right, its key
+/// bold and what it does muted (design §6.2), as an overlay over the panels
+/// beneath. Gives the area inside the box.
+pub(crate) fn clear_box(
+    buf: &mut Buffer,
+    area: Rect,
+    title: &str,
+    corner: (&str, &str),
+    look: TextLook,
+) -> Rect {
     blank(buf, area);
     draw_border(buf, area, title);
-    if let Some(at) = top_right(area, corner.chars().count() as u16) {
-        buf.set_stringn(at.x, at.y, corner, usize::from(at.width), Style::default());
+    let (key, does) = corner;
+    let mut spans = vec![Span::raw(" "), Span::styled(key, look.key)];
+    if !does.is_empty() {
+        spans.push(Span::styled(format!(" {does}"), look.muted));
+    }
+    spans.push(Span::raw(" "));
+    let corner = Line::from(spans);
+    if let Some(at) = top_right(area, corner.width() as u16) {
+        buf.set_line(at.x, at.y, &corner, at.width);
     }
     area.inner(Margin::new(1, 1))
 }
@@ -925,6 +968,9 @@ fn top_bar_line(app: &App, world: &World, width: u16) -> Line<'static> {
 /// key bold and what it does muted (design §6.2).
 type Hint = (&'static str, &'static str);
 
+/// The hint in an overlay's corner (design §6.1).
+pub(crate) const ESC_CLOSE: Hint = ("esc", "close");
+
 /// The keys that work now, shown at the right of the status line as far as
 /// there's room. The mode keys come first, as one hint, so they're the last
 /// to go (design v22 §6.1).
@@ -964,11 +1010,14 @@ fn hint_spans(hints: &[Hint], look: TextLook) -> Vec<Span<'static>> {
 /// cursor mode, then at the right the key hints that fit in `width` cells, or
 /// why a click was refused in their place. An open prompt takes the line over.
 fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
+    let look = app.theme.text();
     if app.screen() == Screen::QuitPrompt {
-        return Line::from(format!(" {QUIT_PROMPT}"));
+        let mut prompt = quit_prompt(look);
+        prompt.spans.insert(0, Span::raw(" "));
+        return prompt;
     }
     if let Some(question) = app.load_question() {
-        return Line::from(format!(" {question}"));
+        return yes_or_no(&question, look);
     }
     // Naming a save takes the line over too (design §6.7).
     if let Some(draft) = app.save_name_draft() {
@@ -1040,6 +1089,8 @@ fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
         String::new()
     };
     let tile = format!("{under} {mode}{followed}{grip}{placing}");
+    // Its parts' dots minor (design §6.2).
+    let tile_line = |tile: &str| inspector::dotted(tile, Style::default(), look.muted);
     // At the right, after a gap of 2 and before a space at the end: why a
     // click did nothing, for a while, or else the key hints that fit (design
     // v22 §6.1). The reason matters more than the end of the tile's part,
@@ -1049,7 +1100,10 @@ fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
         let room = width.saturating_sub(why.chars().count() + 3);
         let tile: String = tile.chars().take(room).collect();
         let gap = width.saturating_sub(tile.chars().count() + why.chars().count() + 1);
-        return Line::from(format!("{tile}{}{why} ", " ".repeat(gap)));
+        let mut line = tile_line(&tile);
+        line.spans
+            .push(Span::raw(format!("{}{why} ", " ".repeat(gap))));
+        return line;
     }
     let room = width.saturating_sub(tile.chars().count() + 3);
     // While the player aims, how to send it or not (design v25 §6.1).
@@ -1105,14 +1159,15 @@ fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
         .into_iter()
         .find(|hints| hint_width(hints) <= room)
         .unwrap_or_default();
+    let mut line = tile_line(&tile);
     if hints.is_empty() {
-        return Line::from(tile);
+        return line;
     }
     let gap = width.saturating_sub(tile.chars().count() + hint_width(&hints) + 1);
-    let mut spans = vec![Span::raw(tile), Span::raw(" ".repeat(gap))];
-    spans.extend(hint_spans(&hints, app.theme.text()));
-    spans.push(Span::raw(" "));
-    Line::from(spans)
+    line.spans.push(Span::raw(" ".repeat(gap)));
+    line.spans.extend(hint_spans(&hints, look));
+    line.spans.push(Span::raw(" "));
+    line
 }
 
 /// A prompt that takes the status line over, with `hints` after it if they

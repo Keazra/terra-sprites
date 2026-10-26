@@ -2,8 +2,9 @@
 //! `InfoPolicy` first.
 
 mod common;
+use common::screen::log_rows;
 use common::{
-    HURT_TARGET, SCREEN, WorldBuilder, acted, app_on, at, at_sprite, died, pack, pointer_on,
+    HURT_TARGET, SCREEN, WorldBuilder, acted, app_on, at, at_sprite, died, lines, pack, pointer_on,
     render, status_line,
 };
 
@@ -70,10 +71,7 @@ fn inspector_text(buffer: &Buffer) -> String {
 
 /// The event log's lines, below its title row, trimmed.
 fn event_log_text(buffer: &Buffer) -> String {
-    (26..29)
-        .map(|y| row(buffer, y, 0..100).trim().to_string())
-        .collect::<Vec<_>>()
-        .join("\n")
+    log_rows(&lines(buffer)).join("\n")
 }
 
 /// The screen cell tile `tile` of a 10×5 field is drawn on, on a 100×30

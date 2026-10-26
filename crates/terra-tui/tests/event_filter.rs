@@ -2,7 +2,8 @@
 //! or major ones only, switched with `m` or a click on its label.
 
 mod common;
-use common::{UNHURT, WorldBuilder, acted, app_on, at, at_sprite, died, render, row};
+use common::screen::log_rows;
+use common::{UNHURT, WorldBuilder, acted, app_on, at, at_sprite, died, lines, render, row};
 
 use ratatui::layout::Position;
 use terra_sim::{
@@ -22,16 +23,10 @@ fn field() -> World {
 /// The event log's lines, without their ticks: the three rows above the
 /// status line.
 fn log(app: &App, world: &World) -> Vec<String> {
-    let screen = render(app, world);
-    (26..29)
-        .map(|y| {
-            (0..100)
-                .map(|x| screen[(x, y)].symbol())
-                .collect::<String>()
-        })
+    log_rows(&lines(&render(app, world)))
+        .into_iter()
         .map(|line| {
-            line.trim()
-                .split_once("  ")
+            line.split_once("  ")
                 .map_or("", |(_, text)| text)
                 .to_string()
         })

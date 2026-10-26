@@ -11,9 +11,10 @@ use crate::theme::TextLook;
 /// The Chem tab (design §6.1): each chemical on its own line with its level
 /// and its change per tick, the physical chemicals, then the signal
 /// chemicals, with what the sprite felt on the reward line; then the
-/// hormones' levels, four to a line. A rise is in the theme's good colour
-/// and a fall in its bad, and the hormones' heading in its heading colour
-/// (design §6.2).
+/// hormones' levels, four to a line. What was felt is in the theme's good
+/// colour when it's a reward and its bad when it's a punishment, and the
+/// hormones' heading in its heading colour (design §6.2). A change stays
+/// plain: a rise is good for food and bad for hunger.
 pub(super) fn chem_tab(sprite: &SpriteView, look: TextLook) -> Vec<Line<'static>> {
     let chemicals: Vec<ChemicalLevel> = sprite.chemicals().collect();
     let line = |c: &ChemicalLevel| {
@@ -21,13 +22,17 @@ pub(super) fn chem_tab(sprite: &SpriteView, look: TextLook) -> Vec<Line<'static>
         let mut spans = vec![Span::raw(format!(" {name:<13}{:>4}", level(c.level)))];
         // Reward is used up every tick, so its line shows what learning
         // took in instead of a change: `last_r` (design §6.1).
-        let (words, number) = match c.name {
-            "reward" => ("felt ", Some(signed_level(sprite.felt()))),
-            _ => ("", change(c.change)),
+        let (words, number, felt) = match c.name {
+            "reward" => ("felt ", Some(signed_level(sprite.felt())), true),
+            _ => ("", change(c.change), false),
         };
         if let Some(number) = number {
             spans.push(Span::raw(format!("  {words}")));
-            let style = look.signed(&number, Style::default());
+            let style = if felt {
+                look.signed(&number, Style::default())
+            } else {
+                Style::default()
+            };
             spans.push(Span::styled(number, style));
         }
         Line::from(spans)

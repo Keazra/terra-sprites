@@ -464,8 +464,7 @@ fn the_brain_tab_shows_what_the_sprite_has_learned_as_memory() {
 
 /// The inspector's text, keeping the indent the Brain tab uses.
 fn brain_lines(app: &App, world: &World) -> Vec<String> {
-    let rows = right_part(&render(app, world, 100, 30), 45);
-    rows[2..rows.len() - 5].to_vec()
+    inspector_rows(app, world, 30).1
 }
 
 /// The Brain tab's lines, keeping their indent, for `world`'s first sprite

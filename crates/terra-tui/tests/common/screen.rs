@@ -101,8 +101,8 @@ pub fn log_rows(rows: &[String]) -> Vec<String> {
         .collect()
 }
 
-/// The inspector's rows on a 100×30 screen: its title, then the text inside
-/// its border, trimmed.
+/// The inspector's rows on a 100×30 screen: its title row, then the open
+/// tab's lines, trimmed.
 pub fn inspector(app: &App, world: &World) -> (String, Vec<String>) {
     inspector_on(app, world, 30)
 }

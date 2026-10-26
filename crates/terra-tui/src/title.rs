@@ -932,7 +932,7 @@ fn draw_load(buf: &mut Buffer, title: &Title, choice: usize) {
 /// line.
 fn draw_help(buf: &mut Buffer, area: Rect, title: &Title) {
     let overlay = Rect::new(area.x, area.y, area.width, area.height.saturating_sub(1));
-    let inner = ui::clear_box(buf, overlay, " Help ", " esc close ");
+    let inner = ui::clear_box(buf, overlay, " Help ", ui::ESC_CLOSE, title.theme.text());
     let lines = crate::help::lines(&title.help, &title.world, usize::from(inner.width));
     for (row, line) in (inner.y..inner.bottom()).zip(&lines) {
         buf.set_line(inner.x, row, line, inner.width);
