@@ -46,7 +46,7 @@ impl App {
             self.cursor = led.pos();
         }
         let pointed = (i32::from(self.pointed.x), i32::from(self.pointed.y));
-        let to = self.pointer.and_then(|cell| self.pointed_spot(cell));
+        let to = self.pointer.and_then(|cell| self.pointed_xy(cell));
         self.aim = Some(Aim {
             from: self.cursor,
             to: to.unwrap_or(pointed),

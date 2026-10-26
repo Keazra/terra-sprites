@@ -7,6 +7,7 @@ The chemicals in a sprite's body (design §4.1, Appendix A). Each has a level fr
 | `id` | Permanent, never reused. The built-in pack groups them: physical from 1, signal from 16, hormones from 32. |
 | `name` | What objects, genomes and `brain_io.ron` call it. |
 | `class` | `Physical`, `Signal` or `Hormone`. |
+| `about` | Optional. What it is, in a phrase the status line shows after its name while the pointer is on it in the inspector (#304): `hunger: rises as energy runs low, and eating brings it down at once`. For a drive, say what raises it and what lowers it in the starter genes. Left out, the status line names its class. |
 
 **The classes** keep a sprite's body honest: genes decide how things feel, never what they do to the body.
 - **Physical** chemicals are the body's actual state: energy, hydration, stamina, what's in the gut, injury. Only physiology and object verbs change them, and they're the only ones a verb may `Inject`. The brain doesn't feel them directly.
@@ -27,7 +28,7 @@ A new drive, `chill`, added to the list. To matter, it needs genes that raise an
 
 <!-- example: chemicals -->
 ```ron
-(id: 27, name: "chill", class: Signal),
+(id: 27, name: "chill", class: Signal, about: "rises in the cold, and basking brings it down"),
 ```
 
 The built-in list in `data/chemicals.ron` is the full working example.

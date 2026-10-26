@@ -3,18 +3,18 @@
 │ TIME                            CURSOR                          SPRITES                          │
 │ space      pause / resume       Z X C      select/train/grab    tab        next sprite           │
 │ .          step                 Q E        left / right click   Shift+tab  previous sprite       │
-│ +/-        faster / slower      Shift+Q E  hug / shock          l          sprite list           │
-│ VIEW                            Ctrl+click hug / shock          l then /   filter the list       │
-│ WASD       scroll (Shift: 5)    H          show to sprites      p          population graph      │
-│ T          track the selected   F          follow a sprite      k          family tree           │
-│ b          sprite colours       middle     follow a sprite      r          name it               │
-│ m          event filter         wheel      change mode          g          save its genome       │
-│ v          exact detail         C again    the Place menu       INSPECTOR                        │
-│ ?          this help            hold E     aim, let go to send  [ ]        switch tabs           │
-│ :          find a command       FILES                           PgUp PgDn  scroll a tab          │
-│ esc        let go, back, quit?  F5 F9      quicksave / load     DEBUG                            │
-│ Ctrl+C     quit at once         Ctrl+S     save as...           F3         how it's running      │
-│                                 Ctrl+O     load a save                                           │
+│ +/-        faster / slower      Shift+Q E  hug / shock          click log  select its sprite     │
+│ VIEW                            Ctrl+click hug / shock          l          sprite list           │
+│ WASD       scroll (Shift: 5)    H          show to sprites      l then /   filter the list       │
+│ T          track the selected   F          follow a sprite      p          population graph      │
+│ b          sprite colours       middle     follow a sprite      k          family tree           │
+│ m          event filter         wheel      change mode          r          name it               │
+│ v          exact detail         C again    the Place menu       g          save its genome       │
+│ ?          this help            hold E     aim, let go to send  INSPECTOR                        │
+│ :          find a command       FILES                           [ ]        switch tabs           │
+│ esc        let go, back, quit?  F5 F9      quicksave / load     PgUp PgDn  scroll a tab          │
+│ Ctrl+C     quit at once         Ctrl+S     save as...           DEBUG                            │
+│                                 Ctrl+O     load a save          F3         how it's running      │
 │                                 Ctrl+T     pick a theme                                          │
 │                                 Ctrl+R     take over a replay                                    │
 │                                                                                                  │

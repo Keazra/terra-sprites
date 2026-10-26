@@ -19,6 +19,7 @@ pub mod policy;
 pub mod saves;
 pub mod session;
 pub mod space;
+mod spots;
 pub mod sprite_list;
 pub mod start;
 mod text;

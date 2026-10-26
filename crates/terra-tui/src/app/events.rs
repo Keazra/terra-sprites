@@ -2,7 +2,6 @@
 //! its filter, the selected sprite's observed list, the names sprites have
 //! been given, and what sets off each emote (§6.3).
 
-use ratatui::layout::Rect;
 use terra_sim::{
     ActionView, Command, CursorTouch, EntityId, Event, EventKind, Outcome, Progress, Target, Verb,
     World,
@@ -425,12 +424,6 @@ impl App {
     /// Which events the event log shows (design §6.1).
     pub fn event_filter(&self) -> EventFilter {
         self.event_filter
-    }
-
-    /// Where the event log's title row shows the filters, if it's drawn.
-    pub fn filter_label(&self) -> Option<Rect> {
-        let area = self.event_log_area?;
-        crate::ui::top_right(area, self.event_filter.labels().chars().count() as u16)
     }
 
     /// Switches the event log to the next filter (design §6.1).

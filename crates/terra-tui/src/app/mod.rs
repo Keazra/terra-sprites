@@ -6,6 +6,7 @@
 //! for a while, the menus, the sprite list, the population graph, the
 //! family tree, naming, saves and replays.
 
+use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::path::PathBuf;
 use std::time::Duration;
@@ -27,6 +28,7 @@ use crate::listed::listed_enum;
 use crate::policy::{InfoPolicy, Omniscient, Panel, Subject};
 use crate::saves::{QUICKSAVE, SaveFile};
 use crate::space::Place;
+use crate::spots::Spots;
 use crate::sprite_list::SortBy;
 use crate::text::{Names, Words};
 use crate::theme::{Emote, Theme};
@@ -42,6 +44,7 @@ mod population;
 mod replay;
 mod saving;
 mod selection;
+mod spots;
 mod status;
 mod tree;
 mod view;
@@ -303,6 +306,18 @@ listed_enum! {
 }
 
 impl Tab {
+    /// What the tab shows, as the status line says it while the pointer is
+    /// on its name (#304).
+    pub fn about(self) -> &'static str {
+        match self {
+            Tab::Body => "what it's doing, its drives and its body",
+            Tab::Brain => "what it notices and decides, and what it has learned",
+            Tab::Chem => "the chemicals in its body",
+            Tab::Genome => "its genes, and what each does",
+            Tab::World => "the whole world: who lives, who died, and its things",
+        }
+    }
+
     /// The tab `steps` along from this one, wrapping around.
     fn along(self, steps: i32) -> Tab {
         along(&Tab::ALL, self, steps)
@@ -589,6 +604,9 @@ pub struct App {
     /// Whether the player last pointed at the inspector or used its keys,
     /// rather than the map's, so help opens at the inspector's page (#303).
     on_inspector: bool,
+    /// The spots of the frame last drawn (#304), which drawing replaces each
+    /// frame: what the pointer is over, and what a click lands on.
+    spots: RefCell<Spots>,
 }
 
 /// A replay as the screen follows it (design §2.7).
@@ -802,6 +820,7 @@ impl App {
             help: help::HelpView::default(),
             palette: None,
             on_inspector: false,
+            spots: RefCell::default(),
         };
         app.centre_on(cursor);
         app
@@ -958,25 +977,15 @@ impl App {
                 self.scroll(dx, dy);
             }
             Action::Point(cell) => self.point(cell),
-            // A click on the event log's filters goes to the next (design
-            // §6.1).
+            // A click on the event log's filters goes to the next, one on an
+            // inspector tab opens it (design §6.1), and one on a line of the
+            // log selects the sprite it's about (#304), where the last
+            // frame drew them.
             Action::Click {
                 at,
                 button: Button::Left,
                 ..
-            } if self.filter_label().is_some_and(|label| label.contains(at)) => {
-                self.next_filter();
-            }
-            // A click on an inspector tab opens it (design §6.1).
-            Action::Click {
-                at,
-                button: Button::Left,
-                ..
-            } if self.tab_at(at).is_some() => {
-                if let Some(tab) = self.tab_at(at) {
-                    self.open(tab);
-                }
-            }
+            } if self.clicks_spot(at) => self.click_spot(at, world),
             Action::Click {
                 at,
                 button,

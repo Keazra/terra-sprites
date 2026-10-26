@@ -472,6 +472,13 @@ pub const PREVIOUS_SPRITE: Control = control(
     &[Heading::Sprites],
     "select",
 );
+pub const LOG_CLICK: Control = control(
+    "click log",
+    &[],
+    "select its sprite",
+    &[Heading::Sprites],
+    "event line",
+);
 pub const SPRITE_LIST: Control = control(
     "l",
     &[presses("l", "sprite list", Action::SpriteList)],
@@ -567,6 +574,13 @@ pub const MEMORY_ENTER: Control = control(
     "the same, where it points",
     &[Heading::Pointer],
     "brain heading lesson learned",
+);
+pub const POINT: Control = control(
+    "point",
+    &[],
+    "what it is, on the status line",
+    &[Heading::Pointer],
+    "hover explain drive bar chemical gene tab",
 );
 
 // The debug overlay (design §6.1, #311).
@@ -690,6 +704,7 @@ pub const CONTROLS: &[Control] = &[
     AIM,
     NEXT_SPRITE,
     PREVIOUS_SPRITE,
+    LOG_CLICK,
     SPRITE_LIST,
     LIST_THEN_FILTER,
     POPULATION,
@@ -702,6 +717,7 @@ pub const CONTROLS: &[Control] = &[
     TAB_WHEEL,
     MEMORY,
     MEMORY_ENTER,
+    POINT,
     DEBUG,
     FILTER,
     CHOOSE,

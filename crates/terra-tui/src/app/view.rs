@@ -47,10 +47,10 @@ impl App {
         self.place_at(cell)?.tile()
     }
 
-    /// What the pointer on screen cell `cell` points at, as `pointed_spot`
+    /// What the pointer on screen cell `cell` points at, as `pointed_xy`
     /// says, if it's over the map view: a tile, the glass or space.
     pub(super) fn pointed_place(&self, cell: Position) -> Option<Place> {
-        let (x, y) = self.pointed_spot(cell)?;
+        let (x, y) = self.pointed_xy(cell)?;
         Some(Place::at(x, y, self.map_size))
     }
 
@@ -64,7 +64,7 @@ impl App {
     /// points at the last column or row, so every tile in view can be
     /// pointed at. Past the wall, at the glass or space, it points at no
     /// tile (M2 design §11.4).
-    pub(super) fn pointed_spot(&self, cell: Position) -> Option<(i32, i32)> {
+    pub(super) fn pointed_xy(&self, cell: Position) -> Option<(i32, i32)> {
         let area = self.tile_area;
         let reach = Rect::new(
             area.x,
@@ -195,14 +195,14 @@ impl App {
     /// §11.4).
     pub(super) fn point(&mut self, cell: Position) {
         self.mouse = Some(cell);
-        let spot = self.pointed_spot(cell);
-        self.pointer = spot.map(|_| cell);
+        let xy = self.pointed_xy(cell);
+        self.pointer = xy.map(|_| cell);
         // While the player aims, the pointer pulls, past the wall too (M2
         // design §11.4).
-        if let (Some(aim), Some(spot)) = (self.aim.as_mut(), spot) {
-            aim.to = spot;
+        if let (Some(aim), Some(xy)) = (self.aim.as_mut(), xy) {
+            aim.to = xy;
         }
-        match spot.map(|(x, y)| Place::at(x, y, self.map_size)) {
+        match xy.map(|(x, y)| Place::at(x, y, self.map_size)) {
             Some(Place::Tile(tile)) => {
                 self.pointed = tile;
                 self.pointer_past_wall = false;

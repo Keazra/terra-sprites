@@ -50,7 +50,7 @@ pub(crate) fn lesson_at(app: &App, world: &World, at: Position) -> Option<Memory
     let rows = shown(app, world);
     let row = usize::from(at.y - inner.y);
     let first = first_shown(app.tab_scroll(), rows.len(), usize::from(inner.height));
-    rows.get(first + row).and_then(|(_, open)| open.clone())
+    rows.get(first + row).and_then(|shown| shown.opens.clone())
 }
 
 /// The Brain tab (design §5.9, §6.1): what the sprite attended to and

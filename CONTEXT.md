@@ -821,6 +821,10 @@ _Avoid_: shortcut bar, legend (the help's legends are of colours and emotes)
 The box `:` opens near the top of the map view: typing finds any control that works in the world by the starts of the words of what it does, each shown with its key, and `Enter` does the one chosen. Its name is what such a box is called elsewhere; what it finds are controls, not commands.
 _Avoid_: command line, console, search (that's the help's)
 
+**Spot** (#304):
+A part of the screen that says what it is when the pointer is on it, such as an inspector tab, a drive's bar, a gene or a line of the event log, and which a click may land on. Each part notes its spots as it's drawn, afresh each frame, and a pop-up's box is one too, so it takes the pointer before what's under it. The status line says what the spot under the pointer is.
+_Avoid_: hotspot, hit box, tooltip (nothing pops up; the status line says it)
+
 **Sprite list**:
 The overlay `l` opens: every sprite, one to a row, with its age, life stage, strongest drive, generation and what it's doing, sorted by number, name, age or drive. `/` filters it to the rows with a column that has the words typed, from their start. Choosing one selects it and centres the viewport on it.
 _Avoid_: roster, census

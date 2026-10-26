@@ -36,6 +36,14 @@ fn a_label_too_long_for_the_title_is_shortened_before_the_tabs_are() {
     assert_eq!(fit(None), " ".repeat(15));
 }
 
+/// The tab written at `column` of the title row with `open` open.
+fn tab_at(open: Tab, column: usize) -> Option<Tab> {
+    tab_places(open)
+        .into_iter()
+        .find(|(_, place)| place.contains(&column))
+        .map(|(tab, _)| tab)
+}
+
 #[test]
 fn a_tab_is_found_in_the_columns_the_title_row_writes_it_in() {
     // The tabs fill the row's last 30 columns, from column 15: with Body
@@ -817,4 +825,112 @@ fn a_drive_bar_is_ten_cells_whatever_the_level() {
     assert_eq!(bar_parts(1.05).concat(), "██████████");
     assert_eq!(bar_parts(-0.3).concat(), "░░░░░░░░░░");
     assert_eq!(bar_parts(f32::NAN).concat(), "░░░░░░░░░░");
+}
+
+#[test]
+fn a_gene_says_what_it_does_in_a_sentence_of_its_kind() {
+    use terra_sim::{EmitterMode, GeneView, Trait, Whom};
+    let emitter = |mode, invert, threshold, gain| GeneView::Emitter {
+        locus: "injury",
+        mode,
+        invert,
+        threshold,
+        gain,
+        chem: "pain",
+    };
+    let says = [
+        (
+            emitter(EmitterMode::Level, true, 0.3, 0.004),
+            "An emitter: pain rises while injury is below .7",
+        ),
+        (
+            emitter(EmitterMode::Level, false, 0.6, -0.1),
+            "An emitter: pain falls while injury is above .6",
+        ),
+        (
+            emitter(EmitterMode::Level, false, 0.0, 0.3),
+            "An emitter: injury raises pain",
+        ),
+        (
+            emitter(EmitterMode::Rise, false, 0.0, 10.0),
+            "An emitter: pain rises as injury rises",
+        ),
+        (
+            emitter(EmitterMode::Fall, false, 0.1, -1.0),
+            "An emitter: pain falls as injury falls, once past .1",
+        ),
+        (
+            GeneView::HalfLife {
+                chem: "hunger",
+                ticks: 2_000,
+            },
+            "A half-life: hunger fades by itself, by half every 2,000 ticks",
+        ),
+        (
+            GeneView::Reaction {
+                reactants: vec![("hunger", 1), ("food", 1)],
+                products: vec![("food", 1)],
+                rate: 0.1,
+            },
+            "A reaction: each tick, hunger + food turns into food",
+        ),
+        (
+            GeneView::Receptor {
+                chem: "h0",
+                threshold: 0.0,
+                gain: -2.0,
+                target: "curiosity_mod",
+            },
+            "A receptor: h0 lowers its curiosity mod",
+        ),
+        (
+            GeneView::InitialConcentration {
+                chem: "h4",
+                value: 0.5,
+            },
+            "A starting level: h4 starts at .5 when it hatches",
+        ),
+        (
+            GeneView::BrainParam {
+                param: "tau_base",
+                value: 0.1,
+            },
+            "A brain setting: its tau base is .1, one of the numbers its brain works by",
+        ),
+        (
+            GeneView::Instinct {
+                inputs: vec![("thirst", false), ("target_adjacent", true)],
+                verb: Verb::Drink,
+                weight: 0.5,
+            },
+            "An instinct: thirst & not target adjacent leans it towards drink",
+        ),
+        (
+            GeneView::AttentionInstinct {
+                input: "arousal",
+                category: "sprite",
+                whom: Whom::Kin,
+                weight: -1.0,
+            },
+            "An attention instinct: arousal draws its eye away from its kin (sprite)",
+        ),
+        (
+            GeneView::Trait {
+                which: Trait::GrowsUp,
+                value: 4_500.0,
+            },
+            "A trait: grows up is the age it grows up at",
+        ),
+        (
+            GeneView::Unknown {
+                type_id: 40,
+                version: 1,
+                bytes: 3,
+            },
+            "A gene this version of the game can't read",
+        ),
+    ];
+    for (gene, words) in says {
+        assert_eq!(gene_about(&gene), words, "{gene:?}");
+    }
 }

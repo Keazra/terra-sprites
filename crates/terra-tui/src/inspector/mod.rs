@@ -7,6 +7,8 @@
 //! to use: verbs in `actions`, traits and parents in `body`, and concepts
 //! and what was learned in `brain`.
 
+use std::ops::Range;
+
 use ratatui::layout::Rect;
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
@@ -14,6 +16,7 @@ use terra_sim::{DeathCause, EntityId, Pos, SpriteView, World};
 
 use crate::app::{App, Selection, Tab};
 use crate::policy::{Panel, Subject};
+use crate::spots::Spot;
 use crate::text::{BOUND, cause_name, thousands, unbroken, wrap};
 
 mod actions;
@@ -34,7 +37,7 @@ pub(crate) use brain::{MemoryOpen, lesson_at};
 use chem::chem_tab;
 pub(crate) use event_log::{crashed_into, event_line, event_sprites, refusal_sprites};
 use genome::genome_tab;
-pub(crate) use genome::something_new;
+pub(crate) use genome::{gene_about, something_new};
 use world::world_tab;
 
 /// The inspector's width, in columns, the column down its left included
@@ -111,19 +114,19 @@ fn tabs_width() -> usize {
     labels + Tab::ALL.len() - 1 + 2
 }
 
-/// The tab written at `column` of the title row with `open` open, counting
-/// from the row's first column, right of the line down the inspector's left
-/// (design §6.1).
-pub(crate) fn tab_at(open: Tab, column: usize) -> Option<Tab> {
+/// Where each tab is written in the title row with `open` open: the
+/// columns it takes, counting from the row's first column, right of the
+/// line down the inspector's left (design §6.1). A click there opens it.
+pub(crate) fn tab_places(open: Tab) -> Vec<(Tab, Range<usize>)> {
     let mut start = TITLE_ROOM - tabs_width();
-    for (tab, text) in tab_texts(open) {
-        let end = start + text.chars().count();
-        if (start..end).contains(&column) {
-            return Some(tab);
-        }
-        start = end + 1;
-    }
-    None
+    tab_texts(open)
+        .map(|(tab, text)| {
+            let end = start + text.chars().count();
+            let place = (tab, start..end);
+            start = end + 1;
+            place
+        })
+        .collect()
 }
 
 /// The columns the title row has: all but the column down the inspector's
@@ -153,18 +156,49 @@ fn shortened(text: &str, width: usize) -> String {
     format!("{}...", kept.trim_end())
 }
 
+/// A line of a tab as it's drawn: the memory block it opens or shuts, if it
+/// does (design v40 §6.1), and its spots, each with the columns it takes
+/// from the line's start (#304).
+pub(crate) struct TabLine {
+    pub(crate) line: Line<'static>,
+    pub(crate) opens: Option<MemoryOpen>,
+    pub(crate) spots: Vec<(Range<u16>, Spot)>,
+}
+
+impl From<Line<'static>> for TabLine {
+    /// A line that opens nothing and has no spot.
+    fn from(line: Line<'static>) -> TabLine {
+        TabLine {
+            line,
+            opens: None,
+            spots: Vec::new(),
+        }
+    }
+}
+
+impl TabLine {
+    /// `line`, all of it `spot`.
+    fn spotted(line: Line<'static>, spot: Spot) -> TabLine {
+        TabLine {
+            line,
+            opens: None,
+            spots: vec![(0..WIDTH as u16, spot)],
+        }
+    }
+}
+
 /// The open tab's lines, from the top.
 pub fn lines(app: &App, world: &World) -> Vec<Line<'static>> {
     shown(app, world)
         .into_iter()
-        .map(|(line, _)| line)
+        .map(|shown| shown.line)
         .collect()
 }
 
-/// The open tab's lines, and which of them open or shut a memory block.
-/// The policy is applied here, so drawing and hit-testing stay one list
-/// (design §6.4, v40 §6.1).
-fn shown(app: &App, world: &World) -> Vec<(Line<'static>, Option<MemoryOpen>)> {
+/// The open tab's lines, which of them open or shut a memory block, and
+/// their spots. The policy is applied here, so drawing, the spots and what
+/// a click opens stay one list (design §6.4, v40 §6.1, #304).
+pub(crate) fn shown(app: &App, world: &World) -> Vec<TabLine> {
     // The policy may hide a tab (design §6.4).
     let subject = match (app.tab(), app.selection()) {
         (Tab::World, _) | (_, None) => Subject::World,
@@ -205,9 +239,9 @@ fn shown(app: &App, world: &World) -> Vec<(Line<'static>, Option<MemoryOpen>)> {
     }
 }
 
-/// Lines that open nothing.
-fn bare(lines: Vec<Line<'static>>) -> Vec<(Line<'static>, Option<MemoryOpen>)> {
-    lines.into_iter().map(|line| (line, None)).collect()
+/// Lines that open nothing and have no spots.
+fn bare(lines: Vec<Line<'static>>) -> Vec<TabLine> {
+    lines.into_iter().map(TabLine::from).collect()
 }
 
 /// The first line shown of a tab `length` lines long in `rows` rows, when
@@ -218,18 +252,20 @@ pub(crate) fn first_shown(scroll: usize, length: usize, rows: usize) -> usize {
 }
 
 /// A sprite tab's lines for `sprite`, the selection. Only the Brain tab's
-/// memory headings open anything.
-fn sprite_tab(
-    tab: Tab,
-    sprite: &SpriteView,
-    app: &App,
-    world: &World,
-) -> Vec<(Line<'static>, Option<MemoryOpen>)> {
+/// memory headings open anything, and only the Body, Chem and Genome tabs
+/// have spots (#304).
+fn sprite_tab(tab: Tab, sprite: &SpriteView, app: &App, world: &World) -> Vec<TabLine> {
     match tab {
-        Tab::Body => bare(body_tab(sprite, app, world)),
-        Tab::Brain => brain_rows(sprite, app, world),
-        Tab::Chem => bare(chem_tab(sprite, app.theme.text())),
-        Tab::Genome => bare(genome_tab(sprite, app)),
+        Tab::Body => body_tab(sprite, app, world),
+        Tab::Brain => brain_rows(sprite, app, world)
+            .into_iter()
+            .map(|(line, opens)| TabLine {
+                opens,
+                ..TabLine::from(line)
+            })
+            .collect(),
+        Tab::Chem => chem_tab(sprite, app.theme.text()),
+        Tab::Genome => genome_tab(sprite, app),
         Tab::World => Vec::new(),
     }
 }

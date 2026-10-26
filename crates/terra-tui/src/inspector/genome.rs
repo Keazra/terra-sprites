@@ -4,15 +4,16 @@
 use ratatui::style::Style;
 use ratatui::text::Line;
 use terra_sim::{
-    CopyChangeView, EmitterMode, Expression, GeneView, LifeStage, SpriteView, Switch, Whom,
+    CopyChangeView, EmitterMode, Expression, GeneView, LifeStage, SpriteView, Switch, Trait, Whom,
 };
 
 use super::actions::verb_name;
 use super::body::{trait_name, trait_value};
 use super::brain::concept_name;
-use super::{listed, wrapped};
+use super::{TabLine, listed, wrapped};
 use crate::app::App;
 use crate::listed::listed_enum;
+use crate::spots::Spot;
 use crate::text::{BOUND, display_name, level, signed, significant, thousands, unbroken};
 
 listed_enum! {
@@ -60,48 +61,66 @@ impl GeneGroup {
 /// The Genome tab (design §6.1): what's new in a sprite with parents (M2
 /// design §12), then the genes grouped under headings, each group in genome
 /// order, as plain lines. The expressed traits share one line. A gene with
-/// no effect is dimmed, with the reason below it.
-pub(super) fn genome_tab(sprite: &SpriteView, app: &App) -> Vec<Line<'static>> {
-    let genes: Vec<(GeneView, Expression, Switch, f32)> = sprite
+/// no effect is dimmed, with the reason below it. The pointer on a gene's
+/// lines, or a trait's part of the line they share, says what it does
+/// (#304).
+pub(super) fn genome_tab(sprite: &SpriteView, app: &App) -> Vec<TabLine> {
+    let genes: Vec<(usize, GeneView, Expression, Switch, f32)> = sprite
         .genes()
         .into_iter()
         .zip(sprite.switches())
         .zip(sprite.gene_health().iter().copied())
-        .map(|(((gene, how), switch), health)| (gene, how, switch, health))
+        .enumerate()
+        .map(|(index, (((gene, how), switch), health))| (index, gene, how, switch, health))
         .collect();
     let look = app.theme.text();
     let plain = Style::default();
-    let mut lines = whats_new(sprite, app);
+    let mut lines: Vec<TabLine> = whats_new(sprite, app)
+        .into_iter()
+        .map(TabLine::from)
+        .collect();
     for group in GeneGroup::ALL {
-        let members: Vec<&(GeneView, Expression, Switch, f32)> = genes
+        let members: Vec<&(usize, GeneView, Expression, Switch, f32)> = genes
             .iter()
-            .filter(|(gene, ..)| GeneGroup::of(gene) == group)
+            .filter(|(_, gene, ..)| GeneGroup::of(gene) == group)
             .collect();
         if members.is_empty() {
             continue;
         }
-        lines.push(Line::styled(format!(" {}", group.heading()), look.heading));
+        lines.push(Line::styled(format!(" {}", group.heading()), look.heading).into());
         let (together, apart): (Vec<_>, Vec<_>) =
-            members.into_iter().partition(|(gene, how, ..)| {
+            members.into_iter().partition(|(_, gene, how, ..)| {
                 matches!(gene, GeneView::Trait { .. }) && *how == Expression::Expressed
             });
         if !together.is_empty() {
-            let traits: Vec<String> = together
+            let traits: Vec<(usize, String)> = together
                 .iter()
-                .map(|(gene, _, _, health)| format!("{}{}", gene_text(gene), health_text(*health)))
+                .map(|(index, gene, _, _, health)| {
+                    let text = format!("{}{}", gene_text(gene), health_text(*health));
+                    (*index, text)
+                })
                 .collect();
-            lines.extend(wrapped(&listed(&traits), 1, plain, look.muted));
+            let texts: Vec<String> = traits.iter().map(|(_, text)| text.clone()).collect();
+            lines.extend(traits_spotted(
+                wrapped(&listed(&texts), 1, plain, look.muted),
+                &traits,
+            ));
         }
-        for (gene, how, switch, health) in apart {
+        for &(index, ref gene, ref how, switch, health) in apart {
             let text = format!(
                 "{}{}{}",
                 gene_text(gene),
-                switch_text(*switch),
-                health_text(*health)
+                switch_text(switch),
+                health_text(health)
             );
+            let spotted = |lines: Vec<Line<'static>>| {
+                lines
+                    .into_iter()
+                    .map(move |line| TabLine::spotted(line, Spot::Gene(index)))
+            };
             let reason = match how {
                 Expression::Expressed => {
-                    lines.extend(wrapped(&text, 1, plain, look.muted));
+                    lines.extend(spotted(wrapped(&text, 1, plain, look.muted)));
                     continue;
                 }
                 Expression::Flagged(reason) => format!("flagged: {reason}"),
@@ -113,11 +132,39 @@ pub(super) fn genome_tab(sprite: &SpriteView, app: &App) -> Vec<Line<'static>> {
                 Expression::Dormant => "dormant: switched off at this life stage".into(),
             };
             // A gene with no effect is minor, and says why (design §6.2).
-            lines.extend(wrapped(&text, 1, look.muted, look.muted));
-            lines.extend(wrapped(&reason, 3, look.muted, look.muted));
+            lines.extend(spotted(wrapped(&text, 1, look.muted, look.muted)));
+            lines.extend(spotted(wrapped(&reason, 3, look.muted, look.muted)));
         }
     }
     lines
+}
+
+/// The traits' shared `lines`, each trait's spot over its part of them:
+/// `traits` are each gene's place in the genome and its text, in the order
+/// the lines list them.
+fn traits_spotted(lines: Vec<Line<'static>>, traits: &[(usize, String)]) -> Vec<TabLine> {
+    let mut traits = traits.iter().peekable();
+    lines
+        .into_iter()
+        .map(|line| {
+            let text = line.to_string();
+            let mut row = TabLine::from(line);
+            let mut from = 0;
+            while let Some((index, trait_text)) = traits.peek() {
+                // As `wrapped` draws it, its spaces kept together as plain ones.
+                let trait_text = trait_text.replace(BOUND, " ");
+                let Some(at) = text[from..].find(&trait_text) else {
+                    break;
+                };
+                let start = text[..from + at].chars().count() as u16;
+                let width = trait_text.chars().count() as u16;
+                row.spots.push((start..start + width, Spot::Gene(*index)));
+                from += at + trait_text.len();
+                traits.next();
+            }
+            row
+        })
+        .collect()
 }
 
 /// What's new in a sprite with parents (M2 design §12, §13), at the top of
@@ -454,5 +501,128 @@ fn emitter_source(locus: &str, mode: EmitterMode, invert: bool) -> String {
         EmitterMode::Level => locus,
         EmitterMode::Rise => format!("{locus} rises"),
         EmitterMode::Fall => format!("{locus} falls"),
+    }
+}
+
+/// What `gene` does, in a sentence, as the status line says it while the
+/// pointer is on it (#304). What each kind of gene does is the engine's,
+/// so the sentence's shape is the screen's; the names in it are the data
+/// pack's: `An emitter: hunger rises while energy is below .7`.
+pub(crate) fn gene_about(gene: &GeneView) -> String {
+    let raises = |by: f32| if by < 0.0 { "lowers" } else { "raises" };
+    let past = |threshold: f32| {
+        if threshold == 0.0 {
+            String::new()
+        } else {
+            format!(", once past {}", significant(threshold))
+        }
+    };
+    match *gene {
+        GeneView::Trait { which, .. } => format!(
+            "A trait: {} is {}",
+            trait_name(which),
+            match which {
+                Trait::Speed => "how fast it walks, and the faster the more energy a step costs",
+                Trait::SenseRadius => "how far it senses, and the further the more energy it costs",
+                Trait::GrowsUp => "the age it grows up at",
+                Trait::GrowsOld => "the age it grows old at",
+            }
+        ),
+        GeneView::HalfLife { chem, .. } => format!(
+            "A half-life: {} fades by itself, by half {}",
+            display_name(chem),
+            numbers(gene)[0].replace(BOUND, " ")
+        ),
+        GeneView::Reaction {
+            ref reactants,
+            ref products,
+            ..
+        } => {
+            let sides = reaction_sides(reactants, products);
+            let (from, to) = sides.split_once(" → ").unwrap_or((&sides, ""));
+            format!("A reaction: each tick, {from} turns into {to}")
+        }
+        GeneView::Emitter {
+            locus,
+            mode,
+            invert,
+            threshold,
+            gain,
+            chem,
+        } => {
+            let rises = if gain < 0.0 { "falls" } else { "rises" };
+            let (chem, locus) = (display_name(chem), display_name(locus));
+            match mode {
+                EmitterMode::Level if invert => format!(
+                    "An emitter: {chem} {rises} while {locus} is below {}",
+                    significant(1.0 - threshold)
+                ),
+                EmitterMode::Level if threshold > 0.0 => format!(
+                    "An emitter: {chem} {rises} while {locus} is above {}",
+                    significant(threshold)
+                ),
+                EmitterMode::Level => format!(
+                    "An emitter: {locus} {} {chem}{}",
+                    raises(gain),
+                    past(threshold)
+                ),
+                EmitterMode::Rise => {
+                    format!(
+                        "An emitter: {chem} {rises} as {locus} rises{}",
+                        past(threshold)
+                    )
+                }
+                EmitterMode::Fall => {
+                    format!(
+                        "An emitter: {chem} {rises} as {locus} falls{}",
+                        past(threshold)
+                    )
+                }
+            }
+        }
+        GeneView::Receptor {
+            chem,
+            threshold,
+            gain,
+            target,
+        } => format!(
+            "A receptor: {} {} its {}{}",
+            display_name(chem),
+            raises(gain),
+            display_name(target),
+            past(threshold)
+        ),
+        GeneView::InitialConcentration { chem, value } => format!(
+            "A starting level: {} starts at {} when it hatches",
+            display_name(chem),
+            significant(value)
+        ),
+        GeneView::BrainParam { param, value } => format!(
+            "A brain setting: its {} is {}, one of the numbers its brain works by",
+            display_name(param),
+            significant(value)
+        ),
+        GeneView::Instinct {
+            ref inputs,
+            verb,
+            weight,
+        } => format!(
+            "An instinct: {} leans it {} {}",
+            concept_name(inputs).replace(BOUND, " "),
+            if weight < 0.0 { "away from" } else { "towards" },
+            verb_name(verb).to_lowercase()
+        ),
+        GeneView::AttentionInstinct {
+            input,
+            category,
+            whom,
+            weight,
+        } => format!(
+            "An attention instinct: {} draws its eye {} {}",
+            display_name(input),
+            if weight < 0.0 { "away from" } else { "to" },
+            attended(category, whom)
+        ),
+        GeneView::Unknown { .. } => "A gene this version of the game can't read".into(),
     }
 }

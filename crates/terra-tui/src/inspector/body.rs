@@ -11,9 +11,10 @@ use terra_sim::{
 };
 
 use super::actions::action_line;
-use super::{CURSOR, WIDTH, counted, dotted, object_type};
+use super::{CURSOR, TabLine, WIDTH, counted, dotted, object_type};
 use crate::app::App;
 use crate::family_tree;
+use crate::spots::Spot;
 use crate::text::{Words, change, display_name, level, significant, thousands, whole, wrap};
 
 /// The Body tab (design §6.1): what the sprite is doing, its age, life stage
@@ -21,12 +22,12 @@ use crate::text::{Words, change, display_name, level, significant, thousands, wh
 /// drive, the physical levels, three to a line, with its wear (and its
 /// genes' average health, once any has weakened) after them, and what the
 /// player has observed it do.
-pub(super) fn body_tab(sprite: &SpriteView, app: &App, world: &World) -> Vec<Line<'static>> {
+pub(super) fn body_tab(sprite: &SpriteView, app: &App, world: &World) -> Vec<TabLine> {
     let look = app.theme.text();
     let line = |text: String| dotted(&text, Style::default(), look.muted);
     let traits = sprite.traits();
     let doing = doing_line(sprite, app, world).map(|line| format!(" {line}"));
-    let mut lines: Vec<Line<'static>> = doing.into_iter().map(line).collect();
+    let mut lines: Vec<TabLine> = doing.into_iter().map(line).map(TabLine::from).collect();
     lines.extend(
         [
             format!(" age {} · {}", thousands(sprite.age()), {
@@ -50,14 +51,16 @@ pub(super) fn body_tab(sprite: &SpriteView, app: &App, world: &World) -> Vec<Lin
                 trait_text(Trait::SenseRadius, traits.sense_radius)
             ),
         ]
-        .map(line),
+        .map(line)
+        .map(TabLine::from),
     );
     lines.extend(
         family_lines(sprite, &app.words(world))
             .into_iter()
-            .map(line),
+            .map(line)
+            .map(TabLine::from),
     );
-    lines.push(Line::default());
+    lines.push(Line::default().into());
     let chemicals: Vec<ChemicalLevel> = sprite.chemicals().collect();
     for drive in chemicals.iter().filter(|c| c.kind == ChemicalKind::Drive) {
         // The bar filled in the drive's colour, as the map draws a sprite
@@ -77,22 +80,27 @@ pub(super) fn body_tab(sprite: &SpriteView, app: &App, world: &World) -> Vec<Lin
         if !arrow.is_empty() {
             spans.push(Span::raw(format!(" {arrow}")));
         }
-        lines.push(Line::from(spans));
+        // The pointer on it says what raises and lowers it (#304).
+        let spot = Spot::Chemical {
+            name: drive.name.to_string(),
+            kind: drive.kind,
+        };
+        lines.push(TabLine::spotted(Line::from(spans), spot));
     }
-    lines.push(Line::default());
+    lines.push(Line::default().into());
     let physical: Vec<String> = chemicals
         .iter()
         .filter(|c| c.kind == ChemicalKind::Physical)
         .map(|c| format!("{} {}", display_name(c.name), level(c.level)))
         .collect();
     for three in physical.chunks(3) {
-        lines.push(line(format!(" {}", three.join(" · "))));
+        lines.push(line(format!(" {}", three.join(" · "))).into());
     }
     // Its genes' average health shows once any has weakened (M2 design
     // §9.4, §9.6). A genome with nothing to weaken gives out when old
     // without any gene losing health, so that isn't shown.
     let weakened = sprite.gene_health().iter().any(|&health| health < 1.0);
-    lines.push(line(if weakened {
+    lines.push(TabLine::from(line(if weakened {
         format!(
             " wear {} · genes {}",
             level(sprite.wear()),
@@ -100,9 +108,13 @@ pub(super) fn body_tab(sprite: &SpriteView, app: &App, world: &World) -> Vec<Lin
         )
     } else {
         format!(" wear {}", level(sprite.wear()))
-    }));
-    lines.push(Line::default());
-    lines.extend(observed_lines(app, world.tick()));
+    })));
+    lines.push(Line::default().into());
+    lines.extend(
+        observed_lines(app, world.tick())
+            .into_iter()
+            .map(TabLine::from),
+    );
     lines
 }
 
