@@ -66,9 +66,11 @@
 //! evolved side's hatched young grow up more often, counted as the viability
 //! run counts them: those still growing at the end aren't. The race is won
 //! when the evolved side wins at least 8 of the seeds that lasted and were
-//! raced; one with no young counted on a side isn't judged. Lost, the
-//! species has **fallen behind** the starter's, and each seed raced that
-//! wasn't won has failed it, as with the bars across seeds.
+//! judged. A side with no young counted raised none to grow up, so it loses
+//! to a side whose young did; a seed with none counted on either side isn't
+//! judged. Lost, the species has **fallen behind** the starter's, and each
+//! seed judged that wasn't won has missed it. The race is held over to #332
+//! by the owner's call (2026-10-26), with G4: reported, not must-pass.
 //!
 //! Then evolution (M2 design §12.7, G4), judged on this run by #226: at
 //! least 3 gene numbers whose middle value among the living at the end
@@ -77,7 +79,8 @@
 //! number is named by what its gene does and when it works, so the young's
 //! and grown sprites' Wander weights are two numbers. It's G4's first test,
 //! so it fails no seed: if it isn't met, the race is its second (#226), and
-//! G4 is met if the race is won.
+//! G4 is met if the race is won. Unmet, G4 is held over to #332 with the
+//! race (the owner, 2026-10-26).
 //!
 //! Reported with no bar: the young hatched that grew up, whose bar is the
 //! viability run's (#226); the young's time on the move (#237 rule 5);
@@ -94,12 +97,11 @@
 //! beside the unattended band of 10%–30%; whether the species has fallen
 //! behind is the race's to say.
 //!
-//! Careful copying would switch on for a seed that failed a bar, the race
-//! among them when it's lost overall, while more than half its living lack
-//! a needs gene (#237 rule 4, M2 design §19.6).
-//! A held-over bar doesn't switch it on (the owner, 2026-10-24): the seeds
-//! a held-over bar would have switched it on for are named apart, for
-//! #332. A seed that died out is judged on its living at the last hour any
+//! Careful copying would switch on for a seed that failed a bar while more
+//! than half its living lack a needs gene (#237 rule 4, M2 design §19.6).
+//! A held-over bar doesn't switch it on (the owner, 2026-10-24), and the
+//! race lost overall is held over too (2026-10-26): the seeds a held-over
+//! bar would have switched it on for are named apart, for #332. A seed that died out is judged on its living at the last hour any
 //! hatched sprite was alive.
 //!
 //! `cargo run --release -p terra-sim --example childhood`
@@ -144,8 +146,8 @@ const RACE_TICKS: u64 = 50_000;
 /// alone, about 1 time in 18 with ten seeds.
 const RACE_WINS: usize = 8;
 
-/// The bar a seed fails when the race is lost overall (M2 design §19.6,
-/// #237 rule 1).
+/// The bar a seed misses when the race is lost overall (M2 design §19.6,
+/// #237 rule 1): held over to #332 (the owner, 2026-10-26).
 const RACE: &str = "the race";
 
 /// The twelve needs genes (M2 design §16.6, §19.6), by what each does, as
@@ -261,14 +263,19 @@ struct Race {
 
 impl Race {
     /// Whether the evolved side's young grew up more often than the
-    /// starter's, a share against a share; a tie isn't. None if either
-    /// side had no young to count.
+    /// starter's, a share against a share; a tie isn't. A side with no
+    /// young to count raised none to grow up, so it loses to a side whose
+    /// young did. None if neither side had young to count.
     fn won(&self) -> Option<bool> {
         let (starter, evolved) = (self.starter, self.evolved);
-        if starter.counted() == 0 || evolved.counted() == 0 {
-            return None;
+        match (starter.counted(), evolved.counted()) {
+            (0, 0) => None,
+            (0, _) => Some(evolved.grew_up > 0),
+            (_, 0) => Some(false),
+            (of_starter, of_evolved) => {
+                Some(evolved.grew_up * of_starter > starter.grew_up * of_evolved)
+            }
         }
-        Some(evolved.grew_up * starter.counted() > starter.grew_up * evolved.counted())
     }
 }
 
@@ -820,7 +827,7 @@ struct Verdicts {
     /// and that it missed.
     failed: Vec<(u64, Vec<&'static str>)>,
     /// Each seed that missed a held-over bar, with the bars it missed
-    /// (#332): reported, not failed.
+    /// (#332): reported, not failed. The race is one, since 2026-10-26.
     held_over: Vec<(u64, Vec<&'static str>)>,
     /// Each seed that lasted and was raced, with whether the evolved side
     /// won it, and whether the race was won (#226 Q7).
@@ -922,7 +929,7 @@ fn judge(runs: &[Run], hours: u64) -> Verdicts {
             fails.push("bushes");
         }
         if !race_won && raced.contains(&(run.seed, false)) {
-            fails.push(RACE);
+            misses.push(RACE);
         }
         if !fails.is_empty() {
             failed.push((run.seed, fails));
@@ -1128,23 +1135,23 @@ fn bars(runs: &[Run], starter: &[(String, f32)], options: &Options) {
     let (lasted, dropped) = evolution_seeds(runs, &verdicts.not_lasted);
     let by_numbers = evolution::evolution(starter, &lasted, &dropped);
     // The numbers unmet fail no seed: the race is G4's second test (#226).
+    // Both are held over to #332 (the owner, 2026-10-26).
     let g4 = by_numbers || verdicts.race_won;
-    if verdicts.failed.is_empty() && g4 && verdicts.race_won {
+    let all_held = verdicts.held_over.is_empty() && verdicts.race_won && g4;
+    if verdicts.failed.is_empty() {
         let every = if short {
             "Every bar judged"
         } else {
             "Every bar"
         };
-        println!("\n{every} was met.");
+        let but = if all_held {
+            ""
+        } else {
+            " but those held over to #332"
+        };
+        println!("\n{every} was met{but}.");
     } else {
-        let mut lines = listed(&verdicts.failed);
-        if !verdicts.race_won {
-            lines.push("the race, across seeds: the species has fallen behind".into());
-        }
-        if !g4 {
-            lines.push("G4, across seeds".into());
-        }
-        println!("\nBars failed: {}.", lines.join("; "));
+        println!("\nBars failed: {}.", listed(&verdicts.failed).join("; "));
     }
     if g4 && !by_numbers {
         println!(
@@ -1155,7 +1162,7 @@ fn bars(runs: &[Run], starter: &[(String, f32)], options: &Options) {
             "G4 wasn't met by the numbers, its first test, nor by the race, its second (#226)."
         );
     }
-    held_over(&verdicts);
+    held_over(&verdicts, g4);
     if !verdicts.trips.is_empty() {
         println!(
             "Careful copying would switch on: seeds {} failed a bar with more than half their \
@@ -1255,16 +1262,25 @@ fn before_dying_out(runs: &[Run], seeds: &[u64]) -> String {
     }
 }
 
-/// The held-over bars (the owner, 2026-10-24): the seeds that missed them,
-/// and whether that's clearly worse than Slice 29's run (#331).
-fn held_over(verdicts: &Verdicts) {
-    if verdicts.held_over.is_empty() {
+/// The held-over bars (the owner, 2026-10-24, and the race and G4,
+/// 2026-10-26): the seeds that missed them, the race and G4 across seeds,
+/// and whether the first two are clearly worse than Slice 29's run (#331).
+fn held_over(verdicts: &Verdicts, g4: bool) {
+    let mut lines = listed(&verdicts.held_over);
+    if !verdicts.race_won {
+        lines.push("the race, across seeds: the species has fallen behind".into());
+    }
+    if !g4 {
+        lines.push("G4, across seeds".into());
+    }
+    if lines.is_empty() {
         println!("The bars held over to #332 were met in every seed.");
         return;
     }
     println!(
-        "Held over to #332, reported but not must-pass (the owner, 2026-10-24): {}.",
-        listed(&verdicts.held_over).join("; ")
+        "Held over to #332, reported but not must-pass (the owner, 2026-10-24, and the race and \
+         G4, 2026-10-26): {}.",
+        lines.join("; ")
     );
     let missed: Vec<String> = verdicts
         .held_over_misses()
@@ -1833,15 +1849,33 @@ mod tests {
             Some(true),
             "fewer young, a larger share"
         );
-        assert_eq!(race(0, 0).won(), None, "no young to count");
+        // A side with no young counted raised none to grow up.
+        assert_eq!(race(0, 0).won(), Some(false), "no evolved young to count");
+        let none = Raised::default();
+        let starter_none = |evolved| Race {
+            starter: none,
+            evolved,
+        };
+        let raised = |grew_up, died_young| Raised {
+            grew_up,
+            died_young,
+        };
+        assert_eq!(starter_none(raised(1, 4)).won(), Some(true));
+        assert_eq!(
+            starter_none(raised(0, 5)).won(),
+            Some(false),
+            "none grew up"
+        );
+        assert_eq!(Race::default().won(), None, "no young on either side");
     }
 
     #[test]
-    fn the_race_is_won_by_8_seeds_and_lost_it_fails_the_seeds_not_won() {
+    fn the_race_is_won_by_8_seeds_and_lost_it_is_held_over() {
         // #226 Q7, #237 rule 1: won when the evolved side wins at least 8
         // of the seeds raced. Lost, the species has fallen behind, and each
-        // seed raced and not won has failed it, which can switch careful
-        // copying on.
+        // seed raced and not won has missed it. Held over to #332 by the
+        // owner (2026-10-26), it fails no seed and switches careful copying
+        // on for none, though the seeds it would have are named.
         let mut runs = ten();
         assert!(judge(&runs, 220).race_won);
         runs[1].race = Some(race(90, 100));
@@ -1853,11 +1887,12 @@ mod tests {
         runs[8].lacking = lacking_thirst(0.9);
         let three = judge(&runs, 220);
         assert!(!three.race_won);
+        assert_eq!(three.failed, []);
         assert_eq!(
-            three.failed,
+            three.held_over,
             [(2, vec![RACE]), (5, vec![RACE]), (9, vec![RACE])]
         );
-        assert_eq!(three.trips, [9]);
+        assert_eq!((three.trips, three.held_over_trips), (vec![], vec![9]));
     }
 
     #[test]
@@ -1873,6 +1908,6 @@ mod tests {
         let seeds: Vec<u64> = judged.raced.iter().map(|(seed, _)| *seed).collect();
         assert_eq!(seeds, [4, 5, 6, 7, 8, 9, 10]);
         assert!(!judged.race_won);
-        assert_eq!(judged.failed, [], "no seed raced lost it");
+        assert_eq!(judged.held_over, [], "no seed raced lost it");
     }
 }
