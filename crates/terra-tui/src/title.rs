@@ -15,7 +15,7 @@ use terra_sim::{Mode, Pos, World};
 
 use crate::app::{self, App, Draft, highlight_moved, shown};
 use crate::clock::Speed;
-use crate::commands::{self, Context};
+use crate::controls::{self, Context};
 use crate::input::Action;
 use crate::listed::listed_enum;
 use crate::saves::{self, SaveFile};
@@ -963,15 +963,20 @@ fn draw_status_line(buf: &mut Buffer, area: Rect, title: &Title) {
     } else if let Some(why) = &title.refusal {
         format!(" {why}")
     } else {
-        match title.screen {
-            Screen::Menu => " ↑↓ choose  enter go  esc quit".into(),
-            _ => String::new(),
-        }
+        String::new()
     };
     buf.set_stringn(area.x, y, left, usize::from(area.width), Style::default());
-    // In the help, its hints, as a world's status line gives them (#303).
-    if title.screen == Screen::Help && title.refusal.is_none() {
-        let hints = ui::all_hints(commands::hints(Context::Help), &title.help, &title.world);
+    // The menu's hints, and the help's, as a world's status line gives
+    // them (#303).
+    let context = match title.screen {
+        Screen::Menu => Some(Context::TitleMenu),
+        Screen::Help => Some(controls::context(&title.help, &title.world)),
+        _ => None,
+    };
+    if let Some(context) = context
+        && title.refusal.is_none()
+    {
+        let hints = ui::all_hints(controls::hints(context), &title.help, &title.world);
         let mut spans = vec![Span::raw(" ")];
         spans.extend(ui::hint_spans(&hints, title.theme.text()));
         buf.set_line(area.x, y, &Line::from(spans), area.width);

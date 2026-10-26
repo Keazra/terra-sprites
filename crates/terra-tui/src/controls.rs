@@ -1,20 +1,21 @@
-//! The commands (design §6.1, #303): every key the player has, what it does,
+//! The controls (design §6.1, #303): every key the player has, what it does,
 //! and where it works, as one list. The status line's hints, the help
 //! screen and the command palette are all built from it, so they can't
-//! drift apart.
+//! drift apart. A control isn't a `terra_sim::Command`, which is what a
+//! click sends the world.
 
 use crate::app::{App, CursorMode, Screen};
 use crate::input::{Action, Button};
 use crate::listed::listed_enum;
 use terra_sim::{Grip, World};
 
-/// A key, what it does in a word or two, as its hint and the command
-/// palette name it, and the action it stands for, if the palette can press
-/// it.
+/// A key: how it's written, what it does in a word or two, as its hint and
+/// the command palette say it, and the action it stands for, if the palette
+/// can press it.
 #[derive(Debug, Clone, Copy)]
 pub struct Key {
-    pub key: &'static str,
-    pub name: &'static str,
+    pub written: &'static str,
+    pub does: &'static str,
     pub action: Option<Action>,
 }
 
@@ -22,10 +23,11 @@ pub struct Key {
 /// of help's headings; with the hint it gives on the status line, and what
 /// it needs to do anything there.
 #[derive(Debug, Clone, Copy)]
-pub struct Command {
+pub struct Control {
     /// The keys as the help and the hint write them: `+/-`, `Z X C`.
     pub written: &'static str,
-    /// Each key on its own. The pointer's doing, such as `hold E`, has none.
+    /// Each key on its own. The pointer's doing, such as `hold E`, has
+    /// none, and nor do keys the help writes together, such as `WASD`.
     pub keys: &'static [Key],
     /// What it does, as the help says it.
     pub does: &'static str,
@@ -40,7 +42,7 @@ pub struct Command {
     pub words: &'static str,
 }
 
-/// What a command's hint on the status line says.
+/// What a control's hint on the status line says.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Says {
     /// Its keys, then this: `+/- speed`.
@@ -53,17 +55,23 @@ pub enum Says {
     WordGoingFirst(&'static str),
 }
 
-/// What a command needs to do anything just now (#303).
+/// What a control needs to do anything just now (#303).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Need {
     Nothing,
     /// Time paused: `.` steps only then.
     Paused,
-    /// Something to choose: a sprite on the list, or a command the palette
-    /// found.
+    /// Something to choose: a sprite on the list, an item on a menu, or a
+    /// row the palette found.
     Rows,
+    /// A palette row chosen whose key the palette can press: the pointer's
+    /// rows only teach their keys.
+    Pressable,
     /// A sprite selected, for the family tree to be drawn about.
     Selection,
+    /// Keys acting, rather than typing into a name or a search, or
+    /// answering a question, which any key but its answers cancels.
+    KeysAct,
 }
 
 listed_enum! {
@@ -92,7 +100,7 @@ listed_enum! {
 }
 
 impl Heading {
-    /// Whether its commands work in the world, with nothing open over it,
+    /// Whether its controls work in the world, with nothing open over it,
     /// so the command palette can run them.
     pub fn in_the_world(self) -> bool {
         !matches!(self, Heading::SpriteList | Heading::Graph | Heading::Tree)
@@ -117,8 +125,15 @@ pub enum Context {
     Graph,
     Tree,
     Help,
+    /// Help while it searches (#303).
+    HelpSearching,
     /// The command palette (#303).
     Palette,
+    /// A menu over the map: the Place menu and its genomes (design v28
+    /// §6.5), saves to load and themes (§6.7).
+    Menu,
+    /// The title screen's menu (M2 design §8).
+    TitleMenu,
     /// Naming a sprite (design §6.5).
     Naming,
     /// Naming a save (design §6.7).
@@ -128,33 +143,33 @@ pub enum Context {
 }
 
 /// A key with no action the palette can press.
-const fn key(key: &'static str, name: &'static str) -> Key {
+const fn key(written: &'static str, does: &'static str) -> Key {
     Key {
-        key,
-        name,
+        written,
+        does,
         action: None,
     }
 }
 
 /// A key the palette can press, as `action`.
-const fn presses(key: &'static str, name: &'static str, action: Action) -> Key {
+const fn presses(written: &'static str, does: &'static str, action: Action) -> Key {
     Key {
-        key,
-        name,
+        written,
+        does,
         action: Some(action),
     }
 }
 
-/// A command under `headings` that needs nothing, its hint its keys and
+/// A control under `headings` that needs nothing, its hint its keys and
 /// what it does.
-const fn command(
+const fn control(
     written: &'static str,
     keys: &'static [Key],
     does: &'static str,
     headings: &'static [Heading],
     words: &'static str,
-) -> Command {
-    Command {
+) -> Control {
+    Control {
         written,
         keys,
         does,
@@ -165,29 +180,38 @@ const fn command(
     }
 }
 
-/// A command only the status line shows, as its hint: `written` then
+/// A control only the status line shows, as its hint: `written` then
 /// `does`.
-const fn hint(written: &'static str, does: &'static str) -> Command {
-    command(written, &[], does, &[], "")
+const fn hint(written: &'static str, does: &'static str) -> Control {
+    control(written, &[], does, &[], "")
 }
 
-impl Command {
-    /// The same command, needing `need` to do anything.
-    const fn needing(self, need: Need) -> Command {
-        Command {
+impl Control {
+    /// The same control, needing `need` to do anything.
+    const fn needing(self, need: Need) -> Control {
+        Control {
             needs: need,
             ..self
         }
     }
 
-    /// The same command, its hint saying `says`.
-    const fn saying(self, says: Says) -> Command {
-        Command { says, ..self }
+    /// The same control, its hint saying `says`.
+    const fn saying(self, says: Says) -> Control {
+        Control { says, ..self }
+    }
+
+    /// Its hint as a box's corner gives it: ` esc close `.
+    pub fn corner(&self) -> (&'static str, &'static str) {
+        let word = match self.says {
+            Says::Word(word) | Says::WordGoingFirst(word) => word,
+            Says::EachKey => self.does,
+        };
+        (self.written, word)
     }
 }
 
 // Time (design §6.6).
-pub const PAUSE: Command = command(
+pub const PAUSE: Control = control(
     "space",
     &[presses("space", "pause or resume", Action::TogglePause)],
     "pause / resume",
@@ -195,7 +219,7 @@ pub const PAUSE: Command = command(
     "stop time run",
 )
 .saying(Says::Word("pause"));
-pub const STEP: Command = command(
+pub const STEP: Control = control(
     ".",
     &[presses(".", "step", Action::StepOnce)],
     "step",
@@ -203,7 +227,7 @@ pub const STEP: Command = command(
     "one tick forward",
 )
 .needing(Need::Paused);
-pub const SPEED: Command = command(
+pub const SPEED: Control = control(
     "+/-",
     &[
         presses("+", "faster", Action::Faster { held: false }),
@@ -216,58 +240,59 @@ pub const SPEED: Command = command(
 .saying(Says::Word("speed"));
 
 // The view (design §6.1).
-pub const SCROLL: Command = command(
+pub const SCROLL: Control = control(
     "WASD",
-    &[key("WASD", "scroll")],
+    &[],
     "scroll (Shift: 5)",
     &[Heading::View],
     "move the view arrows",
 )
 .saying(Says::Word("scroll"));
-pub const TRACK: Command = command(
+pub const TRACK: Control = control(
     "T",
     &[presses("T", "track the selected", Action::Track)],
     "track the selected",
     &[Heading::View],
     "follow centre the view",
 );
-pub const COLOURS: Command = command(
+pub const COLOURS: Control = control(
     "b",
     &[presses("b", "sprite colours", Action::CycleColours)],
     "sprite colours",
     &[Heading::View],
     "drive lineage plain",
 );
-pub const EVENT_FILTER: Command = command(
+pub const EVENT_FILTER: Control = control(
     "m",
     &[presses("m", "event filter", Action::CycleEventFilter)],
     "event filter",
     &[Heading::View],
     "log events major selected",
 );
-pub const DETAIL: Command = command(
+pub const DETAIL: Control = control(
     "v",
     &[presses("v", "exact detail", Action::ToggleDetail)],
     "exact detail",
     &[Heading::View],
     "numbers",
 );
-pub const HELP: Command = command(
+pub const HELP: Control = control(
     "?",
     &[presses("?", "help", Action::Help)],
     "this help",
     &[Heading::View],
     "keys legend",
 )
-.saying(Says::Word("help"));
-pub const PALETTE: Command = command(
+.saying(Says::Word("help"))
+.needing(Need::KeysAct);
+pub const PALETTE: Control = control(
     ":",
     &[key(":", "commands")],
     "find a command",
     &[Heading::View],
     "palette search",
 );
-pub const BACK: Command = command(
+pub const BACK: Control = control(
     "esc",
     &[presses("esc", "let go, back, quit?", Action::Back)],
     "let go, back, quit?",
@@ -275,7 +300,7 @@ pub const BACK: Command = command(
     "cancel leave",
 )
 .saying(Says::Word("quit"));
-pub const QUIT: Command = command(
+pub const QUIT: Control = control(
     "Ctrl+C",
     &[presses("Ctrl+C", "quit at once", Action::Quit)],
     "quit at once",
@@ -284,7 +309,7 @@ pub const QUIT: Command = command(
 );
 
 // Files (design §6.7).
-pub const QUICKSAVE: Command = command(
+pub const QUICKSAVE: Control = control(
     "F5 F9",
     &[
         presses("F5", "quicksave", Action::Quicksave),
@@ -294,28 +319,28 @@ pub const QUICKSAVE: Command = command(
     &[Heading::Files],
     "save",
 );
-pub const SAVE_AS: Command = command(
+pub const SAVE_AS: Control = control(
     "Ctrl+S",
     &[presses("Ctrl+S", "save as...", Action::SaveAs)],
     "save as...",
     &[Heading::Files],
     "name file",
 );
-pub const LOAD: Command = command(
+pub const LOAD: Control = control(
     "Ctrl+O",
     &[presses("Ctrl+O", "load a save", Action::OpenSaves)],
     "load a save",
     &[Heading::Files],
     "open file",
 );
-pub const THEME: Command = command(
+pub const THEME: Control = control(
     "Ctrl+T",
     &[presses("Ctrl+T", "pick a theme", Action::OpenThemes)],
     "pick a theme",
     &[Heading::Files],
     "ascii glyphs colours look",
 );
-pub const TAKE_OVER: Command = command(
+pub const TAKE_OVER: Control = control(
     "Ctrl+R",
     &[presses("Ctrl+R", "take over a replay", Action::TakeOver)],
     "take over a replay",
@@ -324,7 +349,7 @@ pub const TAKE_OVER: Command = command(
 );
 
 // The Cursor (design §6.5).
-pub const MODES: Command = command(
+pub const MODES: Control = control(
     "Z X C",
     &[
         presses("Z", "select", Action::Mode(CursorMode::Select)),
@@ -336,7 +361,7 @@ pub const MODES: Command = command(
     "cursor mode teach move",
 )
 .saying(Says::EachKey);
-pub const CLICKS: Command = command(
+pub const CLICKS: Control = control(
     "Q E",
     &[
         presses(
@@ -360,7 +385,7 @@ pub const CLICKS: Command = command(
     &[Heading::Cursor],
     "pet zap activate grab put down",
 );
-pub const STRONGER: Command = command(
+pub const STRONGER: Control = control(
     "Shift+Q E",
     &[
         presses(
@@ -384,43 +409,43 @@ pub const STRONGER: Command = command(
     &[Heading::Cursor],
     "train stronger",
 );
-pub const CTRL_CLICK: Command = command(
+pub const CTRL_CLICK: Control = control(
     "Ctrl+click",
     &[],
     "hug / shock",
     &[Heading::Cursor],
     "train stronger",
 );
-pub const SHOW: Command = command(
+pub const SHOW: Control = control(
     "H",
     &[presses("H", "show to sprites", Action::ToggleVisible)],
     "show to sprites",
     &[Heading::Cursor],
     "hide seen visible",
 );
-pub const FOLLOW: Command = command(
+pub const FOLLOW: Control = control(
     "F",
     &[presses("F", "follow a sprite", Action::Follow { at: None })],
     "follow a sprite",
     &[Heading::Cursor],
     "",
 );
-pub const MIDDLE: Command = command(
+pub const MIDDLE: Control = control(
     "middle",
     &[],
     "follow a sprite",
     &[Heading::Cursor],
     "click",
 );
-pub const WHEEL: Command = command("wheel", &[], "change mode", &[Heading::Cursor], "cursor");
-pub const PLACE_MENU: Command = command(
+pub const WHEEL: Control = control("wheel", &[], "change mode", &[Heading::Cursor], "cursor");
+pub const PLACE_MENU: Control = control(
     "C again",
     &[],
     "the Place menu",
     &[Heading::Cursor],
     "put new object sprite egg genome",
 );
-pub const AIM: Command = command(
+pub const AIM: Control = control(
     "hold E",
     &[],
     "aim, let go to send",
@@ -429,14 +454,14 @@ pub const AIM: Command = command(
 );
 
 // Sprites (design §6.1).
-pub const NEXT_SPRITE: Command = command(
+pub const NEXT_SPRITE: Control = control(
     "tab",
     &[presses("tab", "next sprite", Action::SelectNext)],
     "next sprite",
     &[Heading::Sprites],
     "select",
 );
-pub const PREVIOUS_SPRITE: Command = command(
+pub const PREVIOUS_SPRITE: Control = control(
     "Shift+tab",
     &[presses(
         "Shift+tab",
@@ -447,42 +472,42 @@ pub const PREVIOUS_SPRITE: Command = command(
     &[Heading::Sprites],
     "select",
 );
-pub const SPRITE_LIST: Command = command(
+pub const SPRITE_LIST: Control = control(
     "l",
     &[presses("l", "sprite list", Action::SpriteList)],
     "sprite list",
     &[Heading::Sprites],
     "all find",
 );
-pub const LIST_THEN_FILTER: Command = command(
+pub const LIST_THEN_FILTER: Control = control(
     "l then /",
     &[],
     "filter the list",
     &[Heading::Sprites],
     "find search",
 );
-pub const POPULATION: Command = command(
+pub const POPULATION: Control = control(
     "p",
     &[presses("p", "population graph", Action::Population)],
     "population graph",
     &[Heading::Sprites],
     "count history eggs",
 );
-pub const FAMILY_TREE: Command = command(
+pub const FAMILY_TREE: Control = control(
     "k",
     &[presses("k", "family tree", Action::FamilyTree)],
     "family tree",
     &[Heading::Sprites],
     "parents young eggs lineage relatives",
 );
-pub const RENAME: Command = command(
+pub const RENAME: Control = control(
     "r",
     &[presses("r", "name it", Action::Rename)],
     "name it",
     &[Heading::Sprites],
     "rename",
 );
-pub const EXPORT_GENOME: Command = command(
+pub const EXPORT_GENOME: Control = control(
     "g",
     &[presses("g", "save its genome", Action::ExportGenome)],
     "save its genome",
@@ -491,7 +516,7 @@ pub const EXPORT_GENOME: Command = command(
 );
 
 // The inspector (design §6.1).
-pub const TABS: Command = command(
+pub const TABS: Control = control(
     "[ ]",
     &[
         presses("[", "previous tab", Action::PreviousTab),
@@ -501,7 +526,7 @@ pub const TABS: Command = command(
     &[Heading::Inspector],
     "body brain chem genome world",
 );
-pub const TAB_SCROLL: Command = command(
+pub const TAB_SCROLL: Control = control(
     "PgUp PgDn",
     &[
         presses("PgUp", "scroll the tab up", Action::ScrollTab { pages: -1 }),
@@ -515,21 +540,21 @@ pub const TAB_SCROLL: Command = command(
     &[Heading::Inspector],
     "page",
 );
-pub const TAB_WHEEL: Command = command(
+pub const TAB_WHEEL: Control = control(
     "wheel",
     &[],
     "scroll the tab under it",
     &[Heading::Pointer],
     "",
 );
-pub const MEMORY: Command = command(
+pub const MEMORY: Control = control(
     "click",
     &[],
     "open or shut a memory",
     &[Heading::Pointer],
     "brain heading lesson learned",
 );
-pub const MEMORY_ENTER: Command = command(
+pub const MEMORY_ENTER: Control = control(
     "enter",
     &[],
     "the same, where it points",
@@ -538,7 +563,7 @@ pub const MEMORY_ENTER: Command = command(
 );
 
 // The debug overlay (design §6.1, #311).
-pub const DEBUG: Command = command(
+pub const DEBUG: Control = control(
     "F3",
     &[presses("F3", "debug overlay", Action::DebugOverlay)],
     "how it's running",
@@ -547,11 +572,11 @@ pub const DEBUG: Command = command(
 );
 
 // The sprite list (design §6.1, #313).
-pub const FILTER: Command = command("/", &[], "filter", &[Heading::SpriteList], "find search")
+pub const FILTER: Control = control("/", &[], "filter", &[Heading::SpriteList], "find search")
     .saying(Says::WordGoingFirst("filter"));
-pub const CHOOSE: Command =
-    command("↑↓", &[], "choose", &[Heading::SpriteList], "wheel").needing(Need::Rows);
-pub const GO_TO: Command = command(
+pub const CHOOSE: Control =
+    control("↑↓", &[], "choose", &[Heading::SpriteList], "wheel").needing(Need::Rows);
+pub const GO_TO: Control = control(
     "enter",
     &[],
     "go to it",
@@ -559,26 +584,26 @@ pub const GO_TO: Command = command(
     "click select",
 )
 .needing(Need::Rows);
-pub const SORT: Command = command("tab", &[], "sort", &[Heading::SpriteList], "order");
-pub const SORT_BACK: Command = command(
+pub const SORT: Control = control("tab", &[], "sort", &[Heading::SpriteList], "order");
+pub const SORT_BACK: Control = control(
     "Shift+tab",
     &[],
     "sort the other way",
     &[Heading::SpriteList],
     "order",
 );
-pub const CLOSE: Command = command(
+pub const CLOSE: Control = control(
     "esc",
     &[],
     "close",
     &[Heading::SpriteList, Heading::Graph, Heading::Tree],
     "",
 );
-pub const CLEAR: Command =
-    command("esc", &[], "clear the filter", &[Heading::SpriteList], "").saying(Says::Word("clear"));
+pub const CLEAR: Control =
+    control("esc", &[], "clear the filter", &[Heading::SpriteList], "").saying(Says::Word("clear"));
 
 // The population graph (M2 design §14.3).
-pub const PICK: Command = command(
+pub const PICK: Control = control(
     "←→",
     &[],
     "pick a moment",
@@ -587,9 +612,9 @@ pub const PICK: Command = command(
 );
 
 // The family tree (M2 design §17.3).
-pub const TREE_CHOOSE: Command =
-    command("←→↑↓", &[], "choose", &[Heading::Tree], "pointer card").needing(Need::Selection);
-pub const CENTRE: Command = command(
+pub const TREE_CHOOSE: Control =
+    control("←→↑↓", &[], "choose", &[Heading::Tree], "pointer card").needing(Need::Selection);
+pub const CENTRE: Control = control(
     "enter",
     &[],
     "centre on it",
@@ -599,30 +624,36 @@ pub const CENTRE: Command = command(
 .needing(Need::Selection);
 
 // Help itself, and the palette (#303).
-pub const HELP_PAGE: Command = hint("←→", "page");
-pub const SEARCH: Command = hint("type", "to search");
-pub const DO_IT: Command = hint("enter", "do it").needing(Need::Rows);
-pub const PALETTE_CHOOSE: Command = hint("↑↓", "choose").needing(Need::Rows);
+pub const HELP_PAGE: Control = hint("←→", "page");
+pub const SEARCH: Control = hint("type", "to search");
+pub const DO_IT: Control = hint("enter", "do it").needing(Need::Pressable);
+/// `↑↓ choose` on the palette or a menu.
+pub const CHOOSE_ROW: Control = hint("↑↓", "choose").needing(Need::Rows);
+
+// The menus (design v28 §6.5, §6.7) and the title screen's (M2 design §8).
+pub const PICK_ITEM: Control = hint("enter", "pick").needing(Need::Rows);
+pub const TITLE_CHOOSE: Control = hint("↑↓", "choose");
+pub const GO: Control = hint("enter", "go");
 
 // While aiming (design v25 §6.5) or placing (design v28 §6.5).
-pub const THROW: Command = hint("let go", "to throw");
-pub const SHOVE: Command = hint("let go", "to shove");
-pub const CANCEL: Command = hint("esc", "cancel");
-pub const PLACE: Command = hint("click", "to place");
-pub const PUT_AWAY: Command = hint("right-click", "put away");
+pub const THROW: Control = hint("let go", "to throw");
+pub const SHOVE: Control = hint("let go", "to shove");
+pub const CANCEL: Control = hint("esc", "cancel");
+pub const PLACE: Control = hint("click", "to place");
+pub const PUT_AWAY: Control = hint("right-click", "put away");
 
 // The prompts that take the status line over (design §6.5, §6.7, M2
 // design §8.4).
-pub const NAME_OK: Command = hint("enter", "ok");
-pub const ANOTHER_NAME: Command = hint("tab", "another");
-pub const SAVE: Command = hint("enter", "save");
-pub const QUIT_GAME: Command = hint("y", "quit the game");
-pub const TITLE_SCREEN: Command = hint("t", "title screen");
-pub const STAY: Command = hint("any other key", "stays");
+pub const NAME_OK: Control = hint("enter", "ok");
+pub const ANOTHER_NAME: Control = hint("tab", "another");
+pub const SAVE: Control = hint("enter", "save");
+pub const QUIT_GAME: Control = hint("y", "quit the game");
+pub const TITLE_SCREEN: Control = hint("t", "title screen");
+pub const STAY: Control = hint("any other key", "stays");
 
-/// Every command in the help, in the order it lists them under each
+/// Every control in the help, in the order it lists them under each
 /// heading.
-pub const COMMANDS: &[Command] = &[
+pub const CONTROLS: &[Control] = &[
     PAUSE,
     STEP,
     SPEED,
@@ -678,7 +709,7 @@ pub const COMMANDS: &[Command] = &[
 
 /// The status line's hints in `context`, in order (design §6.1). Short of
 /// room, a hint saying it goes first does, then whole hints from the end.
-pub fn hints(context: Context) -> &'static [Command] {
+pub fn hints(context: Context) -> &'static [Control] {
     match context {
         Context::World => &[MODES, SCROLL, PAUSE, STEP, SPEED, BACK],
         Context::Throwing => &[THROW, CANCEL],
@@ -689,7 +720,10 @@ pub fn hints(context: Context) -> &'static [Command] {
         Context::Graph => &[PICK, PAUSE, SPEED, CLOSE],
         Context::Tree => &[TREE_CHOOSE, CENTRE, PAUSE, CLOSE],
         Context::Help => &[HELP_PAGE, SEARCH, CLOSE],
-        Context::Palette => &[PALETTE_CHOOSE, DO_IT, CLOSE],
+        Context::HelpSearching => &[SEARCH, CLEAR],
+        Context::Palette => &[CHOOSE_ROW, DO_IT, CLOSE],
+        Context::Menu => &[CHOOSE_ROW, PICK_ITEM, CLOSE],
+        Context::TitleMenu => &[TITLE_CHOOSE, GO, BACK],
         Context::Naming => &[NAME_OK, ANOTHER_NAME, CANCEL],
         Context::SaveNaming => &[SAVE, CANCEL],
         Context::Quitting => &[QUIT_GAME, TITLE_SCREEN, STAY],
@@ -699,8 +733,12 @@ pub fn hints(context: Context) -> &'static [Command] {
 /// Where the player is in `app` on `world`, for the status line's hints.
 pub fn context(app: &App, world: &World) -> Context {
     match app.screen() {
+        Screen::Help if app.help_search().is_some() => Context::HelpSearching,
         Screen::Help => Context::Help,
         Screen::Palette => Context::Palette,
+        Screen::PlaceMenu | Screen::GenomeMenu | Screen::LoadMenu | Screen::ThemeMenu => {
+            Context::Menu
+        }
         Screen::SpriteList if app.list_filter().is_some() => Context::FilteredList,
         Screen::SpriteList => Context::SpriteList,
         Screen::Population => Context::Graph,
@@ -726,25 +764,25 @@ pub struct Hint {
     pub ready: bool,
 }
 
-/// The hints `command` gives in `app` on `world`, as one: each key's when
+/// The hints `control` gives in `app` on `world`, as one: each key's when
 /// it says each, which go together.
-pub fn hints_of(command: &Command, app: &App, world: &World) -> Vec<Hint> {
+pub fn hints_of(control: &Control, app: &App, world: &World) -> Vec<Hint> {
     let ready = |keys: &[Key]| {
-        meets(command.needs, app, world)
+        meets(control.needs, app, world)
             && (keys.is_empty() || keys.iter().any(|key| key_works(key, app)))
     };
-    match command.says {
+    match control.says {
         Says::Word(does) | Says::WordGoingFirst(does) => vec![Hint {
-            key: command.written,
+            key: control.written,
             does,
-            ready: ready(command.keys),
+            ready: ready(control.keys),
         }],
-        Says::EachKey => command
+        Says::EachKey => control
             .keys
             .iter()
             .map(|key| Hint {
-                key: key.key,
-                does: key.name,
+                key: key.written,
+                does: key.does,
                 ready: ready(std::slice::from_ref(key)),
             })
             .collect(),
@@ -758,9 +796,20 @@ fn meets(need: Need, app: &App, world: &World) -> bool {
         Need::Paused => app.clock.is_paused(),
         Need::Rows => match app.screen() {
             Screen::Palette => !app.palette_rows().is_empty(),
+            Screen::PlaceMenu | Screen::GenomeMenu | Screen::LoadMenu | Screen::ThemeMenu => {
+                !app.menu_items(world).is_empty()
+            }
             _ => !crate::sprite_list::order(app, world).is_empty(),
         },
+        Need::Pressable => app
+            .palette_rows()
+            .get(app.palette_choice())
+            .is_some_and(|row| row.key.action.is_some()),
         Need::Selection => app.selection().is_some(),
+        Need::KeysAct => {
+            app.screen() == Screen::Help
+                || !app.typing() && !matches!(app.screen(), Screen::QuitPrompt | Screen::LoadPrompt)
+        }
     }
 }
 
@@ -773,30 +822,46 @@ fn key_works(key: &Key, app: &App) -> bool {
             .is_none_or(|action| !crate::app::changes_the_world(&action, false))
 }
 
-/// The keys the command palette can press (#303): each of a command that
-/// works in the world, with what it's found by.
-pub fn palette_keys() -> impl Iterator<Item = (&'static Command, &'static Key)> {
-    COMMANDS
+/// A row of the command palette (#303): a control and one of its keys,
+/// or for a control with none, such as the pointer's, the control itself,
+/// which teaches its keys but can't press them.
+#[derive(Debug, Clone, Copy)]
+pub struct PaletteRow {
+    pub control: &'static Control,
+    pub key: Key,
+}
+
+/// The command palette's rows (#303): each key the palette can press, of
+/// every control that works in the world, and each such control with no
+/// keys of its own. The palette's own key isn't one.
+pub fn palette_rows() -> impl Iterator<Item = PaletteRow> {
+    CONTROLS
         .iter()
-        .filter(|command| command.headings.iter().any(|h| h.in_the_world()))
-        .flat_map(|command| {
-            command
-                .keys
-                .iter()
-                .filter(|key| key.action.is_some())
-                .map(move |key| (command, key))
+        .filter(|control| control.headings.iter().any(|h| h.in_the_world()))
+        .flat_map(|control| {
+            let keys = control.keys.iter().filter(|key| key.action.is_some());
+            let whole = control.keys.is_empty().then_some(Key {
+                written: control.written,
+                does: control.does,
+                action: None,
+            });
+            keys.copied()
+                .chain(whole)
+                .map(move |key| PaletteRow { control, key })
         })
 }
 
-/// What a command and one of its keys are found by: its name, what the
-/// help says it does, its heading and its other words.
-pub fn found_by(command: &Command, key: &Key) -> String {
-    let headings: Vec<&str> = command.headings.iter().map(|h| h.label()).collect();
+/// What help's search and the palette find a control by (#303): its keys
+/// as `written`, what each of `keys` does, what the help says it does, its
+/// headings and its other words.
+pub fn found_by(control: &Control, written: &str, keys: &[Key]) -> String {
+    let does: Vec<&str> = keys.iter().map(|key| key.does).collect();
+    let headings: Vec<&str> = control.headings.iter().map(|h| h.label()).collect();
     format!(
-        "{} {} {} {}",
-        key.name,
-        command.does,
+        "{written} {} {} {} {}",
+        does.join(" "),
+        control.does,
         headings.join(" "),
-        command.words
+        control.words
     )
 }

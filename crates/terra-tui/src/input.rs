@@ -61,7 +61,8 @@ pub enum Action {
     Mode(CursorMode),
     /// Select the sprite with the next ID (`Tab`).
     SelectNext,
-    /// Select the sprite with the previous ID (`Shift+Tab`).
+    /// Select the sprite with the previous ID (`Shift+Tab`); in help, the
+    /// page before (#303).
     SelectPrevious,
     /// Open the next inspector tab (`]`).
     NextTab,
@@ -139,7 +140,8 @@ pub enum Action {
     /// While naming, the last letter rubbed out (`Backspace`).
     Erase,
     /// While naming, another random name to start from (`Tab`); while
-    /// filtering the sprite list, the next order.
+    /// filtering the sprite list, the next order; in help, the next page
+    /// (#303).
     AnotherName,
     /// While typing, `?` let go of, where the terminal says so: in the New
     /// world box, the mode's explanation goes (M2 design §16).

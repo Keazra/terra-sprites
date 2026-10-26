@@ -15,7 +15,7 @@ use crate::app::{
     App, Areas, ColourMode, ItemLook, PlaceItem, Screen, Selection, ShownItems, item_look,
     spoken_duration, strongest_drive,
 };
-use crate::commands::{self, Command, Context, Hint, Says};
+use crate::controls::{self, Context, Control, Hint, PaletteRow, Says};
 use crate::family_tree::{self, Lineage};
 use crate::help::HelpPage;
 use crate::inspector::{self, INSPECTOR_WIDTH, NOTHING_SELECTED, first_shown};
@@ -127,7 +127,7 @@ pub fn render_with(frame: &mut Frame, app: &App, world: &World, parts: Parts) {
 /// What the status line asks when `Esc` would leave a world (M2 design
 /// §8.4), each answer's key bold and what it does muted (design §6.2).
 fn quit_prompt(app: &App, world: &World) -> Line<'static> {
-    let answers = all_hints(commands::hints(Context::Quitting), app, world);
+    let answers = all_hints(controls::hints(Context::Quitting), app, world);
     let mut spans = vec![Span::raw("Quit? ")];
     spans.extend(hint_spans(&answers, app.theme.text()));
     Line::from(spans)
@@ -686,11 +686,16 @@ fn render_menu(buf: &mut Buffer, screen: Rect, app: &App, world: &World) {
 /// and the status line (design §6.1): its pages named in its top edge, the
 /// open one in the theme's style for what's chosen, and in its bottom edge
 /// what's typed into its search, or that typing searches (#303). The
-/// title screen's help is drawn so too.
+/// title screen's help is drawn so too. While it searches, `Esc` clears
+/// the search first, and its corner says so.
 pub(crate) fn draw_help(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
     let look = app.theme.text();
-    let inner = clear_box(buf, area, "", ESC_CLOSE, look);
     let search = app.help_search();
+    let corner = match search {
+        Some(_) => controls::CLEAR.corner(),
+        None => controls::CLOSE.corner(),
+    };
+    let inner = clear_box(buf, area, "", corner, look);
     let mut title = vec![Span::raw(" Help ─")];
     for page in HelpPage::ALL {
         let label = format!(" {} ", page.label());
@@ -718,13 +723,14 @@ pub(crate) fn draw_help(buf: &mut Buffer, area: Rect, app: &App, world: &World) 
 /// How wide the command palette is, at most (#303).
 const PALETTE_WIDTH: u16 = 50;
 
-/// How many commands the palette shows at once (#303).
+/// How many controls the palette shows at once (#303).
 const PALETTE_ROWS: usize = 10;
 
 /// Draws the command palette near the top of the map view, `map_view`
 /// (#303): what's typed, then each key it found with what it does and
-/// its heading, the key at the right in the theme's key style and the
-/// highlighted row in its style for what's chosen.
+/// its heading, the key at the right in the theme's key style, or muted
+/// where the palette can't press it, and the highlighted row in its style
+/// for what's chosen.
 fn render_palette(buf: &mut Buffer, map_view: Rect, app: &App) {
     let look = app.theme.text();
     let rows = app.palette_rows();
@@ -735,7 +741,7 @@ fn render_palette(buf: &mut Buffer, map_view: Rect, app: &App) {
     if area.width < 12 || area.height < 4 {
         return;
     }
-    let inner = clear_box(buf, area, " Commands ", ESC_CLOSE, look);
+    let inner = clear_box(buf, area, " Commands ", controls::CLOSE.corner(), look);
     let typed = app.palette_text().unwrap_or_default();
     let prompt = Line::from(vec![
         Span::styled(":", look.key),
@@ -751,27 +757,32 @@ fn render_palette(buf: &mut Buffer, map_view: Rect, app: &App) {
     // The highlight stays in view.
     let choice = app.palette_choice();
     let first = (choice + 1).saturating_sub(room);
-    for (row, (index, (command, key))) in rows.iter().enumerate().skip(first).take(room).enumerate()
-    {
-        let heading = command
+    for (y, (index, row)) in rows.iter().enumerate().skip(first).take(room).enumerate() {
+        let PaletteRow { control, key } = row;
+        let heading = control
             .headings
             .first()
             .map_or("", |heading| heading.label());
         let about = format!(" · {}", heading.to_lowercase());
         let used =
-            1 + key.name.chars().count() + about.chars().count() + key.key.chars().count() + 1;
+            1 + key.does.chars().count() + about.chars().count() + key.written.chars().count() + 1;
         let gap = usize::from(inner.width).saturating_sub(used).max(1);
+        let key_look = if key.action.is_some() {
+            look.key
+        } else {
+            look.muted
+        };
         let mut line = Line::from(vec![
-            Span::raw(format!(" {}", key.name)),
+            Span::raw(format!(" {}", key.does)),
             Span::styled(about, look.muted),
             Span::raw(" ".repeat(gap)),
-            Span::styled(key.key, look.key),
+            Span::styled(key.written, key_look),
             Span::raw(" "),
         ]);
         if index == choice {
             line = line.style(look.selected);
         }
-        buf.set_line(inner.x, inner.y + 1 + row as u16, &line, inner.width);
+        buf.set_line(inner.x, inner.y + 1 + y as u16, &line, inner.width);
     }
 }
 
@@ -783,8 +794,8 @@ fn render_sprite_list(buf: &mut Buffer, app: &App, world: &World) {
     };
     // While it's filtered, `Esc` clears the filter first (#313).
     let corner = match app.list_filter() {
-        Some(_) => ("esc", "clear"),
-        None => ESC_CLOSE,
+        Some(_) => controls::CLEAR.corner(),
+        None => controls::CLOSE.corner(),
     };
     let title = crate::sprite_list::title(app, world);
     let inner = clear_box(buf, area, &title, corner, app.theme.text());
@@ -810,7 +821,13 @@ fn render_population(buf: &mut Buffer, app: &App, world: &World) {
     } else {
         " Population ".to_string()
     };
-    let inner = clear_box(buf, area, &title, ESC_CLOSE, app.theme.text());
+    let inner = clear_box(
+        buf,
+        area,
+        &title,
+        controls::CLOSE.corner(),
+        app.theme.text(),
+    );
     if !shown {
         return;
     }
@@ -838,7 +855,13 @@ fn render_family_tree(buf: &mut Buffer, app: &App, world: &World) {
         Some(label) => format!(" Family tree ── {label} "),
         None => " Family tree ".to_string(),
     };
-    let inner = clear_box(buf, area, &title, ESC_CLOSE, app.theme.text());
+    let inner = clear_box(
+        buf,
+        area,
+        &title,
+        controls::CLOSE.corner(),
+        app.theme.text(),
+    );
     if app.selection().is_none() {
         buf.set_string(inner.x, inner.y, NOTHING_SELECTED, Style::default());
     }
@@ -1031,17 +1054,19 @@ fn top_bar_line(app: &App, world: &World, width: u16) -> Line<'static> {
         thousands(world.tick()),
         app.seed,
     );
-    let help_hint = commands::hints_of(&commands::HELP, app, world);
+    let help_hint = controls::hints_of(&controls::HELP, app, world);
     let help = hint_width(&help_hint) + 1;
     let gap = usize::from(width).saturating_sub(text.chars().count() + help);
     // At least a space between the two, so `? help` never runs into them.
     let mut spans = vec![Span::raw(text)];
     if gap > 0 {
         spans.push(Span::raw(" ".repeat(gap)));
-        // Its key bold, as every hint's is (design §6.2); the rest stays in
-        // the bar's reverse video.
+        // Its key bold, as every hint's is (design §6.2), unless `?` would
+        // type rather than open help (#303); the rest stays in the bar's
+        // reverse video, where muting would hide it.
         let key = app.theme.text().key;
         for hint in help_hint {
+            let key = if hint.ready { key } else { Style::default() };
             spans.extend([
                 Span::styled(hint.key, key),
                 Span::raw(format!(" {} ", hint.does)),
@@ -1050,9 +1075,6 @@ fn top_bar_line(app: &App, world: &World, width: u16) -> Line<'static> {
     }
     Line::from(spans).style(Style::default().add_modifier(Modifier::REVERSED))
 }
-
-/// The hint in an overlay's corner (design §6.1).
-pub(crate) const ESC_CLOSE: (&str, &str) = ("esc", "close");
 
 /// How many columns `hints` take, two spaces between each: `Z select  X
 /// train`.
@@ -1079,11 +1101,11 @@ pub(crate) fn hint_spans(hints: &[Hint], look: TextLook) -> Vec<Span<'static>> {
     spans
 }
 
-/// Every hint `commands` give in `app` on `world`, in order.
-pub(crate) fn all_hints(commands: &[Command], app: &App, world: &World) -> Vec<Hint> {
-    commands
+/// Every hint `controls` give in `app` on `world`, in order.
+pub(crate) fn all_hints(controls: &[Control], app: &App, world: &World) -> Vec<Hint> {
+    controls
         .iter()
-        .flat_map(|command| commands::hints_of(command, app, world))
+        .flat_map(|control| controls::hints_of(control, app, world))
         .collect()
 }
 
@@ -1187,8 +1209,8 @@ fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
     let room = width.saturating_sub(tile.chars().count() + 3);
     // The hints for where the player is: in the world, while aiming or
     // placing (design v25, v28 §6.1), or with an overlay open (#303).
-    let context = commands::context(app, world);
-    let hints = hints_within(commands::hints(context), app, world, room);
+    let context = controls::context(app, world);
+    let hints = hints_within(controls::hints(context), app, world, room);
     let mut line = tile_line(&tile);
     if hints.is_empty() {
         return line;
@@ -1209,7 +1231,7 @@ fn prompt_line(
     context: Context,
     width: u16,
 ) -> Line<'static> {
-    let hints = all_hints(commands::hints(context), app, world);
+    let hints = all_hints(controls::hints(context), app, world);
     let fits = prompt.chars().count() + 3 + hint_width(&hints) <= usize::from(width);
     let mut spans = vec![Span::raw(prompt)];
     if fits {
@@ -1229,16 +1251,16 @@ fn cursor_part(app: &App, subject: Subject, part: impl FnOnce() -> String) -> St
     }
 }
 
-/// As many of the hints `commands` give as fit in `room` columns, in order
+/// As many of the hints `controls` give as fit in `room` columns, in order
 /// (design v22 §6.1): short of room, a hint that goes first does, then
-/// whole commands' hints from the end, so the hints of one command, such as
+/// whole controls' hints from the end, so the hints of one control, such as
 /// the mode keys, go together.
-fn hints_within(commands: &[Command], app: &App, world: &World, room: usize) -> Vec<Hint> {
-    let mut kept: Vec<(bool, Vec<Hint>)> = commands
+fn hints_within(controls: &[Control], app: &App, world: &World, room: usize) -> Vec<Hint> {
+    let mut kept: Vec<(bool, Vec<Hint>)> = controls
         .iter()
-        .map(|command| {
-            let first = matches!(command.says, Says::WordGoingFirst(_));
-            (first, commands::hints_of(command, app, world))
+        .map(|control| {
+            let first = matches!(control.says, Says::WordGoingFirst(_));
+            (first, controls::hints_of(control, app, world))
         })
         .collect();
     let width = |kept: &[(bool, Vec<Hint>)]| {

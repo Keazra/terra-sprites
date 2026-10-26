@@ -909,7 +909,7 @@ impl App {
             Screen::Naming => return self.apply_naming(action, world),
             Screen::SaveNaming => return self.apply_save_naming(action, world),
             Screen::LoadPrompt => return self.apply_load_prompt(action),
-            Screen::Help => return self.apply_in_help(action),
+            Screen::Help => return self.apply_in_help(action, world),
             Screen::Palette => return self.apply_in_palette(action, world),
             Screen::SpriteList => return self.apply_in_list(action, world),
             Screen::Population => return self.apply_in_graph(action, world),

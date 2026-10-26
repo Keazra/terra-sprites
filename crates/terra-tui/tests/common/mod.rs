@@ -317,6 +317,14 @@ pub fn apply(app: &mut App, world: &World, action: Action) {
     assert_eq!(app.apply(action, world), Flow::Continue);
 }
 
+/// Types `text` into whatever's open, a character at a time: a name, the
+/// sprite list's filter, help's search or the command palette.
+pub fn type_in(app: &mut App, world: &World, text: &str) {
+    for c in text.chars() {
+        app.apply(Action::Type(c), world);
+    }
+}
+
 /// The screen cell the pointer is on to point at `tile` when the map view's
 /// tiles are drawn from screen cell (0, 0), as `app` draws them: one down
 /// and right of it (design v27 §6.5).

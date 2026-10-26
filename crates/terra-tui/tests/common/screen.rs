@@ -2,7 +2,7 @@
 //! `inspector_tabs.rs` and `event_log.rs` share (#136): screens of any
 //! size, the worlds and sprites they show, and the inspector's lines.
 
-use ratatui::buffer::Buffer;
+use ratatui::buffer::{Buffer, Cell};
 use ratatui::layout::{Position, Rect, Size};
 use terra_sim::{DataPack, EntityId, Event, EventKind, Pos, ScriptedAction, World, WorldConfig};
 use terra_tui::app::App;
@@ -51,6 +51,22 @@ pub fn render(app: &App, world: &World, width: u16, height: u16) -> Buffer {
         }
     }
     corner
+}
+
+/// The cells of `hint`, such as `. step`, where it first shows on the
+/// status line, the bottom row of `screen`.
+pub fn hint_cells<'a>(screen: &'a Buffer, hint: &str) -> Vec<&'a Cell> {
+    let y = screen.area.height - 1;
+    let line: String = (0..screen.area.width)
+        .map(|x| screen[(x, y)].symbol())
+        .collect();
+    let at = line
+        .find(hint)
+        .unwrap_or_else(|| panic!("no {hint:?} in {line:?}"));
+    let x = line[..at].chars().count() as u16;
+    (0..hint.chars().count() as u16)
+        .map(|i| &screen[(x + i, y)])
+        .collect()
 }
 
 /// The screen cell the pointer is on to point at `world`'s map tile (x, y)

@@ -2,12 +2,15 @@
 //! game's folder, on pages for each screen, searched by typing (#303).
 
 mod common;
-use common::{DATA_FOLDER, DRIVE_COLOURS, WorldBuilder, app_in, app_on, at, lines, render};
+use common::{
+    DATA_FOLDER, DRIVE_COLOURS, WorldBuilder, app_in, app_on, at, lines, render, status_line,
+    type_in,
+};
 
 use ratatui::buffer::Buffer;
 use ratatui::style::Color;
 use terra_sim::World;
-use terra_tui::app::{App, Flow, Screen};
+use terra_tui::app::{Flow, Screen};
 use terra_tui::input::Action;
 use terra_tui::theme::Theme;
 
@@ -167,13 +170,6 @@ fn the_lineage_line_draws_each_sprite_in_its_colour() {
     }
 }
 
-/// Types `text` into whatever's open.
-fn type_in(app: &mut App, world: &World, text: &str) {
-    for c in text.chars() {
-        app.apply(Action::Type(c), world);
-    }
-}
-
 /// The help's tabs, in the top edge of its box, the open one in the
 /// highlight's style.
 fn open_page(screen: &Buffer) -> String {
@@ -322,4 +318,38 @@ fn typing_in_help_searches_every_page_and_acts_on_nothing() {
     );
     app.apply(Action::Back, &world);
     assert_eq!(app.screen(), Screen::Normal);
+}
+
+#[test]
+fn while_help_searches_esc_says_it_clears() {
+    let world = field();
+    let mut app = app_on(&world);
+    app.apply(Action::Help, &world);
+    type_in(&mut app, &world, "egg");
+    let line = status_line(&app, &world);
+    assert!(line.ends_with("type to search  esc clear"), "{line:?}");
+    let screen = lines(&render(&app, &world));
+    assert!(screen[1].ends_with(" esc clear ─┐"), "{}", screen[1]);
+}
+
+#[test]
+fn help_scrolls_a_page_too_long_to_fit_and_no_further() {
+    let world = field();
+    let mut app = app_on(&world);
+    app.apply(Action::Help, &world);
+    // The World page fits at 100×30.
+    app.apply(Action::Scroll { dx: 0, dy: 1 }, &world);
+    assert_eq!(app.help_scroll(), 0);
+    // Searching for `s` finds more than fits.
+    type_in(&mut app, &world, "s");
+    for _ in 0..200 {
+        app.apply(Action::Scroll { dx: 0, dy: 1 }, &world);
+    }
+    let last = app.help_scroll();
+    assert!(last > 0, "it scrolls");
+    let at = ratatui::layout::Position::new(10, 10);
+    app.apply(Action::Wheel { at, notches: 5 }, &world);
+    assert_eq!(app.help_scroll(), last, "no further than its last line");
+    app.apply(Action::Scroll { dx: 0, dy: -1 }, &world);
+    assert_eq!(app.help_scroll(), last - 1, "up at once");
 }

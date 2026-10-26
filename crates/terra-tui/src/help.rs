@@ -1,5 +1,5 @@
 //! The help screen (`?`, design §6.1): a page for each part of the game,
-//! with its keys, from the command list, and its legends; and its search,
+//! with its keys, from the control list, and its legends; and its search,
 //! across every page (#303).
 
 use ratatui::style::Style;
@@ -7,7 +7,7 @@ use ratatui::text::{Line, Span};
 use terra_sim::World;
 
 use crate::app::{App, Tab, finds};
-use crate::commands::{COMMANDS, Command, Heading};
+use crate::controls::{self, CONTROLS, Control, Heading};
 use crate::listed::listed_enum;
 use crate::sprite_list;
 use crate::text::display_name;
@@ -74,21 +74,21 @@ fn page(app: &App, world: &World, width: usize, page: HelpPage) -> Vec<Line<'sta
     lines
 }
 
-/// The commands under `heading`, in the command list's order.
-fn under(heading: Heading) -> impl Iterator<Item = &'static Command> {
-    COMMANDS
+/// The controls under `heading`, in the control list's order.
+fn under(heading: Heading) -> impl Iterator<Item = &'static Control> {
+    CONTROLS
         .iter()
-        .filter(move |command| command.headings.contains(&heading))
+        .filter(move |control| control.headings.contains(&heading))
 }
 
-/// A row of the help: `command`'s keys in the theme's key style, set to
+/// A row of the help: `control`'s keys in the theme's key style, set to
 /// `KEY_WIDTH`, then what it does.
-fn row(command: &Command, look: TextLook) -> Vec<Span<'static>> {
-    let pad = KEY_WIDTH.saturating_sub(command.written.chars().count());
+fn row(control: &Control, look: TextLook) -> Vec<Span<'static>> {
+    let pad = KEY_WIDTH.saturating_sub(control.written.chars().count());
     vec![
         Span::raw(" "),
-        Span::styled(command.written, look.key),
-        Span::raw(format!("{}{}", " ".repeat(pad), command.does)),
+        Span::styled(control.written, look.key),
+        Span::raw(format!("{}{}", " ".repeat(pad), control.does)),
     ]
 }
 
@@ -102,7 +102,7 @@ fn in_columns(columns: &[&[Heading]], width: usize, look: TextLook) -> Vec<Line<
             headings
                 .iter()
                 .flat_map(|&heading| {
-                    let keys = under(heading).map(move |command| row(command, look));
+                    let keys = under(heading).map(move |control| row(control, look));
                     std::iter::once(headed(heading.label(), "", look)).chain(keys)
                 })
                 .collect()
@@ -243,7 +243,7 @@ fn tab_legend(tab: Tab) -> &'static [&'static str] {
         ],
         Tab::Chem => &[
             "Each chemical's level, from 0 to 1, and its change each tick",
-            "felt: the reward less the punishment it took in last tick",
+            "felt: the good it took in last tick, its relief and reward, less the punishment",
             "HORMONES: its genes' own chemicals, and the ones with a name",
         ],
         Tab::Genome => &[
@@ -265,18 +265,19 @@ fn tab_legend(tab: Tab) -> &'static [&'static str] {
 fn found(app: &App, world: &World, width: usize, typed: &str) -> Vec<Line<'static>> {
     let look = app.theme.text();
     let typed_words = sprite_list::words(typed);
-    let mut shown: Vec<&Command> = Vec::new();
+    let mut shown: Vec<&Control> = Vec::new();
     let mut lines = Vec::new();
     for page in HelpPage::ALL {
         let mut found = Vec::new();
         for &heading in page.columns().iter().flat_map(|column| column.iter()) {
-            for command in under(heading) {
-                let seen = shown.iter().any(|seen| std::ptr::eq(*seen, command));
-                if seen || !finds(&searched(command), &typed_words) {
+            for control in under(heading) {
+                let seen = shown.iter().any(|seen| std::ptr::eq(*seen, control));
+                let text = controls::found_by(control, control.written, control.keys);
+                if seen || !finds(&text, &typed_words) {
                     continue;
                 }
-                shown.push(command);
-                found.push(Line::from(row(command, look)));
+                shown.push(control);
+                found.push(Line::from(row(control, look)));
             }
         }
         for legend in legends(page, app, world, width, None) {
@@ -306,21 +307,6 @@ fn found(app: &App, world: &World, width: usize, typed: &str) -> Vec<Line<'stati
         ));
     }
     lines
-}
-
-/// What the search looks in for `command`: its keys, what it does, its
-/// headings, its keys' names and its other words.
-fn searched(command: &Command) -> String {
-    let headings: Vec<&str> = command.headings.iter().map(|h| h.label()).collect();
-    let names: Vec<&str> = command.keys.iter().map(|key| key.name).collect();
-    format!(
-        "{} {} {} {} {}",
-        command.written,
-        command.does,
-        headings.join(" "),
-        names.join(" "),
-        command.words
-    )
 }
 
 /// A line of the help that starts with a `heading`, in the theme's heading

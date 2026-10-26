@@ -4,6 +4,7 @@
 //! parted from its recording; and `--data` reads a folder of pack files.
 
 mod common;
+use common::screen::hint_cells;
 use common::{
     app_on, at, ball_world, map_app, pack, pointer_on, render, render_on, row, run, scratch_folder,
 };
@@ -189,13 +190,9 @@ fn a_replay_greys_the_hints_of_keys_it_would_refuse() {
     // Once what it plays has been said, the hints are back.
     app.animate(std::time::Duration::from_secs(5));
     let screen = render(&app, world);
-    let line = row(&screen, 29);
     let look = app.theme.text();
     for (hint, ready) in [("Z select", true), ("X train", false), ("C grab", false)] {
-        let at = line
-            .find(hint)
-            .unwrap_or_else(|| panic!("{hint} in {line:?}"));
-        let key = &screen[(line[..at].chars().count() as u16, 29)];
+        let key = hint_cells(&screen, hint)[0];
         assert_eq!(
             key.modifier.contains(look.key.add_modifier),
             ready,

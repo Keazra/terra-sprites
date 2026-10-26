@@ -4,7 +4,7 @@
 use terra_sim::World;
 
 use super::{App, Draft, Flow, Screen, WHEEL_LINES, along, highlight_moved, typeable};
-use crate::commands::{self, Command, Key};
+use crate::controls::{self, PaletteRow};
 use crate::help::HelpPage;
 use crate::input::Action;
 use crate::sprite_list;
@@ -83,10 +83,12 @@ impl App {
 
     /// What an action does while the help screen is open (#303): `←` and
     /// `→`, or `Tab` and `Shift+Tab`, turn its pages, `↑` and `↓` or the
-    /// wheel scroll it, and typing searches it, `Backspace` rubbing a
-    /// letter out. `Esc` clears the search, then closes the help, as `?`
-    /// does at once, going back to what was open. The mouse still points.
-    pub(super) fn apply_in_help(&mut self, action: Action) -> Flow {
+    /// wheel scroll one too long to fit, and typing searches it,
+    /// `Backspace` rubbing a letter out. `Esc` clears the search, then
+    /// closes the help, as `?` does at once, going back to what was open.
+    /// The mouse still points.
+    pub(super) fn apply_in_help(&mut self, action: Action, world: &World) -> Flow {
+        let last = self.help_scroll_room(world);
         let help = &mut self.help;
         match action {
             Action::Help | Action::Type('?') => self.close_help(),
@@ -113,17 +115,32 @@ impl App {
             Action::AnotherName => self.turn_page(1),
             Action::SelectPrevious => self.turn_page(-1),
             Action::Scroll { dy, .. } => {
-                help.scroll = help.scroll.saturating_add_signed(dy.signum() as isize);
+                let scroll = help.scroll.saturating_add_signed(dy.signum() as isize);
+                help.scroll = scroll.min(last);
             }
             Action::Wheel { at, notches } => {
                 let lines = (notches * WHEEL_LINES) as isize;
-                help.scroll = help.scroll.saturating_add_signed(lines);
+                help.scroll = help.scroll.saturating_add_signed(lines).min(last);
                 self.point(at);
             }
             Action::Point(cell) => self.point(cell),
             _ => {}
         }
         Flow::Continue
+    }
+
+    /// How far the help can scroll down: as far as brings its last line to
+    /// the bottom of its box, or nowhere, when it fits.
+    fn help_scroll_room(&self, world: &World) -> usize {
+        let Some(area) = self.overlay() else {
+            return 0;
+        };
+        // Inside the box's border.
+        let width = usize::from(area.width.saturating_sub(2));
+        let height = usize::from(area.height.saturating_sub(2));
+        crate::help::lines(self, world, width)
+            .len()
+            .saturating_sub(height)
     }
 
     /// Turns the help `steps` pages along, wrapping round, to its top.
@@ -157,20 +174,24 @@ impl App {
         self.palette.as_ref().map_or(0, |palette| palette.choice)
     }
 
-    /// The commands the palette finds for what's typed, each key on a row of
+    /// The rows the palette finds for what's typed, each key on a row of
     /// its own (#303): every key that works in the world with each word
-    /// typed starting a word of its name, of what it does, of its heading
-    /// or of its other words; every one, with nothing typed.
-    pub fn palette_rows(&self) -> Vec<(&'static Command, &'static Key)> {
+    /// typed starting a word of it, of what it does, of its heading or of
+    /// its other words; every one, with nothing typed.
+    pub fn palette_rows(&self) -> Vec<PaletteRow> {
         let typed = sprite_list::words(self.palette_text().unwrap_or_default());
-        commands::palette_keys()
-            .filter(|(command, key)| finds(&commands::found_by(command, key), &typed))
+        controls::palette_rows()
+            .filter(|row| {
+                let text = controls::found_by(row.control, row.key.written, &[row.key]);
+                finds(&text, &typed)
+            })
             .collect()
     }
 
     /// What an action does while the command palette is open (#303):
-    /// typing finds commands, `↑` and `↓` or the wheel choose one, `Enter`
-    /// closes the palette and does what was chosen, and `Esc` closes it.
+    /// typing finds controls, `↑` and `↓` or the wheel choose one, `Enter`
+    /// closes the palette and does what was chosen, if the palette can
+    /// press its key, and `Esc` closes it.
     pub(super) fn apply_in_palette(&mut self, action: Action, world: &World) -> Flow {
         let rows = self.palette_rows();
         let Some(palette) = self.palette.as_mut() else {
@@ -194,7 +215,7 @@ impl App {
                 self.point(at);
             }
             Action::Enter => {
-                let chosen = rows.get(palette.choice).and_then(|(_, key)| key.action);
+                let chosen = rows.get(palette.choice).and_then(|row| row.key.action);
                 self.close_palette();
                 if let Some(action) = chosen {
                     return self.apply(action, world);
@@ -216,7 +237,8 @@ impl App {
 
 /// Whether each word `typed` starts a word of `text`, in any order: `tree`
 /// finds "family tree", and `gen sav` "save its genome". With nothing
-/// typed, everything is found.
+/// typed, everything is found. Unlike the sprite list's filter, which reads
+/// a row's words in order (#313), a control's words have no order to keep.
 pub(crate) fn finds(text: &str, typed: &[String]) -> bool {
     let words = sprite_list::words(text);
     typed

@@ -809,16 +809,16 @@ _Avoid_: tint, palette
 The overlay `?` opens, in pages: the World page, every key grouped, the colour, emote and lineage legends, and the game's folder for its files; the Inspector page, the inspector's keys and the open tab's legend; and a page each for the sprite list, the population graph and the family tree. It opens at the page for where the player is, and typing in it searches every page (#303).
 _Avoid_: manual, cheat sheet
 
-**Command** (#303):
-A key or keys and what they do, as one list that the key hints, the help screen and the command palette are all built from, so they can't drift apart.
-_Avoid_: shortcut, binding (that's the key alone)
+**Control** (#303):
+A key or keys and what they do, such as `space` pausing, on one list that the key hints, the help screen and the command palette are all built from, so they can't drift apart.
+_Avoid_: command (that's what a click sends the world), shortcut, binding (that's the key alone)
 
 **Key hints**:
-The keys at the right of the status line that work where the player is, each with a word on what it does. A hint whose key would do nothing just now is greyed rather than hidden, such as `. step` while time runs (#303).
+The controls at the right of the status line that work where the player is, each a key with a word on what it does. A hint whose key would do nothing just now is greyed rather than hidden, such as `. step` while time runs (#303).
 _Avoid_: shortcut bar, legend (the help's legends are of colours and emotes)
 
 **Command palette** (#303):
-The box `:` opens near the top of the map view: typing finds any key that works in the world by the starts of the words of what it does, each shown with its key, and `Enter` does the one chosen.
+The box `:` opens near the top of the map view: typing finds any control that works in the world by the starts of the words of what it does, each shown with its key, and `Enter` does the one chosen. Its name is what such a box is called elsewhere; what it finds are controls, not commands.
 _Avoid_: command line, console, search (that's the help's)
 
 **Sprite list**:

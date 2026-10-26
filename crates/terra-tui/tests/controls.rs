@@ -1,19 +1,19 @@
-//! The commands as one list (design §6.1, #303): the keys it names do what
+//! The controls as one list (design §6.1, #303): the keys it names do what
 //! it says, every key is in it, the status line's hints come from it greyed
 //! when they'd do nothing, and the command palette finds and runs them.
 
 mod common;
-use common::screen::{app_for, garden_with_sprites, render};
-use common::{key, lines, status_line};
+use common::screen::{app_for, garden_with_sprites, hint_cells, render};
+use common::{key, lines, status_line, type_in};
 
-use ratatui::buffer::Buffer;
+use ratatui::buffer::Cell;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
-use terra_tui::app::Screen;
-use terra_tui::commands::COMMANDS;
+use terra_tui::app::{CursorMode, Screen};
+use terra_tui::controls::CONTROLS;
 use terra_tui::input::{Action, Keys};
-use terra_tui::theme::Theme;
+use terra_tui::theme::{TextLook, Theme};
 
-/// The key event a key as the command list writes it stands for: `space`,
+/// The key event a key as the control list writes it stands for: `space`,
 /// `Shift+tab`, `Ctrl+S`, `F5`, `PgUp`, or a key's own letter, which the
 /// list writes as on the keyboard (`T`) and is pressed without Shift.
 fn event(written: &str) -> KeyEvent {
@@ -45,16 +45,22 @@ fn event(written: &str) -> KeyEvent {
     KeyEvent::new(code, modifiers)
 }
 
+/// Whether a hint's key, its first cell, is drawn as a key that works:
+/// bold, where a greyed one is muted (#303).
+fn ready(key: &Cell, look: TextLook) -> bool {
+    key.modifier.contains(look.key.add_modifier)
+}
+
 #[test]
 fn every_key_the_list_names_does_what_it_says() {
     let mut pressed = 0;
-    for command in COMMANDS {
-        for each in command.keys {
+    for control in CONTROLS {
+        for each in control.keys {
             let Some(action) = each.action else {
                 continue;
             };
-            let got = Keys::new().action_for(event(each.key));
-            assert_eq!(got, Some(action), "{} ({})", each.key, each.name);
+            let got = Keys::new().action_for(event(each.written));
+            assert_eq!(got, Some(action), "{} ({})", each.written, each.does);
             pressed += 1;
         }
     }
@@ -65,9 +71,9 @@ fn every_key_the_list_names_does_what_it_says() {
 
 #[test]
 fn every_key_with_a_job_in_the_world_is_in_the_list() {
-    let listed: Vec<Action> = COMMANDS
+    let listed: Vec<Action> = CONTROLS
         .iter()
-        .flat_map(|command| command.keys)
+        .flat_map(|control| control.keys)
         .filter_map(|each| each.action)
         .collect();
     let mut events: Vec<KeyEvent> = (' '..='~')
@@ -119,18 +125,6 @@ fn every_key_with_a_job_in_the_world_is_in_the_list() {
     }
 }
 
-/// The status line's cells of `hint` (`. step`), as drawn on `screen`.
-fn hint_cells<'a>(screen: &'a Buffer, hint: &str) -> Vec<&'a ratatui::buffer::Cell> {
-    let line = lines(screen)[29].clone();
-    let at = line
-        .find(hint)
-        .unwrap_or_else(|| panic!("no {hint:?} in {line:?}"));
-    let x = line[..at].chars().count() as u16;
-    (0..hint.chars().count() as u16)
-        .map(|i| &screen[(x + i, 29)])
-        .collect()
-}
-
 #[test]
 fn a_hint_that_would_do_nothing_is_greyed_not_hidden() {
     let world = garden_with_sprites();
@@ -176,15 +170,8 @@ fn the_world_s_hints_and_help_s_come_from_the_list() {
     );
 }
 
-/// Types `text` into whatever's open.
-fn type_in(app: &mut terra_tui::app::App, world: &terra_sim::World, text: &str) {
-    for c in text.chars() {
-        app.apply(Action::Type(c), world);
-    }
-}
-
 #[test]
-fn colon_opens_the_palette_which_finds_a_command_by_the_starts_of_its_words() {
+fn colon_opens_the_palette_which_finds_a_control_by_the_starts_of_its_words() {
     let world = garden_with_sprites();
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
     app.apply(Action::Palette, &world);
@@ -202,7 +189,7 @@ fn colon_opens_the_palette_which_finds_a_command_by_the_starts_of_its_words() {
     type_in(&mut app, &world, "tree");
     let rows = app.palette_rows();
     assert_eq!(rows.len(), 1, "{rows:?}");
-    assert_eq!(rows[0].1.name, "family tree");
+    assert_eq!(rows[0].key.does, "family tree");
     let screen = lines(&render(&app, &world, 100, 30));
     let found = &screen[top + 2];
     assert!(found.contains(" family tree · sprites"), "{found}");
@@ -213,22 +200,27 @@ fn colon_opens_the_palette_which_finds_a_command_by_the_starts_of_its_words() {
     app.apply(Action::Back, &world);
     app.apply(Action::Palette, &world);
     type_in(&mut app, &world, "gen sav");
-    let names: Vec<&str> = app.palette_rows().iter().map(|(_, k)| k.name).collect();
+    let names: Vec<&str> = app.palette_rows().iter().map(|row| row.key.does).collect();
     assert_eq!(names, ["save its genome"]);
 
     // And by other words for it (design §6.1).
     app.apply(Action::Back, &world);
     app.apply(Action::Palette, &world);
     type_in(&mut app, &world, "egg");
-    let names: Vec<&str> = app.palette_rows().iter().map(|(_, k)| k.name).collect();
+    let names: Vec<&str> = app.palette_rows().iter().map(|row| row.key.does).collect();
     assert_eq!(
         names,
-        ["population graph", "family tree", "save its genome"]
+        [
+            "the Place menu",
+            "population graph",
+            "family tree",
+            "save its genome"
+        ]
     );
 }
 
 #[test]
-fn enter_runs_the_chosen_command_and_esc_closes_the_palette() {
+fn enter_runs_the_chosen_control_and_esc_closes_the_palette() {
     let world = garden_with_sprites();
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
     app.apply(Action::Palette, &world);
@@ -240,7 +232,7 @@ fn enter_runs_the_chosen_command_and_esc_closes_the_palette() {
     app.apply(Action::Back, &world);
     app.apply(Action::Palette, &world);
     type_in(&mut app, &world, "pa");
-    let names: Vec<&str> = app.palette_rows().iter().map(|(_, k)| k.name).collect();
+    let names: Vec<&str> = app.palette_rows().iter().map(|row| row.key.does).collect();
     assert!(names.contains(&"pause or resume"), "{names:?}");
     let pause = names.iter().position(|&n| n == "pause or resume").unwrap();
     for _ in 0..pause {
@@ -284,17 +276,114 @@ fn the_palette_lists_only_what_works_in_the_world() {
     let world = garden_with_sprites();
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
     app.apply(Action::Palette, &world);
-    for (command, _) in app.palette_rows() {
+    for row in app.palette_rows() {
+        let control = row.control;
         assert!(
-            command
+            control
                 .headings
                 .iter()
                 .any(|heading| heading.in_the_world()),
             "{}",
-            command.written
+            control.written
         );
     }
     // The sprite list's keys aren't there; opening the list is.
     type_in(&mut app, &world, "sort");
     assert!(app.palette_rows().is_empty());
+}
+
+#[test]
+fn hints_with_nothing_to_choose_or_no_sprite_are_greyed() {
+    let world = garden_with_sprites();
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
+    let look = app.theme.text();
+    // A filter that finds no sprite: nothing to choose or go to.
+    app.apply(Action::SpriteList, &world);
+    app.apply(Action::FilterList, &world);
+    type_in(&mut app, &world, "zzz");
+    let screen = render(&app, &world, 100, 30);
+    assert!(!ready(hint_cells(&screen, "↑↓ choose")[0], look));
+    assert!(!ready(hint_cells(&screen, "enter go to it")[0], look));
+    assert!(ready(hint_cells(&screen, "tab sort")[0], look));
+    app.apply(Action::Back, &world);
+    let screen = render(&app, &world, 100, 30);
+    assert!(ready(hint_cells(&screen, "↑↓ choose")[0], look), "the list");
+    app.apply(Action::Back, &world);
+
+    // The family tree with no sprite selected: nothing to choose on it.
+    app.apply(Action::FamilyTree, &world);
+    let screen = render(&app, &world, 100, 30);
+    assert!(!ready(hint_cells(&screen, "←→↑↓ choose")[0], look));
+    assert!(!ready(hint_cells(&screen, "enter centre on it")[0], look));
+    assert!(ready(hint_cells(&screen, "esc close")[0], look));
+    app.apply(Action::Back, &world);
+    app.apply(Action::SelectNext, &world);
+    app.apply(Action::FamilyTree, &world);
+    let screen = render(&app, &world, 100, 30);
+    assert!(ready(hint_cells(&screen, "←→↑↓ choose")[0], look));
+}
+
+#[test]
+fn a_menu_gives_its_own_hints_and_question_mark_opens_help_over_it() {
+    let world = garden_with_sprites();
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
+    app.apply(Action::Mode(CursorMode::Grab), &world);
+    app.apply(Action::Mode(CursorMode::Grab), &world);
+    assert_eq!(app.screen(), Screen::PlaceMenu);
+    let line = status_line(&app, &world);
+    assert!(
+        line.ends_with("↑↓ choose  enter pick  esc close"),
+        "{line:?}"
+    );
+    app.apply(Action::Help, &world);
+    assert_eq!(app.screen(), Screen::Help);
+    app.apply(Action::Back, &world);
+    assert_eq!(app.screen(), Screen::PlaceMenu, "back to the menu");
+}
+
+#[test]
+fn the_top_bar_s_help_is_greyed_while_question_mark_would_type() {
+    let world = garden_with_sprites();
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
+    let look = app.theme.text();
+    let help_key = |app: &terra_tui::app::App| {
+        let screen = render(app, &world, 100, 30);
+        let bar = lines(&screen)[0].clone();
+        let at = bar.find("? help").expect("the top bar's help");
+        screen[(bar[..at].chars().count() as u16, 0)].clone()
+    };
+    assert!(ready(&help_key(&app), look));
+    app.apply(Action::Palette, &world);
+    assert!(!ready(&help_key(&app), look), "`?` types into the palette");
+    app.apply(Action::Back, &world);
+    app.apply(Action::Help, &world);
+    assert!(ready(&help_key(&app), look), "`?` closes help");
+}
+
+#[test]
+fn the_palette_teaches_keys_it_can_t_press_and_the_wheel_chooses() {
+    let world = garden_with_sprites();
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
+    let look = app.theme.text();
+    app.apply(Action::Palette, &world);
+    type_in(&mut app, &world, "place");
+    let rows = app.palette_rows();
+    assert_eq!(rows.len(), 1, "{rows:?}");
+    assert_eq!(rows[0].key.written, "C again");
+    assert_eq!(rows[0].key.action, None);
+    let screen = render(&app, &world, 100, 30);
+    assert!(!ready(hint_cells(&screen, "enter do it")[0], look));
+    // Enter on it just closes the palette: the player has the key.
+    app.apply(Action::Enter, &world);
+    assert_eq!(app.screen(), Screen::Normal);
+    assert_eq!(app.mode(), CursorMode::Select);
+
+    app.apply(Action::Palette, &world);
+    let at = ratatui::layout::Position::new(20, 5);
+    app.apply(Action::Wheel { at, notches: 2 }, &world);
+    assert_eq!(app.palette_choice(), 2);
+    app.apply(Action::Wheel { at, notches: -1 }, &world);
+    assert_eq!(app.palette_choice(), 1);
+    let screen = render(&app, &world, 100, 30);
+    assert!(ready(hint_cells(&screen, "enter do it")[0], look));
 }
