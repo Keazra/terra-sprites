@@ -281,8 +281,8 @@ impl Plot {
     }
 
     /// The legend: each band's swatch and name, then the limit's line, or
-    /// with shares, that they're shares.
-    fn legend(&self, look: &PopulationLook) -> Line<'static> {
+    /// with shares, that they're shares, in `muted` (design §6.2).
+    fn legend(&self, look: &PopulationLook, muted: Style) -> Line<'static> {
         let mut spans = vec![Span::raw(" ")];
         for band in Band::ALL {
             spans.push(Span::styled(
@@ -292,7 +292,7 @@ impl Plot {
             spans.push(Span::raw(format!(" {}  ", band.plural())));
         }
         if self.shares {
-            spans.push(Span::raw("as shares of each column"));
+            spans.push(Span::styled("as shares of each column", muted));
             return Line::from(spans);
         }
         spans.push(Span::styled(
@@ -514,17 +514,19 @@ pub(crate) fn lines(app: &App, world: &World, width: usize, rows: usize) -> Vec<
     lines.push(plot.axis(Some(column)));
     lines.push(plot.ticks());
     lines.push(Line::default());
-    lines.push(plot.legend(&look));
+    lines.push(plot.legend(&look, app.theme.text().muted));
     lines.extend(plot.reading(column, world.data()).map(Line::from));
     lines
 }
 
 /// The small graph at the top of the World tab, `width` columns wide: a
-/// heading, the graph and its axis.
+/// heading, in the theme's heading colour (design §6.2), the graph and its
+/// axis.
 pub(crate) fn small(app: &App, world: &World, width: usize) -> Vec<Line<'static>> {
     let look = app.theme.population();
     let plot = Plot::small(world, width);
-    let mut lines = vec![Line::from(format!(" population, {}", covers(world)))];
+    let heading = format!(" population, {}", covers(world));
+    let mut lines = vec![Line::styled(heading, app.theme.text().heading)];
     lines.extend(plot.rows(SMALL_ROWS, &look));
     lines.push(plot.axis(None));
     lines

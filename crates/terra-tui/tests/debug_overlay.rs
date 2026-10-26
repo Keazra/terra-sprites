@@ -87,13 +87,14 @@ fn field() -> World {
         .build()
 }
 
-/// The screen cells the overlay covers at 100×30, row by row: inside the
-/// map view's border, at its top right, 29 wide and 6 high.
+/// The screen cells the overlay covers at 100×30, row by row: at the map
+/// view's top right, under the top bar and left of the inspector, 29 wide
+/// and 6 high.
 fn overlay_rows(app: &App, world: &World) -> Vec<String> {
     let screen = lines(&render(app, world));
-    screen[2..8]
+    screen[1..7]
         .iter()
-        .map(|row| row.chars().skip(24).take(29).collect())
+        .map(|row| row.chars().skip(25).take(29).collect())
         .collect()
 }
 
@@ -131,16 +132,20 @@ fn f3_shows_the_overlay_in_the_map_view_s_top_right_corner_and_again_hides_it() 
     let rows = overlay_rows(&app, &world);
     assert_eq!(rows[0], boxed(["", "", "", ""])[0], "its top border");
     assert_eq!(rows[5], boxed(["", "", "", ""])[5], "its bottom border");
+    // The map view has no frame (design §6.1), so it runs to the map
+    // view's right edge, and the inspector beside it stays as it was.
     let screen = lines(&render(&app, &world));
-    assert!(
-        screen[1].starts_with("┌─ Map ─"),
-        "the map view's border stays: {}",
-        screen[1]
-    );
+    let beside = |rows: &[String]| -> Vec<String> {
+        rows[1..7]
+            .iter()
+            .map(|row| row.chars().skip(54).collect())
+            .collect()
+    };
+    assert_eq!(beside(&screen), beside(&before), "the inspector");
     assert_eq!(
-        screen[2].chars().nth(53),
-        Some('│'),
-        "inside the map view's border"
+        screen[1].chars().take(25).collect::<String>(),
+        before[1].chars().take(25).collect::<String>(),
+        "the map's tiles left of it"
     );
 
     apply(&mut app, &world, Action::DebugOverlay);

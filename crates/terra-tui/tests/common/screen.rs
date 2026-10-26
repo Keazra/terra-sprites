@@ -91,6 +91,16 @@ pub fn inside(row: &str) -> &str {
     row.trim_start_matches('│').trim_end_matches('│').trim()
 }
 
+/// The event log's three lines on a screen of `rows`, as from `lines`:
+/// the rows between its title row and the status line, trimmed (design
+/// §6.1).
+pub fn log_rows(rows: &[String]) -> Vec<String> {
+    rows[rows.len() - 4..rows.len() - 1]
+        .iter()
+        .map(|row| row.trim().to_string())
+        .collect()
+}
+
 /// The inspector's rows on a 100×30 screen: its title, then the text inside
 /// its border, trimmed.
 pub fn inspector(app: &App, world: &World) -> (String, Vec<String>) {

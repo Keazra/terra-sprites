@@ -4,12 +4,12 @@
 mod common;
 use common::screen::{
     COPY_AND_CHANGE, HUNGRY_GENOME, SPEED_10, a_lone_egg, app_for, garden, garden_with_sprites,
-    generated_world, inside, inspector, inspector_on, one_sprite, one_sprite_among,
+    generated_world, inside, inspector, inspector_on, log_rows, one_sprite, one_sprite_among,
     one_sprite_doing, one_sprite_in, pointer_on, render,
 };
 use common::{
     LETHAL_THORNS, WorldBuilder, at, died, finished, group, inspector_line, inspector_rows, lines,
-    open, pack, pack_changing, run, select,
+    open, open_tab, pack, pack_changing, run, select,
 };
 
 use ratatui::buffer::Buffer;
@@ -44,18 +44,15 @@ fn right_part(buffer: &Buffer, width: u16) -> Vec<String> {
 fn with_room_the_world_tab_shows_the_pack_and_every_object_types_numbers() {
     let world = garden(pack());
     let app = app_for(&world, Theme::cp437(), 100, 30);
-    let inspector = right_part(&render(&app, &world, 100, 30), 46);
+    let inspector = right_part(&render(&app, &world, 100, 30), 45);
     assert_eq!(
-        inspector[1], "┌─ Body Brain Chem Genome [World] ───────────┐",
+        inspector[1], " Body Brain Chem Genome  World",
         "with nothing selected, the title is just the tabs"
     );
+    assert_eq!(open_tab(&app, &world), "World");
     let body: Vec<&str> = inspector[2 + GRAPH_LINES..12 + GRAPH_LINES]
         .iter()
-        .map(|line| {
-            line.trim_start_matches('│')
-                .trim_end_matches('│')
-                .trim_end()
-        })
+        .map(String::as_str)
         .collect();
     assert_eq!(
         body,
@@ -86,14 +83,17 @@ fn the_sprite_tabs_say_how_to_select_a_sprite_when_none_is() {
     let world = garden_with_sprites();
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
     for (tab, title) in [
-        ("Body", "┌─ [Body] Brain Chem Genome World ───────────┐"),
-        ("Brain", "┌─ Body [Brain] Chem Genome World ───────────┐"),
-        ("Chem", "┌─ Body Brain [Chem] Genome World ───────────┐"),
-        ("Genome", "┌─ Body Brain Chem [Genome] World ───────────┐"),
+        ("Body", "  Body  Brain Chem Genome World"),
+        ("Brain", " Body  Brain  Chem Genome World"),
+        ("Chem", " Body Brain  Chem  Genome World"),
+        ("Genome", " Body Brain Chem  Genome  World"),
     ] {
         app.apply(Action::NextTab, &world);
         let (top, text) = inspector(&app, &world);
+        // The open tab is in reverse video, as wide as brackets would be
+        // (design §6.1).
         assert_eq!(top, title, "{tab}");
+        assert_eq!(open_tab(&app, &world), tab);
         assert_eq!(
             text[0], "No sprite selected: click one, or press Tab",
             "{tab}"
@@ -108,18 +108,16 @@ fn the_title_names_the_selected_sprite_before_the_tabs() {
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
     app.apply(Action::SelectNext, &world);
     let id = world.sprites().next().expect("a sprite").id().0;
+    // A label too long for the row is shortened to the ID, never the tabs
+    // (design §6.1); "Sprite #5" fits.
     let (top, _) = inspector(&app, &world);
-    // "Sprite #5" and five tabs don't fit in 46 columns, so the label is
-    // shortened to the ID, never the tabs (design §6.1).
-    let title = format!("┌─ #{id} ── [Body] Brain Chem Genome World ─");
-    assert!(top.starts_with(&title), "{top:?}");
-    assert!(top.ends_with("─┐"), "{top:?}");
+    assert_eq!(
+        top,
+        format!(" Sprite #{id}   Body  Brain Chem Genome World")
+    );
     app.apply(Action::PreviousTab, &world);
     let (top, _) = inspector(&app, &world);
-    assert!(
-        top.starts_with(&format!("┌─ #{id} ── Body Brain Chem Genome [World] ─")),
-        "{top:?}"
-    );
+    assert_eq!(top, format!(" Sprite #{id}  Body Brain Chem Genome  World"));
 }
 
 #[test]
@@ -132,7 +130,7 @@ fn when_the_selected_sprite_dies_its_tabs_say_how_and_at_what_age() {
     for tab in ["Body", "Brain", "Chem", "Genome"] {
         let (top, text) = inspector(&app, &world);
         assert!(
-            top.starts_with(&format!("┌─ #{} ──", id.0)),
+            top.starts_with(&format!(" Sprite #{}  ", id.0)),
             "{tab}: {top:?}"
         );
         assert_eq!(
@@ -159,7 +157,7 @@ fn a_sprite_hurt_to_death_by_an_object_is_named_after_its_type() {
     );
     let screen = lines(&render(&app, &world, 100, 30));
     assert_eq!(
-        inside(&screen[25]),
+        log_rows(&screen)[0],
         format!(
             "4,012  Sprite #{} died (hurt by thornbush, age 4,012)",
             id.0
@@ -393,8 +391,8 @@ fn the_brain_tab_shows_attention_scores_and_what_adds_most_to_the_decision() {
     let objects = [(at(8, 3), "berry_bush"), (at(6, 1), "berry")];
     let (world, mut app) = one_sprite_among(HUNGRY_GENOME, &objects, &[], 1);
     open(&mut app, &world, Tab::Brain);
-    let (top, text) = inspector(&app, &world);
-    assert!(top.contains("[Brain]"), "{top:?}");
+    let (_, text) = inspector(&app, &world);
+    assert_eq!(open_tab(&app, &world), "Brain");
     // Attention: hunger's 1 × .8 on the berry, plus salience .5 × (1 − its
     // distance, .34); the bush has salience alone, .5 × (1 − .5).
     // The decision: hunger .8 × 1, .8 × (1 − 0) × .5 and always 1 × −.1;
@@ -403,13 +401,13 @@ fn the_brain_tab_shows_attention_scores_and_what_adds_most_to_the_decision() {
         text[..8],
         [
             "ATTENTION",
-            "► berry                               1.13",
-            "berry bush                           .25",
+            "► berry                                1.13",
+            "berry bush                            .25",
             "",
-            "DECISION: EAT                         1.10",
-            "hunger                              +.80",
-            "hunger & not target adjacent        +.40",
-            "always                              -.10",
+            "DECISION: EAT                          1.10",
+            "hunger                               +.80",
+            "hunger & not target adjacent         +.40",
+            "always                               -.10",
         ]
     );
     assert!(text[8..].iter().all(String::is_empty), "{text:?}");
@@ -466,16 +464,8 @@ fn the_brain_tab_shows_what_the_sprite_has_learned_as_memory() {
 
 /// The inspector's text, keeping the indent the Brain tab uses.
 fn brain_lines(app: &App, world: &World) -> Vec<String> {
-    let rows = right_part(&render(app, world, 100, 30), 46);
-    rows[2..rows.len() - 7]
-        .iter()
-        .map(|row| {
-            row.trim_start_matches('│')
-                .trim_end_matches('│')
-                .trim_end()
-                .to_string()
-        })
-        .collect()
+    let rows = right_part(&render(app, world, 100, 30), 45);
+    rows[2..rows.len() - 5].to_vec()
 }
 
 /// The Brain tab's lines, keeping their indent, for `world`'s first sprite
@@ -773,7 +763,7 @@ fn the_brain_tab_shows_memory_before_the_first_decision() {
             "Nothing decided yet",
             "",
             "THORNBUSHES",
-            "bad                                 -.80",
+            "bad                                  -.80",
         ]
     );
 }
@@ -805,7 +795,7 @@ fn the_brain_tab_lists_the_places_the_sprite_remembers() {
     let at = row_of(&text, "PLACES");
     assert_eq!(
         text[at..at + 2],
-        ["PLACES", "water · 1 tile W                    1.00"]
+        ["PLACES", "water · 1 tile W                     1.00"]
     );
 }
 
@@ -917,7 +907,7 @@ fn the_brain_tab_says_when_nothing_has_been_decided_or_is_in_sight() {
             "ATTENTION",
             "nothing in sight",
             "",
-            "DECISION: WANDER                       .30",
+            "DECISION: WANDER                        .30",
         ]
     );
 }
@@ -926,8 +916,8 @@ fn the_brain_tab_says_when_nothing_has_been_decided_or_is_in_sight() {
 fn the_chem_tab_lists_every_chemical_with_its_level_and_change_per_tick() {
     let (world, mut app) = one_sprite(WORKED_GENOME, 1);
     open(&mut app, &world, Tab::Chem);
-    let (top, text) = inspector_on(&app, &world, 32);
-    assert!(top.contains("[Chem]"), "{top:?}");
+    let (_, text) = inspector_on(&app, &world, 32);
+    assert_eq!(open_tab(&app, &world), "Chem");
     assert_eq!(
         text,
         [
@@ -957,8 +947,10 @@ fn the_chem_tab_lists_every_chemical_with_its_level_and_change_per_tick() {
             "h4   .00   h5   .00   h6   .00   h7   .00",
             "h8   .00   h9   .00   h10  .00   h11  .00",
             "h12  .00   h13  .00   h14  .00   h15  .00",
+            "feminiser     .00",
+            "longing       .00",
         ],
-        "as much as fits at 100×32"
+        "the whole tab at 100×32"
     );
 }
 
@@ -1017,7 +1009,7 @@ fn the_genome_tab_marks_genes_naming_a_category_the_world_lacks() {
     ])"#;
     let (world, mut app) = one_sprite(genome, 0);
     open(&mut app, &world, Tab::Genome);
-    let rows = right_part(&render(&app, &world, 100, 40), 46);
+    let rows = right_part(&render(&app, &world, 100, 40), 45);
     let text = rows[2..30]
         .iter()
         .map(|row| inside(row))
@@ -1044,8 +1036,8 @@ fn the_genome_tab_shows_brain_settings_instincts_and_attention_instincts() {
     ])"#;
     let (world, mut app) = one_sprite(genome, 0);
     open(&mut app, &world, Tab::Genome);
-    let rows = right_part(&render(&app, &world, 100, 30), 46);
-    assert!(rows[1].contains("[Genome]"), "{:?}", rows[1]);
+    let rows = right_part(&render(&app, &world, 100, 30), 45);
+    assert_eq!(open_tab(&app, &world), "Genome");
     let text: Vec<&str> = rows[2..11].iter().map(|row| inside(row)).collect();
     assert_eq!(
         text,
@@ -1078,7 +1070,7 @@ fn the_genome_tab_shows_whom_an_attention_instinct_is_about() {
     ])"#;
     let (world, mut app) = one_sprite(genome, 0);
     open(&mut app, &world, Tab::Genome);
-    let rows = right_part(&render(&app, &world, 100, 30), 46);
+    let rows = right_part(&render(&app, &world, 100, 30), 45);
     let text: Vec<&str> = rows[2..10].iter().map(|row| inside(row)).collect();
     assert_eq!(
         text,
@@ -1116,7 +1108,7 @@ fn the_genome_tab_shows_switches_dormant_genes_and_weakened_genes() {
     }
     assert!(vigour(&world) < 1.0, "a gene was scarred");
     open(&mut app, &world, Tab::Genome);
-    let rows = right_part(&render(&app, &world, 100, 30), 46);
+    let rows = right_part(&render(&app, &world, 100, 30), 45);
     let text: Vec<&str> = rows[2..7].iter().map(|row| inside(row)).collect();
     assert_eq!(
         text,
@@ -1153,8 +1145,8 @@ fn the_genome_tab_groups_genes_as_plain_lines_and_marks_those_with_no_effect() {
     let (world, mut app) = one_sprite(genome, 0);
     open(&mut app, &world, Tab::Genome);
     let screen = render(&app, &world, 100, 40);
-    let rows = right_part(&screen, 46);
-    assert!(rows[1].contains("[Genome]"), "{:?}", rows[1]);
+    let rows = right_part(&screen, 45);
+    assert_eq!(open_tab(&app, &world), "Genome");
     let text: Vec<&str> = rows[2..30].iter().map(|row| inside(row)).collect();
     assert_eq!(
         text,
@@ -1234,23 +1226,23 @@ fn first_and_last(app: &App, world: &World) -> (String, String) {
 fn page_down_and_up_scroll_a_long_tab_a_page_and_stop_at_either_end() {
     let (world, mut app) = one_sprite(&long_genome(), 0);
     open(&mut app, &world, Tab::Genome);
-    // 21 rows fit at 100×30, so the tab scrolls at most 40 lines.
+    // 23 rows fit at 100×30, so the tab scrolls at most 38 lines.
     let mut page = |pages: i32| {
         app.apply(Action::ScrollTab { pages }, &world);
         first_and_last(&app, &world)
     };
     let shown = |first: &str, last: &str| (first.to_string(), last.to_string());
     let gain = |gain: &str| format!("always → boredom +{gain}");
-    assert_eq!(page(1), shown(&gain(".021"), &gain(".041")), "a page down");
+    assert_eq!(page(1), shown(&gain(".023"), &gain(".045")), "a page down");
     assert_eq!(
         page(1),
-        shown(&gain(".04"), &gain(".06")),
+        shown(&gain(".038"), &gain(".06")),
         "no further than the end"
     );
-    assert_eq!(page(-1), shown(&gain(".019"), &gain(".039")), "a page up");
+    assert_eq!(page(-1), shown(&gain(".015"), &gain(".037")), "a page up");
     assert_eq!(
         page(-1),
-        shown("EMITTERS", &gain(".02")),
+        shown("EMITTERS", &gain(".022")),
         "no further than the top"
     );
 }
@@ -1323,7 +1315,7 @@ fn selecting_another_sprite_starts_its_tab_from_the_top_and_the_same_one_again_d
     app.apply(Action::left_click(pointer_on(&world, 2, 3)), &world);
     assert_eq!(
         first_and_last(&app, &world).0,
-        "always → boredom +.021",
+        "always → boredom +.023",
         "the same sprite again"
     );
     app.apply(Action::SelectNext, &world);
@@ -1334,12 +1326,12 @@ fn selecting_another_sprite_starts_its_tab_from_the_top_and_the_same_one_again_d
 fn after_the_inspector_grows_page_up_scrolls_from_what_is_shown() {
     let (world, mut app) = one_sprite(&long_genome(), 0);
     open(&mut app, &world, Tab::Genome);
-    app.apply(Action::ScrollTab { pages: 2 }, &world); // the end: line 40 at the top
-    // At 100×40 the tab has 31 rows, so the end is line 30 at the top.
+    app.apply(Action::ScrollTab { pages: 2 }, &world); // the end: line 38 at the top
+    // At 100×40 the tab has 33 rows, so the end is line 28 at the top.
     app.fit(ui::areas(Size::new(100, 40)));
     app.apply(Action::ScrollTab { pages: -1 }, &world);
-    let rows = right_part(&render(&app, &world, 100, 40), 46);
-    assert_eq!(inside(&rows[2]), "EMITTERS", "a page up from line 30");
+    let rows = right_part(&render(&app, &world, 100, 40), 45);
+    assert_eq!(inside(&rows[2]), "EMITTERS", "a page up from line 28");
 }
 
 #[test]
@@ -1561,8 +1553,8 @@ fn selecting_the_selected_sprite_from_a_scrolled_world_tab_opens_body_at_the_top
     app.apply(Action::ScrollTab { pages: 1 }, &world);
     // The first sprite is at (2, 3).
     app.apply(Action::left_click(pointer_on(&world, 2, 3)), &world);
-    let rows = right_part(&render(&app, &world, 100, 12), 46);
-    assert!(rows[1].contains("[Body]"), "{:?}", rows[1]);
+    let rows = right_part(&render(&app, &world, 100, 12), 45);
+    assert_eq!(open_tab(&app, &world), "Body");
     // Its first line is what it's doing: nothing has moved it to act yet
     // (M2 design §19.2).
     assert!(inside(&rows[2]).starts_with("Standing"), "{:?}", rows[2]);
@@ -1595,18 +1587,11 @@ fn chemical_names_show_with_spaces_for_underscores() {
 /// The Body tab's lines from "Observed" to the end, on a screen tall
 /// enough to show it all, keeping their leading spaces.
 fn observed_section(app: &App, world: &World) -> Vec<String> {
-    let rows = right_part(&render(app, world, 100, 60), 46);
-    let text: Vec<String> = rows
-        .iter()
-        .map(|row| {
-            let inner = row.trim_start_matches('│').trim_end_matches('│');
-            inner.trim_end().to_string()
-        })
-        .collect();
+    let text = right_part(&render(app, world, 100, 60), 45);
     let start = row_of(&text, " Observed");
     let end = text[start..]
         .iter()
-        .position(|t| t.is_empty() || t.starts_with('└'))
+        .position(String::is_empty)
         .map_or(text.len(), |n| start + n);
     text[start..end].to_vec()
 }
@@ -1640,8 +1625,8 @@ fn the_body_tab_ends_with_what_was_observed_and_how_long_ago() {
         [
             " Observed",
             "        just now · Rested",
-            "     8 ticks ago · Wandered off, but gave",
-            "                   up: the way was blocked",
+            "     8 ticks ago · Wandered off, but gave up:",
+            "                   the way was blocked",
             "     9 ticks ago · Wandered off x2",
             " 1,296 ticks ago · Rested",
         ]

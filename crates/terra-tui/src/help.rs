@@ -7,7 +7,7 @@ use terra_sim::World;
 
 use crate::app::App;
 use crate::text::display_name;
-use crate::theme::{Emote, SemanticTile};
+use crate::theme::{Emote, SemanticTile, TextLook};
 
 /// A group of keys: its heading, and each key with what it does.
 type Group = (&'static str, &'static [(&'static str, &'static str)]);
@@ -89,19 +89,26 @@ const COLUMNS: [&[Group]; 3] = [
 const KEY_WIDTH: usize = 11;
 
 /// The help screen's lines, for a screen `width` columns wide inside its
-/// border.
+/// border: the headings in the theme's heading colour and each key in its
+/// key style (design §6.2).
 pub(crate) fn lines(app: &App, world: &World, width: usize) -> Vec<Line<'static>> {
+    let look = app.theme.text();
     let column_width = width / COLUMNS.len();
-    let columns: Vec<Vec<String>> = COLUMNS
+    let columns: Vec<Vec<Vec<Span<'static>>>> = COLUMNS
         .iter()
         .map(|groups| {
             groups
                 .iter()
                 .flat_map(|(heading, keys)| {
-                    let keys = keys
-                        .iter()
-                        .map(|(key, what)| format!(" {key:<KEY_WIDTH$}{what}"));
-                    std::iter::once(format!(" {heading}")).chain(keys)
+                    let keys = keys.iter().map(move |(key, what)| {
+                        let pad = KEY_WIDTH.saturating_sub(key.chars().count());
+                        vec![
+                            Span::raw(" "),
+                            Span::styled(*key, look.key),
+                            Span::raw(format!("{}{what}", " ".repeat(pad))),
+                        ]
+                    });
+                    std::iter::once(headed(heading, "", look)).chain(keys)
                 })
                 .collect()
         })
@@ -109,28 +116,50 @@ pub(crate) fn lines(app: &App, world: &World, width: usize) -> Vec<Line<'static>
     let rows = columns.iter().map(Vec::len).max().unwrap_or(0);
     let mut lines: Vec<Line<'static>> = (0..rows)
         .map(|row| {
-            let text: String = columns
-                .iter()
-                .map(|column| {
-                    let cell = column.get(row).map_or("", String::as_str);
-                    format!("{cell:<column_width$}")
-                })
-                .collect();
-            Line::from(text.trim_end().to_string())
+            // Each column starts where the one before it ends, and no sooner
+            // than a column's width after it.
+            let mut spans = Vec::new();
+            let (mut used, mut start) = (0, 0);
+            for column in &columns {
+                let cell = column.get(row).cloned().unwrap_or_default();
+                let cell_width: usize = cell.iter().map(|span| span.content.chars().count()).sum();
+                if !cell.is_empty() {
+                    spans.push(Span::raw(" ".repeat(start - used)));
+                    spans.extend(cell);
+                    used = start + cell_width;
+                }
+                start += cell_width.max(column_width);
+            }
+            Line::from(spans)
         })
         .collect();
     lines.push(Line::default());
-    lines.push(Line::from(
-        " COLOURS: a sprite's strongest drive, once it's above half",
-    ));
+    lines.push(Line::from(headed(
+        "COLOURS",
+        ": a sprite's strongest drive, once it's above half",
+        look,
+    )));
     lines.extend(colour_legend(app, world, width));
     lines.extend(emote_legend(app, width));
     lines.push(lineage_legend(app));
     let folder = app
         .data_folder()
         .map_or_else(|| "none".to_string(), |folder| folder.display().to_string());
-    lines.push(Line::from(format!(" FILES    {folder}")));
+    lines.push(Line::from(headed("FILES", &format!("    {folder}"), look)));
     lines
+}
+
+/// A line of the help that starts with a `heading`, in the theme's heading
+/// colour, then `rest`.
+fn headed(heading: &str, rest: &str, look: TextLook) -> Vec<Span<'static>> {
+    let mut spans = vec![
+        Span::raw(" "),
+        Span::styled(heading.to_string(), look.heading),
+    ];
+    if !rest.is_empty() {
+        spans.push(Span::raw(rest.to_string()));
+    }
+    spans
 }
 
 /// Each drive's colour on a sprite, then a sprite with none above half,
@@ -178,7 +207,7 @@ fn lineage_legend(app: &App) -> Line<'static> {
         (lineage.young, "young, theirs"),
         (lineage.others, "the rest"),
     ];
-    let mut spans = vec![Span::raw(" LINEAGE  ")];
+    let mut spans = headed("LINEAGE", "  ", app.theme.text());
     for (colour, who) in marked {
         spans.push(Span::styled(sprite.clone(), Style::default().fg(colour)));
         spans.push(Span::raw(format!(" {who}  ")));
@@ -201,7 +230,7 @@ fn emote_legend(app: &App, width: usize) -> Vec<Line<'static>> {
     const HEAD: &str = " EMOTES   ";
     let indent = || vec![Span::raw(" ".repeat(HEAD.len()))];
     let mut lines = Vec::new();
-    let mut spans = vec![Span::raw(HEAD)];
+    let mut spans = headed(HEAD.trim(), "   ", app.theme.text());
     let mut used = HEAD.len();
     for (emote, meaning) in emotes {
         let entry = format!(" {meaning}  ");

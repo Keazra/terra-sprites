@@ -19,11 +19,16 @@ fn field() -> World {
         .build()
 }
 
-/// The event log's lines, without their ticks.
+/// The event log's lines, without their ticks: the three rows above the
+/// status line.
 fn log(app: &App, world: &World) -> Vec<String> {
     let screen = render(app, world);
-    (25..28)
-        .map(|y| (1..99).map(|x| screen[(x, y)].symbol()).collect::<String>())
+    (26..29)
+        .map(|y| {
+            (0..100)
+                .map(|x| screen[(x, y)].symbol())
+                .collect::<String>()
+        })
         .map(|line| {
             line.trim()
                 .split_once("  ")
@@ -140,20 +145,20 @@ fn major_shows_deaths_lessons_and_refusals() {
 }
 
 #[test]
-fn the_log_s_border_shows_the_filters_with_the_one_in_use_in_brackets() {
+fn the_log_s_title_row_shows_the_filters_with_the_one_in_use_in_brackets() {
     let world = field();
     let mut app = logged(&world);
-    let border = |app: &App| row(&render(app, &world), 24);
+    let title = |app: &App| row(&render(app, &world), 25);
     assert!(
-        border(&app).ends_with(" [all] selected major ─┐"),
+        title(&app).ends_with(" [all] selected major"),
         "{}",
-        border(&app)
+        title(&app)
     );
     app.apply(Action::CycleEventFilter, &world);
     assert!(
-        border(&app).ends_with(" all [selected] major ─┐"),
+        title(&app).ends_with(" all [selected] major"),
         "{}",
-        border(&app)
+        title(&app)
     );
 }
 
@@ -161,16 +166,16 @@ fn the_log_s_border_shows_the_filters_with_the_one_in_use_in_brackets() {
 fn a_click_on_the_filters_goes_to_the_next() {
     let world = field();
     let mut app = logged(&world);
-    let border = row(&render(&app, &world), 24);
-    let at = border.chars().position(|c| c == '[').expect("the label") as u16;
-    app.apply(Action::left_click(Position::new(at + 3, 24)), &world);
+    let title = row(&render(&app, &world), 25);
+    let at = title.chars().position(|c| c == '[').expect("the label") as u16;
+    app.apply(Action::left_click(Position::new(at + 3, 25)), &world);
     assert_eq!(app.event_filter(), EventFilter::Selected);
-    app.apply(Action::left_click(Position::new(10, 24)), &world);
+    app.apply(Action::left_click(Position::new(10, 25)), &world);
     assert_eq!(
         app.event_filter(),
         EventFilter::Selected,
-        "the border elsewhere"
+        "the title row elsewhere"
     );
-    app.apply(Action::left_click(Position::new(at + 3, 26)), &world);
+    app.apply(Action::left_click(Position::new(at + 3, 27)), &world);
     assert_eq!(app.event_filter(), EventFilter::Selected, "the log's lines");
 }

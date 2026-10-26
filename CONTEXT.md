@@ -723,7 +723,7 @@ _Avoid_: camera
 
 **Glass**:
 How the wall is drawn where it faces space: a line of light cyan one tile outside the map (Slice 31). It isn't a tile, so nothing on the map reaches it. On the ship (#181), it's drawn one tile outside a sector, over a tile of space.
-_Avoid_: window, border (that's the map view's)
+_Avoid_: window, border
 
 **Track**:
 The viewport following the selected sprite, or egg, so it stays in the middle of the map view. `T` turns it on or off; scrolling by hand turns it off. It follows whichever is selected, and does nothing while nothing is, or while the Cursor holds the selected egg.
@@ -798,7 +798,7 @@ The panel that lists what just happened to sprites, newest first.
 _Avoid_: events panel, console, feed
 
 **Event filter**:
-Which events the event log shows: all of them, the selected sprite's (what it did and what was done to it), or the major ones (deaths, lessons learned, refused commands). `m`, or a click on the filters on the log's border, goes to the next.
+Which events the event log shows: all of them, the selected sprite's (what it did and what was done to it), or the major ones (deaths, lessons learned, refused commands). `m`, or a click on the filters at the right of the log's title row, goes to the next.
 _Avoid_: log level, view
 
 **Colour mode**:
@@ -833,8 +833,16 @@ _Avoid_: icon, bubble, flash
 What the map view draws for a tile, named by meaning (such as grass terrain) rather than by character.
 
 **Theme**:
-A mapping from semantic tiles to glyphs and colours. Two are built in; the player's own go in the themes folder and are picked with `Ctrl+T`.
+A mapping from semantic tiles to glyphs and colours, and from each text role to a style; it may also give the panel shades. Two are built in; the player's own go in the themes folder and are picked with `Ctrl+T`.
 _Avoid_: skin
+
+**Text role** (#302):
+What a piece of the screen's text is for, which the theme styles: a heading, muted (minor) text, good (a gain or a rise), bad (a loss or a fall), a key in a hint, or selected (what's chosen, such as the open tab). Colour never carries a meaning alone: the signs, arrows and capitals stay.
+_Avoid_: colour scheme, highlight (for a role)
+
+**Panel shade** (#302):
+The background a theme may give the inspector and the event log, a little lighter than the terminal's black, with their title rows lighter again, in place of lines between the panels. A theme without shades, such as ASCII, draws a line instead.
+_Avoid_: border, frame, box (pop-ups have boxes; the panels don't)
 
 ### The Cursor
 

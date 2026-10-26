@@ -22,7 +22,7 @@ fn generations_line(world: &World) -> Option<Line<'static>> {
 /// How many grown sprites are fertile, in a pack that breeds and a world
 /// with sprites, and beneath, how many room nearby holds back, or that the
 /// world is full (M2 design §10.7, #331): `fertile 6`, `too crowded 9`.
-fn fertile_lines(world: &World) -> Vec<Line<'static>> {
+fn fertile_lines(world: &World, muted: Style) -> Vec<Line<'static>> {
     if !world.data().breeds() || world.sprites().next().is_none() {
         return Vec::new();
     }
@@ -40,7 +40,7 @@ fn fertile_lines(world: &World) -> Vec<Line<'static>> {
         "fertile",
         count(Fertility::Fertile)
     ))];
-    lines.extend(wrapped(&beneath, 3, Style::default()));
+    lines.extend(wrapped(&beneath, 3, Style::default(), muted));
     lines
 }
 
@@ -66,6 +66,7 @@ pub(super) fn world_tab(app: &App, world: &World) -> Vec<Line<'static>> {
         .collect();
     let total: u64 = world.deaths_by_cause().map(|(_, n)| n).sum();
     let plain = Style::default();
+    let muted = app.theme.text().muted;
     let mut lines = Vec::new();
     if app.can_view(Panel::Graph, Subject::World) {
         lines.extend(crate::graph::small(app, world, WIDTH));
@@ -85,13 +86,13 @@ pub(super) fn world_tab(app: &App, world: &World) -> Vec<Line<'static>> {
         )),
     ]);
     lines.extend(generations_line(world));
-    lines.extend(fertile_lines(world));
+    lines.extend(fertile_lines(world, muted));
     lines.push(Line::from(format!(
         " {:<12}{:>7}",
         "deaths",
         thousands(total)
     )));
-    lines.extend(wrapped(&listed(&deaths), 3, plain));
+    lines.extend(wrapped(&listed(&deaths), 3, plain, muted));
     for object_type in data.object_type_names() {
         let objects: Vec<ObjectView> = world
             .objects()
@@ -111,7 +112,7 @@ pub(super) fn world_tab(app: &App, world: &World) -> Vec<Line<'static>> {
                     format!("{stage} {}", thousands(n as u64))
                 })
                 .collect();
-            lines.extend(wrapped(&listed(&counts), 3, plain));
+            lines.extend(wrapped(&listed(&counts), 3, plain, muted));
         }
         let totals: Vec<String> = data
             .counter_names(object_type)
@@ -125,7 +126,7 @@ pub(super) fn world_tab(app: &App, world: &World) -> Vec<Line<'static>> {
             })
             .collect();
         if !totals.is_empty() {
-            lines.extend(wrapped(&listed(&totals), 3, plain));
+            lines.extend(wrapped(&listed(&totals), 3, plain, muted));
         }
     }
     lines

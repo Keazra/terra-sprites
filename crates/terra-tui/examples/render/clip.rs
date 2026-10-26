@@ -475,8 +475,11 @@ mod tests {
                 rows.iter().all(|row| !row.contains(" Events ")),
                 "{rows:#?}"
             );
-            // The map view's bottom border sits on the status line.
-            assert!(rows[28].starts_with('└'), "{}", rows[28]);
+            // The map view and the inspector run down to the status line,
+            // the inspector on its shade (design §6.1).
+            assert!(!rows[28].contains('└'), "{}", rows[28]);
+            let shade = Theme::cp437().panels().expect("shaded").shade;
+            assert_eq!(frame.screen[(60, 28)].bg, shade);
         }
     }
 

@@ -142,13 +142,13 @@ listed_enum! {
     /// Every filter, in the order `m` goes through them.
     pub const ALL;
 
-    /// Its name on the event log's border.
+    /// Its name on the event log's title row.
     pub fn label(self) -> &'static str;
 }
 
 impl EventFilter {
-    /// The event log's border's label: every filter, the one in use in
-    /// brackets, as the inspector's title shows its tabs.
+    /// The filters on the event log's title row: every filter, the one in
+    /// use in brackets.
     pub fn labels(self) -> String {
         let labels: Vec<String> = EventFilter::ALL
             .iter()
@@ -326,12 +326,14 @@ pub(crate) fn highlight_moved(index: usize, by: i32, count: usize) -> usize {
 /// Where on screen the panels the app works with are drawn.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Areas {
-    /// The screen cells inside the map view's border, where it draws the
-    /// map's tiles and what's past its wall.
+    /// The map view's screen cells, where it draws the map's tiles and
+    /// what's past its wall.
     pub tiles: Rect,
-    /// The inspector, border included, if the screen has room for it.
+    /// The inspector, its title row included, if the screen has room for
+    /// it.
     pub inspector: Option<Rect>,
-    /// The event log, border included, if the screen has room for it.
+    /// The event log, its title row included, if the screen has room for
+    /// it.
     pub event_log: Option<Rect>,
     /// Where the help screen and the sprite list are drawn: between the top
     /// bar and the status line, if the screen has room for the game.
@@ -416,10 +418,11 @@ pub struct App {
     viewport: Origin,
     /// The map's size, in tiles.
     map_size: Size,
-    /// The screen cells inside the map view's border, where it draws the
-    /// map and what's past its wall.
+    /// The map view's screen cells, where it draws the map and what's past
+    /// its wall.
     tile_area: Rect,
-    /// The inspector, border included, if the screen has room for it.
+    /// The inspector, its title row included, if the screen has room for
+    /// it.
     inspector: Option<Rect>,
     /// The screen cell under the mouse pointer, while it's over the map
     /// view.
@@ -521,7 +524,8 @@ pub struct App {
     /// Whether the view follows the selected sprite (`T`, design v21
     /// §6.1).
     tracking: bool,
-    /// The event log, border included, if the screen has room for it.
+    /// The event log, its title row included, if the screen has room for
+    /// it.
     event_log_area: Option<Rect>,
     /// Where the help screen and the sprite list are drawn.
     overlay: Option<Rect>,

@@ -6,7 +6,7 @@ use terra_sim::{
 };
 
 use super::actions::{action_line, logged_line};
-use super::body::bar;
+use super::body::bar_parts;
 use super::brain::{concept_name, scored};
 use super::*;
 use crate::text::Words;
@@ -15,23 +15,17 @@ use crate::text::Words;
 // this tests the title's fitting directly.
 #[test]
 fn a_label_too_long_for_the_title_is_shortened_before_the_tabs_are() {
-    let tabs = "[Body] Chem Genome World";
-    let fit = |label: &str, short: &str| fitted_title(Some((label, short)), tabs);
+    // The five tabs take 30 columns, the open one's spaces included, which
+    // leaves a label 15.
+    let fit = |labels| fitted_label(labels, 30);
+    assert_eq!(fit(Some(("Sprite #530", "#530"))), " Sprite #530  ");
+    assert_eq!(fit(Some(("Sprite #1234567", "#1234567"))), " #1234567  ");
     assert_eq!(
-        fit("Sprite #530", "#530"),
-        " Sprite #530 ── [Body] Chem Genome World "
-    );
-    assert_eq!(
-        fit("Sprite #1234567", "#1234567"),
-        " #1234567 ── [Body] Chem Genome World "
-    );
-    let crowded = "[Body] Brain Chem Genome World Lineage";
-    assert_eq!(
-        fitted_title(Some(("Sprite #1234567", "#1234567")), crowded),
-        format!(" {crowded} "),
+        fitted_label(Some(("Sprite #1234567", "#1234567")), 40),
+        " ",
         "with no room for even the number, the tabs alone"
     );
-    assert_eq!(fitted_title(None, tabs), format!(" {tabs} "));
+    assert_eq!(fit(None), " ");
 }
 
 fn wander(progress: Progress) -> ActionView {
@@ -759,7 +753,7 @@ fn a_scored_name_too_long_for_its_row_wraps_under_itself() {
     assert_eq!(
         lines,
         [
-            "   not attended sprite &               +.40",
+            "   not attended sprite &                +.40",
             "     not target adjacent & hunger",
         ],
         "each input kept whole"
@@ -779,7 +773,7 @@ fn a_wrapped_line_has_the_room_the_number_leaves_on_the_first() {
     assert_eq!(
         scored("   ", &name, "+.40"),
         [
-            "   not attended sprite &               +.40",
+            "   not attended sprite &                +.40",
             "     not target distance & not tiredness",
         ]
     );
@@ -789,8 +783,8 @@ fn a_wrapped_line_has_the_room_the_number_leaves_on_the_first() {
 // screen if one ever did.
 #[test]
 fn a_drive_bar_is_ten_cells_whatever_the_level() {
-    assert_eq!(bar(0.42), "████░░░░░░");
-    assert_eq!(bar(1.05), "██████████");
-    assert_eq!(bar(-0.3), "░░░░░░░░░░");
-    assert_eq!(bar(f32::NAN), "░░░░░░░░░░");
+    assert_eq!(bar_parts(0.42).concat(), "████░░░░░░");
+    assert_eq!(bar_parts(1.05).concat(), "██████████");
+    assert_eq!(bar_parts(-0.3).concat(), "░░░░░░░░░░");
+    assert_eq!(bar_parts(f32::NAN).concat(), "░░░░░░░░░░");
 }

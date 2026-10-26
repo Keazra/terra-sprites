@@ -15,6 +15,7 @@ use std::path::PathBuf;
 use ratatui::buffer::Buffer;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::layout::{Position, Rect, Size};
+use ratatui::style::Modifier;
 use ratatui::{Terminal, backend::TestBackend};
 use terra_sim::{
     ActionView, Command, DataPack, EntityId, Event, EventKind, Genome, Hurt, Map, Outcome, Pos,
@@ -715,29 +716,36 @@ pub fn open(app: &mut App, world: &World, tab: Tab) {
     }
 }
 
-/// The inspector on a 100×`height` screen: its title row, then each row
-/// inside its border, the border and trailing spaces left off and the
-/// margin kept. At 100 columns it's the right-hand 46, above the event
-/// log's 7 rows.
+/// The inspector on a 100×`height` screen: its title row, then each row of
+/// the open tab, trailing spaces left off and the margin kept. At 100
+/// columns it's the right-hand 45, after the column down its left, above
+/// the event log's 4 rows (design §6.1).
 pub fn inspector_rows(app: &App, world: &World, height: u16) -> (String, Vec<String>) {
     let size = Size::new(100, height);
     let screen = render_on(app, world, size);
     let rows: Vec<String> = (0..size.height)
         .map(|y| {
-            let row: String = (size.width - 46..size.width)
+            let row: String = (size.width - 45..size.width)
                 .map(|x| screen[(x, y)].symbol())
                 .collect();
             row.trim_end().to_string()
         })
         .collect();
-    let inside = rows[2..rows.len() - 7]
-        .iter()
-        .map(|row| {
-            let row = row.trim_start_matches('│').trim_end_matches('│');
-            row.trim_end().to_string()
-        })
-        .collect();
+    let inside = rows[2..rows.len() - 5].to_vec();
     (rows[1].clone(), inside)
+}
+
+/// The open tab's name in the inspector's title row on a 100×30 screen: the
+/// cells there in reverse video, as the built-in themes draw what's chosen
+/// (design §6.1).
+pub fn open_tab(app: &App, world: &World) -> String {
+    let screen = render(app, world);
+    let open: String = (SCREEN.width - 45..SCREEN.width)
+        .map(|x| &screen[(x, 1)])
+        .filter(|cell| cell.modifier.contains(Modifier::REVERSED))
+        .map(|cell| cell.symbol())
+        .collect();
+    open.trim().to_string()
 }
 
 /// `rows` from the first that starts with `start` after its margin.

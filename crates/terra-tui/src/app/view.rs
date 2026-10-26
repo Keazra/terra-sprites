@@ -59,8 +59,9 @@ impl App {
     /// the map view: the tile up and to the left of the one under it, so the
     /// pointer's arrow rests on the Cursor's corner rather than hiding it.
     /// On the map view's top row it stays in that row, and on its left
-    /// column in that column; and the border just right of or below the
-    /// tiles points at the last column or row, so every tile in view can be
+    /// column in that column; and the cell just right of or below the map
+    /// view, the inspector's left column or the event log's title row,
+    /// points at the last column or row, so every tile in view can be
     /// pointed at. Past the wall, at the glass or space, it points at no
     /// tile (M2 design §11.4).
     pub(super) fn pointed_spot(&self, cell: Position) -> Option<(i32, i32)> {

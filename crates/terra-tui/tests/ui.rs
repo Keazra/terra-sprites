@@ -135,32 +135,33 @@ const SMALL_MAP: [&str; 4] = [
 
 #[test]
 fn the_map_view_takes_the_room_between_the_top_bar_and_the_event_log() {
-    // M2 design §11.1: a small map no longer shrinks it.
-    assert_eq!(ui::areas(Size::new(100, 30)).tiles, Rect::new(1, 2, 52, 21));
+    // M2 design §11.1: a small map no longer shrinks it. It has no frame,
+    // so it runs to the screen's left edge (design §6.1).
+    assert_eq!(ui::areas(Size::new(100, 30)).tiles, Rect::new(0, 1, 54, 24));
 }
 
 #[test]
 fn a_small_map_is_drawn_in_the_middle_of_the_map_view_with_space_round_it() {
-    // M2 design §11.1: the 10×4 map, in the 52×21 tiles of a 100×30 screen's
-    // map view, has 21 columns of space on either side, its glass included,
-    // 8 rows above and 9 below.
+    // M2 design §11.1: the 10×4 map, in the 54×24 tiles of a 100×30 screen's
+    // map view, has 22 columns of space on either side, its glass included,
+    // and 10 rows above and below.
     let world = drawn_world(&SMALL_MAP);
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
-    assert_eq!(app.cell_of(at(0, 0)), Some(Position::new(22, 10)));
-    assert_eq!(app.cell_of(at(9, 3)), Some(Position::new(31, 13)));
+    assert_eq!(app.cell_of(at(0, 0)), Some(Position::new(22, 11)));
+    assert_eq!(app.cell_of(at(9, 3)), Some(Position::new(31, 14)));
     let screen = render(&app, &world, 100, 30);
-    let corners = [(21, 9, "╔"), (32, 9, "╗"), (21, 14, "╚"), (32, 14, "╝")];
+    let corners = [(21, 10, "╔"), (32, 10, "╗"), (21, 15, "╚"), (32, 15, "╝")];
     for (x, y, pane) in corners {
         assert_eq!(screen[(x, y)].symbol(), pane, "({x}, {y})");
     }
-    for (x, y) in [(20, 10), (33, 13), (22, 8), (31, 15), (1, 2), (52, 22)] {
+    for (x, y) in [(20, 11), (33, 14), (22, 9), (31, 16), (0, 1), (53, 24)] {
         let star = screen[(x, y)].symbol();
         assert!(matches!(star, " " | "·" | "∙" | "*"), "space at ({x}, {y})");
     }
     // It doesn't scroll, in any direction.
     for (dx, dy) in [(-5, 0), (5, 0), (0, -5), (0, 5)] {
         app.apply(Action::Scroll { dx, dy }, &world);
-        assert_eq!(app.cell_of(at(0, 0)), Some(Position::new(22, 10)));
+        assert_eq!(app.cell_of(at(0, 0)), Some(Position::new(22, 11)));
     }
 }
 
@@ -386,31 +387,29 @@ fn map_tiles_take_their_theme_colours() {
 }
 
 #[test]
-fn the_border_is_single_lined_on_every_side_and_the_wall_is_glass() {
-    // M2 design §11.2: the glass shows where the wall is, one tile outside
-    // the map, so the border needn't.
+fn the_map_view_has_no_border_and_the_wall_is_glass() {
+    // Design §6.1, M2 design §11.2: the glass shows where the wall is, one
+    // tile outside the map, so the map view needs no frame: its tiles run
+    // from edge to edge.
     let world = big_world();
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
-    let ends = |row: &String| {
-        let chars: Vec<char> = row.chars().collect();
-        (chars[0], chars[chars.len() - 1])
-    };
-    for (dx, dy) in [(0, 0), (-200, -200), (200, 200)] {
-        app.apply(Action::Scroll { dx, dy }, &world);
-        let rows = map_view_rows(&render(&app, &world, 100, 30));
-        assert!(rows[0].starts_with("┌─ Map ──"), "{}", rows[0]);
-        assert_eq!(ends(&rows[0]), ('┌', '┐'));
-        assert!(rows[1..22].iter().all(|row| ends(row) == ('│', '│')));
-        assert_eq!(ends(&rows[22]), ('└', '┘'));
-        assert!(rows[22].chars().skip(1).take(52).all(|c| c == '─'));
+    app.apply(Action::Point(Position::new(30, 10)), &world);
+    let rows = map_view_rows(&render(&app, &world, 100, 30));
+    for row in [&rows[0], &rows[23]] {
+        assert_eq!(row, &".".repeat(54), "the top and bottom rows are tiles");
     }
+    assert!(
+        rows.iter()
+            .all(|row| row.starts_with('.') && row.ends_with('.')),
+        "and so are the left and right columns: {rows:#?}"
+    );
     // Scrolled to the top-left corner, the view is a quarter of itself past
-    // the wall: 13 columns and 5 rows, the glass in the last of each.
+    // the wall: 13 columns and 6 rows, the glass in the last of each.
     app.apply(Action::Scroll { dx: -200, dy: -200 }, &world);
     let rows = map_view_rows(&render(&app, &world, 100, 30));
-    let glass: String = rows[5].chars().skip(13).take(6).collect();
+    let glass: String = rows[5].chars().skip(12).take(6).collect();
     assert_eq!(glass, "╔═════");
-    let side: String = rows[6].chars().skip(13).take(3).collect();
+    let side: String = rows[6].chars().skip(12).take(3).collect();
     assert_eq!(side, "║..");
 }
 
@@ -446,24 +445,24 @@ fn the_glass_runs_all_round_the_map_one_tile_out() {
 fn the_cursor_is_clipped_at_the_edge_of_the_map_view() {
     let world = big_world();
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
-    app.apply(Action::Point(Position::new(1, 2)), &world); // the view's top-left tile
+    app.apply(Action::Point(Position::new(0, 1)), &world); // the view's top-left tile
     let rows = map_view_rows(&render(&app, &world, 100, 30));
-    assert!(rows[1].starts_with("│.←..."), "{}", rows[1]);
-    assert!(rows[2].starts_with("│↑♦..."), "{}", rows[2]);
-    assert!(rows[3].starts_with("│....."), "{}", rows[3]);
+    assert!(rows[0].starts_with(".←..."), "{}", rows[0]);
+    assert!(rows[1].starts_with("↑♦..."), "{}", rows[1]);
+    assert!(rows[2].starts_with("....."), "{}", rows[2]);
 }
 
 /// A field of grass bigger than the map view of a 100×30 screen, which
-/// shows 52×21 of its tiles from cell (1, 2).
+/// shows 54×24 of its tiles from cell (0, 1).
 fn big_world() -> World {
     let row = ".".repeat(120);
     drawn_world(&vec![row.as_str(); 60])
 }
 
-/// The map view's rows on a 100×30 screen, border included: the left 54
-/// columns of rows 1 to 23.
+/// The map view's rows on a 100×30 screen: the left 54 columns of rows 1
+/// to 24.
 fn map_view_rows(screen: &Buffer) -> Vec<String> {
-    (1..24)
+    (1..25)
         .map(|y| (0..54).map(|x| screen[(x, y)].symbol()).collect())
         .collect()
 }
@@ -473,17 +472,18 @@ fn a_cursor_whose_target_is_out_of_view_is_not_drawn_at_all() {
     let world = big_world();
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
     // Put the cursor on the view's rightmost column, with the pointer on the
-    // border beside it, then move the pointer off the map and scroll left, so
-    // the cursor's tile leaves the view.
-    app.apply(Action::Point(Position::new(53, 12)), &world);
-    assert_eq!(i32::from(app.cursor().x), app.viewport().x + 51);
-    app.apply(Action::Point(Position::new(0, 12)), &world);
+    // inspector's left column beside it, then move the pointer further
+    // into the inspector, off the map view, and scroll left, so the cursor's
+    // tile leaves the view.
+    app.apply(Action::Point(Position::new(54, 12)), &world);
+    assert_eq!(i32::from(app.cursor().x), app.viewport().x + 53);
+    app.apply(Action::Point(Position::new(70, 12)), &world);
     app.apply(Action::Scroll { dx: -1, dy: 0 }, &world);
     let rows = map_view_rows(&render(&app, &world, 100, 30));
-    for row in &rows[1..22] {
+    for row in &rows {
         assert_eq!(
             row,
-            &format!("│{}│", ".".repeat(52)),
+            &".".repeat(54),
             "no stray arrows or marks at the view's edge"
         );
     }
@@ -548,17 +548,17 @@ fn a_frame_bigger_than_the_fitted_view_draws_the_glass_and_space_past_the_wall()
     // the part of the map the viewport has room for: it shows the map as far
     // as it goes, and the glass and space past it.
     let world = big_world();
-    let mut app = app_for(&world, Theme::cp437(), 100, 30); // 52×21 tiles
-    // Tiles (81, 44) on: a quarter of the view, 13 and 5, past the wall.
+    let mut app = app_for(&world, Theme::cp437(), 100, 30); // 54×24 tiles
+    // Tiles (79, 42) on: a quarter of the view, 13 and 6, past the wall.
     app.apply(Action::Scroll { dx: 200, dy: 200 }, &world);
-    let screen = render(&app, &world, 140, 40); // room for 92×31 tiles
-    let row = |y: u16| -> String { (1..41).map(|x| screen[(x, y)].symbol()).collect() };
-    for y in 2..18 {
-        assert_eq!(row(y), format!("{}║", ".".repeat(39)), "row {y}");
+    let screen = render(&app, &world, 140, 40); // room for 94×34 tiles
+    let row = |y: u16| -> String { (0..42).map(|x| screen[(x, y)].symbol()).collect() };
+    for y in 1..19 {
+        assert_eq!(row(y), format!("{}║", ".".repeat(41)), "row {y}");
     }
-    assert_eq!(row(18), format!("{}╝", "═".repeat(39)));
-    for y in 19..33 {
-        for x in 41..93 {
+    assert_eq!(row(19), format!("{}╝", "═".repeat(41)));
+    for y in 20..35 {
+        for x in 42..94 {
             assert!(
                 matches!(screen[(x, y)].symbol(), " " | "·" | "∙" | "*"),
                 "space at ({x}, {y})"
@@ -742,7 +742,7 @@ fn below_100_by_30_the_screen_says_the_terminal_is_too_small() {
     }
     assert_eq!(
         ui::areas(Size::new(100, 30)).tiles.width,
-        52,
+        54,
         "from 100 columns, the inspector takes 46"
     );
 }
@@ -780,8 +780,8 @@ fn a_100_by_30_screen_has_every_panel() {
     let app = app_for(&world, Theme::cp437(), 100, 30);
     let screen = lines(&render(&app, &world, 100, 30));
     assert!(screen[0].starts_with(" Terra Sprites"));
-    assert!(screen[1].contains("Map") && screen[1].contains("World"));
-    assert!(screen[24].contains("Events"));
+    assert!(screen[1].contains("Body Brain Chem Genome"));
+    assert!(screen[25].contains("Events"));
 }
 
 #[test]
@@ -1497,7 +1497,7 @@ fn a_picture_without_the_event_log_gives_its_rows_to_the_map_view_and_inspector(
     };
     let areas = ui::areas_with(Size::new(100, 30), parts);
     assert_eq!(areas.event_log, None);
-    assert_eq!(areas.tiles, Rect::new(1, 2, 52, 26));
+    assert_eq!(areas.tiles, Rect::new(0, 1, 54, 28));
     let inspector = areas.inspector.expect("the inspector");
     assert_eq!((inspector.y, inspector.bottom()), (1, 29));
     let shown = render_parts(&generated_world(), parts);
@@ -1505,9 +1505,9 @@ fn a_picture_without_the_event_log_gives_its_rows_to_the_map_view_and_inspector(
         shown.iter().all(|line| !line.contains(" Events ")),
         "{shown:#?}"
     );
-    // The map view's bottom border sits on the status line.
-    assert!(shown[28].starts_with('└'), "{}", shown[28]);
-    assert!(shown[28].ends_with('┘'), "{}", shown[28]);
+    // The line between the map view and the inspector runs down to the
+    // status line.
+    assert_eq!(shown[28].chars().nth(54), Some('│'), "{}", shown[28]);
 }
 
 #[test]
@@ -1519,11 +1519,10 @@ fn a_picture_without_the_inspector_gives_its_columns_to_the_map_view() {
     };
     let areas = ui::areas_with(Size::new(100, 30), parts);
     assert_eq!(areas.inspector, None);
-    assert_eq!(areas.tiles, Rect::new(1, 2, 98, 21));
+    assert_eq!(areas.tiles, Rect::new(0, 1, 100, 24));
     let shown = render_parts(&generated_world(), parts);
-    assert!(shown[1].starts_with("┌─ Map ─"), "{}", shown[1]);
-    assert!(shown[1].ends_with('┐'), "{}", shown[1]);
-    assert_eq!(shown[1].chars().count(), 100, "{}", shown[1]);
+    assert!(!shown[1].contains('│'), "{}", shown[1]);
+    assert!(shown[25].starts_with("─ Events ─"), "{}", shown[25]);
 }
 
 #[test]
@@ -1536,18 +1535,18 @@ fn a_picture_without_the_top_bar_and_status_line_starts_and_ends_on_panels() {
         ..ui::Parts::ALL
     };
     let areas = ui::areas_with(Size::new(100, 30), parts);
-    assert_eq!(areas.tiles, Rect::new(1, 1, 52, 23));
-    assert_eq!(areas.event_log, Some(Rect::new(0, 25, 100, 5)));
+    assert_eq!(areas.tiles, Rect::new(0, 0, 54, 26));
+    assert_eq!(areas.event_log, Some(Rect::new(0, 26, 100, 4)));
     assert_eq!(areas.overlay, Some(Rect::new(0, 0, 100, 30)));
     let shown = render_parts(&generated_world(), parts);
-    assert!(shown[0].starts_with("┌─ Map ─"), "{}", shown[0]);
-    assert!(shown[25].starts_with("┌─ Events ─"), "{}", shown[25]);
-    assert!(shown[29].starts_with('└'), "{}", shown[29]);
+    assert_eq!(shown[0].chars().nth(54), Some('│'), "{}", shown[0]);
+    assert!(shown[26].starts_with("─ Events ─"), "{}", shown[26]);
 }
 
 #[test]
-fn a_picture_without_any_other_part_is_the_map_view_in_its_border() {
-    // #291: the map view's border runs round the whole picture.
+fn a_picture_without_any_other_part_is_the_map_view_alone() {
+    // #291: the map view fills the whole picture; it has no border (design
+    // §6.1).
     let parts = ui::Parts {
         top_bar: false,
         inspector: false,
@@ -1555,13 +1554,11 @@ fn a_picture_without_any_other_part_is_the_map_view_in_its_border() {
         status_line: false,
     };
     let areas = ui::areas_with(Size::new(100, 30), parts);
-    assert_eq!(areas.tiles, Rect::new(1, 1, 98, 28));
+    assert_eq!(areas.tiles, Rect::new(0, 0, 100, 30));
     assert_eq!((areas.inspector, areas.event_log), (None, None));
     let shown = render_parts(&generated_world(), parts);
-    assert!(shown[0].starts_with("┌─ Map ─"), "{}", shown[0]);
-    assert!(shown[0].ends_with('┐'), "{}", shown[0]);
-    assert!(shown[29].starts_with('└'), "{}", shown[29]);
-    assert!(shown[29].ends_with('┘'), "{}", shown[29]);
+    let lines = ['┌', '┐', '└', '┘', '│', '─'];
+    assert!(shown.iter().all(|row| !row.contains(lines)), "{shown:#?}");
 }
 
 #[test]
@@ -1573,8 +1570,7 @@ fn the_game_draws_every_part_of_the_screen() {
     let app = app_for(&world, Theme::cp437(), 100, 30);
     let shown = lines(&render(&app, &world, 100, 30));
     assert!(shown[0].starts_with(" Terra Sprites"), "{}", shown[0]);
-    assert!(shown[1].starts_with("┌─ Map ─"), "{}", shown[1]);
-    assert_eq!(shown[1].matches('┌').count(), 2, "{}", shown[1]);
-    assert!(shown[24].starts_with("┌─ Events ─"), "{}", shown[24]);
-    assert!(!shown[29].starts_with('└'), "{}", shown[29]);
+    assert!(shown[1].contains(" Body Brain Chem"), "{}", shown[1]);
+    assert!(shown[25].starts_with("  Events "), "{}", shown[25]);
+    assert!(!shown[29].trim().is_empty(), "{}", shown[29]);
 }

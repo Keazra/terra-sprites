@@ -4,7 +4,8 @@
 
 use std::collections::BTreeMap;
 
-use ratatui::style::Color;
+use ratatui::buffer::Buffer;
+use ratatui::style::{Color, Modifier, Style};
 use serde::Deserialize;
 use terra_sim::{DataPack, Terrain};
 
@@ -165,6 +166,48 @@ impl LineageLook {
     }
 }
 
+/// How a theme styles the screen's text by the job it does (design §6.2,
+/// #302): the headings, minor text, gains and losses, the key in each hint,
+/// and what's chosen, such as the open tab. Colour never carries a meaning
+/// alone: the signs, arrows and capitals stay.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TextLook {
+    /// A heading, such as `ATTENTION` or `Observed`.
+    pub heading: Style,
+    /// Minor text: a log line's tick, `and 3 more`, a `·` between parts,
+    /// a bar's empty part, what a hint's key does.
+    pub muted: Style,
+    /// A gain, such as `+.99`.
+    pub good: Style,
+    /// A loss, such as `-.19`.
+    pub bad: Style,
+    /// The key in a hint, such as the `Z` of `Z select`.
+    pub key: Style,
+    /// What's chosen, such as the open tab.
+    pub selected: Style,
+}
+
+impl TextLook {
+    /// The style of a signed number such as `+.99` or `-.19`: a gain good,
+    /// a loss bad, and anything else in `otherwise`.
+    pub fn signed(&self, number: &str, otherwise: Style) -> Style {
+        match number.chars().next() {
+            Some('+') => self.good,
+            Some('-') => self.bad,
+            _ => otherwise,
+        }
+    }
+}
+
+/// The shades the panels beside and under the map sit on (design §6.1,
+/// #302): the inspector and the event log on `shade`, their title rows on
+/// `title`. A theme without them draws lines between the panels instead.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PanelLook {
+    pub shade: Color,
+    pub title: Color,
+}
+
 /// The default theme's file.
 const CP437: &str = include_str!("../../../themes/cp437.ron");
 
@@ -258,6 +301,10 @@ pub struct Theme {
     population: PopulationLook,
     /// The lineage colours (M2 design §17.4).
     lineage: LineageLook,
+    /// The screen's text, by its job (design §6.2).
+    text: TextLook,
+    /// The panels' shades, if it has them (design §6.1).
+    panels: Option<PanelLook>,
 }
 
 impl Theme {
@@ -369,6 +416,18 @@ impl Theme {
         self.lineage
     }
 
+    /// How the screen's text is styled by its job (design §6.2, #302).
+    pub fn text(&self) -> TextLook {
+        self.text
+    }
+
+    /// The shades the inspector and the event log sit on, or `None` for a
+    /// theme that draws lines between the panels instead (design §6.1,
+    /// #302).
+    pub fn panels(&self) -> Option<PanelLook> {
+        self.panels
+    }
+
     /// A theme from the text of a theme file, as `--theme <file>` loads it
     /// (design v34 §6.7), checked against the data pack it will draw.
     ///
@@ -467,6 +526,14 @@ impl Theme {
             .unwrap_or_default()
             .look(builtin.lineage.unwrap_or_default())
             .expect("the built-in cp437 theme has every lineage colour");
+        // And any of the text's styles (design §6.2, #302). The panels'
+        // shades aren't the default theme's: a theme without them draws
+        // lines between the panels.
+        let text = file
+            .text
+            .unwrap_or_default()
+            .look(builtin.text.unwrap_or_default())
+            .expect("the built-in cp437 theme styles text for every job");
         let theme = Theme {
             tiles,
             objects,
@@ -489,6 +556,11 @@ impl Theme {
             stars: glyphs(space.stars),
             population,
             lineage,
+            text,
+            panels: file.panels.map(|panels| PanelLook {
+                shade: panels.shade.into(),
+                title: panels.title.into(),
+            }),
         };
         if let Some((what, symbol)) = theme
             .symbols()
@@ -661,6 +733,14 @@ struct ThemeFile {
     /// without some of them, draws the default theme's.
     #[serde(default, deserialize_with = "implicit_some")]
     lineage: Option<LineageFile>,
+    /// The screen's text, by its job (design §6.2, #302). A theme without
+    /// it, or without some of it, styles it as the default theme does.
+    #[serde(default, deserialize_with = "implicit_some")]
+    text: Option<TextFile>,
+    /// The panels' shades (design §6.1, #302). A theme without them draws
+    /// lines between the panels, rather than the default theme's shades.
+    #[serde(default, deserialize_with = "implicit_some")]
+    panels: Option<PanelsFile>,
 }
 
 /// A section a theme file may leave out, written without `Some(…)` when
@@ -761,6 +841,83 @@ impl LineageFile {
     }
 }
 
+/// A theme file's `text` section: the screen's text, by its job (design
+/// §6.2, #302).
+#[derive(Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct TextFile {
+    #[serde(default, deserialize_with = "implicit_some")]
+    heading: Option<StyleEntry>,
+    #[serde(default, deserialize_with = "implicit_some")]
+    muted: Option<StyleEntry>,
+    #[serde(default, deserialize_with = "implicit_some")]
+    good: Option<StyleEntry>,
+    #[serde(default, deserialize_with = "implicit_some")]
+    bad: Option<StyleEntry>,
+    #[serde(default, deserialize_with = "implicit_some")]
+    key: Option<StyleEntry>,
+    #[serde(default, deserialize_with = "implicit_some")]
+    selected: Option<StyleEntry>,
+}
+
+impl TextFile {
+    /// The styles this section gives, with `default`'s for any it leaves
+    /// out: `None` if both leave one out.
+    fn look(self, default: TextFile) -> Option<TextLook> {
+        let style = |theirs: Option<StyleEntry>, ours: Option<StyleEntry>| {
+            theirs.or(ours).map(StyleEntry::style)
+        };
+        Some(TextLook {
+            heading: style(self.heading, default.heading)?,
+            muted: style(self.muted, default.muted)?,
+            good: style(self.good, default.good)?,
+            bad: style(self.bad, default.bad)?,
+            key: style(self.key, default.key)?,
+            selected: style(self.selected, default.selected)?,
+        })
+    }
+}
+
+/// How a theme file styles text: a colour, bold and reverse video, any of
+/// them left out.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct StyleEntry {
+    #[serde(default, deserialize_with = "implicit_some")]
+    fg: Option<Colour>,
+    #[serde(default)]
+    bold: bool,
+    #[serde(default)]
+    reversed: bool,
+}
+
+impl StyleEntry {
+    fn style(self) -> Style {
+        let mut style = Style::default();
+        if let Some(fg) = self.fg {
+            style = style.fg(fg.into());
+        }
+        if self.bold {
+            style = style.add_modifier(Modifier::BOLD);
+        }
+        if self.reversed {
+            style = style.add_modifier(Modifier::REVERSED);
+        }
+        style
+    }
+}
+
+/// A theme file's `panels` section: the shades the inspector and the event
+/// log sit on (design §6.1, #302).
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PanelsFile {
+    /// What the panels sit on.
+    shade: Colour,
+    /// What their title rows sit on.
+    title: Colour,
+}
+
 /// A theme file's `cursor` section.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -800,10 +957,50 @@ struct GlyphEntry {
     reversed: bool,
 }
 
+/// A colour as a theme file writes it: one of the 16 terminal colours by
+/// name, which follow the player's terminal, or an exact one, `"#rrggbb"`
+/// (design §6.2, #302).
+#[derive(Clone, Copy)]
+enum Colour {
+    Named(Named),
+    Exact(u8, u8, u8),
+}
+
+impl<'de> Deserialize<'de> for Colour {
+    fn deserialize<D: serde::Deserializer<'de>>(colour: D) -> Result<Colour, D::Error> {
+        // A name RON reads as one of the 16, and anything else as text,
+        // so a name it doesn't know is refused below, saying what's allowed.
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Written {
+            Named(Named),
+            Other(String),
+        }
+        match Written::deserialize(colour)? {
+            Written::Named(named) => Ok(Colour::Named(named)),
+            Written::Other(text) => exact(&text).ok_or_else(|| {
+                serde::de::Error::custom(format!(
+                    "\"{text}\" isn't a colour: name one of the 16, such as light_cyan, \
+                     or write an exact one as \"#rrggbb\""
+                ))
+            }),
+        }
+    }
+}
+
+/// An exact colour written `"#rrggbb"`, in hexadecimal.
+fn exact(text: &str) -> Option<Colour> {
+    let hex = text
+        .strip_prefix('#')
+        .filter(|hex| hex.len() == 6 && hex.chars().all(|c| c.is_ascii_hexdigit()))?;
+    let byte = |at: usize| u8::from_str_radix(&hex[at..at + 2], 16).ok();
+    Some(Colour::Exact(byte(0)?, byte(2)?, byte(4)?))
+}
+
 /// The 16 terminal colours, as named in theme files.
 #[derive(Clone, Copy, Deserialize)]
 #[serde(rename_all = "snake_case")]
-enum Colour {
+enum Named {
     Black,
     Red,
     Green,
@@ -824,23 +1021,80 @@ enum Colour {
 
 impl From<Colour> for Color {
     fn from(colour: Colour) -> Color {
-        match colour {
-            Colour::Black => Color::Black,
-            Colour::Red => Color::Red,
-            Colour::Green => Color::Green,
-            Colour::Yellow => Color::Yellow,
-            Colour::Blue => Color::Blue,
-            Colour::Magenta => Color::Magenta,
-            Colour::Cyan => Color::Cyan,
-            Colour::Gray => Color::Gray,
-            Colour::DarkGray => Color::DarkGray,
-            Colour::LightRed => Color::LightRed,
-            Colour::LightGreen => Color::LightGreen,
-            Colour::LightYellow => Color::LightYellow,
-            Colour::LightBlue => Color::LightBlue,
-            Colour::LightMagenta => Color::LightMagenta,
-            Colour::LightCyan => Color::LightCyan,
-            Colour::White => Color::White,
+        let named = match colour {
+            Colour::Exact(r, g, b) => return Color::Rgb(r, g, b),
+            Colour::Named(named) => named,
+        };
+        match named {
+            Named::Black => Color::Black,
+            Named::Red => Color::Red,
+            Named::Green => Color::Green,
+            Named::Yellow => Color::Yellow,
+            Named::Blue => Color::Blue,
+            Named::Magenta => Color::Magenta,
+            Named::Cyan => Color::Cyan,
+            Named::Gray => Color::Gray,
+            Named::DarkGray => Color::DarkGray,
+            Named::LightRed => Color::LightRed,
+            Named::LightGreen => Color::LightGreen,
+            Named::LightYellow => Color::LightYellow,
+            Named::LightBlue => Color::LightBlue,
+            Named::LightMagenta => Color::LightMagenta,
+            Named::LightCyan => Color::LightCyan,
+            Named::White => Color::White,
         }
+    }
+}
+
+/// Whether the terminal shows a theme's exact colours (design §6.2): one
+/// that says so in `COLORTERM` (`colorterm`), as most do, and every terminal
+/// on Windows, whose console has since Windows 10. Elsewhere, such as in
+/// macOS's Terminal, which draws them wrongly, they're drawn as the nearest
+/// of 256 ([`in_256_colours`]).
+pub fn shows_exact_colours(colorterm: Option<&str>, windows: bool) -> bool {
+    windows || matches!(colorterm, Some("truecolor" | "24bit"))
+}
+
+/// Each exact colour drawn in `buffer` as the nearest of the 256 colours
+/// nearly every terminal shows, for a terminal that doesn't show exact
+/// colours (design §6.2). Named colours are the terminal's own, and stay.
+pub fn in_256_colours(buffer: &mut Buffer) {
+    let nearest = |colour| match colour {
+        Color::Rgb(r, g, b) => Color::Indexed(nearest_256(r, g, b)),
+        other => other,
+    };
+    for cell in &mut buffer.content {
+        cell.fg = nearest(cell.fg);
+        cell.bg = nearest(cell.bg);
+    }
+}
+
+/// The levels of each of red, green and blue in the 256 colours' 6×6×6
+/// cube, which starts at colour 16.
+const CUBE: [u8; 6] = [0, 95, 135, 175, 215, 255];
+
+/// The nearest of the 256 colours to `(r, g, b)`: from the cube, or from
+/// the 24 greys after it, `#080808` to `#eeeeee`, whichever is nearer.
+fn nearest_256(r: u8, g: u8, b: u8) -> u8 {
+    let distance = |(x, y, z): (u8, u8, u8)| {
+        [(r, x), (g, y), (b, z)]
+            .iter()
+            .map(|&(wanted, got)| (i32::from(wanted) - i32::from(got)).pow(2))
+            .sum::<i32>()
+    };
+    let step = |value: u8| {
+        (0..CUBE.len())
+            .min_by_key(|&i| (i32::from(CUBE[i]) - i32::from(value)).abs())
+            .unwrap_or(0)
+    };
+    let (i, j, k) = (step(r), step(g), step(b));
+    let cube = (CUBE[i], CUBE[j], CUBE[k]);
+    let mean = (u32::from(r) + u32::from(g) + u32::from(b)) / 3;
+    let grey_step = ((mean.saturating_sub(8) + 5) / 10).min(23) as u8;
+    let grey = 8 + 10 * grey_step;
+    if distance((grey, grey, grey)) < distance(cube) {
+        232 + grey_step
+    } else {
+        16 + 36 * i as u8 + 6 * j as u8 + k as u8
     }
 }

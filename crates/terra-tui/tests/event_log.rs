@@ -2,7 +2,7 @@
 //! newest first under the map, and how lines that read the same merge.
 
 mod common;
-use common::screen::{COPY_AND_CHANGE, a_lone_egg, app_for, garden, inside, render, touched};
+use common::screen::{COPY_AND_CHANGE, a_lone_egg, app_for, garden, log_rows, render, touched};
 use common::{
     HURT_ITSELF, UNHURT, acted, at, at_sprite, died, finished, lines, pack, pack_changing,
 };
@@ -36,20 +36,16 @@ fn the_event_log_lists_deaths_newest_first_under_the_map() {
         &world,
     );
     let screen = lines(&render(&app, &world, 100, 30));
-    assert!(screen[24].starts_with("┌─ Events ─"), "{:?}", screen[24]);
+    // Under the map, a title row, then three events above the status line.
+    assert!(screen[25].starts_with("  Events "), "{:?}", screen[25]);
     assert_eq!(
-        inside(&screen[25]),
-        "4,100  Sprite #13 died (old age, age 66,000)"
+        log_rows(&screen),
+        [
+            "4,100  Sprite #13 died (old age, age 66,000)",
+            "4,100  Sprite #12 died (starvation, age 3,900)",
+            "4,012  Sprite #31 died (dehydration, age 4,012)",
+        ]
     );
-    assert_eq!(
-        inside(&screen[26]),
-        "4,100  Sprite #12 died (starvation, age 3,900)"
-    );
-    assert_eq!(
-        inside(&screen[27]),
-        "4,012  Sprite #31 died (dehydration, age 4,012)"
-    );
-    assert!(screen[28].starts_with('└'), "three lines of events");
 }
 
 #[test]
@@ -62,10 +58,10 @@ fn a_line_that_repeats_in_the_event_log_counts_up_within_cp437() {
     app.record(&[died(4_100, id, DeathCause::Dehydration, 4_012)], &world);
     let screen = lines(&render(&app, &world, 100, 30));
     assert_eq!(
-        inside(&screen[25]),
+        log_rows(&screen)[0],
         "4,100  Sprite #31 died (dehydration, age 4,012) x2"
     );
-    assert!(screen[25].chars().all(terra_tui::cp437::contains));
+    assert!(screen[26].chars().all(terra_tui::cp437::contains));
 }
 
 #[test]
@@ -115,13 +111,7 @@ fn the_event_log_shows_every_play_and_hit_and_whatever_hurt_a_sprite() {
     let sprite = |id| at_sprite(EntityId(id));
     let world = garden(pack());
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
-    let log = |app: &App| -> Vec<String> {
-        let screen = lines(&render(app, &world, 100, 30));
-        screen[25..28]
-            .iter()
-            .map(|row| inside(row).to_string())
-            .collect()
-    };
+    let log = |app: &App| -> Vec<String> { log_rows(&lines(&render(app, &world, 100, 30))) };
     app.record(
         &[
             acted(10, EntityId(4), Verb::Play, ball, Applied, UNHURT),
@@ -189,11 +179,9 @@ fn logged_watched(
         })
         .collect();
     app.record(&events, world);
-    let screen = lines(&render(&app, world, 100, 30));
-    screen[25..25 + events.len()]
-        .iter()
-        .map(|row| inside(row).to_string())
-        .collect()
+    let mut rows = log_rows(&lines(&render(&app, world, 100, 30)));
+    rows.truncate(events.len());
+    rows
 }
 
 #[test]
@@ -348,11 +336,7 @@ fn logged(world: &World, events: &[Event]) -> Vec<String> {
     for event in events {
         app.record(std::slice::from_ref(event), world);
     }
-    let screen = lines(&render(&app, world, 100, 30));
-    screen[25..28]
-        .iter()
-        .map(|row| inside(row).to_string())
-        .collect()
+    log_rows(&lines(&render(&app, world, 100, 30)))
 }
 
 #[test]
@@ -680,9 +664,8 @@ fn the_event_log_says_what_s_new_in_a_hatchling_with_a_gene_changed() {
             assert!(world.tick() < 2_000, "it hatched");
         }
         let screen = lines(&render(&app, &world, 100, 30));
-        let line = screen[25..28]
-            .iter()
-            .map(|row| inside(row).to_string())
+        let line = log_rows(&screen)
+            .into_iter()
             .find(|row| row.contains("hatched"))
             .expect("its hatching in the log");
         let hatched = format!("Sprite #{} hatched (Sprite #1's)", egg.0);

@@ -427,7 +427,7 @@ impl App {
         self.event_filter
     }
 
-    /// Where the event log's border shows the filters, if it's drawn.
+    /// Where the event log's title row shows the filters, if it's drawn.
     pub fn filter_label(&self) -> Option<Rect> {
         let area = self.event_log_area?;
         crate::ui::top_right(area, self.event_filter.labels().chars().count() as u16)

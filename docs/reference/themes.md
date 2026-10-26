@@ -1,6 +1,6 @@
 # Themes
 
-A **theme** says how the map is drawn: the character and colour of each kind of ground, each plant and toy, sprites, their emotes, the Cursor, the glass round the map and the stars in space past it (design §6.2, M2 design §11), the colours and blocks of the population graph (M2 design §14), and the lineage colours (§17). The game has two built in, `themes/cp437.ron` (the default) and `themes/ascii.ron` (`--ascii`). To draw it your own way, copy one, edit it, and put it in the `themes` folder of the game's folder (design §6.7). The help screen (`?`) shows where the game's folder is:
+A **theme** says how the map is drawn: the character and colour of each kind of ground, each plant and toy, sprites, their emotes, the Cursor, the glass round the map and the stars in space past it (design §6.2, M2 design §11), the colours and blocks of the population graph (M2 design §14), and the lineage colours (§17). It also colours the screen's text by its job, and shades the panels beside and under the map, or leaves them to lines (design §6.1, §6.2). The game has two built in, `themes/cp437.ron` (the default) and `themes/ascii.ron` (`--ascii`). To draw it your own way, copy one, edit it, and put it in the `themes` folder of the game's folder (design §6.7). The help screen (`?`) shows where the game's folder is:
 
 | System | The themes folder |
 |---|---|
@@ -16,18 +16,19 @@ The game doesn't remember the theme you picked once it's closed. To start in one
 cargo run --release -- --theme my-theme.ron --seed 7
 ```
 
-`--theme` and `--ascii` can't be used together, since both pick a theme. A theme only changes how things look: it isn't part of the world, so it never changes what happens, and a save or replay plays out the same in any theme. Frames, panels and text are the same in every theme.
+`--theme` and `--ascii` can't be used together, since both pick a theme. A theme only changes how things look: it isn't part of the world, so it never changes what happens, and a save or replay plays out the same in any theme. The characters of frames and text are the same in every theme: a theme sets only their colours.
 
 ## The rules
 
 - **Every character must be in CP437,** the character set of the old PC screen, so any CP437 font or tileset can draw the game (design §6.2). That includes `☺ ♣ ♠ • ○ ≈ ▲ ║ ░` and plain ASCII; it doesn't include, say, `λ`, `€` or emoji. A character outside it is refused, naming the character and what it was for.
 - **Colours** are the 16 terminal colours, by name: `black`, `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `gray`, `dark_gray`, `light_red`, `light_green`, `light_yellow`, `light_blue`, `light_magenta`, `light_cyan`, `white`. How each looks is up to the terminal's own palette. Terminals have no brown, so the built-in themes draw dirt in `yellow`.
+- **A colour can also be exact,** written `"#rrggbb"` in double quotes, such as `"#181a22"`. A named colour follows the player's terminal colours and an exact one doesn't, so the default theme uses exact colours only where no name fits: the panels' shades, since even `dark_gray` is far too bright for a background (`#767676` in Windows Terminal). On a terminal that doesn't say it shows exact colours, such as macOS's Terminal, the game draws each as the nearest of the 256 colours nearly every terminal shows (design §6.2). A colour that's neither a name nor `"#rrggbb"` is refused, naming it.
 - **Give each kind of thing its own character,** and use colour for its state, as the built-in themes do: then a player who can't tell colours apart can still tell a bush from a thornbush. The game doesn't enforce this.
 - **A theme that's wrong is refused,** with a message saying what's wrong. Picked from the menu, the status line says so, such as "Couldn't use theme my-theme: it has no glyph for terrain(rock)", and the map keeps the theme it had. Given with `--theme`, the game doesn't start, and says the same.
 
 ## Fields
 
-A theme is one record with eight fields. The first five are needed; `space`, `population` and `lineage` may be left out.
+A theme is one record with ten fields. The first five are needed; `space`, `population`, `lineage`, `text` and `panels` may be left out.
 
 | Field | Meaning |
 |---|---|
@@ -39,6 +40,8 @@ A theme is one record with eight fields. The first five are needed; `space`, `po
 | `space` | The glass round the map and the stars past it (below). Optional: whatever a theme leaves out of it, it draws as the default theme does. |
 | `population` | How the population graph (`p`) is drawn (below). Optional, as `space` is. |
 | `lineage` | The lineage colours (`b`) (below). Optional, as `space` is. |
+| `text` | The screen's text, styled by its job (below). Optional, as `space` is. |
+| `panels` | The shades the inspector and the event log sit on (below). Optional: a theme without them draws lines between the panels instead. |
 
 A **glyph** is `(glyph: '♣', fg: green)`, with two optional flags: `bold: true`, and `reversed: true`, which swaps the colour and the background. Characters go in single quotes; a quote itself is `'\''`.
 
@@ -109,6 +112,25 @@ The population graph (`p`, and small at the top of the World tab) stacks the egg
 | `young` | Its young, and theirs: `light_magenta`. |
 | `others` | Every other sprite: `dark_gray`. |
 
+### `text`
+
+The screen's text is coloured by what it is, so a tab reads at a glance (design §6.2). `text` is a record of six roles, each a style: `(fg: light_cyan, bold: true)`, with `fg`, `bold` and `reversed` each optional. A role left out is styled as the default theme styles it, and a role the game doesn't know is refused, naming it. Colour never carries a meaning alone: the signs, arrows and capitals stay, so the screen reads the same in any theme.
+
+| Role | What it styles | Default theme |
+|---|---|---|
+| `heading` | Headings: `ATTENTION`, `WATER`, `Observed`, `HORMONES`, help's headings, the sprite list's heading, the World tab's graph's heading | `light_cyan`, bold |
+| `muted` | Minor text: a log line's tick, `and 3 more`, a `·` between parts, a bar's empty part, what a hint's key does, the dead on the family tree | `dark_gray` |
+| `good` | A gain or a rise: `+.99` on the Brain tab, `+.0017` on the Chem tab | `light_green` |
+| `bad` | A loss or a fall: `-.19`, `-.0020` | `light_red` |
+| `key` | The key in a hint, `Z` of `Z select`, and help's keys | bold |
+| `selected` | What's chosen: the open tab, a menu's highlighted item, the sprite list's highlighted row | reversed |
+
+A drive's bar on the Body tab is drawn in the colour `drives` gives the drive.
+
+### `panels`
+
+`panels` is a record of two colours: `shade`, what the inspector and the event log sit on, and `title`, what their title rows sit on (the inspector's tabs, the log's "Events" and its filters). Both are needed. The default theme's are `"#181a22"` and `"#282c3a"`, a shade and two lighter than black. A theme without `panels`, such as the ASCII one, draws a line instead: `│` between the map and the inspector, and a `─` rule over the log with its title and filters in it (design §6.1).
+
 ## Working example
 
 A bright theme, for a terminal whose dark colours are hard to see: light colours everywhere, and the CP437 glyphs.
@@ -177,7 +199,12 @@ A bright theme, for a terminal whose dark colours are hard to see: light colours
         limit: (glyph: '·', fg: gray),
     ),
     lineage: (others: gray),
+    text: (
+        heading: (fg: light_yellow, bold: true),
+        muted:   (fg: gray),
+    ),
+    panels: (shade: "#1c1c1c", title: "#303030"),
 )
 ```
 
-Save it as `bright.ron` in the themes folder and pick it with `Ctrl+T`. Boredom, crowdedness, arousal and anxiety are left out of `drives`, so a sprite bored, crowded, aroused or anxious above all else draws in white. `space` gives only the far stars, in gray rather than dark gray, so the glass and the nearer stars are drawn as the default theme draws them. `population` draws old sprites in white and the line of the world's limit in gray; the rest of the graph is drawn as in the default theme. `lineage` draws the sprites outside the lineage in gray, a little brighter than the default's dark gray.
+Save it as `bright.ron` in the themes folder and pick it with `Ctrl+T`. Boredom, crowdedness, arousal and anxiety are left out of `drives`, so a sprite bored, crowded, aroused or anxious above all else draws in white. `space` gives only the far stars, in gray rather than dark gray, so the glass and the nearer stars are drawn as the default theme draws them. `population` draws old sprites in white and the line of the world's limit in gray; the rest of the graph is drawn as in the default theme. `lineage` draws the sprites outside the lineage in gray, a little brighter than the default's dark gray. `text` makes headings light yellow and minor text gray, so they stand out more; gains, losses, keys and the open tab are styled as in the default theme. `panels` sets the shades in neutral greys.

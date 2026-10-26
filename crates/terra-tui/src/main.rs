@@ -7,17 +7,17 @@ use std::fmt::Display;
 use std::io::{self, IsTerminal, Write, stdout};
 use std::path::Path;
 use std::process::ExitCode;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, LazyLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use ratatui::DefaultTerminal;
 use ratatui::crossterm::event::{
     self, DisableMouseCapture, EnableMouseCapture, Event, KeyboardEnhancementFlags,
     PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
 };
 use ratatui::crossterm::execute;
 use ratatui::crossterm::terminal::{self, supports_keyboard_enhancement};
+use ratatui::{DefaultTerminal, Frame};
 use terra_sim::{Playback, World};
 use terra_tui::app::{App, Flow, Ticks};
 use terra_tui::args::{Args, USAGE, VERSION};
@@ -29,12 +29,25 @@ use terra_tui::input::{self, Keys};
 use terra_tui::saves;
 use terra_tui::session::{self, Session};
 use terra_tui::start;
-use terra_tui::theme::Theme;
+use terra_tui::theme::{self, Theme};
 use terra_tui::title::{self, Title, TitleFlow};
 use terra_tui::ui;
 
 /// About 30 frames per second.
 const FRAME: Duration = Duration::from_millis(33);
+
+/// Draws `frame`'s exact colours as the nearest of 256 in a terminal that
+/// doesn't show exact colours (design §6.2), as the game finds when it
+/// starts.
+fn fit_colours(frame: &mut Frame) {
+    static EXACT: LazyLock<bool> = LazyLock::new(|| {
+        let colorterm = std::env::var("COLORTERM").ok();
+        theme::shows_exact_colours(colorterm.as_deref(), cfg!(windows))
+    });
+    if !*EXACT {
+        theme::in_256_colours(frame.buffer_mut());
+    }
+}
 
 fn main() -> ExitCode {
     let args = match Args::parse(std::env::args().skip(1)) {
@@ -257,7 +270,10 @@ fn run_title(
     loop {
         // The terminal may have been resized since the last frame.
         title.resize(terminal.size()?);
-        terminal.draw(|frame| title::render(frame, &title))?;
+        terminal.draw(|frame| {
+            title::render(frame, &title);
+            fit_colours(frame);
+        })?;
         let deadline = last_frame + FRAME;
         while event::poll(deadline.saturating_duration_since(Instant::now()))? {
             let action = match event::read()? {
@@ -570,7 +586,10 @@ fn run(
         // The terminal may have been resized since the last frame.
         app.fit(ui::areas(terminal.size()?));
         let draw_start = Instant::now();
-        terminal.draw(|frame| ui::render(frame, app, session.world()))?;
+        terminal.draw(|frame| {
+            ui::render(frame, app, session.world());
+            fit_colours(frame);
+        })?;
         let drawing = draw_start.elapsed();
         if setup.force_panic {
             panic!("forced panic (--force-panic): the terminal should now be restored");

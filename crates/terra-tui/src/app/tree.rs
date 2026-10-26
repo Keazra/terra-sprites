@@ -83,6 +83,7 @@ impl App {
             self.tree_scroll,
             self.tree_choice,
             self.flash_on(),
+            self.theme.text().muted,
         ))
     }
 

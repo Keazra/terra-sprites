@@ -2,7 +2,9 @@
 // tileset can draw it. Every kind of thing has its own glyph; colour only
 // decorates or marks state. Colours are the 16 terminal colours, by name:
 // black, red, green, yellow, blue, magenta, cyan, gray, dark_gray, light_red,
-// light_green, light_yellow, light_blue, light_magenta, light_cyan, white.
+// light_green, light_yellow, light_blue, light_magenta, light_cyan, white;
+// or an exact colour, "#rrggbb". A name follows the player's terminal colours,
+// so this theme uses exact ones only where no name fits: the panels' shades.
 (
     tiles: {
         terrain(grass):         (glyph: '.', fg: green),
@@ -139,4 +141,26 @@
     // stand out on grass, dirt, sand and water alike. What a theme leaves out
     // of this section, it draws as the default theme does.
     lineage: (elders: light_blue, siblings: light_red, young: light_magenta, others: dark_gray),
+    // The screen's text, by the job it does (design §6.2): headings, minor
+    // text (a log line's tick, "and 3 more", a `·` between parts, a bar's
+    // empty part, what a hint's key does), gains and losses, the key in each
+    // hint, and what's chosen, such as the open tab. Each is a colour, `fg`,
+    // with `bold` and `reversed`, any of them left out. Colour never carries
+    // a meaning alone: the signs, arrows and capitals stay. What a theme
+    // leaves out of this section, it styles as the default theme does.
+    text: (
+        heading:  (fg: light_cyan, bold: true),
+        muted:    (fg: dark_gray),
+        good:     (fg: light_green),
+        bad:      (fg: light_red),
+        key:      (bold: true),
+        selected: (reversed: true),
+    ),
+    // The panels beside and under the map (design §6.1): the inspector and
+    // the event log sit on `shade`, a little lighter than the terminal's
+    // black, and their title rows on `title`, lighter again, with no lines.
+    // No named colour is that close to black, so they're exact. A theme
+    // without this section draws a line between the panels and the map
+    // instead, as the ASCII theme does.
+    panels: (shade: "#181a22", title: "#282c3a"),
 )

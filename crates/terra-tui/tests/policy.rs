@@ -59,18 +59,19 @@ fn row(buffer: &Buffer, y: u16, xs: std::ops::Range<u16>) -> String {
     xs.map(|x| buffer[(x, y)].symbol()).collect()
 }
 
-/// The text inside the inspector's border, trimmed.
+/// The text of the inspector's open tab, trimmed: below its title row and
+/// above the event log (design §6.1).
 fn inspector_text(buffer: &Buffer) -> String {
-    (2..23)
-        .map(|y| row(buffer, y, 55..99).trim().to_string())
+    (2..25)
+        .map(|y| row(buffer, y, 55..100).trim().to_string())
         .collect::<Vec<_>>()
         .join("\n")
 }
 
-/// The text inside the event log's border, trimmed.
+/// The event log's lines, below its title row, trimmed.
 fn event_log_text(buffer: &Buffer) -> String {
-    (25..28)
-        .map(|y| row(buffer, y, 1..99).trim().to_string())
+    (26..29)
+        .map(|y| row(buffer, y, 0..100).trim().to_string())
         .collect::<Vec<_>>()
         .join("\n")
 }

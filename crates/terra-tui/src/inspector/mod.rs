@@ -7,8 +7,9 @@
 //! to use: verbs in `actions`, traits and parents in `body`, and concepts
 //! and what was learned in `brain`.
 
+use ratatui::layout::Rect;
 use ratatui::style::Style;
-use ratatui::text::Line;
+use ratatui::text::{Line, Span};
 use terra_sim::{DeathCause, EntityId, Pos, SpriteView, World};
 
 use crate::app::{App, Selection, Tab};
@@ -36,29 +37,32 @@ use genome::genome_tab;
 pub(crate) use genome::something_new;
 use world::world_tab;
 
-/// The inspector's width, in columns, border included (design §6.1).
+/// The inspector's width, in columns, the column down its left included
+/// (design §6.1).
 pub(crate) const INSPECTOR_WIDTH: u16 = 46;
 
-/// The columns inside the inspector's border.
-const WIDTH: usize = INSPECTOR_WIDTH as usize - 2;
+/// The columns a tab's lines have: all but the column down its left.
+const WIDTH: usize = INSPECTOR_WIDTH as usize - 1;
+
+/// Where the open tab's lines are drawn in the inspector, `area`: below its
+/// title row, and right of the column down its left, which is a line in a
+/// theme without shades (design §6.1).
+pub(crate) fn tab_area(area: Rect) -> Rect {
+    Rect::new(
+        area.x + 1,
+        area.y + 1,
+        area.width.saturating_sub(1),
+        area.height.saturating_sub(1),
+    )
+}
 
 /// What a sprite tab says with no sprite selected.
 pub(crate) const NOTHING_SELECTED: &str = " No sprite selected: click one, or press Tab";
 
-/// The inspector's title: the selected sprite, if any, then the tabs, with
-/// the open one in brackets.
-pub fn title(app: &App) -> String {
-    let tabs: Vec<String> = Tab::ALL
-        .iter()
-        .map(|&tab| {
-            if tab == app.tab() {
-                format!("[{}]", tab.label())
-            } else {
-                tab.label().to_string()
-            }
-        })
-        .collect();
-    let tabs = tabs.join(" ");
+/// The inspector's title row: the selected sprite, if any, then the tabs,
+/// the open one in the theme's style for what's chosen, reverse video in the
+/// built-in themes (design §6.1).
+pub fn title(app: &App) -> Line<'static> {
     // The open tab's policy decides whether the title names the sprite
     // (design §6.4).
     let labels = app
@@ -66,28 +70,52 @@ pub fn title(app: &App) -> String {
         .map(|selection| selection.id())
         .filter(|&id| app.can_view(Panel::Tab(app.tab()), Subject::Sprite(id)))
         .map(|id| (app.names().label(id), format!("#{}", id.0)));
-    fitted_title(
+    let label = fitted_label(
         labels
             .as_ref()
             .map(|(label, short)| (label.as_str(), short.as_str())),
-        &tabs,
-    )
+        tabs_width(),
+    );
+    let mut spans = vec![Span::raw(label)];
+    for (i, &tab) in Tab::ALL.iter().enumerate() {
+        if i > 0 {
+            spans.push(Span::raw(" "));
+        }
+        // As wide as the others' brackets were, so the row doesn't move.
+        if tab == app.tab() {
+            spans.push(Span::styled(
+                format!(" {} ", tab.label()),
+                app.theme.text().selected,
+            ));
+        } else {
+            spans.push(Span::raw(tab.label()));
+        }
+    }
+    Line::from(spans)
 }
 
-/// The columns the border leaves the title: all but its corners and the
-/// line before the title.
-const TITLE_ROOM: usize = INSPECTOR_WIDTH as usize - 3;
+/// How many columns the tabs take in the title row, the open one's
+/// spaces included.
+fn tabs_width() -> usize {
+    let labels: usize = Tab::ALL.iter().map(|tab| tab.label().chars().count()).sum();
+    labels + Tab::ALL.len() - 1 + 2
+}
 
-/// The title with the sprite's `label` if it fits, or else its `short`
-/// label, or else no label: the tabs are never cut (design §6.1).
-fn fitted_title(labels: Option<(&str, &str)>, tabs: &str) -> String {
+/// The columns the title row has: all but the column down the inspector's
+/// left.
+const TITLE_ROOM: usize = INSPECTOR_WIDTH as usize - 1;
+
+/// What the title row says before tabs `tabs` columns wide: the sprite's
+/// `label` if it fits, or else its `short` label, or else just a space:
+/// the tabs are never cut (design §6.1).
+fn fitted_label(labels: Option<(&str, &str)>, tabs: usize) -> String {
     let (label, short) = labels.unzip();
     [label, short]
         .into_iter()
         .flatten()
-        .map(|label| format!(" {label} ── {tabs} "))
-        .find(|title| title.chars().count() <= TITLE_ROOM)
-        .unwrap_or_else(|| format!(" {tabs} "))
+        .map(|label| format!(" {label}  "))
+        .find(|label| label.chars().count() + tabs <= TITLE_ROOM)
+        .unwrap_or_else(|| " ".to_string())
 }
 
 /// The open tab's lines, from the top.
@@ -118,7 +146,12 @@ fn shown(app: &App, world: &World) -> Vec<(Line<'static>, Option<MemoryOpen>)> {
         (tab, Some(Selection::Living(id))) => match (world.sprite(id), world.egg(id)) {
             (Some(sprite), _) => sprite_tab(tab, &sprite, app, world),
             // An egg has no body, brain or chemistry yet (M2 design §10.7).
-            (None, Some(egg)) => bare(egg_card(&egg, world, &app.words(world))),
+            (None, Some(egg)) => bare(egg_card(
+                &egg,
+                world,
+                &app.words(world),
+                app.theme.text().muted,
+            )),
             (None, None) => Vec::new(),
         },
         (_, Some(Selection::Dead { id, cause, age })) => {
@@ -132,7 +165,7 @@ fn shown(app: &App, world: &World) -> Vec<(Line<'static>, Option<MemoryOpen>)> {
                 unbroken(&how),
                 thousands(age)
             );
-            bare(wrapped(&text, 1, Style::default()))
+            bare(wrapped(&text, 1, Style::default(), app.theme.text().muted))
         }
     }
 }
@@ -159,11 +192,8 @@ fn sprite_tab(
 ) -> Vec<(Line<'static>, Option<MemoryOpen>)> {
     match tab {
         Tab::Body => bare(body_tab(sprite, app, world)),
-        Tab::Brain => brain_rows(sprite, app, world)
-            .into_iter()
-            .map(|(text, open)| (Line::from(text), open))
-            .collect(),
-        Tab::Chem => bare(chem_tab(sprite)),
+        Tab::Brain => brain_rows(sprite, app, world),
+        Tab::Chem => bare(chem_tab(sprite, app.theme.text())),
         Tab::Genome => bare(genome_tab(sprite, app)),
         Tab::World => Vec::new(),
     }
@@ -209,10 +239,26 @@ fn listed(items: &[String]) -> String {
 }
 
 /// `text` wrapped at word boundaries to fit the inspector, its first line
-/// indented `indent` columns and the rest 3, all in `style`.
-fn wrapped(text: &str, indent: usize, style: Style) -> Vec<Line<'static>> {
+/// indented `indent` columns and the rest 3, all in `style` but for each
+/// `·` between its parts, which is `muted` (design §6.2).
+fn wrapped(text: &str, indent: usize, style: Style, muted: Style) -> Vec<Line<'static>> {
     wrap(&" ".repeat(indent), "   ", text, WIDTH)
         .into_iter()
-        .map(|line| Line::styled(line.replace(BOUND, " "), style))
+        .map(|line| dotted(&line.replace(BOUND, " "), style, muted))
         .collect()
+}
+
+/// `text` as a line in `style`, but for each `·` between its parts, which
+/// is `muted`: minor beside the parts (design §6.2).
+pub(crate) fn dotted(text: &str, style: Style, muted: Style) -> Line<'static> {
+    let mut spans = Vec::new();
+    for (i, part) in text.split('·').enumerate() {
+        if i > 0 {
+            spans.push(Span::styled("·", muted));
+        }
+        if !part.is_empty() {
+            spans.push(Span::styled(part.to_string(), style));
+        }
+    }
+    Line::from(spans)
 }
