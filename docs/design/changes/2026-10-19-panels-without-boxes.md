@@ -1,6 +1,6 @@
 # Panels without boxes, and colours with jobs
 
-The screen's panels lose their boxes, and their text gets colours by what it is. Fauxpaw settled it in the UI lessons round of 2026-10-19 (questions 1, 2 and part of 8), as Look 1 ([#302](https://github.com/Keazra/terra-sprites/issues/302)), the first of the Look slices ([#301](https://github.com/Keazra/terra-sprites/issues/301)).
+The screen's panels lose their boxes, and their text gets colours by what it is. Fauxpaw settled it in the UI lessons round of 2026-10-19 (questions 1, 2 and part of 8), as Look 1 ([#302](https://github.com/Keazra/terra-sprites/issues/302)), the first of the Look slices ([#301](https://github.com/Keazra/terra-sprites/issues/301)), and it was built in [#383](https://github.com/Keazra/terra-sprites/pull/383).
 
 ## M1 "A Sprite Lives"
 
