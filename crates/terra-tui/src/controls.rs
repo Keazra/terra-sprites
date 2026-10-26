@@ -114,9 +114,9 @@ pub enum Context {
     /// The map and the panels, with nothing open over them.
     World,
     /// The map, on a screen where the inspector pops over it, while it's
-    /// shut (#305).
+    /// shut (design §6.1, #305).
     InspectorShut,
-    /// The inspector, filling the screen (#305).
+    /// The inspector, filling the screen (design §6.1, #305).
     Inspector,
     /// Aiming a throw (design v25 §6.5).
     Throwing,
@@ -546,7 +546,7 @@ pub const TABS: Control = control(
     &[Heading::Inspector],
     "body brain chem genome world",
 );
-// #305.
+// Design §6.1, #305.
 pub const INSPECTOR: Control = control(
     "i",
     &[presses("i", "inspector bigger", Action::Inspector)],

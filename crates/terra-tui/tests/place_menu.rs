@@ -543,7 +543,7 @@ fn a_folder_named_like_a_genome_file_isnt_listed() {
 
 #[test]
 fn the_naming_prompt_shows_its_key_hints() {
-    // The narrowest screen the game draws on, 100 columns, has room for the
+    // The narrowest screen with every panel, 100 columns, has room for the
     // longest name and its hints (design §6.1).
     let world = field(&[], &[at(4, 2)]);
     let mut app = grab_app(&world);

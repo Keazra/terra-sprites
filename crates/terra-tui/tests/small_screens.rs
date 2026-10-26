@@ -10,7 +10,7 @@ use common::screen::inspector_on;
 use common::*;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Size};
-use terra_sim::World;
+use terra_sim::{Pos, World};
 use terra_tui::app::{App, CursorMode, Screen, Selection, Tab};
 use terra_tui::input::{Action, Button};
 use terra_tui::theme::Theme;
@@ -28,11 +28,6 @@ fn field_world() -> World {
 /// A field of grass smaller than the map view, with a sprite at (5, 5).
 fn small_world() -> World {
     WorldBuilder::grass(20, 10).starters(&[at(5, 5)]).build()
-}
-
-/// An app on `world` laid out for a screen of `size`, in the CP437 theme.
-fn app_sized(world: &World, size: Size) -> App {
-    sized_app(world, Theme::cp437(), size)
 }
 
 /// The last row of `screen`: the status line.
@@ -60,7 +55,7 @@ fn under_100_columns_the_inspector_is_shut_until_i_opens_it_over_the_map() {
     let areas = ui::areas(size);
     assert_eq!(areas.tiles.width, 80, "the map view takes the whole width");
     assert!(areas.pops_over);
-    let mut app = app_sized(&world, size);
+    let mut app = sized_app(&world, Theme::cp437(), size);
     select(&mut app, &world, sprite_on(&world, at(5, 5)));
     let shut = render_on(&app, &world, size);
     assert!(!row(&shut, 1).contains("Body"), "{}", row(&shut, 1));
@@ -87,21 +82,20 @@ fn under_100_columns_the_inspector_is_shut_until_i_opens_it_over_the_map() {
 }
 
 #[test]
-fn the_open_pop_over_takes_clicks_and_the_wheel_off_the_map_beneath_it() {
+fn the_inspector_open_over_the_map_takes_clicks_and_the_wheel_off_the_map_beneath_it() {
     let world = field_world();
     let size = Size::new(80, 24);
-    let mut app = app_sized(&world, size);
+    let mut app = sized_app(&world, Theme::cp437(), size);
     let far = sprite_on(&world, at(30, 8));
     let near = sprite_on(&world, at(5, 5));
     select(&mut app, &world, near);
     apply(&mut app, &world, Action::Track);
     apply(&mut app, &world, Action::Track);
-    let cell = app.cell_of(at(30, 8)).expect("in view");
+    let pointer = pointer_on(&app, at(30, 8));
     let inspector = app.inspector_area();
     assert!(inspector.is_none(), "shut, it's drawn nowhere");
     apply(&mut app, &world, Action::Inspector);
     let inspector = app.inspector_area().expect("open");
-    let pointer = Position::new(cell.x + 1, cell.y + 1);
     assert!(inspector.contains(pointer), "the far sprite is under it");
     apply(&mut app, &world, Action::left_click(pointer));
     assert_eq!(app.selection(), Some(Selection::Living(near)));
@@ -124,6 +118,155 @@ fn the_open_pop_over_takes_clicks_and_the_wheel_off_the_map_beneath_it() {
     );
 }
 
+/// Centres the view on the sprite on `tile`, with Track, scrolls it down
+/// to the map view's last row and selects nothing, on a screen of `size`;
+/// and says where `tile` is drawn.
+fn on_the_last_row(app: &mut App, world: &World, size: Size, tile: Pos) -> Position {
+    let tiles = ui::areas(size).tiles;
+    select(app, world, sprite_on(world, tile));
+    apply(app, world, Action::Track);
+    let cell = app.cell_of(tile).expect("centred");
+    let down = i32::from(tiles.bottom() - 1 - cell.y);
+    apply(app, world, Action::Scroll { dx: 0, dy: -down });
+    let cell = app.cell_of(tile).expect("in view");
+    assert_eq!(cell.y, tiles.bottom() - 1, "on the map view's last row");
+    // A click on empty grass, at the map view's top left.
+    apply(
+        app,
+        world,
+        Action::left_click(Position::new(tiles.x + 3, tiles.y + 3)),
+    );
+    assert_eq!(app.selection(), None);
+    cell
+}
+
+#[test]
+fn the_inspector_open_over_the_map_hides_it_from_the_pointer_below_it_too() {
+    let world = WorldBuilder::grass(200, 80).starters(&[at(60, 40)]).build();
+    let size = Size::new(80, 24);
+    let mut app = sized_app(&world, Theme::cp437(), size);
+    let cell = on_the_last_row(&mut app, &world, size, at(60, 40));
+    apply(&mut app, &world, Action::Inspector);
+    let inspector = app.inspector_area().expect("open");
+    assert!(inspector.contains(cell), "the sprite is under it");
+    // On the status line, the pointer points a row up and a cell left, at
+    // the sprite under the inspector.
+    let below = Position::new(cell.x + 1, cell.y + 1);
+    assert!(!inspector.contains(below));
+    apply(&mut app, &world, Action::left_click(below));
+    assert_eq!(app.selection(), None, "the click reaches nothing");
+}
+
+#[test]
+fn filling_the_screen_the_inspector_hides_the_map_and_the_event_log_from_the_pointer() {
+    let world = WorldBuilder::grass(200, 80).starters(&[at(60, 40)]).build();
+    // No event log, so the status line is just below the map view.
+    let size = Size::new(100, 24);
+    let mut app = sized_app(&world, Theme::cp437(), size);
+    let cell = on_the_last_row(&mut app, &world, size, at(60, 40));
+    apply(&mut app, &world, Action::Inspector);
+    assert_eq!(app.screen(), Screen::Inspector);
+    apply(
+        &mut app,
+        &world,
+        Action::left_click(Position::new(cell.x + 1, cell.y + 1)),
+    );
+    assert_eq!(app.selection(), None, "the hidden map takes no click");
+
+    let mut app = app_on(&world);
+    let filters = cell_of_text(&app, &world, SCREEN, "selected major");
+    let filter = app.event_filter();
+    apply(&mut app, &world, Action::Inspector);
+    let screen = render(&app, &world);
+    assert!(
+        !row(&screen, filters.y).contains("selected major"),
+        "hidden with the event log"
+    );
+    apply(&mut app, &world, Action::left_click(filters));
+    assert_eq!(
+        app.event_filter(),
+        filter,
+        "the hidden filters take no click"
+    );
+}
+
+#[test]
+fn open_over_the_map_the_inspector_leaves_the_view_where_it_was_and_centres_beside_it() {
+    let world = field_world();
+    let size = Size::new(80, 24);
+    let tiles = ui::areas(size).tiles;
+    let mut app = sized_app(&world, Theme::cp437(), size);
+    to_the_corner(&mut app, &world);
+    let before = app.cell_of(at(5, 5));
+    apply(&mut app, &world, Action::Inspector);
+    let inspector = app.inspector_area().expect("open");
+    assert_eq!(
+        app.cell_of(at(5, 5)),
+        before,
+        "opening it doesn't move the view"
+    );
+
+    // `Tab` and Track centre a sprite in the part of the view beside it.
+    select(&mut app, &world, sprite_on(&world, at(30, 8)));
+    let cell = app.cell_of(at(30, 8)).expect("in view");
+    assert!(cell.x < inspector.x, "{cell:?} {inspector:?}");
+    apply(&mut app, &world, Action::Track);
+    let cell = app.cell_of(at(30, 8)).expect("in view");
+    assert!(cell.x < inspector.x, "{cell:?} {inspector:?}");
+
+    // The map's last column can be scrolled to beside it.
+    apply(&mut app, &world, Action::Scroll { dx: 500, dy: 0 });
+    let last = app.cell_of(at(199, 8)).expect("in view");
+    assert!(last.x < inspector.x, "{last:?} {inspector:?}");
+    // Shut, the view goes back to a quarter of itself past the wall.
+    apply(&mut app, &world, Action::Back);
+    assert!(!app.inspector_open());
+    let last = app.cell_of(at(199, 8)).expect("in view");
+    assert_eq!(last.x - tiles.x, tiles.width - 1 - tiles.width / 4);
+}
+
+#[test]
+fn a_cursor_left_under_the_inspector_is_hidden_and_q_reaches_nothing_there() {
+    let world = field_world();
+    let size = Size::new(80, 24);
+    let mut app = sized_app(&world, Theme::cp437(), size);
+    to_the_corner(&mut app, &world);
+    let far = sprite_on(&world, at(30, 8));
+    let pointer = pointer_on(&app, at(30, 8));
+    apply(&mut app, &world, Action::Point(pointer));
+    assert_eq!(app.shown_cursor(), Some(at(30, 8)));
+    apply(&mut app, &world, Action::Inspector);
+    assert!(
+        app.inspector_area()
+            .is_some_and(|area| area.contains(app.cell_of(at(30, 8)).unwrap()))
+    );
+    assert_eq!(app.shown_cursor(), None, "under the inspector");
+    let q = Action::Press {
+        button: Button::Left,
+        amplified: false,
+    };
+    apply(&mut app, &world, q);
+    assert_eq!(app.selection(), None);
+
+    apply(&mut app, &world, Action::Back);
+    assert_eq!(app.shown_cursor(), Some(at(30, 8)), "shut, it's back");
+    apply(&mut app, &world, q);
+    assert_eq!(app.selection(), Some(Selection::Living(far)));
+}
+
+#[test]
+fn shrunk_to_no_room_and_back_the_inspector_over_the_map_is_shut() {
+    let world = field_world();
+    let size = Size::new(80, 24);
+    let mut app = sized_app(&world, Theme::cp437(), size);
+    apply(&mut app, &world, Action::Inspector);
+    assert!(app.inspector_open());
+    app.fit(ui::areas(Size::new(80, 9)));
+    assert!(!app.inspector_open() && !app.inspector_shut(), "no room");
+    app.fit(ui::areas(size));
+    assert!(app.inspector_shut(), "so Esc isn't spent closing it unseen");
+}
+
 #[test]
 fn under_30_rows_the_event_log_goes_and_with_too_few_for_the_inspector_the_map_is_alone() {
     let short = ui::areas(Size::new(120, 29));
@@ -143,7 +286,7 @@ fn under_30_rows_the_event_log_goes_and_with_too_few_for_the_inspector_the_map_i
     }
     let world = field_world();
     let size = Size::new(40, 12);
-    let mut app = app_sized(&world, size);
+    let mut app = sized_app(&world, Theme::cp437(), size);
     apply(&mut app, &world, Action::Inspector);
     assert_eq!(app.refusal(), Some("No room for the inspector"));
     assert_eq!(app.screen(), Screen::Normal);
@@ -153,7 +296,7 @@ fn under_30_rows_the_event_log_goes_and_with_too_few_for_the_inspector_the_map_i
 #[test]
 fn short_of_room_the_top_bar_keeps_the_time_and_the_help_key() {
     let world = field_world();
-    let app = app_sized(&world, Size::new(40, 12));
+    let app = sized_app(&world, Theme::cp437(), Size::new(40, 12));
     let bar = row(&render_on(&app, &world, Size::new(40, 12)), 0);
     assert!(bar.starts_with(" tick 0 │ ► 1x"), "{bar}");
     assert!(bar.ends_with("? help"), "{bar}");
@@ -170,14 +313,14 @@ fn i_fills_the_screen_with_the_open_tab_in_columns_and_i_or_esc_takes_it_back() 
     let world = field_world();
     let id = sprite_on(&world, at(5, 5));
     // The Genome tab's lines, from a screen tall enough for them all.
-    let mut tall = app_sized(&world, Size::new(100, 200));
+    let mut tall = sized_app(&world, Theme::cp437(), Size::new(100, 200));
     select(&mut tall, &world, id);
     open(&mut tall, &world, Tab::Genome);
     let (_, docked) = inspector_on(&tall, &world, 200);
     let docked: Vec<String> = docked.into_iter().filter(|line| !line.is_empty()).collect();
 
     let size = Size::new(140, 40);
-    let mut app = app_sized(&world, size);
+    let mut app = sized_app(&world, Theme::cp437(), size);
     select(&mut app, &world, id);
     open(&mut app, &world, Tab::Genome);
     apply(&mut app, &world, Action::Inspector);
@@ -217,7 +360,7 @@ fn i_fills_the_screen_with_the_open_tab_in_columns_and_i_or_esc_takes_it_back() 
 #[test]
 fn filling_the_screen_the_inspector_takes_its_own_keys_and_time_s_but_not_the_map_s() {
     let world = field_world();
-    let mut app = app_sized(&world, Size::new(100, 30));
+    let mut app = sized_app(&world, Theme::cp437(), Size::new(100, 30));
     select(&mut app, &world, sprite_on(&world, at(5, 5)));
     apply(&mut app, &world, Action::Inspector);
     let viewport = app.viewport();
@@ -233,15 +376,15 @@ fn filling_the_screen_the_inspector_takes_its_own_keys_and_time_s_but_not_the_ma
 }
 
 #[test]
-fn on_a_narrow_screen_i_opens_the_pop_over_then_fills_the_screen() {
+fn on_a_narrow_screen_i_opens_the_inspector_over_the_map_then_fills_the_screen() {
     let world = field_world();
-    let mut app = app_sized(&world, Size::new(80, 24));
+    let mut app = sized_app(&world, Theme::cp437(), Size::new(80, 24));
     apply(&mut app, &world, Action::Inspector);
     assert!(app.inspector_open() && app.screen() == Screen::Normal);
     apply(&mut app, &world, Action::Inspector);
     assert_eq!(app.screen(), Screen::Inspector);
     apply(&mut app, &world, Action::Back);
-    assert!(app.inspector_open(), "back to the pop-over");
+    assert!(app.inspector_open(), "back to it open over the map");
     apply(&mut app, &world, Action::Back);
     assert!(!app.inspector_open());
 }
@@ -253,11 +396,10 @@ fn zoomed_the_map_view_shows_47_by_34_tiles_at_140_by_40_and_27_by_24_at_100_by_
         (Size::new(140, 40), 94, 34, 47),
         (Size::new(100, 30), 54, 24, 27),
     ] {
-        let mut app = app_sized(&world, size);
+        let mut app = sized_app(&world, Theme::cp437(), size);
         let row = ui::areas(size).tiles.y + 1;
         assert_eq!(tiles_across(&app, row).len(), across, "{size:?}");
         apply(&mut app, &world, Action::Zoom);
-        assert!(app.zoomed());
         assert_eq!(app.tile_width(), 2);
         assert_eq!(tiles_across(&app, row).len(), zoomed, "{size:?}");
         assert_eq!(ui::areas(size).tiles.height, down, "{size:?}");
@@ -288,7 +430,7 @@ fn zoomed_terrain_repeats_in_a_tile_s_second_cell_and_a_sprite_or_an_object_leav
 fn zoomed_the_glass_meets_the_map_on_every_side() {
     let world = small_world();
     let size = Size::new(100, 30);
-    let mut app = app_sized(&world, size);
+    let mut app = sized_app(&world, Theme::cp437(), size);
     apply(&mut app, &world, Action::Zoom);
     let screen = render_on(&app, &world, size);
     let first = app.cell_of(at(0, 0)).expect("in view");
@@ -400,7 +542,7 @@ fn i_and_o_are_in_the_help() {
 fn a_narrow_help_stacks_its_columns_rather_than_cutting_them() {
     let world = field_world();
     let size = Size::new(60, 20);
-    let mut app = app_sized(&world, size);
+    let mut app = sized_app(&world, Theme::cp437(), size);
     apply(&mut app, &world, Action::Inspector);
     apply(&mut app, &world, Action::Back);
     apply(&mut app, &world, Action::Help);
@@ -421,30 +563,6 @@ fn a_narrow_help_stacks_its_columns_rather_than_cutting_them() {
             .any(|line| line.contains("enter      the same, where it points")),
         "uncut: {shown:#?}"
     );
-}
-
-#[test]
-fn the_title_screen_needs_60_by_20() {
-    use terra_tui::args::Args;
-    use terra_tui::start;
-    use terra_tui::title::{self, Title};
-    let draw = |size: Size| {
-        let world = start::title_world(&Args::default(), 3, (size.width, size.height)).unwrap();
-        let mut title = Title::new(world, Theme::cp437(), 1, size);
-        title.animate(std::time::Duration::from_secs(10));
-        let mut terminal =
-            ratatui::Terminal::new(ratatui::backend::TestBackend::new(size.width, size.height))
-                .unwrap();
-        terminal.draw(|frame| title::render(frame, &title)).unwrap();
-        lines(terminal.backend().buffer()).join("\n")
-    };
-    let fits = draw(Size::new(60, 20));
-    assert!(
-        fits.contains("1 New world") && fits.contains("4 Quit"),
-        "{fits}"
-    );
-    let small = draw(Size::new(59, 20));
-    assert!(small.contains("needs 60x20, this is 59x20"), "{small}");
 }
 
 #[test]

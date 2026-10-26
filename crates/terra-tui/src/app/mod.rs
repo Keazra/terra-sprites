@@ -49,6 +49,8 @@ mod status;
 mod tree;
 mod view;
 
+use view::InspectorRoom;
+
 pub(crate) use cursor::{ItemLook, ShownItems, item_look};
 pub(crate) use help::finds;
 pub(crate) use spots::in_the_world;
@@ -435,15 +437,9 @@ pub struct App {
     /// The map view's screen cells, where it draws the map and what's past
     /// its wall.
     tile_area: Rect,
-    /// The inspector, its title row included, if the screen has room for
-    /// it: where it's drawn while it's shown.
-    inspector_room: Option<Rect>,
-    /// Whether the inspector pops over the map view's right side rather
-    /// than sitting beside it, on a screen under 100 columns (#305).
-    pops_over: bool,
-    /// Whether the inspector is open over the map, where it pops over it
-    /// (`i`, #305).
-    inspector_open: bool,
+    /// Where the inspector goes as the screen is laid out, and whether it's
+    /// open where it pops over the map view (design §6.1, #305).
+    inspector: InspectorRoom,
     /// Whether each tile is drawn two cells wide, so tiles are square
     /// (`o`, M2 design §11.7, #305). Not part of the world.
     zoom: bool,
@@ -763,9 +759,7 @@ impl App {
             viewport: Origin { x: 0, y: 0 },
             map_size: Size::new(map.width(), map.height()),
             tile_area: areas.tiles,
-            inspector_room: areas.inspector,
-            pops_over: areas.pops_over,
-            inspector_open: false,
+            inspector: InspectorRoom::of(&areas, InspectorRoom::Nowhere),
             zoom: false,
             pointer: None,
             pointer_past_wall: false,
@@ -956,7 +950,7 @@ impl App {
             Screen::FamilyTree => return self.apply_in_tree(action, world),
             // Filling the screen, the inspector takes the inspector's keys,
             // time's and the pointer's, and `i` or `Esc` takes it back
-            // (#305).
+            // (design §6.1, #305).
             Screen::Inspector if matches!(action, Action::Inspector | Action::Back) => {
                 self.screen = Screen::Normal;
                 return Flow::Continue;
@@ -1037,10 +1031,11 @@ impl App {
                     _ => {}
                 }
             }
-            Action::Press { button, amplified } if !self.out_of_reach() => {
-                self.act(self.cursor, button, amplified, world);
+            Action::Press { button, amplified } => {
+                if let Some(tile) = self.shown_cursor() {
+                    self.act(tile, button, amplified, world);
+                }
             }
-            Action::Press { .. } => {}
             // A middle click points, then acts where the Cursor is, as `F`
             // does (design v26 §6.5); past the wall, on no tile (M2 design
             // §11.4).
@@ -1080,7 +1075,7 @@ impl App {
             Action::NextTab => self.open(self.tab.along(1)),
             Action::PreviousTab => self.open(self.tab.along(-1)),
             Action::ScrollTab { pages } => {
-                let page = self.inspector_rows() as i32;
+                let page = self.lines_at_once() as i32;
                 self.scroll_tab(pages * page, world);
             }
             // The wheel scrolls the inspector's tab, and over the map cycles
@@ -1129,8 +1124,9 @@ impl App {
             // first, in any mode (design v33 §6.5); then returns to Select;
             // from Select it asks to quit (design v21 §6.5).
             Action::Back if self.aim.is_some() => self.end_aim(),
-            // Then it closes the inspector open over the map (#305).
-            Action::Back if self.pops_over && self.inspector_open => self.inspector_open = false,
+            // Then it closes the inspector open over the map (design §6.1,
+            // #305).
+            Action::Back if self.inspector_open() => self.open_inspector(false),
             Action::Back if self.placing.is_some() => self.placing = None,
             Action::Back if self.grip(world).is_some() => self.let_go(world),
             Action::Back if self.mode != CursorMode::Select => self.mode = CursorMode::Select,
@@ -1236,10 +1232,10 @@ pub(crate) fn spoken_duration(time: Duration) -> String {
     }
 }
 
-/// Whether `action` works while the inspector fills the screen (#305): its
-/// tabs, scrolling and memory headings, the pointer over it, time, choosing
-/// a sprite, the detail view and help. The rest are the map's, which is
-/// hidden.
+/// Whether `action` works while the inspector fills the screen (design
+/// §6.1, #305): its tabs, scrolling and memory headings, the pointer over
+/// it, time, choosing a sprite, the detail view and help. The rest are the
+/// map's, which is hidden.
 fn works_full_screen(action: &Action) -> bool {
     matches!(
         action,

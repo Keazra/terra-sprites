@@ -54,15 +54,15 @@ impl App {
     }
 
     /// The lines a tab shows at once in the inspector: a page.
-    pub(super) fn inspector_rows(&self) -> usize {
+    pub(super) fn lines_at_once(&self) -> usize {
         self.inspector_area()
-            .map_or(0, |area| inspector::Pages::of(area).lines())
+            .map_or(0, |area| inspector::TabColumns::of(area).at_once())
     }
 
     /// Scrolls the open tab by `lines` from where it's shown, down being
     /// positive, stopping at the top and where its last line comes into view.
     pub(super) fn scroll_tab(&mut self, lines: i32, world: &World) {
-        let (length, rows) = (inspector::lines(self, world).len(), self.inspector_rows());
+        let (length, rows) = (inspector::lines(self, world).len(), self.lines_at_once());
         let from = inspector::first_shown(self.tab_scroll, length, rows);
         let furthest = inspector::first_shown(usize::MAX, length, rows);
         let scrolled = from as i64 + i64::from(lines);
@@ -91,11 +91,14 @@ impl App {
     }
 
     /// Selects `id`, and centres the viewport on it, where it is at `pos`
-    /// if it's anywhere, only if it's out of view (design §6.5): as `Tab`
-    /// does, and a click on a line of the event log about it.
+    /// if it's anywhere, only if it's out of sight (design §6.5): out of
+    /// view, or under the inspector open over the map view (design §6.1,
+    /// #305). As `Tab` does, and a click on a line of the event log about
+    /// it.
     pub(super) fn select_in_view(&mut self, id: EntityId, pos: Option<Pos>) {
         self.select(id);
-        if let Some(pos) = pos.filter(|&pos| self.cell_of(pos).is_none()) {
+        let out_of_sight = |pos: Pos| self.cell_of(pos).is_none() || self.under_the_inspector(pos);
+        if let Some(pos) = pos.filter(|&pos| out_of_sight(pos)) {
             self.centre_on(pos);
         }
     }

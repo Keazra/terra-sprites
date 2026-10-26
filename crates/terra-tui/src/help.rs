@@ -117,12 +117,15 @@ fn row(control: &Control, look: TextLook) -> Vec<Span<'static>> {
     ]
 }
 
+/// A row of a help column: a heading, or a key and what it does.
+type Cell = Vec<Span<'static>>;
+
 /// The keys under each heading of `columns`, a column of headings at a
 /// time, side by side in a screen `width` columns wide. Where they don't
 /// all fit side by side, as many as do are, and the rest go below them
-/// (#305).
+/// (design §6.1, #305).
 fn in_columns(columns: &[&[Heading]], width: usize, look: TextLook) -> Vec<Line<'static>> {
-    let columns: Vec<Vec<Vec<Span<'static>>>> = columns
+    let columns: Vec<Vec<Cell>> = columns
         .iter()
         .map(|headings| {
             headings
@@ -148,24 +151,28 @@ fn in_columns(columns: &[&[Heading]], width: usize, look: TextLook) -> Vec<Line<
     lines
 }
 
-/// How wide a help column's widest row is.
-fn widest(column: &[Vec<Span<'static>>]) -> usize {
-    column
-        .iter()
-        .map(|cell| cell_width(cell))
-        .max()
-        .unwrap_or(0)
-}
-
 /// How wide a row of the help is.
 fn cell_width(cell: &[Span<'static>]) -> usize {
     cell.iter().map(|span| span.content.chars().count()).sum()
 }
 
+/// How wide each of `columns` help columns is, at least, side by side in
+/// `width` columns: an equal share of them.
+fn share(width: usize, columns: usize) -> usize {
+    width / columns.max(1)
+}
+
 /// Whether `columns` fit side by side in `width` columns, each no sooner
-/// than an equal share of them after the one before.
-fn fits(columns: &[Vec<Vec<Span<'static>>>], width: usize) -> bool {
-    let share = width / columns.len().max(1);
+/// than its share of them after the one before.
+fn fits(columns: &[Vec<Cell>], width: usize) -> bool {
+    let share = share(width, columns.len());
+    let widest = |column: &Vec<Cell>| {
+        column
+            .iter()
+            .map(|cell| cell_width(cell))
+            .max()
+            .unwrap_or(0)
+    };
     let Some((last, before)) = columns.split_last() else {
         return true;
     };
@@ -174,24 +181,24 @@ fn fits(columns: &[Vec<Vec<Span<'static>>>], width: usize) -> bool {
 }
 
 /// `columns`' rows side by side, in `width` columns.
-fn side_by_side(columns: &[Vec<Vec<Span<'static>>>], width: usize) -> Vec<Line<'static>> {
-    let column_width = width / columns.len().max(1);
+fn side_by_side(columns: &[Vec<Cell>], width: usize) -> Vec<Line<'static>> {
+    let share = share(width, columns.len());
     let rows = columns.iter().map(Vec::len).max().unwrap_or(0);
     (0..rows)
         .map(|row| {
             // Each column starts where the one before it ends, and no sooner
-            // than a column's width after it.
+            // than its share after it.
             let mut spans = Vec::new();
             let (mut used, mut start) = (0, 0);
             for column in columns {
                 let cell = column.get(row).cloned().unwrap_or_default();
-                let cell_width = cell_width(&cell);
+                let taken = cell_width(&cell);
                 if !cell.is_empty() {
                     spans.push(Span::raw(" ".repeat(start - used)));
                     spans.extend(cell);
-                    used = start + cell_width;
+                    used = start + taken;
                 }
-                start += cell_width.max(column_width);
+                start += taken.max(share);
             }
             Line::from(spans)
         })

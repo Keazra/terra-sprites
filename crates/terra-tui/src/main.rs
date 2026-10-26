@@ -240,7 +240,8 @@ impl Opening {
 
 /// The title screen's world, sized to the terminal (M2 design §8.1).
 fn title_world(args: &Args) -> Result<World, String> {
-    let (width, height) = terminal::size().unwrap_or((ui::MIN_SIZE.width, ui::MIN_SIZE.height));
+    let smallest = title::MIN_SIZE;
+    let (width, height) = terminal::size().unwrap_or((smallest.width, smallest.height));
     start::title_world(args, time_seed(), (width, height))
 }
 

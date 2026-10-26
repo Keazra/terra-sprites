@@ -924,6 +924,20 @@ fn a_terminal_too_small_says_so() {
 }
 
 #[test]
+fn the_title_screen_draws_its_menu_from_60_by_20() {
+    // #305: its boxes' room, more than the game's own smallest screen.
+    let mut title = title_on(60, 20);
+    title.animate(Duration::from_secs(10));
+    let shown = text(&render_at(&title, 60, 20));
+    assert!(
+        shown.contains("1 New world") && shown.contains("4 Quit"),
+        "{shown}"
+    );
+    let shown = text(&render_at(&title, 59, 20));
+    assert!(shown.contains("needs 60x20, this is 59x20"), "{shown}");
+}
+
+#[test]
 fn a_terminal_too_small_takes_no_clicks_or_turns_of_the_wheel() {
     // M2 design §8.2: as a world's too-small screen takes none (design
     // §6.1), the menu hidden behind the message can't be picked from.

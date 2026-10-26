@@ -17,7 +17,7 @@ use crate::app::{
 };
 use crate::controls::{self, Context, Control, Hint, PaletteRow, Says};
 use crate::family_tree::{self, Lineage};
-use crate::inspector::{self, INSPECTOR_WIDTH, NOTHING_SELECTED, Pages, first_shown};
+use crate::inspector::{self, INSPECTOR_WIDTH, NOTHING_SELECTED, TabColumns, first_shown};
 use crate::policy::{Panel, Subject};
 use crate::space::{self, Place};
 use crate::spots::{Spot, Spots};
@@ -99,9 +99,9 @@ pub fn render_with(frame: &mut Frame, app: &App, world: &World, parts: Parts) {
     }
     draw_tiles(frame.buffer_mut(), map_view_area(area, parts), app, world);
     // Beside the map view, or over its right side while it's open there
-    // (#305).
-    let inspector =
-        inspector_area(area, parts).filter(|_| !pops_over(area) || app.inspector_open());
+    // (design §6.1, #305), as the app has it, so it's drawn where clicks
+    // find it.
+    let inspector = inspector_area(area, parts).filter(|_| !app.inspector_shut());
     if let Some(inspector) = inspector {
         render_inspector(frame.buffer_mut(), inspector, app, world, &mut spots);
     }
@@ -141,8 +141,8 @@ pub fn render_with(frame: &mut Frame, app: &App, world: &World, parts: Parts) {
             render_family_tree(frame.buffer_mut(), app, world);
             pop_ups.push(overlay);
         }
-        // The inspector, filling the screen (#305). It hides all that's
-        // beneath it, so only its own spots take the pointer.
+        // The inspector, filling the screen (design §6.1, #305). It hides
+        // all that's beneath it, so only its own spots take the pointer.
         Screen::Inspector => {
             if let Some(area) = overlay {
                 spots = Spots::default();
@@ -250,7 +250,7 @@ pub(crate) fn render_too_small_with(
     let needs = format!("needs {}x{},", needs.width, needs.height);
     let this = format!("this is {}x{}", area.width, area.height);
     let mut lines = vec!["Terminal too small".to_string()];
-    // On two lines if it's too narrow for one (#305).
+    // On two lines if it's too narrow for one (design §6.1, #305).
     if needs.len() + this.len() < usize::from(area.width) {
         lines.push(format!("{needs} {this}"));
     } else {
@@ -339,7 +339,8 @@ fn panels_height(screen: Rect, parts: Parts) -> u16 {
 /// The inspector, its title row and the column down its left included, if
 /// it's drawn: at the right, below the top bar if that's drawn, down to the
 /// event log or the status line, on a terminal with room for it. Beside the
-/// map view, or on one under 100 columns over its right side (#305).
+/// map view, or on one under 100 columns over its right side (design §6.1,
+/// #305).
 fn inspector_area(screen: Rect, parts: Parts) -> Option<Rect> {
     let rows = panels_height(screen, parts);
     let room = screen.width >= INSPECTOR_WIDTH && rows >= MIN_INSPECTOR_ROWS;
@@ -430,7 +431,7 @@ fn draw_tiles(buf: &mut Buffer, inner: Rect, app: &App, world: &World) {
                 Place::Tile(pos) => pos,
                 Place::Glass(pane) => {
                     let glass = app.theme.glass(pane);
-                    let column = app.viewport().x + i32::from((x - inner.x) / width);
+                    let column = app.column_from(inner.as_position(), Position::new(x, y));
                     // Two cells wide, the glass down the sides keeps to the
                     // map's side of its tile, so it meets the map.
                     let outer = if column < 0 { !second } else { second };
@@ -1185,30 +1186,31 @@ fn top_bar_line(app: &App, world: &World, width: u16) -> Line<'static> {
         Some(ago) if ago.as_secs() < 60 => format!("saved {}s ago", ago.as_secs() / 10 * 10),
         Some(ago) => format!("saved {} ago", spoken_duration(ago)),
     };
-    let mut parts = [
-        Some("Terra Sprites".to_string()),
-        Some(format!("tick {}", thousands(world.tick()))),
-        Some(time),
-        Some(format!("seed {}", app.seed)),
-        population,
-        Some(saved),
+    // Each piece, and how soon it goes when the bar is short of room for
+    // `? help`: the seed first, then the game's name, when it was saved and
+    // how many sprites there are, so the time and the help's key stay
+    // (design §6.1, #305).
+    let mut pieces: Vec<(Option<u8>, String)> = vec![
+        (Some(1), "Terra Sprites".to_string()),
+        (None, format!("tick {}", thousands(world.tick()))),
+        (None, time),
+        (Some(0), format!("seed {}", app.seed)),
     ];
-    let text = |parts: &[Option<String>]| {
-        let shown: Vec<&str> = parts.iter().flatten().map(String::as_str).collect();
+    pieces.extend(population.map(|count| (Some(3), count)));
+    pieces.push((Some(2), saved));
+    let joined = |pieces: &[(Option<u8>, String)]| {
+        let shown: Vec<&str> = pieces.iter().map(|(_, piece)| piece.as_str()).collect();
         format!(" {}", shown.join(" │ "))
     };
     let help = help_hint(app, world);
     let wide = |hint: &Vec<Span>| hint.iter().map(Span::width).sum::<usize>();
-    // Short of room for `? help`, the bar drops the seed, then the game's
-    // name, when it was saved and how many sprites there are, so the time
-    // and the help's key stay (#305).
-    for part in [3, 0, 5, 4] {
-        if text(&parts).chars().count() + wide(&help.plain) < usize::from(width) {
+    for soonest in 0..4 {
+        if joined(&pieces).chars().count() + wide(&help.plain) < usize::from(width) {
             break;
         }
-        parts[part] = None;
+        pieces.retain(|&(goes, _)| goes != Some(soonest));
     }
-    let text = text(&parts);
+    let text = joined(&pieces);
     // `? help`, naming the page `?` would open, `? help (Inspector)`, or
     // without it if the bar's short of room (#303). At least a space comes
     // between it and the rest, so it never runs into them.
@@ -1489,7 +1491,7 @@ fn item_label(item: &ItemLook) -> String {
 /// between it and the map view.
 fn render_inspector(buf: &mut Buffer, area: Rect, app: &App, world: &World, spots: &mut Spots) {
     // Over the map view, or filling the screen, nothing beneath shows
-    // through past a short line (#305).
+    // through past a short line (design §6.1, #305).
     blank(buf, area);
     match app.theme.panels() {
         Some(panels) => shade(buf, area, panels),
@@ -1507,18 +1509,18 @@ fn render_inspector(buf: &mut Buffer, area: Rect, app: &App, world: &World, spot
         let place = Rect::new(start, area.y, columns.len() as u16, 1).intersection(area);
         spots.note(place, Spot::Tab(tab));
     }
-    // In columns, where there's room for more than one (#305), each line's
-    // spots where it's drawn.
-    let pages = Pages::of(area);
+    // In columns, where there's room for more than one (design §6.1, #305),
+    // each line's spots where it's drawn.
+    let columns = TabColumns::of(area);
     let lines = inspector::shown(app, world);
-    let first = first_shown(app.tab_scroll(), lines.len(), pages.lines());
+    let first = first_shown(app.tab_scroll(), lines.len(), columns.at_once());
     for (shown, line) in lines.into_iter().skip(first).enumerate() {
-        let Some(row) = pages.row(shown) else {
+        let Some(row) = columns.place(shown) else {
             break;
         };
         buf.set_line(row.x, row.y, &line.line, row.width);
-        for (columns, spot) in line.spots {
-            let place = Rect::new(row.x + columns.start, row.y, columns.len() as u16, 1);
+        for (cells, spot) in line.spots {
+            let place = Rect::new(row.x + cells.start, row.y, cells.len() as u16, 1);
             let place = place.intersection(row);
             if line.minor {
                 spots.note_unmarked(place, spot);

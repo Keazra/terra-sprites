@@ -41,8 +41,7 @@ const LOAD_ROWS: usize = 12;
 /// The smallest screen the title screen draws on: its tallest box, New
 /// world's, its status line and a margin round them (M2 design §8.2,
 /// #305). The game itself draws on less.
-pub(crate) const MIN_SIZE: Size =
-    Size::new(BOX_WIDTH + 4, NEW_WORLD_FRAME_ROWS + PRESET_ROWS as u16 + 4);
+pub const MIN_SIZE: Size = Size::new(BOX_WIDTH + 4, NEW_WORLD_FRAME_ROWS + PRESET_ROWS as u16 + 4);
 /// The list of saves' rows besides the saves: its border.
 const LOAD_FRAME_ROWS: u16 = 2;
 /// The most presets the New world box shows at once; it scrolls for more.

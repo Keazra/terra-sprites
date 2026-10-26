@@ -27,19 +27,6 @@ fn selected(size: Size, tab: Tab) -> (World, App, EntityId) {
     (world, app, id)
 }
 
-/// The screen cell where `text` starts on the first row of a `size` screen
-/// that has it.
-fn cell_of_text(app: &App, world: &World, size: Size, text: &str) -> Position {
-    let screen = render_on(app, world, size);
-    for y in 0..size.height {
-        let row = row(&screen, y);
-        if let Some(x) = row.find(text) {
-            return Position::new(row[..x].chars().count() as u16, y);
-        }
-    }
-    panic!("{text:?} isn't on screen:\n{}", lines(&screen).join("\n"));
-}
-
 /// A tooltip as it's drawn: the name on its top edge, and the words inside
 /// it, its lines joined with spaces.
 #[derive(Debug)]

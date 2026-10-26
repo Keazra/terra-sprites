@@ -10,7 +10,7 @@ use terra_tui::input::Action;
 use terra_tui::theme::Theme;
 
 use super::{
-    LONE, WorldBuilder, at, inspector_rows, pack, pack_changing, render_on, run, sized_app,
+    LONE, SCREEN, WorldBuilder, at, inspector_rows, pack, pack_changing, render_on, run, sized_app,
 };
 
 pub fn generated_world() -> World {
@@ -24,14 +24,9 @@ pub fn app_for(world: &World, theme: Theme, width: u16, height: u16) -> App {
     sized_app(world, theme, at_least_min(width, height))
 }
 
-/// The smallest screen with room for every panel beside the map view
-/// (design §6.1): the size the game drew on, at least, before smaller
-/// screens stepped down (#305).
-pub const EVERY_PANEL: Size = Size::new(100, 30);
-
 /// A screen of at least the smallest size with every panel.
 pub fn at_least_min(width: u16, height: u16) -> Size {
-    Size::new(width.max(EVERY_PANEL.width), height.max(EVERY_PANEL.height))
+    Size::new(width.max(SCREEN.width), height.max(SCREEN.height))
 }
 
 /// One frame on a `width`×`height` screen. Smaller than 100×30, where the

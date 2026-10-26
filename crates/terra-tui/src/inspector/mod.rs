@@ -62,41 +62,43 @@ pub(crate) fn tab_area(area: Rect) -> Rect {
 /// The columns between two of a tab's columns of lines.
 const COLUMN_GAP: u16 = 2;
 
+/// How far one of a tab's columns of lines starts from the one before.
+const COLUMN_STEP: u16 = WIDTH as u16 + COLUMN_GAP;
+
 /// Where a tab's lines are drawn in the inspector, below its title row: in
 /// as many columns as fit side by side, one beside the map view, and more
 /// while the tab fills the screen, read down each and on to the next
 /// (design §6.1, #305).
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct Pages {
+pub(crate) struct TabColumns {
     inner: Rect,
     columns: u16,
 }
 
-impl Pages {
-    /// The open tab's lines' places in the inspector, `area`.
-    pub(crate) fn of(area: Rect) -> Pages {
+impl TabColumns {
+    /// The open tab's columns of lines in the inspector, `area`.
+    pub(crate) fn of(area: Rect) -> TabColumns {
         let inner = tab_area(area);
-        let column = WIDTH as u16 + COLUMN_GAP;
-        Pages {
+        TabColumns {
             inner,
-            columns: ((inner.width + COLUMN_GAP) / column).max(1),
+            columns: ((inner.width + COLUMN_GAP) / COLUMN_STEP).max(1),
         }
     }
 
     /// How many lines fit at once: a page.
-    pub(crate) fn lines(self) -> usize {
+    pub(crate) fn at_once(self) -> usize {
         usize::from(self.inner.height) * usize::from(self.columns)
     }
 
     /// Where the `shown`th line of those shown is drawn, counting from 0,
     /// if it fits.
-    pub(crate) fn row(self, shown: usize) -> Option<Rect> {
+    pub(crate) fn place(self, shown: usize) -> Option<Rect> {
         let rows = usize::from(self.inner.height);
-        if rows == 0 || shown >= self.lines() {
+        if rows == 0 || shown >= self.at_once() {
             return None;
         }
         let (column, row) = ((shown / rows) as u16, (shown % rows) as u16);
-        let x = self.inner.x + column * (WIDTH as u16 + COLUMN_GAP);
+        let x = self.inner.x + column * COLUMN_STEP;
         let width = (WIDTH as u16).min(self.inner.right().saturating_sub(x));
         Some(Rect::new(x, self.inner.y + row, width, 1))
     }

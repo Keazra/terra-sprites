@@ -308,6 +308,19 @@ pub fn lines(screen: &Buffer) -> Vec<String> {
     (0..screen.area.height).map(|y| row(screen, y)).collect()
 }
 
+/// The screen cell where `text` starts on the first row of a `size` screen
+/// that has it.
+pub fn cell_of_text(app: &App, world: &World, size: Size, text: &str) -> Position {
+    let screen = render_on(app, world, size);
+    for y in 0..size.height {
+        let row = row(&screen, y);
+        if let Some(x) = row.find(text) {
+            return Position::new(row[..x].chars().count() as u16, y);
+        }
+    }
+    panic!("{text:?} isn't on screen:\n{}", lines(&screen).join("\n"));
+}
+
 /// A key event of `kind` with no modifiers: a press, a repeat or a
 /// release.
 pub fn key(code: KeyCode, kind: KeyEventKind) -> KeyEvent {
