@@ -1,12 +1,14 @@
 //! Shared helpers for terra-tui integration tests: hand-drawn worlds, apps
 //! on them, frames drawn as text, the player's clicks and ticks (#156), and
 //! worlds where generations come quickly, for the family tree (M2 design
-//! §17).
+//! §17). The tests of what the screen draws share more in `screen` (#136).
 //!
 //! Each test file is its own crate, so it `mod common;` and uses only the
 //! pieces it needs. Helpers a given file never calls are allowed here so the
 //! shared API stays one place, as in terra-sim's (#155).
 #![allow(dead_code)]
+
+pub mod screen;
 
 use std::path::PathBuf;
 
