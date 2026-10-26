@@ -198,6 +198,7 @@ The game's designs:
 
 - [M2 "Generations" design](design/m2-generations.md) (the plan for milestone 2: its slices, the time scale of a sprite's life, and what "M2 is done" means; and what its slices settled: memory of places, the title screen, and where places sit on the Brain tab, life stages and ageing, breeding, the view past the wall, mixing and changing genes, the population graph, courtship and families, fast-forward and the speed cap, the family tree, learning by watching, and a harsher world).
 - [M1 "A Sprite Lives" design](design/m1-a-sprite-lives.md), the rulebook for everything M2 doesn't change.
+- [M3 "Body & verbs" design](design/m3-body-and-verbs.md) (the plan for milestone 3, next: its slices, content safety, the rules every new verb shares, and what "M3 is done" means).
 - [M4 "Terra" design](design/m4-terra.md) (the plan for the ship, a later milestone: its sectors, devices and sealed doors, and what "M4 is done" means).
 - [Design changes](design/changes/): each change to a design, one file per PR; its README says where the earlier numbered revisions are. The evaluations of v1 are in [`docs/design/reviews/`](design/reviews/).
 

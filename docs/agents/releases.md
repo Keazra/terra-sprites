@@ -90,7 +90,7 @@ Only for a serious problem players hit in a release (a crash, a lost save, a wor
 
 1. The fix merges to `main` first, as usual.
 2. A branch `release/0.2`, made from the tag, takes the same change in a PR of its own, with the version raised to 0.2.1 (and the title clip with it, as in "Making one") and a short `docs/releases/v0.2.1.md`.
-3. The owner merges it and makes the release `v0.2.1` on that branch: the downloads workflow, as in "Making one", with the tag `v0.2.1`, run from `release/0.2` (`--ref release/0.2`, or that branch under "Use workflow from"). A PR to `main` then points the README's and the manual's install commands at `v0.2.1`, and carries the notes file across.
+3. The owner merges it and makes the release `v0.2.1` on that branch: the downloads workflow, as in "Making one", with the tag `v0.2.1`, run from `release/0.2` (`--ref release/0.2`, or that branch under "Use workflow from"). A PR to `main` then points the README's and the manual's install commands and release-page links at `v0.2.1`, and carries the notes file across.
 
 ## The first release
 
