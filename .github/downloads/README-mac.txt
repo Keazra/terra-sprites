@@ -67,7 +67,8 @@ update, unzip the new one and run that instead.
 Removing it
 -----------
 
-1. Drag this folder to the Trash. That removes the game.
+1. Drag this folder to the Trash, and the zip too if Safari kept it.
+   That removes the game.
 
 2. To remove your worlds too, delete the game's own folder. In Finder,
    choose Go, then Go to Folder, type ~/Library/Application Support and

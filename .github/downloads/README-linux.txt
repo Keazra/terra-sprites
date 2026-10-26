@@ -53,9 +53,9 @@ instead.
 Removing it
 -----------
 
-1. Delete this folder, and terra-sprites from the folder on your PATH if
-   you moved it there (rm ~/.local/bin/terra-sprites). That removes the
-   game.
+1. Delete this folder, the zip if you kept it, and terra-sprites from
+   the folder on your PATH if you moved it there
+   (rm ~/.local/bin/terra-sprites). That removes the game.
 
 2. To remove your worlds too, delete the game's own folder:
 

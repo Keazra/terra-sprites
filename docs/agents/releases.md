@@ -58,7 +58,7 @@ At the end of the milestone's acceptance slice (M2's is Slice 30b, [#148](https:
    ```
 
    Publishing makes the tag, on the commit the zips were built from. The workflow never publishes: until the owner does, only those who can push to the repo can see the draft.
-4. **Check it installs, and uninstalls cleanly:** the `cargo install` line above, on the owner's PC or in a cloud session, then `terra-sprites --version`; then the notes' uninstall steps leave neither the `terra-sprites` command nor the game's folder behind.
+4. **Check it installs, and uninstalls cleanly:** the `cargo install` line above, on the owner's PC or in a cloud session, then `terra-sprites --version`; then the notes' uninstall steps leave neither the `terra-sprites` command nor the game's folder behind. On the owner's PC, the "Removing it" steps in the `README.txt` of their system's zip should leave nothing behind too.
 
 ### The notes
 
@@ -85,11 +85,11 @@ Either way, you need a terminal of at least 100×30 (on Windows, Windows Termina
 
 ## Uninstall
 
-Delete the folder you unzipped, or run `cargo uninstall terra-tui` if you installed it with Rust. Your worlds stay in the game's own folder, so a newer version finds them, until you delete that too:
+Delete the folder you unzipped, the zip if you kept it, and on Linux `terra-sprites` from the folder on your PATH if you moved it there. Or, if you installed it with Rust, run `cargo uninstall terra-tui`. Your worlds stay in the game's own folder, so a newer version finds them, until you delete that too:
 
 - Windows (PowerShell): `Remove-Item -Recurse "$env:APPDATA\terra-sprites"`
 - Mac: `rm -rf ~/Library/Application\ Support/terra-sprites`
-- Linux: `rm -rf ~/.local/share/terra-sprites`
+- Linux: `rm -rf ~/.local/share/terra-sprites`, or `$XDG_DATA_HOME/terra-sprites` if you've set that
 
 The game writes nothing anywhere else. A Rust install also leaves the code it downloaded in Cargo's folder: the manual's [Uninstalling](https://github.com/Keazra/terra-sprites/blob/v0.2.0/docs/manual.md#uninstalling) says how to clear it.
 ```

@@ -58,7 +58,8 @@ and run that instead.
 Removing it
 -----------
 
-1. Delete this folder. That removes the game.
+1. Delete this folder, and the zip you downloaded if you kept it. That
+   removes the game.
 
 2. To remove your worlds too, delete the game's own folder. Type
    %APPDATA% in File Explorer's address bar, press Enter, and delete the
