@@ -10,10 +10,12 @@ use ratatui::Frame;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Rect, Size};
 use ratatui::style::{Color, Modifier, Style};
+use ratatui::text::{Line, Span};
 use terra_sim::{Mode, Pos, World};
 
-use crate::app::{App, Draft, highlight_moved, shown};
+use crate::app::{self, App, Draft, highlight_moved, shown};
 use crate::clock::Speed;
+use crate::commands::{self, Context};
 use crate::input::Action;
 use crate::listed::listed_enum;
 use crate::saves::{self, SaveFile};
@@ -256,9 +258,10 @@ impl Title {
         Choice::ALL[usize::from(self.saves.is_empty())..].to_vec()
     }
 
-    /// Whether keys type, as they do in the New world box.
+    /// Whether keys type, as they do in the New world box, and in the help,
+    /// which searches what's typed (#303).
     pub fn typing(&self) -> bool {
-        matches!(self.screen, Screen::NewWorld(_))
+        matches!(self.screen, Screen::NewWorld(_) | Screen::Help)
     }
 
     /// Says on the status line why something the player asked for didn't
@@ -333,13 +336,24 @@ impl Title {
             }
             Screen::NewWorld(new) => self.apply_in_new_world(action, new),
             Screen::Load { choice } => self.apply_in_load(action, choice),
+            // The help works as a world's does, and closing it goes back
+            // to the menu (#303).
             Screen::Help => {
-                if matches!(action, Action::Back | Action::Help) {
+                self.help.apply(action, &self.world);
+                if self.help.screen() != app::Screen::Help {
                     self.screen = Screen::Menu;
                 }
                 TitleFlow::Stay
             }
         }
+    }
+
+    /// Opens the help, at the world's page, as a world's opens there.
+    fn open_help(&mut self) {
+        if self.help.screen() != app::Screen::Help {
+            self.help.apply(Action::Help, &self.world);
+        }
+        self.screen = Screen::Help;
     }
 
     fn apply_in_menu(&mut self, action: Action) -> TitleFlow {
@@ -373,7 +387,7 @@ impl Title {
                 TitleFlow::Stay
             }
             Action::Help => {
-                self.screen = Screen::Help;
+                self.open_help();
                 TitleFlow::Stay
             }
             _ => TitleFlow::Stay,
@@ -392,7 +406,7 @@ impl Title {
                 })
             }
             Choice::Load => self.screen = Screen::Load { choice: 0 },
-            Choice::Help => self.screen = Screen::Help,
+            Choice::Help => self.open_help(),
             Choice::Quit => return TitleFlow::Quit,
         }
         TitleFlow::Stay
@@ -932,11 +946,7 @@ fn draw_load(buf: &mut Buffer, title: &Title, choice: usize) {
 /// line.
 fn draw_help(buf: &mut Buffer, area: Rect, title: &Title) {
     let overlay = Rect::new(area.x, area.y, area.width, area.height.saturating_sub(1));
-    let inner = ui::clear_box(buf, overlay, " Help ", ui::ESC_CLOSE, title.theme.text());
-    let lines = crate::help::lines(&title.help, &title.world, usize::from(inner.width));
-    for (row, line) in (inner.y..inner.bottom()).zip(&lines) {
-        buf.set_line(inner.x, row, line, inner.width);
-    }
+    ui::draw_help(buf, overlay, &title.help, &title.world);
 }
 
 /// The status line: a prompt or a refusal, or else the keys, with the
@@ -959,6 +969,13 @@ fn draw_status_line(buf: &mut Buffer, area: Rect, title: &Title) {
         }
     };
     buf.set_stringn(area.x, y, left, usize::from(area.width), Style::default());
+    // In the help, its hints, as a world's status line gives them (#303).
+    if title.screen == Screen::Help && title.refusal.is_none() {
+        let hints = ui::all_hints(commands::hints(Context::Help), &title.help, &title.world);
+        let mut spans = vec![Span::raw(" ")];
+        spans.extend(ui::hint_spans(&hints, title.theme.text()));
+        buf.set_line(area.x, y, &Line::from(spans), area.width);
+    }
     let version = concat!("v", env!("CARGO_PKG_VERSION"), " ");
     let x = area.right().saturating_sub(version.len() as u16);
     buf.set_string(x, y, version, Style::default().fg(Color::DarkGray));

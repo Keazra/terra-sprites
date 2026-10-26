@@ -89,7 +89,7 @@ impl<'a> Row<'a> {
 
 /// The words of `text`, in lower case, split at whatever isn't a letter or a
 /// digit: `Tobek #12` is `tobek` and `12`.
-fn words(text: &str) -> Vec<String> {
+pub(crate) fn words(text: &str) -> Vec<String> {
     text.split(|c: char| !c.is_alphanumeric())
         .filter(|word| !word.is_empty())
         .map(str::to_lowercase)

@@ -34,6 +34,7 @@ use crate::theme::{Emote, Theme};
 mod aim;
 mod cursor;
 mod events;
+mod help;
 mod list;
 mod menus;
 mod naming;
@@ -46,6 +47,7 @@ mod tree;
 mod view;
 
 pub(crate) use cursor::{ItemLook, ShownItems, item_look};
+pub(crate) use help::finds;
 
 /// Whether the game carries on after an action.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -87,6 +89,8 @@ pub enum Screen {
     Population,
     /// The family tree is open (M2 design §17.2).
     FamilyTree,
+    /// The command palette is open (#303).
+    Palette,
 }
 
 listed_enum! {
@@ -577,6 +581,14 @@ pub struct App {
     taken_over: bool,
     /// The debug overlay (`F3`, design §6.1, #311).
     debug: DebugOverlay,
+    /// The help screen's page and search (#303), while it's open or as it
+    /// was last.
+    help: help::HelpView,
+    /// The command palette, while it's open (#303).
+    palette: Option<help::Palette>,
+    /// Whether the player last pointed at the inspector or used its keys,
+    /// rather than the map's, so help opens at the inspector's page (#303).
+    on_inspector: bool,
 }
 
 /// A replay as the screen follows it (design §2.7).
@@ -625,7 +637,7 @@ struct Naming {
 /// there so far, and whether the player has typed it, rather than it being
 /// the one offered, which the first letter typed replaces. The title
 /// screen's seed is typed so too (M2 design §8.3).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub(crate) struct Draft {
     text: String,
     typed: bool,
@@ -787,6 +799,9 @@ impl App {
             replay: None,
             taken_over: false,
             debug: DebugOverlay::default(),
+            help: help::HelpView::default(),
+            palette: None,
+            on_inspector: false,
         };
         app.centre_on(cursor);
         app
@@ -895,6 +910,7 @@ impl App {
             Screen::SaveNaming => return self.apply_save_naming(action, world),
             Screen::LoadPrompt => return self.apply_load_prompt(action),
             Screen::Help => return self.apply_in_help(action),
+            Screen::Palette => return self.apply_in_palette(action, world),
             Screen::SpriteList => return self.apply_in_list(action, world),
             Screen::Population => return self.apply_in_graph(action, world),
             Screen::FamilyTree => return self.apply_in_tree(action, world),
@@ -924,6 +940,7 @@ impl App {
                 }
             }
         }
+        self.note_focus(&action);
         if self.replay.is_some() && changes_the_world(&action, self.pointed_at_map(&action)) {
             self.refuse(REPLAY_REFUSAL.into());
             return Flow::Continue;
@@ -1047,10 +1064,8 @@ impl App {
             Action::ToggleDetail => self.detail = !self.detail,
             Action::Track => self.toggle_tracking(world),
             Action::CycleEventFilter => self.next_filter(),
-            Action::Help => {
-                self.end_aim();
-                self.screen = Screen::Help;
-            }
+            Action::Help => self.open_help(),
+            Action::Palette => self.open_palette(),
             Action::SpriteList => {
                 self.end_aim();
                 self.open_list(world);
@@ -1125,15 +1140,28 @@ impl App {
         }
     }
 
-    /// What an action does while the help screen is open: `?` or `Esc`
-    /// closes it, and the mouse still points.
-    fn apply_in_help(&mut self, action: Action) -> Flow {
-        match action {
-            Action::Help | Action::Back => self.screen = Screen::Normal,
-            Action::Point(cell) => self.point(cell),
+    /// Notes whether `action` was the player's at the inspector or at the
+    /// map, so help opens at the page for the one they were at (#303): the
+    /// pointer over either, or the inspector's keys or the map's.
+    fn note_focus(&mut self, action: &Action) {
+        match *action {
+            Action::Point(at) | Action::Click { at, .. } | Action::Wheel { at, .. } => {
+                if self.inspector.is_some_and(|area| area.contains(at)) {
+                    self.on_inspector = true;
+                } else if self.tile_area.contains(at) {
+                    self.on_inspector = false;
+                }
+            }
+            Action::NextTab | Action::PreviousTab | Action::ScrollTab { .. } => {
+                self.on_inspector = true;
+            }
+            Action::Scroll { .. }
+            | Action::Mode(_)
+            | Action::Press { .. }
+            | Action::Follow { .. }
+            | Action::Track => self.on_inspector = false,
             _ => {}
         }
-        Flow::Continue
     }
 
     /// What the keys for time do, whatever's open: pause, step, faster and
@@ -1175,7 +1203,7 @@ pub(crate) fn spoken_duration(time: Duration) -> String {
 /// only points and selects), the wheel over the map view, which changes mode,
 /// naming a sprite, showing the Cursor to sprites, and loading a save.
 /// Saving, and exporting a genome, only read it.
-fn changes_the_world(action: &Action, wheel_on_map: bool) -> bool {
+pub(crate) fn changes_the_world(action: &Action, wheel_on_map: bool) -> bool {
     match action {
         Action::Mode(mode) => *mode != CursorMode::Select,
         Action::Wheel { .. } => wheel_on_map,

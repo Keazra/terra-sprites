@@ -4,7 +4,9 @@
 //! parted from its recording; and `--data` reads a folder of pack files.
 
 mod common;
-use common::{at, ball_world, map_app, pack, pointer_on, render_on, row, run, scratch_folder};
+use common::{
+    app_on, at, ball_world, map_app, pack, pointer_on, render, render_on, row, run, scratch_folder,
+};
 
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::{Path, PathBuf};
@@ -175,6 +177,31 @@ fn a_replay_refuses_whatever_would_change_the_world() {
     assert!(!app.clock.is_paused());
     app.apply(Action::Mode(CursorMode::Select), world);
     assert!(app.take_commands().is_empty(), "nothing for the world");
+}
+
+#[test]
+fn a_replay_greys_the_hints_of_keys_it_would_refuse() {
+    // #303: hints are greyed rather than hidden where they'd do nothing.
+    let playback = replay_of(&played(ball_world(), 10), "greyed");
+    let world = playback.world();
+    let mut app = app_on(world);
+    app.start_replay("last_session.replay", &playback);
+    // Once what it plays has been said, the hints are back.
+    app.animate(std::time::Duration::from_secs(5));
+    let screen = render(&app, world);
+    let line = row(&screen, 29);
+    let look = app.theme.text();
+    for (hint, ready) in [("Z select", true), ("X train", false), ("C grab", false)] {
+        let at = line
+            .find(hint)
+            .unwrap_or_else(|| panic!("{hint} in {line:?}"));
+        let key = &screen[(line[..at].chars().count() as u16, 29)];
+        assert_eq!(
+            key.modifier.contains(look.key.add_modifier),
+            ready,
+            "{hint}"
+        );
+    }
 }
 
 #[test]

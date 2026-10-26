@@ -874,7 +874,7 @@ fn a_click_on_a_save_in_load_loads_it_and_a_click_off_the_list_closes_it() {
 }
 
 #[test]
-fn help_opens_the_help_screen_and_esc_closes_it() {
+fn help_opens_the_help_screen_which_searches_and_esc_closes_it() {
     let mut title = after_the_scene();
     title.apply(Action::Pick(3));
     let shown = text(&render(&title));
@@ -882,6 +882,16 @@ fn help_opens_the_help_screen_and_esc_closes_it() {
         shown.contains("Help") && shown.contains("EMOTES"),
         "{shown}"
     );
+    // Its pages turn and its search types there too (#303), and Esc clears
+    // the search before it closes the help.
+    title.apply(Action::Scroll { dx: 1, dy: 0 });
+    assert!(text(&render(&title)).contains("THE POINTER"));
+    for c in "egg".chars() {
+        title.apply(Action::Type(c));
+    }
+    assert!(text(&render(&title)).contains("search: egg_"));
+    title.apply(Action::Back);
+    assert!(text(&render(&title)).contains("type to search"));
     title.apply(Action::Back);
     assert!(!text(&render(&title)).contains("EMOTES"));
 }

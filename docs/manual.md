@@ -66,7 +66,7 @@ cargo uninstall terra-tui
 
 If you ran it from a downloaded zip or a copy of the repository instead, delete that folder, and the program from the folder on your PATH if you moved it there.
 
-Either way, your worlds stay. Everything the game writes goes in one folder, the game's folder: saves and autosaves, the last session's replay, genomes you saved and fast-forward tables, along with any themes or presets you put there yourself. The help screen (`?`) shows where it is on its last line, `FILES`. Delete it to remove them too, or keep it, and the game finds them again if you reinstall:
+Either way, your worlds stay. Everything the game writes goes in one folder, the game's folder: saves and autosaves, the last session's replay, genomes you saved and fast-forward tables, along with any themes or presets you put there yourself. The help screen (`?`) shows where it is on the last line of its World page, `FILES`. Delete it to remove them too, or keep it, and the game finds them again if you reinstall:
 
 | System | Delete the game's folder |
 |---|---|
@@ -93,7 +93,8 @@ The same key in capitals or lower case does the same thing.
 | `b` | Sprite colours: what a sprite's colour shows: its strongest drive, nothing, or its lineage, which marks the selected sprite's parents and grandparents, brothers and sisters, and young and theirs each in a colour, and every other sprite dark gray. The status line says which |
 | `m` | Event log filter: all events, the selected sprite's, or only the major ones (deaths, lessons learned, refusals) |
 | `v` | Detail view: exactly what the selected sprite is doing |
-| `?` | Help: every key, the colour legend and where the game keeps its files |
+| `?` | Help: a page for each part of the game, with its keys and what its colours and marks mean. It opens at the page for what you're looking at: the sprite list's, the graph's or the family tree's over those, the inspector's when you last pointed at it or used its keys, and otherwise the world's, with every key, the colour legend and where the game keeps its files. `←` `→` or `Tab` turn the pages; type to search every page, such as `egg`; `Esc` clears the search, then closes it |
+| `:` | Command palette: type what you want to do, such as `tree` or `save`, and it finds the command and shows its key; the arrows choose and `Enter` does it. Commands that do nothing just now are greyed on the status line rather than hidden, such as `. step` while time runs |
 | `F3` | Debug overlay, in the map's top-right corner, and again to hide it: how the game is running on your computer, for a screenshot when it feels slow or a held key misbehaves. Read over the last second: the ticks a second it ran against the speed asked for (or `paused`, or `at Max`), the simulation's time in a frame against its 25 ms budget, and the drawing's time in a frame, with the frames a second. Then whether your terminal reports key releases: `releases reported`, `no releases` (a held key is told from taps only by its repeats), or `kitty protocol`. It measures the game as you play it, drawing included, where the speed example (`cargo run --release -p terra-sim --example speed`) measures the simulation alone |
 | `Z` / `X` / `C` | Cursor mode: Select / Train / Grab. The mouse wheel over the map changes mode too. `C` again in Grab mode opens the Place menu |
 | `Q` / `E` | Left / right click where the Cursor is. In Train mode the left pets and the right zaps (with Ctrl on a click or Shift on a key, a hug or a shock); in Grab mode the left picks up, leads, lets go or puts down, and holding the right aims a throw or a shove, which goes when you let go |

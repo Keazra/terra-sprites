@@ -12,7 +12,8 @@ use crate::policy::{Panel, Subject};
 impl App {
     /// What an action does while the population graph is open (M2 design
     /// §14): `←` and `→`, or the pointer over the graph, pick the moment it
-    /// reads; time runs as usual, and `p` or `Esc` closes it.
+    /// reads; time runs as usual, `?` opens the help at the graph's page
+    /// (#303), and `p` or `Esc` closes it.
     pub(super) fn apply_in_graph(&mut self, action: Action, world: &World) -> Flow {
         if self.apply_time(&action, world) {
             return Flow::Continue;
@@ -42,6 +43,7 @@ impl App {
                 self.screen = Screen::Normal;
                 self.graph_pick = None;
             }
+            Action::Help => self.open_help(),
             _ => {}
         }
         Flow::Continue

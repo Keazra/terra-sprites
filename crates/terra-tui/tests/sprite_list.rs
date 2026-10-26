@@ -354,12 +354,7 @@ fn the_list_is_ignored_by_other_keys_and_quit_still_quits() {
     let mut world = field();
     let mut app = named(&mut world);
     app.apply(Action::SpriteList, &world);
-    for action in [
-        Action::TogglePause,
-        Action::Help,
-        Action::NextTab,
-        Action::Track,
-    ] {
+    for action in [Action::TogglePause, Action::NextTab, Action::Track] {
         app.apply(action, &world);
         assert_eq!(app.screen(), Screen::SpriteList, "{action:?}");
     }

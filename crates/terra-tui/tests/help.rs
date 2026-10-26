@@ -1,12 +1,13 @@
 //! The help screen (`?`, design §6.1): the keys, the colour legend and the
-//! game's folder.
+//! game's folder, on pages for each screen, searched by typing (#303).
 
 mod common;
 use common::{DATA_FOLDER, DRIVE_COLOURS, WorldBuilder, app_in, app_on, at, lines, render};
 
+use ratatui::buffer::Buffer;
 use ratatui::style::Color;
 use terra_sim::World;
-use terra_tui::app::{Flow, Screen};
+use terra_tui::app::{App, Flow, Screen};
 use terra_tui::input::Action;
 use terra_tui::theme::Theme;
 
@@ -164,4 +165,161 @@ fn the_lineage_line_draws_each_sprite_in_its_colour() {
         .map(|(who, colour)| (who.to_string(), colour));
         assert_eq!(colours, expected);
     }
+}
+
+/// Types `text` into whatever's open.
+fn type_in(app: &mut App, world: &World, text: &str) {
+    for c in text.chars() {
+        app.apply(Action::Type(c), world);
+    }
+}
+
+/// The help's tabs, in the top edge of its box, the open one in the
+/// highlight's style.
+fn open_page(screen: &Buffer) -> String {
+    let selected = Theme::cp437().text().selected;
+    assert!(!selected.add_modifier.is_empty(), "reversed");
+    (0..screen.area.width)
+        .map(|x| &screen[(x, 1)])
+        .filter(|cell| cell.modifier.contains(selected.add_modifier))
+        .map(|cell| cell.symbol())
+        .collect::<String>()
+        .trim()
+        .to_string()
+}
+
+#[test]
+fn help_opens_at_the_page_for_where_the_player_is_and_goes_back_there() {
+    let world = field();
+    let mut app = app_on(&world);
+    app.apply(Action::Help, &world);
+    assert_eq!(app.help_page().label(), "World");
+    assert_eq!(open_page(&render(&app, &world)), "World");
+    app.apply(Action::Back, &world);
+
+    // Over the sprite list, the list's page; Esc goes back to the list.
+    app.apply(Action::SpriteList, &world);
+    app.apply(Action::Help, &world);
+    assert_eq!(app.help_page().label(), "Sprite list");
+    let all = lines(&render(&app, &world)).join("\n");
+    assert!(
+        all.contains("SPRITE LIST") && all.contains("COLUMNS"),
+        "{all}"
+    );
+    app.apply(Action::Back, &world);
+    assert_eq!(app.screen(), Screen::SpriteList);
+    app.apply(Action::Back, &world);
+
+    for (open, page) in [
+        (Action::Population, "Population graph"),
+        (Action::FamilyTree, "Family tree"),
+    ] {
+        app.apply(Action::SelectNext, &world);
+        app.apply(open, &world);
+        let screen = app.screen();
+        app.apply(Action::Help, &world);
+        assert_eq!(app.help_page().label(), page);
+        app.apply(Action::Help, &world);
+        assert_eq!(app.screen(), screen, "? closes it, back to {page}");
+        app.apply(Action::Back, &world);
+    }
+
+    // Once the player uses the inspector's keys, the inspector's page,
+    // with the open tab's legend.
+    app.apply(Action::NextTab, &world);
+    app.apply(Action::Help, &world);
+    assert_eq!(app.help_page().label(), "Inspector");
+    let all = lines(&render(&app, &world)).join("\n");
+    assert!(all.contains("THE POINTER"), "{all}");
+    assert!(all.contains("BRAIN TAB"), "{all}");
+    app.apply(Action::Back, &world);
+    // Back on the map, the world's page again.
+    app.apply(Action::Scroll { dx: 1, dy: 0 }, &world);
+    app.apply(Action::Help, &world);
+    assert_eq!(app.help_page().label(), "World");
+}
+
+#[test]
+fn the_arrows_and_tab_turn_help_s_pages() {
+    let world = field();
+    let mut app = app_on(&world);
+    app.apply(Action::Help, &world);
+    let mut pages = Vec::new();
+    for _ in 0..5 {
+        app.apply(Action::Scroll { dx: 1, dy: 0 }, &world);
+        pages.push(app.help_page().label());
+    }
+    assert_eq!(
+        pages,
+        [
+            "Inspector",
+            "Sprite list",
+            "Population graph",
+            "Family tree",
+            "World"
+        ]
+    );
+    app.apply(Action::Scroll { dx: -1, dy: 0 }, &world);
+    assert_eq!(app.help_page().label(), "Family tree", "round the back");
+    // Tab and Shift+Tab, as typing reads them.
+    app.apply(Action::AnotherName, &world);
+    assert_eq!(app.help_page().label(), "World");
+    app.apply(Action::SelectPrevious, &world);
+    assert_eq!(app.help_page().label(), "Family tree");
+    assert_eq!(open_page(&render(&app, &world)), "Family tree");
+}
+
+#[test]
+fn typing_in_help_searches_every_page_and_acts_on_nothing() {
+    let world = field();
+    let mut app = app_on(&world);
+    app.apply(Action::Help, &world);
+    let paused = app.clock.is_paused();
+    type_in(&mut app, &world, "egg");
+    assert_eq!(app.help_search(), Some("egg"));
+    assert_eq!(app.clock.is_paused(), paused);
+    let screen = lines(&render(&app, &world));
+    assert!(
+        screen[28].starts_with("└─ search: egg_ ─"),
+        "{}",
+        screen[28]
+    );
+    let all = screen.join("\n");
+    // Rows and legend lines with a word starting `egg`, under their pages.
+    for found in [
+        "WORLD",
+        "the Place menu",
+        "INSPECTOR",
+        "BODY TAB",
+        "An egg shows who laid it",
+        "FAMILY TREE",
+    ] {
+        assert!(all.contains(found), "{found} in\n{all}");
+    }
+    assert!(!all.contains("pause / resume"), "{all}");
+
+    // Typing that would act in the world types: `p`, space.
+    type_in(&mut app, &world, " p");
+    assert_eq!(app.help_search(), Some("egg p"));
+    assert_eq!(app.screen(), Screen::Help);
+    app.apply(Action::Erase, &world);
+    app.apply(Action::Erase, &world);
+    assert_eq!(app.help_search(), Some("egg"));
+
+    type_in(&mut app, &world, "zzq");
+    let all = lines(&render(&app, &world)).join("\n");
+    assert!(all.contains("Nothing in the help has \"eggzzq\""), "{all}");
+
+    // Esc clears the search, then closes the help.
+    app.apply(Action::Back, &world);
+    assert_eq!(app.help_search(), None);
+    assert_eq!(app.screen(), Screen::Help);
+    let screen = lines(&render(&app, &world));
+    assert!(
+        screen[28].starts_with("└─ type to search ─"),
+        "{}",
+        screen[28]
+    );
+    app.apply(Action::Back, &world);
+    assert_eq!(app.screen(), Screen::Normal);
 }

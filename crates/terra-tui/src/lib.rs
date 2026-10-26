@@ -4,6 +4,7 @@
 pub mod app;
 pub mod args;
 pub mod clock;
+pub mod commands;
 pub mod cp437;
 pub mod debug_overlay;
 mod family_tree;

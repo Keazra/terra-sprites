@@ -806,8 +806,20 @@ What colours a sprite on the map: its strongest drive once one is above half (ea
 _Avoid_: tint, palette
 
 **Help screen**:
-The overlay `?` opens: every key, grouped, the colour and emote legends, and the game's folder for its files.
+The overlay `?` opens, in pages: the World page, every key grouped, the colour, emote and lineage legends, and the game's folder for its files; the Inspector page, the inspector's keys and the open tab's legend; and a page each for the sprite list, the population graph and the family tree. It opens at the page for where the player is, and typing in it searches every page (#303).
 _Avoid_: manual, cheat sheet
+
+**Command** (#303):
+A key or keys and what they do, as one list that the key hints, the help screen and the command palette are all built from, so they can't drift apart.
+_Avoid_: shortcut, binding (that's the key alone)
+
+**Key hints**:
+The keys at the right of the status line that work where the player is, each with a word on what it does. A hint whose key would do nothing just now is greyed rather than hidden, such as `. step` while time runs (#303).
+_Avoid_: shortcut bar, legend (the help's legends are of colours and emotes)
+
+**Command palette** (#303):
+The box `:` opens near the top of the map view: typing finds any key that works in the world by the starts of the words of what it does, each shown with its key, and `Enter` does the one chosen.
+_Avoid_: command line, console, search (that's the help's)
 
 **Sprite list**:
 The overlay `l` opens: every sprite, one to a row, with its age, life stage, strongest drive, generation and what it's doing, sorted by number, name, age or drive. `/` filters it to the rows with a column that has the words typed, from their start. Choosing one selects it and centres the viewport on it.

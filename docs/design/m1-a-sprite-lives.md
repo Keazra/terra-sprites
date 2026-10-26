@@ -1402,35 +1402,51 @@ The species is dropped into a world it doesn't know and has to learn about it. I
   - **Lines that read the same in a row merge** into one with a count, "You petted Sprite #12 x10", as the observed list's do; its tick is the latest one's. Spam-clicking would otherwise fill the log.
 - **Status line:** the tile under the Cursor, the cursor mode, followed by `· seen` while sprites can see the Cursor in it (v29, `TRAIN · seen`), the sprite the Cursor follows (`following Mira #12`, v26), what the Cursor holds or leads (`holding: berry`, `leading: Mira #12`, v23, in every mode), and hints for the active keys. A prompt such as "Quit? (y/n)" takes its place while open.
   - **The key hints** (v22) sit at the right and lead with the mode keys, `Z select  X train  C grab`, then `WASD scroll  space pause  . step  +/- speed  esc quit`. Short of room, whole hints drop from the end, so the mode keys are the last to go, together.
-  - **While aiming** (v25), the key hints read `let go to throw  esc cancel`, or `let go to shove  esc cancel`. **While the sprite list is open** (v30), they read `/ filter  ↑↓ choose  enter go to it  tab sort  esc close`, dropping `/ filter` first when short of room, or while it's filtered, `↑↓ choose  enter go to it  tab sort  esc clear` (#313), and while the population graph is (Slice 26), `←→ pick a moment  space pause  +/- speed  esc close` (M2 design §14.3). While the family tree is (Slice 25), they read `←→↑↓ choose  enter centre on it  space pause  esc close` (M2 design §17.2).
+  - **One list of commands** (#303) makes the key hints, the help screen and the command palette (below), so they can't drift apart. **A hint whose key would do nothing just now is greyed** rather than hidden, its key muted like its word: `. step` while time runs, `↑↓ choose` with nothing to choose, and in a replay the keys it refuses (§2.7), such as `X train` and `C grab`.
+  - **While aiming** (v25), the key hints read `let go to throw  esc cancel`, or `let go to shove  esc cancel`. **While the sprite list is open** (v30), they read `/ filter  ↑↓ choose  enter go to it  tab sort  esc close`, dropping `/ filter` first when short of room, or while it's filtered, `↑↓ choose  enter go to it  tab sort  esc clear` (#313), and while the population graph is (Slice 26), `←→ pick a moment  space pause  +/- speed  esc close` (M2 design §14.3). While the family tree is (Slice 25), they read `←→↑↓ choose  enter centre on it  space pause  esc close` (M2 design §17.2). While help is open (#303), they read `←→ page  type to search  esc close`, and while the command palette is, `↑↓ choose  enter do it  esc close`.
   - **A refused click's reason** (v22) takes the key hints' place for about 3 seconds of real time, worded as the event log words it: "Couldn't pet Sprite #12: it's gone". A Train click with nothing to act on says so the same way: "No sprite here to pet" (or hug, zap, shock). So do an `F` or a middle click with nothing to follow (v26), "No sprite here to follow", and a right click in Select mode while there's nothing to activate, "Nothing here to activate". So does a Grab click (v23): "Nothing here to grab", or on a fixture, "Can't grab the berry bush: it's rooted to the ground"; and a Grab right click with nothing held, led or under the Cursor (v25): "Nothing here to throw or shove", or on a fixture, "Can't throw the thornbush: it's rooted to the ground". On a line too full for it, such as when the Cursor follows a sprite standing on a berry, the reason still shows, and the tile's part of the line is cut short to make room.
   - The tile names its terrain and any object on it, with the object's stage if it has stages: `(61,40) grass · berry bush (mature)`.
   - **Display names** are the data's names with `_` shown as a space (`berry_bush` → "berry bush"), so `objects.ron` needs no separate display name. Its `plural` is the one other form the screen needs (§3.5.1).
 - **Overlays** (v30) fill the screen between the top bar and the status line, inside a single-lined border with their name at the left of its top edge and ` esc close ` at the right. The status line stays.
-  - **The help screen** (`?`): every key in three columns of groups (time and view; the Cursor; sprites and the inspector), then the colour legend, a sprite glyph in each of the data pack's drives' colours and "none", the emote legend, from Slice 25 the lineage colours (M2 design §17.4), and the game's folder for its files (§6.7). It fits at 100×30, so it doesn't scroll. `?` or `Esc` closes it; other keys do nothing while it's open, but `F3` (below).
+  - **The help screen** (`?`) has five pages (#303), named in its top edge after `Help`, the open one in the style for what's chosen. **World:** every key in three columns of groups (time and view; the Cursor and files; sprites, the inspector and debug), then the colour legend, a sprite glyph in each of the data pack's drives' colours and "none", the emote legend, from Slice 25 the lineage colours (M2 design §17.4), and the game's folder for its files (§6.7). **Inspector:** its keys, what the pointer does over it, and a legend for the open tab, such as the Brain tab's on the Brain tab. **Sprite list**, **Population graph** and **Family tree:** that screen's keys, its time keys where time runs, and what it shows.
+    - **`?` opens it at the page for where the player is:** over the sprite list, the population graph or the family tree, their page; the Inspector page once the player last pointed at the inspector or used its keys (`[`, `]`, `PgUp`, `PgDn`); otherwise the World page. `←` and `→`, or `Tab` and `Shift+Tab`, turn the pages, round from the last to the first; `↑`, `↓` and the wheel scroll a page too long to fit.
+    - **Typing searches every page** (#303): the bottom edge, ` type to search ` until then, shows ` search: egg_ `, and the help lists each key and legend line that has a word starting with each word typed, under its page's name and its legend's heading, or says `Nothing in the help has "…"`. Since typing searches, keys do nothing else while help is open: `p` and space type. `Backspace` rubs out; `Esc` clears the search, then closes the help, as `?` does at once, going back to what was open. `F3` still works (below).
 
     ```
-    ┌─ Help ─────────────────────────────────────────────────────────────────────────────── esc close ─┐
+    ┌─ Help ─ World  Inspector  Sprite list  Population graph  Family tree ──────────────── esc close ─┐
     │ TIME                            CURSOR                          SPRITES                          │
-    │ space      pause / resume       Z X C      select/train/grab    Tab        next sprite           │
-    │ .          step                 Q E        left / right click   Shift+Tab  previous sprite       │
-    │ + -        faster / slower      Shift+Q E  hug / shock          l          sprite list           │
-    │ VIEW                            Ctrl+click hug / shock          p          population graph      │
-    │ WASD       scroll (Shift: 5)    H          show to sprites      k          family tree           │
-    │ T          track the selected   F          follow a sprite      r          name it               │
-    │ b          sprite colours       middle     follow a sprite      g          save its genome       │
-    │ m          event filter         wheel      change mode          INSPECTOR                        │
-    │ v          exact detail         C again    the Place menu       [ ]        switch tabs           │
-    │ ?          this help            hold E     aim, let go to send  PgUp PgDn  scroll a tab          │
-    │ Esc        let go, back, quit?                                  DEBUG                            │
-    │ Ctrl+C     quit at once                                         F3         how it's running      │
-    │                                                                                                  │
+    │ space      pause / resume       Z X C      select/train/grab    tab        next sprite           │
+    │ .          step                 Q E        left / right click   Shift+tab  previous sprite       │
+    │ +/-        faster / slower      Shift+Q E  hug / shock          l          sprite list           │
+    │ VIEW                            Ctrl+click hug / shock          l then /   filter the list       │
+    │ WASD       scroll (Shift: 5)    H          show to sprites      p          population graph      │
+    │ T          track the selected   F          follow a sprite      k          family tree           │
+    │ b          sprite colours       middle     follow a sprite      r          name it               │
+    │ m          event filter         wheel      change mode          g          save its genome       │
+    │ v          exact detail         C again    the Place menu       INSPECTOR                        │
+    │ ?          this help            hold E     aim, let go to send  [ ]        switch tabs           │
+    │ :          find a command       FILES                           PgUp PgDn  scroll a tab          │
+    │ esc        let go, back, quit?  F5 F9      quicksave / load     DEBUG                            │
+    │ Ctrl+C     quit at once         Ctrl+S     save as...           F3         how it's running      │
+    │                                 Ctrl+O     load a save                                           │
+    │                                 Ctrl+T     pick a theme                                          │
+    │                                 Ctrl+R     take over a replay                                    │
     │ COLOURS: a sprite's strongest drive, once it's above half                                        │
-    │ ☺ hunger  ☺ thirst  ☺ pain  ☺ tiredness  ☺ boredom  ☺ loneliness  ☺ crowdedness  ☺ none          │
-    │ EMOTES   ! hurt  ‼ zapped  ? gave up  z resting  ♥ pleased                                       │
+    │ ☺ hunger  ☺ thirst  ☺ pain  ☺ tiredness  ☺ boredom  ☺ loneliness  ☺ crowdedness  ☺ arousal       │
+    │ ☺ anxiety  ☺ none                                                                                │
+    │ EMOTES   ! hurt  ‼ zapped  ? gave up  z resting  ♥ pleased  ♫ danced  ♪ called                   │
     │ LINEAGE  ☺ parents, grandparents  ☺ brothers, sisters  ☺ young, theirs  ☺ the rest               │
     │ FILES    C:\Users\Player\AppData\Roaming\terra-sprites                                           │
-    └──────────────────────────────────────────────────────────────────────────────────────────────────┘
+    └─ type to search ─────────────────────────────────────────────────────────────────────────────────┘
+    ```
+
+  - **The command palette** (`:`, #303) is a box near the top of the map view, ` Commands `, with ` esc close ` in its corner. It lists every key that works in the world, one to a row, with what it does and its help heading, dimmed, and the key at the right. Typing finds them by the starts of their words, in any order, as the sprite list's filter does (`tree` finds the family tree, `gen sav` saving a genome), searching what it does, its heading and other words for it: `egg` finds the family tree, the population graph and saving a genome. `↑`, `↓` and the wheel choose; `Enter` closes the palette and does what's chosen, as its key would; `Esc` closes it. With nothing found it says ` Nothing found`, and `enter do it` is greyed. Keys that work only in an overlay, such as the sprite list's sorting, aren't in it.
+
+    ```
+      ┌─ Commands ───────────────────────── esc close ─┐
+      │:tree_                                          │
+      │ family tree · sprites                        k │
+      └────────────────────────────────────────────────┘
     ```
 
   - **The sprite list** (`l`): a row per sprite the policy lets it show (§6.4), with its label, age, life stage (M2 design §9.6), strongest drive above .5 in the map's colour (or `-`), generation (M2 design §17.1, #313), and what it's doing as the Body tab's first line says it, in the detail view too.
@@ -1680,7 +1696,8 @@ N ═ M
 | `Ctrl+S` / `Ctrl+O` | Save by name / load a save from a list (§6.7, v32) |
 | `Ctrl+T` | Pick a theme from the built-in ones and the themes folder (§6.7, v34) |
 | `Ctrl+R` | In a replay, take it over: play on from where it has reached (§2.7, v36) |
-| `?` | Open or close help |
+| `?` | Open or close help, at the page for where the player is; typing in it searches it (§6.1, #303) |
+| `:` | Open the command palette: find any key by what it does, and do it (§6.1, #303) |
 | `Esc` | Close a menu or overlay; cancel an aim; let go of what the Cursor has hold of; back to Select; from Select, ask to quit (v33) |
 | `Ctrl+C` | Quit at once |
 

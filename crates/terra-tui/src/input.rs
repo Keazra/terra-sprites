@@ -93,6 +93,8 @@ pub enum Action {
     CycleEventFilter,
     /// Open or close the help screen (`?`, design §6.1).
     Help,
+    /// Open the command palette (`:`, #303).
+    Palette,
     /// Open or close the sprite list (`l`, design §6.1).
     SpriteList,
     /// In the sprite list, start filtering it (`/`, design §6.1, #313).
@@ -413,6 +415,7 @@ impl Keys {
             KeyCode::Char('t') => (!held).then_some(Action::Track),
             KeyCode::Char('m') => (!held).then_some(Action::CycleEventFilter),
             KeyCode::Char('?') => (!held).then_some(Action::Help),
+            KeyCode::Char(':') => (!held).then_some(Action::Palette),
             KeyCode::Char('l') => (!held).then_some(Action::SpriteList),
             KeyCode::Char('/') => (!held).then_some(Action::FilterList),
             KeyCode::Char('p') => (!held).then_some(Action::Population),
@@ -479,6 +482,7 @@ fn physical_key(code: KeyCode) -> KeyCode {
         KeyCode::Char('_') => KeyCode::Char('-'),
         KeyCode::Char('>') => KeyCode::Char('.'),
         KeyCode::Char('?') => KeyCode::Char('/'),
+        KeyCode::Char(':') => KeyCode::Char(';'),
         KeyCode::Char(c) => KeyCode::Char(c.to_ascii_lowercase()),
         other => other,
     }
