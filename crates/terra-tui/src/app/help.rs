@@ -88,10 +88,10 @@ impl App {
     }
 
     /// What an action does while the help screen is open (#303): `←` and
-    /// `→`, or `Tab` and `Shift+Tab`, turn its pages, `↑` and `↓` or the
+    /// `→`, or `Tab` and `Shift+Tab`, turn its pages, as a click on a
+    /// page's name opens it, either ending a search; `↑` and `↓` or the
     /// wheel scroll one too long to fit, and typing searches it,
-    /// `Backspace` rubbing a letter out. A click on a page's name opens it,
-    /// ending a search. `Esc` clears the search, then closes the help, as
+    /// `Backspace` rubbing a letter out. `Esc` clears the search, then closes the help, as
     /// `?` does at once, going back to what was open. The mouse still
     /// points.
     pub(super) fn apply_in_help(&mut self, action: Action, world: &World) -> Flow {
@@ -109,8 +109,8 @@ impl App {
                     if search.text().is_empty() {
                         help.search = None;
                     }
+                    help.scroll = 0;
                 }
-                help.scroll = 0;
             }
             Action::Back if help.search.is_some() => {
                 help.search = None;
@@ -157,10 +157,11 @@ impl App {
     }
 
     /// Scrolls the help `lines` down, or up if less than 0, no further than
-    /// brings its last line to the bottom of its box.
+    /// brings its last line to the bottom of its box. It goes from where
+    /// the help is drawn from, which a taller terminal may have brought up.
     fn scroll_help(&mut self, lines: isize, world: &World) {
         let last = self.help_scroll_room(world);
-        let scroll = self.help.scroll.saturating_add_signed(lines);
+        let scroll = self.help.scroll.min(last).saturating_add_signed(lines);
         self.help.scroll = scroll.min(last);
     }
 
@@ -178,9 +179,11 @@ impl App {
             .saturating_sub(height)
     }
 
-    /// Turns the help `steps` pages along, wrapping round, to its top.
+    /// Turns the help `steps` pages along, wrapping round, to its top,
+    /// ending a search, as a click on a page's name does.
     fn turn_page(&mut self, steps: i32) {
         self.help.page = along(&HelpPage::ALL, self.help.page, steps);
+        self.help.search = None;
         self.help.scroll = 0;
     }
 

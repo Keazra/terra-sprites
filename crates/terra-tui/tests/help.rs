@@ -434,4 +434,23 @@ fn help_scrolls_a_page_too_long_to_fit_and_no_further() {
     assert_eq!(app.help_scroll(), last, "no further than its last line");
     app.apply(Action::Scroll { dx: 0, dy: -1 }, &world);
     assert_eq!(app.help_scroll(), last - 1, "up at once");
+    // Four rows taller, it's drawn from four lines further up, and goes up
+    // from there at once.
+    app.apply(Action::Scroll { dx: 0, dy: 1 }, &world);
+    app.fit(terra_tui::ui::areas(ratatui::layout::Size::new(100, 34)));
+    app.apply(Action::Scroll { dx: 0, dy: -1 }, &world);
+    assert_eq!(app.help_scroll(), last - 5, "up one from where it's drawn");
+}
+
+#[test]
+fn turning_help_s_page_ends_a_search() {
+    let world = field();
+    let mut app = app_on(&world);
+    app.apply(Action::Help, &world);
+    type_in(&mut app, &world, "egg");
+    app.apply(Action::Scroll { dx: 1, dy: 0 }, &world);
+    assert_eq!(app.help_search(), None);
+    assert_eq!(app.help_page().label(), "Inspector");
+    app.apply(Action::Back, &world);
+    assert_eq!(app.screen(), Screen::Normal, "Esc closes it at once");
 }

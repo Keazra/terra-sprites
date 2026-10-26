@@ -286,7 +286,8 @@ impl Keys {
     /// the arrows pick from a list or a row beside it, and `Shift+Tab` goes
     /// back through the sprite list's orders while it's filtered (#313).
     /// `F3` still shows or hides the debug overlay (design §6.1).
-    /// Only presses count, and `Ctrl+C` still quits, but letting go of `?`
+    /// Only presses count, `Esc`, `Enter` and `?` once a press as `F3` does,
+    /// and `Ctrl+C` still quits, but letting go of `?`
     /// says so, as New world explains a mode while it's held (M2 design
     /// §16). Releases are still tracked, so the `r` that opened the prompt
     /// counts as let go after it, and a key already down when the prompt
@@ -306,6 +307,17 @@ impl Keys {
             return matches!(key.code, KeyCode::Char('c' | 'C')).then_some(Action::Quit);
         }
         match key.code {
+            // `Esc`, `Enter` and `?` can close what's typed into, so each
+            // acts once a press, noted as down as `action_for` notes keys:
+            // held, it would close help and then act on what's under it.
+            KeyCode::Esc | KeyCode::Enter | KeyCode::Char('?') => {
+                self.down.insert(physical);
+                (key.kind != KeyEventKind::Repeat).then_some(match key.code {
+                    KeyCode::Esc => Action::Back,
+                    KeyCode::Enter => Action::Enter,
+                    _ => Action::Type('?'),
+                })
+            }
             KeyCode::Char(c) => Some(Action::Type(c)),
             KeyCode::Backspace => Some(Action::Erase),
             // Shift+Tab as `action_for` reads it, either way it's reported.
@@ -314,8 +326,6 @@ impl Keys {
                 Some(Action::SelectPrevious)
             }
             KeyCode::Tab => Some(Action::AnotherName),
-            KeyCode::Enter => Some(Action::Enter),
-            KeyCode::Esc => Some(Action::Back),
             // `F3` types nothing, so it shows or hides the debug overlay
             // while typing too (design §6.1, #311), once a press: noted as
             // down, it does nothing pressed again with no release between.
