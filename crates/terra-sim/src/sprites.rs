@@ -451,17 +451,24 @@ impl Sprite {
         hatchling.name = name;
         hatchling.copying_errors = copying_errors;
         hatchling.copy_changes = copy_changes;
-        hatchling.flaws = flaws;
-        if hatchling.broken() > 0 {
+        hatchling.take_flaws(flaws, data);
+        hatchling
+    }
+
+    /// Gives it these hidden flaws, as it's made: a gene with both copies
+    /// flawed is born broken, at `flaws.health`, and works at that strength
+    /// (M2 design §12.4). It draws nothing from the world's randomness.
+    pub(crate) fn take_flaws(&mut self, flaws: Vec<u8>, data: &DataPack) {
+        self.flaws = flaws;
+        if self.broken() > 0 {
             let born_with = data.physiology().flaws.health;
-            for (index, health) in hatchling.health.iter_mut().enumerate() {
-                if flaws_of(&hatchling.flaws, index) >= 2 {
+            for (index, health) in self.health.iter_mut().enumerate() {
+                if flaws_of(&self.flaws, index) >= 2 {
                     *health = health.min(born_with);
                 }
             }
-            hatchling.express(data);
+            self.express(data);
         }
-        hatchling
     }
 
     /// The egg this sprite was, in a save from before eggs were items

@@ -55,8 +55,8 @@
 //! says they weren't judged. A seed that misses a bar across seeds has
 //! failed it only if the bar isn't met.
 //!
-//! **The race** against the starter's genes (#226 Q7, #237 rules 1 and 8),
-//! run every time: for each seed that didn't die out, with hatched sprites
+//! **The race** against the starter's genes (M2 design §19.6, #226 Q7,
+//! #237 rules 1 and 8), run every time: for each seed that didn't die out, with hatched sprites
 //! alive at the end, the same fresh world as the viability run's
 //! (`scenarios/viability.ron`), run as it is for 50,000 ticks twice: once
 //! as it generates, its 30 first sprites wild, from the starter's genes;
@@ -136,15 +136,16 @@ use terra_sim::{
 const NEWBORN_TICKS: u64 = 20_000;
 
 /// Each side of the race runs as long as the viability run
-/// (`scenarios/viability.ron`), in ticks (#226 Q7).
+/// (`scenarios/viability.ron`), in ticks (M2 design §19.6, #226 Q7).
 const RACE_TICKS: u64 = 50_000;
 
 /// The seeds the evolved side must win, of those that lasted and were
-/// raced, for the race to be won (#226 Q7): by chance alone, about 1 time
-/// in 18 with ten seeds.
+/// judged, for the race to be won (M2 design §19.6, #226 Q7): by chance
+/// alone, about 1 time in 18 with ten seeds.
 const RACE_WINS: usize = 8;
 
-/// The bar a seed fails when the race is lost overall (#237 rule 1).
+/// The bar a seed fails when the race is lost overall (M2 design §19.6,
+/// #237 rule 1).
 const RACE: &str = "the race";
 
 /// The twelve needs genes (M2 design §16.6, §19.6), by what each does, as
@@ -249,8 +250,9 @@ impl Raised {
     }
 }
 
-/// One seed's race (#226 Q7): its fresh world's hatched young, run as the
-/// viability run, from the starter's genes and from the end's.
+/// One seed's race (M2 design §19.6, #226 Q7): its fresh world's hatched
+/// young, run as the viability run, from the starter's genes and from the
+/// end's.
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
 struct Race {
     starter: Raised,
@@ -578,6 +580,9 @@ fn run(data: &DataPack, starter: &Starter, seed: u64, options: &Options) -> Run 
     if out.died_out.is_none() {
         out.newborns =
             World::unattended_like(config.clone(), data.clone(), seed, &world).map(newborns);
+        // The starter's side is the viability run's world, and so the long
+        // run's own first ticks again: it's run apart so each side is
+        // counted the same way, by `raised`.
         out.race =
             World::new_like(config.clone(), data.clone(), seed, &world).map(|evolved| Race {
                 starter: raised(World::new(config, data.clone(), seed)),
@@ -588,7 +593,7 @@ fn run(data: &DataPack, starter: &Starter, seed: u64, options: &Options) -> Run 
 }
 
 /// Runs `world` for the race's ticks: how many of its hatched young grew
-/// up, and how many died young (#226 Q7).
+/// up, and how many died young (M2 design §19.6, #226 Q7).
 fn raised(mut world: World) -> Raised {
     let mut tally = Tally::new(&world);
     let mut counts = Counts::default();
@@ -1085,8 +1090,8 @@ fn bars(runs: &[Run], starter: &[(String, f32)], options: &Options) {
     if let Some(middle) = middle(shares) {
         println!(
             "Lone newborns given the end's genes: {:.0}% grew up in the middle seed (the \
-             unattended band is 10%-30%; whether the species has fallen behind is Slice 30's \
-             race against the starter's genes).",
+             unattended band is 10%-30%; whether the species has fallen behind is the race's to \
+             say, below).",
             100.0 * middle
         );
     }
@@ -1203,11 +1208,16 @@ fn race(runs: &[Run], verdicts: &Verdicts) {
         );
     }
     let won = verdicts.raced.iter().filter(|(_, won)| *won).count();
+    let judged = verdicts.raced.len();
     println!(
-        "\nThe evolved side's young grew up more often in {won} of the {} seeds that lasted and \
-         were raced: {} (bar: at least {RACE_WINS}).{}",
-        verdicts.raced.len(),
+        "\nThe evolved side's young grew up more often in {won} of the {judged} seeds that lasted \
+         and were judged: {} (bar: at least {RACE_WINS}{}).{}",
         if verdicts.race_won { "won" } else { "lost" },
+        if judged < RACE_WINS {
+            ", so too few seeds were judged to win it"
+        } else {
+            ""
+        },
         if verdicts.race_won {
             ""
         } else {
@@ -1799,6 +1809,12 @@ mod tests {
             ]
         );
         assert_eq!(judged.trips, [1]);
+    }
+
+    #[test]
+    fn each_side_of_the_race_runs_as_long_as_the_viability_run() {
+        let viability = include_str!("../../../scenarios/viability.ron");
+        assert!(viability.contains(&format!("ticks: {RACE_TICKS},")));
     }
 
     #[test]

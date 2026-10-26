@@ -184,7 +184,7 @@ pub(crate) fn place_sprites(
         let (grows_up, grows_old) = Sprite::adulthood(&genome, data);
         let age = grows_up + uniform(&mut state.rng, grows_old.saturating_sub(grows_up).max(1));
         let mut sprite = Sprite::aged(genome, pos, state.tick, age, data);
-        sprite.flaws = flaws;
+        sprite.take_flaws(flaws, data);
         for index in [physiology.indices.energy, physiology.indices.hydration] {
             let level = sprite.body.chems[index] * (low + (high - low) * unit(&mut state.rng));
             sprite.body.start_at(index, level);
@@ -217,7 +217,7 @@ pub(crate) fn place_newborns(
             _ => like[n * like.len() / count].clone(),
         };
         let mut sprite = Sprite::newborn(genome, pos, state.tick, data);
-        sprite.flaws = flaws;
+        sprite.take_flaws(flaws, data);
         sprite.placed = true;
         state.add_sprite(sprite);
     }

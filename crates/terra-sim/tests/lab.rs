@@ -517,11 +517,12 @@ fn lone_newborns_take_after_the_hatched_sprites_of_another_world_in_turn() {
     // M2 design §19.6: the long run's lone newborns, given the genomes and
     // hidden flaws of the hatched sprites alive at its end, spread through
     // them in turn: with two, the first half take after the first and the
-    // rest after the second. A world with none gives none. Here two
-    // mothers each lay an egg alone, copied with many flaws.
+    // rest after the second, each gene as born, broken or whole (§12.4). A
+    // world with none gives none. Here two mothers each lay an egg alone,
+    // copied with many flaws.
     let data = builtin_changing(
         "physiology.ron",
-        &[LONE, ("flaws: (arise: 0.004,", "flaws: (arise: 0.1,")],
+        &[LONE, ("flaws: (arise: 0.004,", "flaws: (arise: 0.5,")],
     );
     let female = format!("{ALONE}{FEMALE}");
     let mut world = family_in(
@@ -536,7 +537,7 @@ fn lone_newborns_take_after_the_hatched_sprites_of_another_world_in_turn() {
         world
             .sprites()
             .filter(|s| !s.parents().is_empty())
-            .map(|s| (s.genome().clone(), s.flaws()))
+            .map(|s| (s.genome().clone(), s.flaws(), s.gene_health().to_vec()))
             .collect()
     };
     while hatched(&world).len() < 2 {
@@ -547,17 +548,26 @@ fn lone_newborns_take_after_the_hatched_sprites_of_another_world_in_turn() {
     assert_eq!(hatched.len(), 2);
     assert_ne!(hatched[0], hatched[1], "two different young");
     assert!(
-        hatched.iter().all(|(_, flaws)| flaws.contains(&1)),
+        hatched.iter().all(|(_, flaws, _)| flaws.contains(&1)),
         "each carrying a flaw"
+    );
+    assert!(
+        hatched.iter().any(|(_, flaws, _)| flaws.contains(&2)),
+        "a young one with a gene broken"
     );
     let lone = World::unattended_like(config.clone(), data, 1, &world).expect("hatched sprites");
     let newborns: Vec<_> = lone.sprites().collect();
     assert_eq!(newborns.len(), config.sprites());
     for (n, newborn) in newborns.iter().enumerate() {
         assert_eq!(newborn.life_stage(), LifeStage::Young);
-        let (genome, flaws) = &hatched[usize::from(n >= newborns.len() / 2)];
+        let (genome, flaws, health) = &hatched[usize::from(n >= newborns.len() / 2)];
         assert_eq!(newborn.genome(), genome, "newborn {n}'s genome");
         assert_eq!(&newborn.flaws(), flaws, "newborn {n}'s flaws");
+        assert_eq!(
+            newborn.gene_health(),
+            health,
+            "newborn {n}'s genes, as born"
+        );
     }
 }
 
@@ -567,10 +577,12 @@ fn the_race_s_evolved_side_is_the_starter_s_world_with_another_world_s_genes() {
     // sprites given the starter's genes once and, once, the genomes and
     // hidden flaws of the hatched sprites alive at the end of a long run,
     // spread through them in turn. Each stands where the starter's sprite
-    // in its place stands, grown up as it is. A world with none gives none.
+    // in its place stands, grown up as it is, and a gene broken in the one
+    // it takes after is born broken in it too (§12.4). A world with none
+    // gives none.
     let data = builtin_changing(
         "physiology.ron",
-        &[LONE, ("flaws: (arise: 0.004,", "flaws: (arise: 0.1,")],
+        &[LONE, ("flaws: (arise: 0.004,", "flaws: (arise: 0.5,")],
     );
     let female = format!("{ALONE}{FEMALE}");
     let mut world = family_in(
@@ -585,7 +597,7 @@ fn the_race_s_evolved_side_is_the_starter_s_world_with_another_world_s_genes() {
         world
             .sprites()
             .filter(|s| !s.parents().is_empty())
-            .map(|s| (s.genome().clone(), s.flaws()))
+            .map(|s| (s.genome().clone(), s.flaws(), s.gene_health().to_vec()))
             .collect()
     };
     while hatched(&world).len() < 2 {
@@ -594,6 +606,10 @@ fn the_race_s_evolved_side_is_the_starter_s_world_with_another_world_s_genes() {
     }
     let hatched = hatched(&world);
     assert_ne!(hatched[0], hatched[1], "two different young");
+    assert!(
+        hatched.iter().any(|(_, flaws, _)| flaws.contains(&2)),
+        "a young one with a gene broken"
+    );
     let starter = World::new(config.clone(), data.clone(), 1);
     let evolved = World::new_like(config.clone(), data, 1, &world).expect("hatched sprites");
     assert_eq!(evolved.mode(), starter.mode());
@@ -620,8 +636,9 @@ fn the_race_s_evolved_side_is_the_starter_s_world_with_another_world_s_genes() {
             LifeStage::Young,
             "sprite {n} is grown up"
         );
-        let (genome, flaws) = &hatched[usize::from(n >= firsts.len() / 2)];
+        let (genome, flaws, health) = &hatched[usize::from(n >= firsts.len() / 2)];
         assert_eq!(first.genome(), genome, "sprite {n}'s genome");
         assert_eq!(&first.flaws(), flaws, "sprite {n}'s flaws");
+        assert_eq!(first.gene_health(), health, "sprite {n}'s genes, as born");
     }
 }
