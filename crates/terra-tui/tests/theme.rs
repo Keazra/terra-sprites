@@ -666,13 +666,20 @@ fn a_theme_colour_can_be_one_of_the_16_names_or_exact() {
 fn a_colour_neither_named_nor_exact_is_refused_saying_what_is() {
     // Design §6.2, #302.
     let pack = pack();
-    for wrong in ["purple", "\"#12\"", "\"#12345g\"", "\"1a2b3c\""] {
+    for (wrong, named) in [
+        ("purple", "purple"),
+        ("\"#12\"", "#12"),
+        ("\"#12345g\"", "#12345g"),
+        ("\"1a2b3c\"", "1a2b3c"),
+        // A number or a tuple is named as RON writes it.
+        ("5", "5"),
+        ("(1, 2, 3)", "[1,2,3]"),
+    ] {
         let edited = ascii_with(
             "attention_marker: dark_gray",
             &format!("attention_marker: {wrong}"),
         );
         let error = Theme::from_ron(&edited, &pack).expect_err(wrong);
-        let named = wrong.trim_matches('"');
         assert!(error.contains(named), "{wrong}: {error}");
         assert!(error.contains("#rrggbb"), "{wrong}: {error}");
     }

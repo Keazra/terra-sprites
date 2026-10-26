@@ -975,22 +975,26 @@ enum Colour {
 
 impl<'de> Deserialize<'de> for Colour {
     fn deserialize<D: serde::Deserializer<'de>>(colour: D) -> Result<Colour, D::Error> {
-        // A name RON reads as one of the 16, and anything else as text,
-        // so a name it doesn't know is refused below, saying what's allowed.
+        // A name RON reads as one of the 16, and anything else as text, or
+        // as whatever it is, a number or a tuple, so what isn't a colour is
+        // refused below, named, saying what's allowed.
         #[derive(Deserialize)]
         #[serde(untagged)]
         enum Written {
             Named(Named),
-            Other(String),
+            Text(String),
+            Other(ron::Value),
         }
+        let refused = |written: String| {
+            serde::de::Error::custom(format!(
+                "{written} isn't a colour: name one of the 16, such as light_cyan, \
+                 or write an exact one as \"#rrggbb\""
+            ))
+        };
         match Written::deserialize(colour)? {
             Written::Named(named) => Ok(Colour::Named(named)),
-            Written::Other(text) => exact(&text).ok_or_else(|| {
-                serde::de::Error::custom(format!(
-                    "\"{text}\" isn't a colour: name one of the 16, such as light_cyan, \
-                     or write an exact one as \"#rrggbb\""
-                ))
-            }),
+            Written::Text(text) => exact(&text).ok_or_else(|| refused(format!("\"{text}\""))),
+            Written::Other(value) => Err(refused(ron::to_string(&value).unwrap_or_default())),
         }
     }
 }

@@ -957,8 +957,9 @@ impl App {
             } => {
                 self.point(at);
                 // A click on a memory heading toggles it (design v40 §6.1).
-                // The inspector sits outside the map view's reach, so the
-                // same click is never also a tile.
+                // The map view's reach takes in the inspector's left column
+                // (#302), but the open tab starts a column in, so the same
+                // click is never also a tile.
                 if button == Button::Left {
                     self.toggle_lesson(at, world);
                 }
