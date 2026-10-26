@@ -36,8 +36,9 @@ M3 was planned on the map [Finishing M2 and planning M3](https://github.com/Keaz
 | 20 | **Look 10 lays M3's screen out again,** late in M3, after the event log and before First steps | #233, the owner's ask, 2026-10-26 | §3, §6.7 |
 | 21 | **A hurt limb heals in about half an hour,** and clumsiness is gentle: a sore limb works three quarters as well, a hurt lands on the limb the act used, and a sore head or arm fumbles some tries | [#359](https://github.com/Keazra/terra-sprites/issues/359)'s round | §5.2, §6.4, §7.4 |
 | 22 | **Grief is a feeling you can see,** felt most for a partner, its own young or a parent; giving up brings a quieter grief; **calls are drawn as waves** of sound | [#360](https://github.com/Keazra/terra-sprites/issues/360)'s round, and the owner's ask in it | §1.1, §3, §8.4, §8.5 |
+| 23 | **Hands start with boredom's gentle pull,** a throw lines up and goes as far as the sprite is **strong**, a new trait; berries share a tile, picked up one at a time or **gathered** by the heap, the sprite's choice; the Body tab says the limbs **in words**, and the little picture waits | [#361](https://github.com/Keazra/terra-sprites/issues/361)'s round, and the owner's asks in it | §1.1, §3, §5.2, §6, §7.3, §9 |
 
-Rows 14 to 20 are #233's round 1, which the owner settled on 2026-10-26: rows 14 to 18 as recommended, row 19 in the owner's own answer, and row 20 the slice the owner asked for in it. Rows 21 and 22 are the rounds of Slices 33 and 34, settled with the owner on 2026-10-26: Slice 33's as recommended, and Slice 34's as recommended but for a little more of the search's second option, with calls drawn as waves the owner's ask.
+Rows 14 to 20 are #233's round 1, which the owner settled on 2026-10-26: rows 14 to 18 as recommended, row 19 in the owner's own answer, and row 20 the slice the owner asked for in it. Rows 21 to 23 are the rounds of Slices 33, 34 and 35, settled with the owner on 2026-10-26: Slice 33's as recommended; Slice 34's as recommended but for a little more of the search's second option, with calls drawn as waves the owner's ask; and Slice 35's as recommended, with strength, heaps and the status line the owner's asks, and words on the Body tab the owner's choice over a picture for now.
 
 ---
 
@@ -61,9 +62,9 @@ The owner's principles carry over unchanged (`docs/agents/how-we-work.md`). Four
 
 | Item | Slice | Issue |
 |---|---|---|
-| Limbs that hurt and heal, with the little picture of the sprite ([#314](https://github.com/Keazra/terra-sprites/issues/314)) | 33 | [#164](https://github.com/Keazra/terra-sprites/issues/164), [#227](https://github.com/Keazra/terra-sprites/issues/227) |
+| Limbs that hurt and heal, said in words on the Body tab | 33 | [#164](https://github.com/Keazra/terra-sprites/issues/164), [#227](https://github.com/Keazra/terra-sprites/issues/227) |
 | Grief for what a sprite sees, with what it can see on the map ([#316](https://github.com/Keazra/terra-sprites/issues/316)), deaths keeping where they happened ([#268](https://github.com/Keazra/terra-sprites/issues/268)'s world half) and calls drawn as waves ([#273](https://github.com/Keazra/terra-sprites/issues/273)) | 34 | [#231](https://github.com/Keazra/terra-sprites/issues/231), from [#206](https://github.com/Keazra/terra-sprites/issues/206) |
-| Hands: holding by size, carrying, dropping and throwing, with how close the other choices came ([#39](https://github.com/Keazra/terra-sprites/issues/39)) | 35 | [#135](https://github.com/Keazra/terra-sprites/issues/135), #164 |
+| Hands: holding by size, carrying, gathering, dropping and throwing, with strength and how close the other choices came ([#39](https://github.com/Keazra/terra-sprites/issues/39)) | 35 | [#135](https://github.com/Keazra/terra-sprites/issues/135), #164 |
 | Grab before eat | 36 | [#229](https://github.com/Keazra/terra-sprites/issues/229) |
 | Play as a feeling, with novelty as a sense ([#262](https://github.com/Keazra/terra-sprites/issues/262)), the Brain tab's habit wording ([#160](https://github.com/Keazra/terra-sprites/issues/160)) and the scuff question ([#46](https://github.com/Keazra/terra-sprites/issues/46)) | 37 | [#230](https://github.com/Keazra/terra-sprites/issues/230) |
 | Grip, push and pull, with fear that eases ([#72](https://github.com/Keazra/terra-sprites/issues/72)'s fear half) | 38 | #227 |
@@ -129,9 +130,9 @@ Each slice is a GitHub issue in the "M3 — Body & verbs" milestone and its own 
 
 | # | Slice | Needs first | Rank | Checks |
 |---|---|---|---|---|
-| 33 | Limbs that hurt and heal, with the little picture | v0.2.0, Looks 1–6 | M | B1 |
+| 33 | Limbs that hurt and heal | v0.2.0, Looks 1–6 | M | B1 |
 | 34 | Grief for what a sprite sees, with what it can see on the map and calls drawn as waves | v0.2.0, Looks 1–6 | M | Grief's tests; Slice 32's family bars |
-| 35 | Hands, with how close the other choices came | 33 | M | B2 |
+| 35 | Hands, with strength and how close the other choices came | 33 | M | B2 |
 | 36 | Grab before eat | 35 | **C** | B3 |
 | 37 | Play as a feeling, with novelty as a sense | 35 | **C** | B7, B9 |
 | 38 | Grip, push and pull, with fear that eases | 33, 37 | M | B5, B8, B10 |
@@ -163,7 +164,7 @@ Each slice is a GitHub issue in the "M3 — Body & verbs" milestone and its own 
 
 The owner's two content-safety rules (`docs/agents/how-we-work.md`; M2 design §5, §18.3) hold for everything M3 adds, enforced by the engine whatever a genome or data pack says:
 
-- **Attraction and mating attempts only ever between adults.** M3's new verbs change nothing about who is drawn to whom. Courting sprites touch each other (§11.2), and the engine's rule that the breeding drive never draws the eye to a young sprite keeps that touch on adults. G7's tests with random genomes cover every verb M3 adds: Touch, Grab, Grip, Push, Pull, Throw, Drop and handing over (§5.3).
+- **Attraction and mating attempts only ever between adults.** M3's new verbs change nothing about who is drawn to whom. Courting sprites touch each other (§11.2), and the engine's rule that the breeding drive never draws the eye to a young sprite keeps that touch on adults. G7's tests with random genomes cover every verb M3 adds: Touch, Grab, Gather, Grip, Push, Pull, Throw, Drop and handing over (§5.3).
 - **Nothing about mating is ever learned by watching,** and in M3 nothing about it is ever taught by a correction either (B15).
 - **Pregnancy** changes when an egg is laid, not who can mate (B13).
 
@@ -194,7 +195,7 @@ From #231 Q1:
 | # | What you'd see | How it's checked, and the bar |
 |---|---|---|
 | **B1** | **Hurt limbs** (Slice 33). A pricked or hit sprite limps, grabs badly or crawls, and in time walks normally again | Tests for the rules: a hurt arm grabs and throws worse; hurt legs walk slowly; a sprite with both legs badly hurt crawls; a limb hurt badly enough is useless until it heals; a sprite with no usable arm can't grab, grip, push, pull, throw or drop, and eats off the ground; a hurt head makes eating and drinking harder and never kills; every limb heals. In the viability run: **seen**, a sprite with a hurt limb at half or more of the population counts, in at least 9 of 10 seeds; **not crippling**, on average at most 1 sprite in 10 has a useless limb. The slice's number: healing takes **about half an hour of play** (§7.4) |
-| **B2** | **Hands** (Slice 35). Sprites pick up, carry, drop and throw things on their own | In every seed of the viability run, sprites carry a berry somewhere, carry a ball in both arms, drop things and throw a ball, all on their own. How often each happens is reported |
+| **B2** | **Hands** (Slice 35). Sprites pick up, carry, drop and throw things on their own | In every seed of the viability run, sprites carry a berry somewhere, carry a ball in both arms, drop things and throw a ball, all on their own. How often each happens, gathering a heap among them, is reported |
 | **B3** | **Manners** (Slice 36). Grown sprites mostly pick a fallen berry up before eating it, and the young learn it from their elders | Of grown sprites' meals of fallen berries, at least **3 in 4** were picked up first, all seeds of the viability run together. By the time they grow up, young raised among sprites pick berries up first more often than unattended young (the unattended run), in the middle seed. For information: squishes per seed, and meals eaten off the ground by sprites with no usable arm |
 | **B4** | **Eggs: carried, and sometimes broken** (Slice 40). Parents carry their eggs; a due egg hatches beside the sprite holding it; a thrown egg can break, and kin who see it grieve | Tests for §14's rules. In the viability run: at least **1 egg in 10** laid by a pair is carried by a parent at some point; at most **1 in 20** is carried off by a sprite outside its family; at most **1 egg in 20** laid breaks, all seeds together. For information: who broke them (a parent, other kin, a stranger), and G5's young counted from laying as well as from hatching |
 | **B5** | **Grip** (Slice 38). Sprites walk a ball along by pushing it, and grip each other; the gripped struggle free | Tests for §12's rules, and a Lab scenario: a sprite pushed into thorns learns as from the Cursor's shove (the thornbush is bad, and it comes to fear the pusher). In the viability run: in every seed, sprites grip balls and push them along, and grip each other, on their own; fewer than **1 death in 50** comes from being pushed into thorns, all seeds together. **Fear that eases** (#72): a Lab scenario where a sprite fears another that then stays near it for two hours of play without hurting it; by the end its fear is at most **half** what it was |
@@ -285,14 +286,14 @@ What every new verb shares. Each piece's own rules are in its section.
 
 ### 6.1 The verbs
 
-- **The verbs in M3** (#164, #227, #230): Approach, Retreat, Wander, Rest, Eat, Drink, Hit, Mate, BreedAlone, Call and Court, as in M2; and new, **Touch, Grab, Grip, Push, Pull, Throw and Drop.** Slice 46 replaces Eat and Drink with **Take in** (§20). Speak stays reserved for M6.
+- **The verbs in M3** (#164, #227, #230): Approach, Retreat, Wander, Rest, Eat, Drink, Hit, Mate, BreedAlone, Call and Court, as in M2; and new, **Touch, Grab, Gather, Grip, Push, Pull, Throw and Drop.** Gather is Slice 35's (§9.4). Slice 46 replaces Eat and Drink with **Take in** (§20). Speak stays reserved for M6.
 - **Play stops being a verb** (§11). Its number is retired and never used again, as verb numbers are append-only (M1 design §1.4).
-- **Each verb works on anything whose data says what it does** (#227 Q1, B8): Touch, Push and Pull on any thing, so a panel, a button or a lever needs no new code; Grab, carrying and Drop on anything small enough to hold.
+- **Each verb works on anything whose data says what it does** (#227 Q1, B8): Touch, Push and Pull on any thing, so a panel, a button or a lever needs no new code; Grab, carrying and Drop on anything small enough to hold, and Gather on a heap of tiny things.
 - **Handing over is a Drop aimed at a sprite** (#227 Q5): no new verb (§17).
 
 ### 6.2 What a sprite's limbs allow
 
-- **Hard and soft gates** (#164): Grab, Grip, Push, Pull, Throw and Drop aren't offered at all with **no usable arm**. Everything else is softened, not barred: a hurt arm grabs and throws worse, a sprite hits with its arms or its legs, and hurt legs walk slowly or crawl. One arm is enough unless the thing's size needs two (§9.1).
+- **Hard and soft gates** (#164): Grab, Gather, Grip, Push, Pull, Throw and Drop aren't offered at all with **no usable arm**. Everything else is softened, not barred: a hurt arm grabs and throws worse, a sprite hits with its arms or its legs, and hurt legs walk slowly or crawl. One arm is enough unless the thing's size needs two (§9.1).
 - **Each limb is tracked on its own,** and the verbs, the Body tab and the brain's senses all ask how usable it is (#227 Q9), so a later milestone's limb loss (#235) or organs (#31) need no new questions of them.
 
 ### 6.3 Acts in two steps
@@ -324,11 +325,11 @@ From #230 Q7:
 - **The event log keeps listing every act that was play.**
 - **A fruitless try** reads "Tried to eat the water, but nothing happened", not "…, but it was empty", which was written for a bush with no fruit (#91's wording fix, with M3's words for the new verbs).
 - **The exact words are each slice's,** with its verb.
-- **The Body tab is full** (about 23 lines in 21 rows at 100×30), so the little picture (§7.3) shows the limbs and what each arm holds without taking rows.
+- **The Body tab is full** (about 23 lines in 21 rows at 100×30), so its words for the limbs and what each arm holds show only while there's something to say (§7.3).
 
 ### 6.7 Look 10: M3's screen, laid out again
 
-The owner asked for a UI redesign slice in M3 (#233, 2026-10-26), and chose to have it late. The new look (Looks 1–9, [#301](https://github.com/Keazra/terra-sprites/issues/301)) is laid out for M2's screen, and M3's slices each fit their own piece into it: hurt limbs and the little picture, what each arm holds, play, grip, sleep, pregnancy, grief, bodies and the event log. Look 10 lays it all out again, once, with the whole picture.
+The owner asked for a UI redesign slice in M3 (#233, 2026-10-26), and chose to have it late. The new look (Looks 1–9, [#301](https://github.com/Keazra/terra-sprites/issues/301)) is laid out for M2's screen, and M3's slices each fit their own piece into it: hurt limbs, what each arm holds, play, grip, sleep, pregnancy, grief, bodies and the event log. Look 10 lays it all out again, once, with the whole picture.
 
 - **When:** after the event log (Slice 47), with Looks 1–9 in, and before First steps (Slice 49), which teaches the screen, so it teaches the finished one. Slice 50's play-through then plays the screen M3 ships with.
 - **What it covers:** the inspector's tabs, since the Body tab is full before M3 starts and M3 adds the most to it; how holding, gripping, sleeping, pregnancy and grief show on the map, gathered from each slice's answers so they read as one set; and the help and hints for what M3 added.
@@ -357,11 +358,12 @@ From #164, #227 Q2 and Q9, and #231's B1.
 
 - A hurt sprite limps, crawls or fumbles on the map, as its slice settles, and the Body tab says which limbs are hurt and how badly.
 
-### 7.3 The little picture ([#314](https://github.com/Keazra/terra-sprites/issues/314))
+### 7.3 The limbs in words
 
-- A small figure of the selected sprite on the Body tab, about 8 by 4 cells in half blocks (`▀ ▄ █`, all CP437): head, arms and legs shaded by how hurt each is, and what's in each arm (from Slice 35).
-- Its colours come through the theme's palette, so themes still decide every colour, and the tile front end can later draw real art behind the same slots.
-- It grows with the sprite's life stage.
+Settled in Slice 35's round with the owner, 2026-10-26 ([#361](https://github.com/Keazra/terra-sprites/issues/361)): words for now, in place of the little picture this section planned.
+
+- **The Body tab says in words how each limb is and what each arm holds,** and, as the owner asked, what the sprite is eating while it eats. Only what's worth saying shows, so a well sprite with empty arms takes no rows on a full tab (§6.6). Something like `arms  left sore, 2 berries · right an egg`, `legs  right useless`, `head  eating the berry`; the exact words and where they sit are the second round's (§7.5).
+- **The little picture** ([#314](https://github.com/Keazra/terra-sprites/issues/314)), a small figure of the sprite with its limbs shaded and what it holds at its hands, is revisited later, the owner's call. Look 10, which lays the screen out again (§6.7), is a natural time. Mock-ups of a figure drawn in lines and of #314's half-block portrait were made for the round.
 
 ### 7.4 Hurts and healing
 
@@ -379,7 +381,7 @@ Settled in the slice's round with the owner, 2026-10-26, all as recommended ([#3
 Once Look 1's layout is in, with mock-ups of each choice:
 
 - How the map shows a limp or a crawl, in every theme and the ASCII look.
-- What the little picture shows beyond the limbs, since there's no body colour gene, and where it sits.
+- Where the Body tab's words for the limbs and arms sit (§7.3), and how they're cut short when the tab is full.
 
 ---
 
@@ -446,7 +448,7 @@ From #164, #227, #229 and #230.
 
 | Size | Held |
 |---|---|
-| **Tiny** (new; berries become tiny) | In one arm, stacking up to the handful |
+| **Tiny** (new; berries become tiny) | In one arm, stacking up to the handful of three (§9.4) |
 | **Small** (an egg) | In one arm, one at a time |
 | **Medium** (the ball) | In both arms |
 | **Large** | Not held |
@@ -458,7 +460,7 @@ From #164, #227, #229 and #230.
 
 ### 9.2 Dropping and throwing
 
-- **Drop** puts what's in its arms down at its feet; aimed at a sprite, it's a hand-over, into that sprite's free arm or at its feet (§17).
+- **Drop** puts what's in its arms down beside what the sprite is looking at, carrying it there first (§9.4), or at its feet when it's looking at the thing in its arms; aimed at a sprite, it's a hand-over, into that sprite's free arm or at its feet (§17).
 - **Throw is aimed at what the sprite is looking at** (#230 Q12), so "throw the ball to Pip" is one choice. A sprite throws less far than the Cursor, and a thrown thing never hurts what it hits (§1.2).
 - **A berry that rots in a sprite's arm falls where the sprite stands,** and may sprout like any rotting berry: 1 in 10, where there's room (#229).
 - **Planting:** a carried berry dropped on grass can sprout, the same 1 in 10. Beds that always grow it are M4's.
@@ -467,13 +469,35 @@ From #164, #227, #229 and #230.
 
 - **The Brain tab adds the runners-up** under the chosen verb, with their scores, and greys the verbs the sprite couldn't choose, with why: "no free arm", "nothing to throw".
 
-### 9.4 Left for its round
+### 9.4 How hands work
 
-- The handful: how many berries one grab takes, and one arm holds.
-- What a sprite senses about its arms, such as whether the thing it's looking at is the one in its arm.
-- How far a throw goes, and what a thrown thing does when it lands short of what it was aimed at.
-- The instincts for Grab, Drop and Throw, and how strong each is. Bored sprites' pull to pick up and throw is Slice 37's (§11.2).
-- How a sprite carrying something shows on the map.
+Settled in the slice's round with the owner, 2026-10-26 ([#361](https://github.com/Keazra/terra-sprites/issues/361)): as recommended, with a strength trait, heaps and the status line from the owner's asks, and words on the Body tab in place of the little picture (§7.3).
+
+- **Hands are used from the start.** Boredom's pull to pick up and throw, the second rung of Slice 37's ladder (§11.2), starts now, weak beside today's play; Slice 37 sets how strong it ends up. Throwing a ball eases boredom as a kick does, by the ball's data. Two reasons to put things down: a sprite puts down what it carries when nothing else pulls on it, about as readily as a grown sprite wanders off, and lets go when it's hurt. Picking up and putting down are never play.
+- **A throw rolls along the ground,** in one of the eight directions, by the rolling rules (M1 design §3.5.4): it bounces off walls and bushes, knocks another ball on, crushes a berry in its way, stops at the water's edge, and never hurts anyone. A thrown berry stops against a ball.
+- **The thrower lines up first:** it walks until what it's aiming at is within reach, straight or diagonal from it with nothing in the way, then throws. From where it stands, only about 1 in 3 of what a sprite looks at 2 to 4 tiles away is in such a line (measured before the slice on `main` at a874a95). This isn't choosing where to stand (#246); it's only where a throw's walk stops.
+- **A throw goes as far as what it's aimed at,** and one that reaches it stops at its feet; one that falls short, because the other moved or something was in the way, lies where it stops. Looking at the thing in its arms, with nothing else to aim at, a sprite tosses it two tiles ahead, the way it last walked.
+- **Strength, a new trait** (the owner's ask): from the genes, as speed is, from 4 to 12, the middle 8. A throw reaches **half the thrower's strength in tiles**, so 2 to 6, 6 being the Cursor's, and three quarters of that for a young sprite or with a sore arm. A throw costs a little energy, more the stronger the sprite, as a step costs more the faster it is, so strength isn't free. Grips and breaking free use it from Slice 38 (§12), and lifting heavy things in M5 ([#96](https://github.com/Keazra/terra-sprites/issues/96)). A genome with no strength gene gets the middle. The Body tab shows it with speed and sense.
+- **Putting down:** Drop carries the thing over to what the sprite is looking at and puts it down beside it: by the water, by a bush, at another sprite's feet (a hand-over from Slice 43). Looking at the thing in its arms, it puts it down where it stands.
+- **The handful is three berries,** so six with both arms free. **Tiny things share a tile,** up to three, which changes M1 design §3.4's one object to a tile: a heap of tiny things, and nothing else with it. A rolling ball crushes a whole heap, as it crushes one berry today.
+- **One berry or the heap, the sprite's choice** (the owner's ask): **Grab** takes the one thing the sprite is looking at, and a new verb, **Gather**, takes the heap it's looking at, as much as one arm has room for. The starter genes lean the same way to both, so each sprite finds which it likes, and its young pick it up by watching; habits about each are kept apart, as two verbs' are.
+- **What a sprite feels of its arms:** how full they are, and whether what it's looking at is the thing in its arms, so *with something in its arms: eat it* eats the one it holds (Slice 36).
+- **Which arm:** a berry or an egg goes in the better arm (§7.4), and the ball takes both, so a sprite with one useless arm can't pick a ball up. An arm that becomes useless drops what it holds. A sore arm fumbles about 1 pick-up in 4 (§6.4), and the thing stays where it was.
+- **Eggs wait for Slice 40:** until then sprites can't pick an egg up; the Cursor still can.
+- **What's in its arms goes where it goes:** it stays through the Cursor's lead or shove, and falls beside the sprite when it dies. The Cursor can't take a thing out of a sprite's arms. A rolling ball can be picked up, which ends its roll.
+- **Fruit on a bush is eaten where it grows** (#164): picking it to carry isn't in M3.
+- **On screen:** the doing line says `Going to pick up the berry`, `Picked up the berry`, `Going to throw the ball to Bo #7`, `Threw the ball to Bo #7`, `Taking the berry to the water`, `Put the berry down`, and while it carries something it ends `· 2 berries in its arms` where there's room. The log lists every throw, `Pip #12 threw the ball to Bo #7`, but not picking up or putting down. The status line names what a sprite on the tile holds: `(40,12) grass · Pip #12, holding 2 berries and an egg`, with the Cursor's own `holding: berry` further along as today. The Body tab says it in words (§7.3).
+- **Carrying in the mouth waits** for losing limbs for good (#235), when a sprite with no arms would need it.
+
+### 9.5 Left for its second round
+
+Once Look 1's layout is in, with mock-ups of each choice:
+
+- How a sprite carrying something shows on the map, in each theme and the ASCII look: a berry, a handful, an egg (from Slice 40) and the ball; and how a heap of berries shows.
+- The Brain tab's runners-up (#39): how many it shows, and how the choices a sprite couldn't make are greyed with why.
+- Whether a sprite's throw shows an aim line, as the Cursor's does.
+
+Small cases the round didn't reach, such as whether Drop and Throw take one berry of a handful or all of it, are the build's to settle and say in its PR.
 
 ---
 
@@ -512,7 +536,7 @@ From #230, settled 2026-10-17, with #262 and #160 joining from #232.
 
 The owner: "A bored Sprite will try anything, up to and including hitting, kicking, throwing, grappling, and should learn what is/isn't acceptable by way of how others react to it. They should probably bias gentler actions over harder actions."
 
-- **A ladder of leanings, gentlest strongest.** The starter genes give boredom a pull towards each act on what the sprite is looking at: **touch** most, then **pick up and throw** (*bored, with something in its arms: throw it*), then **grip, push and pull**, and **hit** least. Each is as general as *hungry: eat what you're looking at*.
+- **A ladder of leanings, gentlest strongest.** The starter genes give boredom a pull towards each act on what the sprite is looking at: **touch** most, then **pick up and throw** (*bored, with something in its arms: throw it*), then **grip, push and pull**, and **hit** least. Each is as general as *hungry: eat what you're looking at*. Slice 35 starts the pick-up-and-throw rung weak (§9.4), and this slice sets how strong it ends up.
 - **Other sprites.** Hitting or gripping another sprite is a little fun for the one doing it; the other is hurt by a hit and struggles against a grip (§12). What usually follows teaches the rest: the other hits back or runs, and empathy (§11.5) makes it feel bad either way.
 - **Family is spared by a leaning, not a rule.** The starter genes lean strongly against the hard acts (hit, throw, grip) on a sprite's own family (its young, its partner, its parents) and their eggs, as they already lean against hitting family. A sprite can still do it, and learns from what follows. Gentle acts on family, a touch, picking up and putting down, are fine. Strangers and their eggs get no special leaning. The owner: "if we want to discourage a behaviour, we should do it with biases as opposed to hard rules." If the eggs slice breaks more eggs than B4 allows, the fallback is a leaning against the hard acts on every egg, still a leaning.
 - **Lonely and courting sprites touch.** *Lonely: touch what you're looking at* and *aroused, looking at a stranger of the other sex: touch it* take the place of the other two Play instincts, so courting pairs still get to know each other by playing (M2 design §15.2).
