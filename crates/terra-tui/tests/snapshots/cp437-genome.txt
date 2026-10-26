@@ -1,5 +1,5 @@
  Terra Sprites │ tick 3 │ ► 1x │ seed 7 │ sprites 3 │ not saved                              ? help
-                             *       ∙                  Sprite #5  Body Brain Chem  Genome  World
+                             *       ∙                  Sprite #5     Body Brain Chem  Genome  World
            ··   ∙                     ·       *         TRAITS
    ·           ∙                 ·            ·  ∙  ∙   speed 6.5 · sense 9.32 · grows up 4,214 ·
          *               · · ·              ∙        ·    grows old 16,524

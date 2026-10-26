@@ -54,6 +54,17 @@ impl App {
         self.tab_scroll = 0;
     }
 
+    /// The tab whose name is drawn at `at` in the inspector's title row,
+    /// if any (design §6.1).
+    pub(super) fn tab_at(&self, at: Position) -> Option<Tab> {
+        let area = self.inspector?;
+        let column = at.x.checked_sub(area.x + 1)?;
+        if at.y != area.y {
+            return None;
+        }
+        inspector::tab_at(self.tab, usize::from(column))
+    }
+
     /// The rows a tab has in the inspector: a page.
     pub(super) fn inspector_rows(&self) -> usize {
         self.inspector

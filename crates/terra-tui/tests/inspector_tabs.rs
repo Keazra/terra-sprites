@@ -46,8 +46,8 @@ fn with_room_the_world_tab_shows_the_pack_and_every_object_types_numbers() {
     let app = app_for(&world, Theme::cp437(), 100, 30);
     let inspector = right_part(&render(&app, &world, 100, 30), 45);
     assert_eq!(
-        inspector[1], " Body Brain Chem Genome  World",
-        "with nothing selected, the title is just the tabs"
+        inspector[1], "               Body Brain Chem Genome  World",
+        "with nothing selected, the title is just the tabs, at its right"
     );
     assert_eq!(open_tab(&app, &world), "World");
     let body: Vec<&str> = inspector[2 + GRAPH_LINES..12 + GRAPH_LINES]
@@ -83,16 +83,16 @@ fn the_sprite_tabs_say_how_to_select_a_sprite_when_none_is() {
     let world = garden_with_sprites();
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
     for (tab, title) in [
-        ("Body", "  Body  Brain Chem Genome World"),
-        ("Brain", " Body  Brain  Chem Genome World"),
-        ("Chem", " Body Brain  Chem  Genome World"),
-        ("Genome", " Body Brain Chem  Genome  World"),
+        ("Body", " Body  Brain Chem Genome World"),
+        ("Brain", "Body  Brain  Chem Genome World"),
+        ("Chem", "Body Brain  Chem  Genome World"),
+        ("Genome", "Body Brain Chem  Genome  World"),
     ] {
         app.apply(Action::NextTab, &world);
         let (top, text) = inspector(&app, &world);
         // The open tab is in reverse video, as wide as brackets would be
         // (design §6.1).
-        assert_eq!(top, title, "{tab}");
+        assert_eq!(top, format!("{title:>45}"), "{tab}");
         assert_eq!(open_tab(&app, &world), tab);
         assert_eq!(
             text[0], "No sprite selected: click one, or press Tab",
@@ -103,21 +103,88 @@ fn the_sprite_tabs_say_how_to_select_a_sprite_when_none_is() {
 }
 
 #[test]
-fn the_title_names_the_selected_sprite_before_the_tabs() {
+fn the_title_names_the_selected_sprite_left_of_the_tabs() {
     let world = garden_with_sprites();
     let mut app = app_for(&world, Theme::cp437(), 100, 30);
     app.apply(Action::SelectNext, &world);
-    let id = world.sprites().next().expect("a sprite").id().0;
-    // A label too long for the row is shortened to the ID, never the tabs
-    // (design §6.1); "Sprite #5" fits.
-    let (top, _) = inspector(&app, &world);
-    assert_eq!(
-        top,
-        format!(" Sprite #{id}   Body  Brain Chem Genome World")
+    let label = format!(
+        "Sprite #{}",
+        world.sprites().next().expect("a sprite").id().0
     );
+    let (top, _) = inspector(&app, &world);
+    assert_eq!(top, format!(" {label:<14} Body  Brain Chem Genome World"));
     app.apply(Action::PreviousTab, &world);
     let (top, _) = inspector(&app, &world);
-    assert_eq!(top, format!(" Sprite #{id}  Body Brain Chem Genome  World"));
+    assert_eq!(top, format!(" {label:<14}Body Brain Chem Genome  World"));
+}
+
+#[test]
+fn selecting_a_sprite_leaves_the_tabs_where_they_were() {
+    let world = garden_with_sprites();
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
+    open(&mut app, &world, Tab::Body);
+    let (before, _) = inspector(&app, &world);
+    app.apply(Action::SelectNext, &world);
+    let (after, _) = inspector(&app, &world);
+    assert_eq!(before.chars().count(), 45, "{before:?}");
+    assert_eq!(
+        after.chars().skip(15).collect::<String>(),
+        before.chars().skip(15).collect::<String>(),
+        "{before:?} then {after:?}"
+    );
+}
+
+#[test]
+fn a_name_too_long_for_its_number_shows_alone_or_shortened() {
+    for (name, shown) in [
+        ("Mira", "Mira #"),
+        ("WWWWWWWWA", "WWWWWWWWA "),
+        ("Abcdefghijklmnop", "Abcdefghij... "),
+    ] {
+        let mut world = garden_with_sprites();
+        let id = world.sprites().next().expect("a sprite").id();
+        world.submit(Command::Rename {
+            sprite: id,
+            name: name.into(),
+        });
+        run(&mut world, 1);
+        let mut app = app_for(&world, Theme::cp437(), 100, 30);
+        app.record(&[], &world);
+        app.apply(Action::SelectNext, &world);
+        let (top, _) = inspector(&app, &world);
+        assert!(top.starts_with(&format!(" {shown}")), "{name}: {top:?}");
+        assert!(
+            top.ends_with(" Body  Brain Chem Genome World"),
+            "{name}: {top:?}"
+        );
+    }
+}
+
+#[test]
+fn a_click_on_a_tab_opens_it() {
+    let world = garden_with_sprites();
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
+    app.apply(Action::SelectNext, &world);
+    // The title row is the screen's second, right of the inspector's left
+    // column at 54.
+    let click = |app: &mut App, column: usize| {
+        app.apply(
+            Action::left_click(Position::new(55 + column as u16, 1)),
+            &world,
+        );
+    };
+    for tab in ["Genome", "Chem", "World", "Brain", "Body"] {
+        let (top, _) = inspector(&app, &world);
+        let column = top.find(&format!(" {tab}")).expect(tab) + 1;
+        click(&mut app, column + tab.len() - 1);
+        assert_eq!(open_tab(&app, &world), tab, "{top:?}");
+    }
+    let (top, _) = inspector(&app, &world);
+    click(&mut app, top.find("Chem").expect("Chem") - 1);
+    assert_eq!(open_tab(&app, &world), "Body", "between two tabs");
+    click(&mut app, 2);
+    assert_eq!(open_tab(&app, &world), "Body", "on the sprite's label");
+    assert!(app.selection().is_some(), "{:?}", app.selection());
 }
 
 #[test]

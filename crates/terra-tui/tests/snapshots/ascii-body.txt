@@ -1,5 +1,5 @@
  Terra Sprites │ tick 3 │ ► 1x │ seed 7 │ sprites 3 │ not saved                              ? help
-                             *       +                │ Sprite #5   Body  Brain Chem Genome World
+                             *       +                │ Sprite #5      Body  Brain Chem Genome World
            ..   +                     .       *       │ Wandering off · 8 tiles to go
    .           +                 .            .  +  + │ age 4,217 · adult · grows old 16,524
          *               . . .              +        .│ speed 6.5 · sense 9.32

@@ -59,39 +59,49 @@ pub(crate) fn tab_area(area: Rect) -> Rect {
 /// What a sprite tab says with no sprite selected.
 pub(crate) const NOTHING_SELECTED: &str = " No sprite selected: click one, or press Tab";
 
-/// The inspector's title row: the selected sprite, if any, then the tabs,
-/// the open one in the theme's style for what's chosen, reverse video in the
-/// built-in themes (design §6.1).
+/// The inspector's title row: the selected sprite, if any, at its left, and
+/// the tabs at its right, the open one in the theme's style for what's
+/// chosen, reverse video in the built-in themes. The tabs keep their places
+/// whatever is selected, so a click finds them where they were (design §6.1).
 pub fn title(app: &App) -> Line<'static> {
     // The open tab's policy decides whether the title names the sprite
     // (design §6.4).
-    let labels = app
+    let sprite = app
         .selection()
         .map(|selection| selection.id())
         .filter(|&id| app.can_view(Panel::Tab(app.tab()), Subject::Sprite(id)))
-        .map(|id| (app.names().label(id), format!("#{}", id.0)));
+        .map(|id| (app.names().label(id), app.names().get(id)));
     let label = fitted_label(
-        labels
+        sprite
             .as_ref()
-            .map(|(label, short)| (label.as_str(), short.as_str())),
-        tabs_width(),
+            .map(|(label, name)| (label.as_str(), name.unwrap_or(label))),
+        TITLE_ROOM - tabs_width(),
     );
     let mut spans = vec![Span::raw(label)];
-    for (i, &tab) in Tab::ALL.iter().enumerate() {
+    for (i, (tab, text)) in tab_texts(app.tab()).enumerate() {
         if i > 0 {
             spans.push(Span::raw(" "));
         }
-        // As wide as the others' brackets were, so the row doesn't move.
         if tab == app.tab() {
-            spans.push(Span::styled(
-                format!(" {} ", tab.label()),
-                app.theme.text().selected,
-            ));
+            spans.push(Span::styled(text, app.theme.text().selected));
         } else {
-            spans.push(Span::raw(tab.label()));
+            spans.push(Span::raw(text));
         }
     }
     Line::from(spans)
+}
+
+/// The tabs as the title row writes them with `open` open, which is as
+/// wide as brackets made it, so the row doesn't move.
+fn tab_texts(open: Tab) -> impl Iterator<Item = (Tab, String)> {
+    Tab::ALL.iter().map(move |&tab| {
+        let text = if tab == open {
+            format!(" {} ", tab.label())
+        } else {
+            tab.label().to_string()
+        };
+        (tab, text)
+    })
 }
 
 /// How many columns the tabs take in the title row, the open one's
@@ -101,21 +111,46 @@ fn tabs_width() -> usize {
     labels + Tab::ALL.len() - 1 + 2
 }
 
+/// The tab written at `column` of the title row with `open` open, counting
+/// from the row's first column, right of the line down the inspector's left
+/// (design §6.1).
+pub(crate) fn tab_at(open: Tab, column: usize) -> Option<Tab> {
+    let mut start = TITLE_ROOM - tabs_width();
+    for (tab, text) in tab_texts(open) {
+        let end = start + text.chars().count();
+        if (start..end).contains(&column) {
+            return Some(tab);
+        }
+        start = end + 1;
+    }
+    None
+}
+
 /// The columns the title row has: all but the column down the inspector's
 /// left.
 const TITLE_ROOM: usize = INSPECTOR_WIDTH as usize - 1;
 
-/// What the title row says before tabs `tabs` columns wide: the sprite's
-/// `label` if it fits, or else its `short` label, or else just a space:
-/// the tabs are never cut (design §6.1).
-fn fitted_label(labels: Option<(&str, &str)>, tabs: usize) -> String {
-    let (label, short) = labels.unzip();
-    [label, short]
-        .into_iter()
-        .flatten()
-        .map(|label| format!(" {label}  "))
-        .find(|label| label.chars().count() + tabs <= TITLE_ROOM)
-        .unwrap_or_else(|| " ".to_string())
+/// What the title row says before the tabs, `room` columns of it: a
+/// sprite's `label`, "Mira #12", if it fits, or else its `name` alone, or
+/// else as much of its name as fits, ending "..." since CP437 has no "…"
+/// (design §6.1, §6.2). A space comes before it, at least one after it, and
+/// the tabs are never cut. An unnamed sprite's name is its label.
+fn fitted_label(sprite: Option<(&str, &str)>, room: usize) -> String {
+    let fits = room.saturating_sub(2);
+    let text = match sprite {
+        Some((label, name)) => [label, name]
+            .into_iter()
+            .find(|text| text.chars().count() <= fits)
+            .map_or_else(|| shortened(name, fits), str::to_string),
+        None => String::new(),
+    };
+    format!("{:<room$}", format!(" {text}"))
+}
+
+/// The first of `text` that fits in `width` columns with "..." after it.
+fn shortened(text: &str, width: usize) -> String {
+    let kept: String = text.chars().take(width.saturating_sub(3)).collect();
+    format!("{}...", kept.trim_end())
 }
 
 /// The open tab's lines, from the top.

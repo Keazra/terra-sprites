@@ -106,7 +106,7 @@ The same key in capitals or lower case does the same thing.
 | `p` | Population graph: the world's population over the whole run, each column split by the share of eggs, young, adults and old, from the bottom. `←` `→` or the mouse pick a moment, and the lines under the graph say how many there were then, of which generations, and what was laid, hatched, spawned or died since the column before. A small copy at the top of the World tab shows how many, with the world's limit |
 | `r` | Name the selected sprite: type a name, or `Tab` for another random one, then `Enter` |
 | `g` | Save the selected sprite's genome to the genomes folder (the status line says where); the Place menu reads it back |
-| `[` / `]` | Previous / next inspector tab |
+| `[` / `]` | Previous / next inspector tab; or click a tab |
 | `PgUp` / `PgDn`, or the mouse wheel over the inspector | Scroll a long tab |
 | `F5` / `F9` | Quicksave / quickload. Loading over a world that has run since it was last saved asks first (`y` to load), and a loaded world starts paused |
 | `Ctrl+S` / `Ctrl+O` | Save under a name you type / pick a save to load, newest first. The world also saves itself every 10 minutes of running time and when you quit, keeping the last 3 autosaves. See [saves](reference/saves.md) |

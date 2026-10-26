@@ -11,21 +11,51 @@ use super::brain::{concept_name, scored};
 use super::*;
 use crate::text::Words;
 
-// No sprite's number or name is long enough yet to crowd the tabs, so
-// this tests the title's fitting directly.
 #[test]
 fn a_label_too_long_for_the_title_is_shortened_before_the_tabs_are() {
-    // The five tabs take 30 columns, the open one's spaces included, which
-    // leaves a label 15.
-    let fit = |labels| fitted_label(labels, 30);
-    assert_eq!(fit(Some(("Sprite #530", "#530"))), " Sprite #530  ");
-    assert_eq!(fit(Some(("Sprite #1234567", "#1234567"))), " #1234567  ");
+    // The five tabs take 30 of the row's 45 columns, the open one's spaces
+    // included, which leaves 15: a label of 13 with a space each side.
+    let fit = |sprite| fitted_label(sprite, 15);
+    assert_eq!(fit(Some(("Sprite #530", "Sprite #530"))), " Sprite #530   ");
+    assert_eq!(fit(Some(("Mira #12", "Mira"))), " Mira #12      ");
     assert_eq!(
-        fitted_label(Some(("Sprite #1234567", "#1234567")), 40),
-        " ",
-        "with no room for even the number, the tabs alone"
+        fit(Some(("WWWWWWWWA #538", "WWWWWWWWA"))),
+        " WWWWWWWWA     ",
+        "the name alone, when the number doesn't fit beside it"
     );
-    assert_eq!(fit(None), " ");
+    assert_eq!(
+        fit(Some(("Abcdefghijklmnop #538", "Abcdefghijklmnop"))),
+        " Abcdefghij... ",
+        "as much of the name as fits"
+    );
+    assert_eq!(
+        fit(Some(("Old Bo of Mira #538", "Old Bo of Mira"))),
+        " Old Bo of...  ",
+        "with no space before the dots"
+    );
+    assert_eq!(fit(None), " ".repeat(15));
+}
+
+#[test]
+fn a_tab_is_found_in_the_columns_the_title_row_writes_it_in() {
+    // The tabs fill the row's last 30 columns, from column 15: with Body
+    // open, " Body  Brain Chem Genome World".
+    let body_open = |column| tab_at(Tab::Body, column);
+    assert_eq!(body_open(14), None);
+    assert_eq!(body_open(15), Some(Tab::Body), "the open tab's space");
+    assert_eq!(body_open(20), Some(Tab::Body));
+    assert_eq!(body_open(21), None, "between two tabs");
+    assert_eq!(body_open(22), Some(Tab::Brain));
+    assert_eq!(body_open(44), Some(Tab::World));
+    assert_eq!(body_open(45), None);
+    // With World open, "Body Brain Chem Genome  World ".
+    let world_open = |column| tab_at(Tab::World, column);
+    assert_eq!(world_open(18), Some(Tab::Body));
+    assert_eq!(world_open(19), None);
+    assert_eq!(world_open(31), Some(Tab::Genome));
+    assert_eq!(world_open(37), None);
+    assert_eq!(world_open(38), Some(Tab::World));
+    assert_eq!(world_open(44), Some(Tab::World));
 }
 
 fn wander(progress: Progress) -> ActionView {

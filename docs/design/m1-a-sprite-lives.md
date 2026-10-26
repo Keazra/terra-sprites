@@ -1217,7 +1217,7 @@ The species is dropped into a world it doesn't know and has to learn about it. I
 
 ```
  Terra Sprites │ tick 48,210 │ ► 4x │ seed 7 │ sprites 27 │ saved 2m ago                     ? help
-..,,,..~~~~≈≈≈≈~~..........♣....#########...........♣.│ Mira #12   Body  Brain Chem Genome World
+..,,,..~~~~≈≈≈≈~~..........♣....#########...........♣.│ Mira #12       Body  Brain Chem Genome World
 .,,,...~~~≈≈≈≈≈~~....♣.........########....♠..........│ Going to eat the berry bush · 3 tiles to go
 ..,,...~~~~≈≈≈~~..........☺.......#####.......♣.......│ age 3,410 · speed 7 · sense 10
 ...,....~~~~~~~.....•.........☺.....##....☺...........│ hunger     ███████░░░ .71 ▲
@@ -1285,7 +1285,7 @@ The species is dropped into a world it doesn't know and has to learn about it. I
   - A map smaller than the space gets a map view shrunk to fit it, at the top-left. From Slice 31, it's drawn in the middle of a full map view instead, with space around it (M2 design §11.1).
   - Its border is **double-lined** (`═ ║`) on any side where the terrarium's wall is in view, and single-lined where the map carries on. From Slice 31, it's single-lined all round, and the wall is drawn as glass just past the map (M2 design §11.2). From #302 it has no border at all.
   - The Cursor is 3×3 tiles and follows the pointer, or the sprite it follows (§6.5).
-- **Inspector tabs** (`[` and `]`, wrapping around). The game starts on World. The inspector's title row is the selected sprite and the tabs, with the open one in the theme's style for what's chosen, reverse video in the built-in themes, as a selected sprite is, and a space wider each side, as brackets were (#302); with no sprite selected, it's the tabs alone. A sprite's label too long to fit is shortened, never the tab names.
+- **Inspector tabs** (`[` and `]`, wrapping around, or a click on one, #302). The game starts on World. The inspector's title row is the selected sprite at its left and the tabs at its right, so selecting a sprite never moves them, with the open one in the theme's style for what's chosen, reverse video in the built-in themes, as a selected sprite is, and a space wider each side, as brackets were (#302); with no sprite selected, it's the tabs alone. The tabs leave a sprite's label 13 columns. A label too long for them, as "Bramblewick #538" is, gives the sprite's name alone, and a name too long for them as much of it as fits, ending `...` since CP437 has no `…`; the tab names are never cut.
 
 | Tab | Shows |
 |---|---|

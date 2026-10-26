@@ -950,6 +950,16 @@ impl App {
             } if self.filter_label().is_some_and(|label| label.contains(at)) => {
                 self.next_filter();
             }
+            // A click on an inspector tab opens it (design §6.1).
+            Action::Click {
+                at,
+                button: Button::Left,
+                ..
+            } if self.tab_at(at).is_some() => {
+                if let Some(tab) = self.tab_at(at) {
+                    self.open(tab);
+                }
+            }
             Action::Click {
                 at,
                 button,
