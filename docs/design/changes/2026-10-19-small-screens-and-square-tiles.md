@@ -1,6 +1,6 @@
 # Small screens step down, and square tiles
 
-A screen smaller than 100×30 steps down a part at a time rather than saying "Terminal too small", the inspector can fill the screen, and tiles can be drawn two cells wide, so they're square. Fauxpaw settled it in the UI lessons round of 2026-10-19 (questions 5 and 6), as Look 4 ([#305](https://github.com/Keazra/terra-sprites/issues/305)) of the Look slices ([#301](https://github.com/Keazra/terra-sprites/issues/301)).
+A screen smaller than 100×30 steps down a part at a time rather than saying "Terminal too small", the inspector can fill the screen, and tiles can be drawn two cells wide, so they're square. Fauxpaw settled it in the UI lessons round of 2026-10-19 (questions 5 and 6), as Look 4 ([#305](https://github.com/Keazra/terra-sprites/issues/305)) of the Look slices ([#301](https://github.com/Keazra/terra-sprites/issues/301)), and it was built in [#390](https://github.com/Keazra/terra-sprites/pull/390).
 
 ## M1 "A Sprite Lives"
 
