@@ -138,7 +138,19 @@ pub(crate) fn place_objects(config: &WorldConfig, data: &DataPack, state: &mut W
 /// §9.1), and with its energy and hydration drawn between physiology's
 /// `first_population` fractions of the newborn level, so the sprites don't
 /// all run dry together. If the map runs out of room, the rest are skipped.
-pub(crate) fn place_sprites(config: &WorldConfig, data: &DataPack, state: &mut WorldState) {
+///
+/// If `like` names any sprites, each first sprite takes after them in turn,
+/// spread through the list, as the unattended run's do (`place_newborns`):
+/// its genome and hidden flaws, in place of a wild sprite's. The wild
+/// sprite is still drawn, so every draw after it is the one the starter's
+/// world makes: each takes the tile, the draw of its age and the levels the
+/// starter's sprite in its place would have (the race, M2 design §19.6).
+pub(crate) fn place_sprites(
+    config: &WorldConfig,
+    data: &DataPack,
+    state: &mut WorldState,
+    like: &[(Genome, Vec<u8>)],
+) {
     let mut candidates = standing_room(data, state);
     // The tiles farther from water, drawn from once the near ones are
     // taken: with none near, the first draw is from the whole map in tile
@@ -152,7 +164,8 @@ pub(crate) fn place_sprites(config: &WorldConfig, data: &DataPack, state: &mut W
     }
     let physiology = data.physiology();
     let (low, high) = physiology.first_population;
-    for _ in 0..config.sprites() {
+    let count = config.sprites();
+    for n in 0..count {
         if candidates.is_empty() {
             candidates = std::mem::take(&mut rest);
         }
@@ -162,12 +175,16 @@ pub(crate) fn place_sprites(config: &WorldConfig, data: &DataPack, state: &mut W
         let choice = uniform(&mut state.rng, candidates.len() as u64) as usize;
         let pos = candidates.swap_remove(choice);
         // Wild sprites carry a few hidden flaws (M2 design §12).
-        let (genome, flaws) = mutation::wild(data, &mut state.rng);
+        let wild = mutation::wild(data, &mut state.rng);
+        let (genome, flaws) = match like {
+            [] => wild,
+            _ => like[n * like.len() / count].clone(),
+        };
         // The first sprites are adults, of all ages (M2 design §9.1).
         let (grows_up, grows_old) = Sprite::adulthood(&genome, data);
         let age = grows_up + uniform(&mut state.rng, grows_old.saturating_sub(grows_up).max(1));
         let mut sprite = Sprite::aged(genome, pos, state.tick, age, data);
-        sprite.flaws = flaws;
+        sprite.take_flaws(flaws, data);
         for index in [physiology.indices.energy, physiology.indices.hydration] {
             let level = sprite.body.chems[index] * (low + (high - low) * unit(&mut state.rng));
             sprite.body.start_at(index, level);
@@ -200,7 +217,7 @@ pub(crate) fn place_newborns(
             _ => like[n * like.len() / count].clone(),
         };
         let mut sprite = Sprite::newborn(genome, pos, state.tick, data);
-        sprite.flaws = flaws;
+        sprite.take_flaws(flaws, data);
         sprite.placed = true;
         state.add_sprite(sprite);
     }

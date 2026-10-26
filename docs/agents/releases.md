@@ -32,6 +32,7 @@ At the end of the milestone's acceptance slice (M2's is Slice 30b, [#148](https:
 
      `--locked` builds with the release's own `Cargo.lock`. Without it, `cargo install` picks the newest versions of every library, so an old release can stop building, or build differently, as libraries move on.
    - Say in the same places that players without Rust can download the game ready-made from the release's page instead, with a link to it (`https://github.com/Keazra/terra-sprites/releases/tag/v0.2.0`), which works once step 3 has published it.
+   - The title screen shows the version in its corner, so the opening scene's clip changes with it. Render the README's clip again with the manual's command (`cargo run --release -p terra-tui --example render -- title -o docs/clips/title.gif`), and give the renderer's test `the_same_clip_comes_out_the_same_on_every_computer` (`crates/terra-tui/examples/render/main.rs`) the new file's two hashes, which its failure prints.
 2. **The owner merges it, then runs the downloads workflow for the release at once,** since the README now names it. Sessions can't make tags or releases: the git proxy refuses their tags, and GitHub refuses their releases ("not permitted for this session type", 2026-10-18). A workflow can, so the downloads workflow (`.github/workflows/downloads.yml`) makes the release, as a draft. With `gh`, from the terra-sprites folder in PowerShell:
 
    ```powershell
@@ -88,9 +89,9 @@ Either way, you need a terminal of at least 100×30 (on Windows, Windows Termina
 Only for a serious problem players hit in a release (a crash, a lost save, a world that won't load), and only once `main` has moved on to the next milestone; before that, the fix merges to `main` like any other and the release waits for it.
 
 1. The fix merges to `main` first, as usual.
-2. A branch `release/0.2`, made from the tag, takes the same change in a PR of its own, with the version raised to 0.2.1 and a short `docs/releases/v0.2.1.md`.
-3. The owner merges it and makes the release `v0.2.1` on that branch: the downloads workflow, as in "Making one", with the tag `v0.2.1`, run from `release/0.2` (`--ref release/0.2`, or that branch under "Use workflow from"). A PR to `main` then points the README's and the manual's install commands at `v0.2.1`, and carries the notes file across.
+2. A branch `release/0.2`, made from the tag, takes the same change in a PR of its own, with the version raised to 0.2.1 (and the title clip with it, as in "Making one") and a short `docs/releases/v0.2.1.md`.
+3. The owner merges it and makes the release `v0.2.1` on that branch: the downloads workflow, as in "Making one", with the tag `v0.2.1`, run from `release/0.2` (`--ref release/0.2`, or that branch under "Use workflow from"). A PR to `main` then points the README's and the manual's install commands and release-page links at `v0.2.1`, and carries the notes file across.
 
 ## The first release
 
-M1 shipped before there were releases. Its release, v0.1.0, goes on M1's acceptance merge, `fc2ce3f` (PR #127, as it is after the history rewrite of 2026-10-05), whose `Cargo.toml` already says 0.1.0. Its notes are [`docs/releases/v0.1.0.md`](../releases/v0.1.0.md). The README keeps installing `main` until v0.2.0 is out, since M2 is most of what the README and the clips show.
+M1 shipped before there were releases. Its release, v0.1.0, went on M1's acceptance merge, `fc2ce3f` (PR #127, as it is after the history rewrite of 2026-10-05), whose `Cargo.toml` already said 0.1.0. Its notes are [`docs/releases/v0.1.0.md`](../releases/v0.1.0.md). The README installed `main` until v0.2.0, since M2 was most of what the README and the clips showed.

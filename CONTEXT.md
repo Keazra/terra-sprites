@@ -188,8 +188,12 @@ _Avoid_: dead gene, failed gene, knockout
 A species that has become worse at living than the starter's genes in the same world: its world fails its bars, or it loses the race against the starter's genes (the same fresh worlds run once with the starter's genome and once with genomes from the end of its long run, M2 design §19.6). What a species does better without is evolution; falling behind is the harm.
 _Avoid_: wear and decay for this (those are a sprite's), genetic decline, degeneration
 
+**The race** (M2, Slice 30b):
+G4's second test, which the long run runs every time: after each seed whose world didn't die out, that seed's fresh world runs as the viability run twice, once with the starter's sprites and once with sprites taking after the hatched sprites alive at the long run's end, on the same tiles, with their ages and starting levels drawn as the starter's sprites' are, so only the genes differ. A seed is won when the evolved side's young grow up more often; the race is won with at least 8 of the seeds that lasted and were judged. Lost, the species has fallen behind (M2 design §19.6).
+_Avoid_: competition, tournament; lone newborns (that's the unattended run given the end's genes, a reading with no bar)
+
 **Careful copying** (M2, held in reserve):
-Copying the needs genes so that they're lost or changed a tenth as often as other genes, as *Creatures*' gene flags do. It's built only if a world in the long run fails a bar (or the race is lost overall) while more than half its living lack a needs gene.
+Copying the needs genes so that they're lost or changed a tenth as often as other genes, as *Creatures*' gene flags do. It's built only if a world in the long run fails a bar while more than half its living lack a needs gene. A bar held over to a later revisit, the race among them, doesn't count.
 _Avoid_: protected genes, mutation bias (it changes how often, never which way)
 
 **Flagged gene**:
@@ -993,7 +997,7 @@ The death of a sprite that had grown up, adult or old, judged by life stage. The
 _Avoid_: adult death (old sprites' count too); a death after tick 10,000 (A4 counted by tick until Slice 29)
 
 **Long run** (M2, Slice 29):
-The default world left alone for 220 hours on seeds 1–10, on the owner's PC: the `childhood` example. It reports Slice 29's bars, G1's (whether each seed's world lasts), the starter genes the living lack, lone newborns given the end's genes, and G4 (gene values moved, over the seeds that last).
+The default world left alone for 220 hours on seeds 1–10, on the owner's PC: the `childhood` example. It reports Slice 29's bars, G1's (whether each seed's world lasts), the starter genes the living lack, lone newborns given the end's genes, and G4: gene values moved, over the seeds that last, and the race.
 _Avoid_: soak (that has the Cursor's commands), viability run (that's 50,000 ticks)
 
 **Soak**:

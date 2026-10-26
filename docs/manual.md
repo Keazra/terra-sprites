@@ -15,7 +15,7 @@ How to play Terra Sprites and how to work on it: everything past what the [READM
 
 ## Where it's at
 
-Milestone 1 is done: every slice is built ([milestone](https://github.com/Keazra/terra-sprites/milestone/1)), and the owner signed it off after playing it through ([M1 acceptance](acceptance/m1.md)). Milestone 2, *Generations*, is nearly done ([milestone](https://github.com/Keazra/terra-sprites/milestone/2)): sprites now hatch from eggs, grow up, court, breed and grow old, and the young are born with a mix of their parents' genes. The world is harsher too: water is scarce, so most young die unless another sprite or the player guides them. One slice is left: the sign-off. Milestone 3 is being planned.
+Milestone 1 is done: every slice is built ([milestone](https://github.com/Keazra/terra-sprites/milestone/1)), and the owner signed it off after playing it through ([M1 acceptance](acceptance/m1.md)). Milestone 2, *Generations*, is done too, and released as v0.2.0 ([milestone](https://github.com/Keazra/terra-sprites/milestone/2), [M2 acceptance](acceptance/m2.md)): sprites now hatch from eggs, grow up, court, breed and grow old, and the young are born with a mix of their parents' genes. The world is harsher too: water is scarce, so most young die unless another sprite or the player guides them. Milestone 3, *Body & verbs*, is being planned.
 
 ## What sprites do
 
@@ -33,14 +33,14 @@ You can select a sprite and look inside it: its Brain tab shows what it's paying
 
 ## Getting started
 
-You need [Rust](https://rustup.rs) 1.97.1 or newer (`rustup update stable`) and a terminal of at least 100×30 characters; 140×40 is better. On Windows, use Windows Terminal. To install the game as a command, without downloading the code yourself:
+You need a terminal of at least 100×30 characters; 140×40 is better. On Windows, use Windows Terminal. The easiest way in is the ready-made game for Windows, Mac (Apple silicon) or Linux on the [v0.2.0 release's page](https://github.com/Keazra/terra-sprites/releases/tag/v0.2.0), with no Rust needed: the zip's `README.txt` says how to run it. Or, with [Rust](https://rustup.rs) 1.97.1 or newer (`rustup update stable`), install the game as a command, without downloading the code yourself:
 
 ```bash
-cargo install --git https://github.com/Keazra/terra-sprites terra-tui
+cargo install --git https://github.com/Keazra/terra-sprites --tag v0.2.0 --locked terra-tui
 terra-sprites
 ```
 
-Run the same `cargo install` line again to update it. Or, from a copy of the repository:
+`--locked` builds it with the release's own library versions. Leave out `--tag v0.2.0` to install the newest work in progress instead, and run the line again, with a newer release's tag, to update. Or, from a copy of the repository:
 
 ```bash
 cargo run --release
@@ -64,7 +64,7 @@ If you installed it with `cargo install`, this removes the `terra-sprites` comma
 cargo uninstall terra-tui
 ```
 
-If you ran it from a copy of the repository instead, delete that folder.
+If you ran it from a downloaded zip or a copy of the repository instead, delete that folder.
 
 Either way, your worlds stay. Everything the game writes goes in one folder, the game's folder: saves and autosaves, the last session's replay, genomes you saved and fast-forward tables, along with any themes or presets you put there yourself. The help screen (`?`) shows where it is on its last line, `FILES`. Delete it to remove them too, or keep it, and the game finds them again if you reinstall:
 
@@ -196,8 +196,9 @@ To run the checks CI runs: `.\scripts\check.ps1` in PowerShell, or `scripts/chec
 
 The game's designs:
 
-- [M2 "Generations" design](design/m2-generations.md) (the plan for milestone 2: its slices, the time scale of a sprite's life, and what "M2 is done" means; and what its slices have settled so far: memory of places, the title screen, and where places sit on the Brain tab, life stages, breeding, genes, the population graph, and fast-forward and the speed cap).
+- [M2 "Generations" design](design/m2-generations.md) (the plan for milestone 2: its slices, the time scale of a sprite's life, and what "M2 is done" means; and what its slices settled: memory of places, the title screen, and where places sit on the Brain tab, life stages and ageing, breeding, the view past the wall, mixing and changing genes, the population graph, courtship and families, fast-forward and the speed cap, the family tree, learning by watching, and a harsher world).
 - [M1 "A Sprite Lives" design](design/m1-a-sprite-lives.md), the rulebook for everything M2 doesn't change.
+- [M3 "Body & verbs" design](design/m3-body-and-verbs.md) (the plan for milestone 3, next: its slices, content safety, the rules every new verb shares, and what "M3 is done" means).
 - [M4 "Terra" design](design/m4-terra.md) (the plan for the ship, a later milestone: its sectors, devices and sealed doors, and what "M4 is done" means).
 - [Design changes](design/changes/): each change to a design, one file per PR; its README says where the earlier numbered revisions are. The evaluations of v1 are in [`docs/design/reviews/`](design/reviews/).
 
@@ -207,8 +208,8 @@ The `docs/terra-sprites-docs` folder is empty in your copy. It's where the owner
 
 | Milestone | Contents |
 |---|---|
-| **M1 — A Sprite Lives** *(done)* | World, ecology, biochemistry, learning brain, terminal UI, the Cursor, saves and replays |
-| **M2 — Generations** | Memory of places, a title screen, life stages and ageing, breeding, genetics, a family tree, population graphs, fast-forward and a speed cap, learning by watching, a harsher world |
+| **M1 — A Sprite Lives** *(done, v0.1.0)* | World, ecology, biochemistry, learning brain, terminal UI, the Cursor, saves and replays |
+| **M2 — Generations** *(done, v0.2.0)* | Memory of places, a title screen, life stages and ageing, breeding, genetics, a family tree, population graphs, fast-forward and a speed cap, learning by watching, a harsher world |
 | **M3 — Body & verbs** | Limbs that are hurt and heal, and the verbs they give: touching, grabbing, gripping, pushing, pulling, throwing and dropping things. Play as a feeling, real sleep, eggs carried and sometimes broken, pregnancy, grief for the deaths a sprite sees, dead bodies, families sharing food and correcting their young, first-steps worlds for new players, and the screen laid out again for it all |
 | **M4 — Terra** | The terrarium is a ship, Terra: its sectors open one by one as the sprites learn |
 | **M5 — Wild Terra** | Critters, more hazards and toys, possibly seasons and weather |
