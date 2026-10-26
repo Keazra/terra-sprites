@@ -95,7 +95,6 @@ impl App {
     /// `?` does at once, going back to what was open. The mouse still
     /// points.
     pub(super) fn apply_in_help(&mut self, action: Action, world: &World) -> Flow {
-        let last = self.help_scroll_room(world);
         let help = &mut self.help;
         match action {
             Action::Help | Action::Type('?') => self.close_help(),
@@ -121,13 +120,9 @@ impl App {
             Action::Scroll { dx, .. } if dx != 0 => self.turn_page(dx.signum()),
             Action::AnotherName => self.turn_page(1),
             Action::SelectPrevious => self.turn_page(-1),
-            Action::Scroll { dy, .. } => {
-                let scroll = help.scroll.saturating_add_signed(dy.signum() as isize);
-                help.scroll = scroll.min(last);
-            }
+            Action::Scroll { dy, .. } => self.scroll_help(dy.signum() as isize, world),
             Action::Wheel { at, notches } => {
-                let lines = (notches * WHEEL_LINES) as isize;
-                help.scroll = help.scroll.saturating_add_signed(lines).min(last);
+                self.scroll_help((notches * WHEEL_LINES) as isize, world);
                 self.point(at);
             }
             Action::Click {
@@ -159,6 +154,14 @@ impl App {
             return None;
         }
         crate::help::page_at(usize::from(column))
+    }
+
+    /// Scrolls the help `lines` down, or up if less than 0, no further than
+    /// brings its last line to the bottom of its box.
+    fn scroll_help(&mut self, lines: isize, world: &World) {
+        let last = self.help_scroll_room(world);
+        let scroll = self.help.scroll.saturating_add_signed(lines);
+        self.help.scroll = scroll.min(last);
     }
 
     /// How far the help can scroll down: as far as brings its last line to

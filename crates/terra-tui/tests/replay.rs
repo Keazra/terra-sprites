@@ -7,6 +7,7 @@ mod common;
 use common::screen::hint_cells;
 use common::{
     app_on, at, ball_world, map_app, pack, pointer_on, render, render_on, row, run, scratch_folder,
+    type_in,
 };
 
 use std::panic::{AssertUnwindSafe, catch_unwind};
@@ -198,6 +199,48 @@ fn a_replay_greys_the_hints_of_keys_it_would_refuse() {
             ready,
             "{hint}"
         );
+    }
+}
+
+#[test]
+fn in_a_replay_the_palette_mutes_the_keys_it_would_refuse() {
+    let playback = replay_of(&played(ball_world(), 10), "palette");
+    let world = playback.world();
+    let mut app = app_on(world);
+    app.start_replay("last_session.replay", &playback);
+    app.animate(std::time::Duration::from_secs(5));
+    let look = app.theme.text();
+    app.apply(Action::Palette, world);
+    for (typed, key, ready) in [("name it", "r", false), ("sprite list", "l", true)] {
+        type_in(&mut app, world, typed);
+        let screen = render(&app, world);
+        // The palette's first row, under what's typed: its key is the last
+        // thing in it, before a space and the box's right edge.
+        let (x, y) = (0..screen.area.height)
+            .find_map(|y| {
+                let text: String = (0..screen.area.width)
+                    .map(|x| screen[(x, y)].symbol())
+                    .collect();
+                let at = text.find(&format!(" {key} │"))?;
+                Some((text[..at].chars().count() as u16 + 1, y))
+            })
+            .unwrap_or_else(|| panic!("a row for {typed}"));
+        let cell = &screen[(x, y)];
+        assert_eq!(cell.symbol(), key);
+        assert_eq!(
+            cell.modifier.contains(look.key.add_modifier),
+            ready,
+            "{typed}"
+        );
+        let enter = hint_cells(&screen, "enter do it")[0];
+        assert_eq!(
+            enter.modifier.contains(look.key.add_modifier),
+            ready,
+            "enter, for {typed}"
+        );
+        for _ in typed.chars() {
+            app.apply(Action::Erase, world);
+        }
     }
 }
 

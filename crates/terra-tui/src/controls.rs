@@ -812,7 +812,7 @@ fn meets(need: Need, app: &App, world: &World) -> bool {
         Need::Pressable => app
             .palette_rows()
             .get(app.palette_choice())
-            .is_some_and(|row| row.key.action.is_some()),
+            .is_some_and(|row| pressable(&row.key, app)),
         Need::Selection => app.selection().is_some(),
         Need::KeysAct => {
             app.screen() == Screen::Help
@@ -828,6 +828,12 @@ fn key_works(key: &Key, app: &App) -> bool {
         || key
             .action
             .is_none_or(|action| !crate::app::changes_the_world(&action, false))
+}
+
+/// Whether the palette can press `key` just now: it has an action, and
+/// a replay wouldn't refuse it.
+pub fn pressable(key: &Key, app: &App) -> bool {
+    key.action.is_some() && key_works(key, app)
 }
 
 /// A row of the command palette (#303): a control and one of its keys,

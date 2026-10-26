@@ -17,7 +17,6 @@ use crate::app::{
 };
 use crate::controls::{self, Context, Control, Hint, PaletteRow, Says};
 use crate::family_tree::{self, Lineage};
-use crate::help::HelpPage;
 use crate::inspector::{self, INSPECTOR_WIDTH, NOTHING_SELECTED, first_shown};
 use crate::policy::{Panel, Subject};
 use crate::space::{self, Place};
@@ -701,8 +700,7 @@ pub(crate) fn draw_help(buf: &mut Buffer, area: Rect, app: &App, world: &World) 
     };
     let inner = clear_box(buf, area, "", corner, look);
     let mut title = vec![Span::raw(crate::help::TITLE)];
-    for page in HelpPage::ALL {
-        let label = format!(" {} ", page.label());
+    for (page, label) in crate::help::page_names() {
         if search.is_none() && page == app.help_page() {
             title.push(Span::styled(label, look.selected));
         } else {
@@ -715,7 +713,8 @@ pub(crate) fn draw_help(buf: &mut Buffer, area: Rect, app: &App, world: &World) 
         Some(typed) => Line::raw(format!(" search: {typed}_ ")),
         None => Line::styled(" type to search ", look.muted),
     };
-    buf.set_line(area.x + 2, area.bottom().saturating_sub(1), &bottom, room);
+    let bottom_row = area.bottom().saturating_sub(1);
+    buf.set_line(area.x + HELP_TITLE_AT, bottom_row, &bottom, room);
     let lines = crate::help::lines(app, world, usize::from(inner.width));
     // Scrolled no further than its last line at the bottom.
     let first = app
@@ -771,7 +770,7 @@ fn render_palette(buf: &mut Buffer, map_view: Rect, app: &App) {
         let used =
             1 + key.does.chars().count() + about.chars().count() + key.written.chars().count() + 1;
         let gap = usize::from(inner.width).saturating_sub(used).max(1);
-        let key_look = if key.action.is_some() {
+        let key_look = if controls::pressable(key, app) {
             look.key
         } else {
             look.muted

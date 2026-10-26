@@ -35,12 +35,20 @@ listed_enum! {
 /// What the help's top edge says before its pages' names.
 pub(crate) const TITLE: &str = " Help ─";
 
+/// Each page's name as the help's top edge writes it after `TITLE`, side
+/// by side: ` World `.
+pub(crate) fn page_names() -> impl Iterator<Item = (HelpPage, String)> {
+    HelpPage::ALL
+        .into_iter()
+        .map(|page| (page, format!(" {} ", page.label())))
+}
+
 /// The page whose name the help's top edge writes at `column`, counting
 /// from where the title starts (#303).
 pub(crate) fn page_at(column: usize) -> Option<HelpPage> {
     let mut start = TITLE.chars().count();
-    for page in HelpPage::ALL {
-        let end = start + page.label().chars().count() + 2;
+    for (page, name) in page_names() {
+        let end = start + name.chars().count();
         if (start..end).contains(&column) {
             return Some(page);
         }

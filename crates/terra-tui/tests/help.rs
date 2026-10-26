@@ -257,6 +257,39 @@ fn the_top_bar_names_the_page_question_mark_would_open() {
 }
 
 #[test]
+fn pointing_at_the_inspector_opens_help_at_its_page_and_at_the_map_the_world_s() {
+    let world = field();
+    let mut app = app_on(&world);
+    let page = |app: &App| app.help_page_here().label();
+    // The inspector's lines, right of its left column at 54.
+    app.apply(Action::Point(Position::new(70, 10)), &world);
+    assert_eq!(page(&app), "Inspector");
+    let bar = lines(&render(&app, &world))[0].trim_end().to_string();
+    assert!(bar.ends_with("  ? help (Inspector)"), "{bar}");
+    app.apply(Action::Help, &world);
+    assert_eq!(app.help_page().label(), "Inspector");
+    app.apply(Action::Back, &world);
+    // A tile on the map.
+    app.apply(Action::Point(Position::new(20, 10)), &world);
+    assert_eq!(page(&app), "World");
+    // A click on one of the inspector's tabs, in its title row.
+    let title = lines(&render(&app, &world))[1].clone();
+    let at = title.find("Brain").expect("the Brain tab");
+    let x = title[..at].chars().count() as u16;
+    app.apply(Action::left_click(Position::new(x, 1)), &world);
+    assert_eq!(page(&app), "Inspector");
+    // The wheel over the map changes mode, and is on the map.
+    app.apply(
+        Action::Wheel {
+            at: Position::new(20, 10),
+            notches: 1,
+        },
+        &world,
+    );
+    assert_eq!(page(&app), "World");
+}
+
+#[test]
 fn a_click_on_a_page_s_name_opens_it_and_ends_a_search() {
     let world = field();
     let mut app = app_on(&world);
