@@ -4,7 +4,8 @@
 
 mod common;
 use common::{
-    SCREEN, WorldBuilder, apply, at, lines, map_app, pointer_on, render, scratch_folder, sized_app,
+    SCREEN, WorldBuilder, apply, at, lines, map_app, on_row, pointer_on, render, scratch_folder,
+    settings_world, sized_app,
 };
 
 use std::path::Path;
@@ -18,14 +19,6 @@ use terra_tui::settings::{self, Look, SavedSettings, Setting, Settings};
 use terra_tui::theme::{ColourPalette, GlyphSet, Pick, SemanticTile, Theme};
 
 const ASCII_THEME: &str = include_str!("../../../themes/ascii.ron");
-
-/// An 11×8 grass world with a starter sprite on (2, 2).
-fn world() -> World {
-    WorldBuilder::grass(11, 8)
-        .starters(&[at(2, 2)])
-        .seed(7)
-        .build()
-}
 
 /// An app for `world` in the default theme, reading themes from `folder`.
 fn app_for(world: &World, folder: &Path) -> App {
@@ -70,13 +63,6 @@ fn values_of(app: &mut App, world: &World, row: Setting) -> Vec<String> {
     }
 }
 
-/// Opens the settings screen on row `row`, by its number.
-fn on_row(app: &mut App, world: &World, row: Setting) {
-    apply(app, world, Action::OpenSettings);
-    let number = Setting::ALL.iter().position(|&s| s == row).unwrap() + 1;
-    apply(app, world, Action::Pick(number as u8));
-}
-
 #[test]
 fn ctrl_t_opens_the_settings_screen() {
     let mut keys = Keys::with_release_reporting(false);
@@ -86,7 +72,7 @@ fn ctrl_t_opens_the_settings_screen() {
 
 #[test]
 fn the_settings_screen_is_a_box_over_the_map_a_numbered_row_each() {
-    let world = world();
+    let world = settings_world();
     let mut app = sized_app(&world, Theme::cp437(), SCREEN);
     app.set_motion(true);
     apply(&mut app, &world, Action::OpenSettings);
@@ -124,7 +110,7 @@ fn the_settings_screen_is_a_box_over_the_map_a_numbered_row_each() {
 
 #[test]
 fn up_and_down_or_a_row_s_number_choose_a_row_and_change_nothing() {
-    let world = world();
+    let world = settings_world();
     let mut app = app_for(&world, &scratch_folder("choose"));
     apply(&mut app, &world, Action::OpenSettings);
     assert_eq!(app.menu_choice(), 0);
@@ -142,7 +128,7 @@ fn up_and_down_or_a_row_s_number_choose_a_row_and_change_nothing() {
 
 #[test]
 fn right_or_enter_changes_the_glyphs_at_once_and_left_goes_back() {
-    let world = world();
+    let world = settings_world();
     let mut app = app_for(&world, &scratch_folder("glyphs"));
     on_row(&mut app, &world, Setting::Glyphs);
     apply(&mut app, &world, Action::Scroll { dx: 1, dy: 0 });
@@ -169,7 +155,7 @@ fn the_colours_row_goes_through_the_built_in_palettes_then_the_theme_files() {
     std::fs::write(folder.join("bright.ron"), theme_with_sprite('B')).unwrap();
     std::fs::write(folder.join("notes.txt"), "not a theme").unwrap();
     std::fs::create_dir_all(folder.join("old.ron")).unwrap();
-    let world = world();
+    let world = settings_world();
     let mut app = app_for(&world, &folder);
     on_row(&mut app, &world, Setting::Colours);
     assert_eq!(
@@ -204,7 +190,7 @@ fn a_theme_file_gives_its_glyphs_on_one_row_and_its_colours_on_the_other() {
     let folder = scratch_folder("file");
     let night = theme_with_sprite('N');
     std::fs::write(folder.join("night.ron"), &night).unwrap();
-    let world = world();
+    let world = settings_world();
     let night = Theme::from_ron(&night, world.data()).unwrap();
     let mut app = app_for(&world, &folder);
     // Glyphs: CP437, ASCII, night.
@@ -228,7 +214,7 @@ fn a_theme_file_gives_its_glyphs_on_one_row_and_its_colours_on_the_other() {
 fn a_theme_that_doesnt_load_is_refused_and_the_row_keeps_its_value() {
     let folder = scratch_folder("broken");
     std::fs::write(folder.join("broken.ron"), theme_with_sprite('λ')).unwrap();
-    let world = world();
+    let world = settings_world();
     let mut app = app_for(&world, &folder);
     on_row(&mut app, &world, Setting::Glyphs);
     apply(&mut app, &world, Action::Scroll { dx: -1, dy: 0 });
@@ -248,7 +234,7 @@ fn a_theme_that_doesnt_load_is_refused_and_the_row_keeps_its_value() {
 
 #[test]
 fn the_motion_row_turns_motion_on_and_off() {
-    let world = world();
+    let world = settings_world();
     let mut app = app_for(&world, &scratch_folder("motion"));
     app.set_motion(true);
     on_row(&mut app, &world, Setting::Motion);
@@ -303,7 +289,7 @@ fn the_square_tiles_row_is_the_switch_o_is() {
 
 #[test]
 fn a_click_on_a_row_changes_it_and_one_off_the_box_closes_it() {
-    let world = world();
+    let world = settings_world();
     let mut app = app_for(&world, &scratch_folder("click"));
     apply(&mut app, &world, Action::OpenSettings);
     let area = app.menu_area(&world).expect("open");
@@ -333,7 +319,7 @@ fn a_click_on_a_row_changes_it_and_one_off_the_box_closes_it() {
 
 #[test]
 fn esc_closes_it_and_question_mark_opens_help_over_it() {
-    let world = world();
+    let world = settings_world();
     let mut app = app_for(&world, &scratch_folder("esc"));
     apply(&mut app, &world, Action::OpenSettings);
     apply(&mut app, &world, Action::Help);
@@ -346,7 +332,7 @@ fn esc_closes_it_and_question_mark_opens_help_over_it() {
 
 #[test]
 fn time_runs_on_behind_it() {
-    let world = world();
+    let world = settings_world();
     let mut app = app_for(&world, &scratch_folder("time"));
     assert!(!app.clock.is_paused());
     apply(&mut app, &world, Action::OpenSettings);
@@ -358,7 +344,7 @@ fn time_runs_on_behind_it() {
 
 #[test]
 fn its_status_line_says_how_to_choose_and_change_a_row() {
-    let world = world();
+    let world = settings_world();
     let mut app = sized_app(&world, Theme::cp437(), SCREEN);
     apply(&mut app, &world, Action::OpenSettings);
     let line = common::status_line(&app, &world);
@@ -370,7 +356,7 @@ fn its_status_line_says_how_to_choose_and_change_a_row() {
 
 #[test]
 fn with_no_themes_folder_it_offers_the_built_in_ones() {
-    let world = world();
+    let world = settings_world();
     let mut app = map_app(&world, Rect::new(1, 2, 40, 12));
     on_row(&mut app, &world, Setting::Glyphs);
     assert_eq!(
@@ -385,7 +371,7 @@ fn the_themes_folder_is_still_listed_after_a_load() {
     // loaded world keeps them, the themes folder as much as the saves.
     let folder = scratch_folder("after-load");
     std::fs::write(folder.join("night.ron"), theme_with_sprite('N')).unwrap();
-    let world = world();
+    let world = settings_world();
     let mut app = app_for(&world, &folder);
     app.set_save_folder(folder.join("saves"));
     apply(&mut app, &world, Action::Quicksave);
@@ -439,7 +425,7 @@ fn every_row_changed() -> Settings {
 
 #[test]
 fn the_app_hands_on_the_settings_as_the_player_left_them() {
-    let world = world();
+    let world = settings_world();
     let mut app = app_for(&world, &scratch_folder("handed-on"));
     assert_eq!(
         app.settings(),
@@ -461,7 +447,7 @@ fn the_app_hands_on_the_settings_as_the_player_left_them() {
 fn the_next_world_starts_with_the_settings_the_last_one_left() {
     // Back to the title screen and into another world (M2 design §8.4).
     let folder = scratch_folder("next-world");
-    let world = world();
+    let world = settings_world();
     let mut app = app_for(&world, &folder);
     change_every_row(&mut app, &world);
     let next_world = WorldBuilder::grass(60, 20).seed(8).build();
@@ -494,7 +480,7 @@ fn the_next_world_starts_with_the_settings_the_last_one_left() {
 fn what_the_flags_pick_isn_t_saved_as_another_row_changes() {
     // `--ascii` for its run, say, over settings that saved nothing.
     let folder = scratch_folder("flags");
-    let world = world();
+    let world = settings_world();
     let mut app = app_for(&world, &folder);
     let path = folder.join(settings::FILE);
     app.set_settings_file(path.clone());
@@ -522,7 +508,7 @@ fn what_the_flags_pick_isn_t_saved_as_another_row_changes() {
 #[test]
 fn the_settings_carry_over_a_load() {
     let folder = scratch_folder("load");
-    let world = world();
+    let world = settings_world();
     let mut app = app_for(&world, &folder);
     let path = folder.join(settings::FILE);
     app.set_settings_file(path.clone());

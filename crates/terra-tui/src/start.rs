@@ -177,37 +177,31 @@ fn config(args: &Args) -> Result<(WorldConfig, DataPack), String> {
     Ok((config, data))
 }
 
-/// The glyph set the game starts with (design §6.2, §6.7, #307):
-/// `--ascii`'s, or `--theme`'s file's, which last only for the run; else
-/// the one the player saved; else CP437.
-pub fn glyph_set(args: &Args, saved: Option<Pick<GlyphSet>>) -> Pick<GlyphSet> {
+/// The glyph set the flags give, for their run only (design §6.2, §6.7,
+/// #307): `--ascii`'s, or `--theme`'s file's; none if neither is given.
+fn glyph_set(args: &Args) -> Option<Pick<GlyphSet>> {
     if args.ascii {
-        Pick::BuiltIn(GlyphSet::Ascii)
-    } else if let Some(path) = &args.theme {
-        Pick::File(path.clone())
+        Some(Pick::BuiltIn(GlyphSet::Ascii))
     } else {
-        saved.unwrap_or(Pick::BuiltIn(GlyphSet::Cp437))
+        args.theme.clone().map(Pick::File)
     }
 }
 
-/// The palette the game starts with (design §6.2, §6.7, #307): `--theme`'s
-/// file's, which lasts only for the run; else the one the player saved;
-/// else mono, where `NO_COLOR`'s value, `no_color`, is set to anything but
-/// nothing, as no-color.org asks; else the default. `main.rs` reads
-/// `NO_COLOR` and passes it in.
-pub fn palette(
-    args: &Args,
-    saved: Option<Pick<ColourPalette>>,
-    no_color: Option<&str>,
-) -> Pick<ColourPalette> {
-    if let Some(path) = &args.theme {
-        Pick::File(path.clone())
-    } else if let Some(saved) = saved {
-        saved
-    } else if no_color.is_some_and(|value| !value.is_empty()) {
-        Pick::BuiltIn(ColourPalette::Mono)
+/// The palette the flags give, for their run only (design §6.2, §6.7,
+/// #307): `--theme`'s file's, if it's given.
+fn palette(args: &Args) -> Option<Pick<ColourPalette>> {
+    args.theme.clone().map(Pick::File)
+}
+
+/// The palette the game starts with when neither the flags nor the
+/// settings pick one (design §6.2, #307): mono, where `NO_COLOR`'s value,
+/// `no_color`, is set to anything but nothing, as no-color.org asks; else
+/// the default. `main.rs` reads `NO_COLOR` and passes it in.
+fn unpicked_palette(no_color: Option<&str>) -> ColourPalette {
+    if no_color.is_some_and(|value| !value.is_empty()) {
+        ColourPalette::Mono
     } else {
-        Pick::BuiltIn(ColourPalette::Default)
+        ColourPalette::Default
     }
 }
 
@@ -219,28 +213,26 @@ pub fn theme(
     palette: &Pick<ColourPalette>,
     data: &DataPack,
 ) -> Result<Theme, String> {
-    look(glyphs, palette, data).map(|look| look.theme())
+    let glyph_theme = flagged(glyphs, data)?;
+    let palette_theme = palette_theme(palette, glyphs, &glyph_theme, data)?;
+    Ok(Theme::compose(&glyph_theme, &palette_theme))
 }
 
-/// The look a glyph set and a palette make, as `theme` reads them.
-fn look(
-    glyphs: &Pick<GlyphSet>,
+/// The theme `palette` is taken from, as the flags name it, beside the
+/// glyph set `glyphs`, taken from `glyph_theme`: a theme file both name is
+/// read once.
+fn palette_theme(
     palette: &Pick<ColourPalette>,
+    glyphs: &Pick<GlyphSet>,
+    glyph_theme: &Theme,
     data: &DataPack,
-) -> Result<Look, String> {
-    let glyph_theme = flagged(glyphs, data)?;
-    let palette_theme = match palette {
+) -> Result<Theme, String> {
+    match palette {
         Pick::File(path) if matches!(glyphs, Pick::File(same) if same == path) => {
-            glyph_theme.clone()
+            Ok(glyph_theme.clone())
         }
-        _ => flagged(palette, data)?,
-    };
-    Ok(Look::new(
-        glyphs.clone(),
-        glyph_theme,
-        palette.clone(),
-        palette_theme,
-    ))
+        _ => flagged(palette, data),
+    }
 }
 
 /// The theme `pick` is taken from, as the flags name it: one that won't
@@ -283,10 +275,7 @@ pub fn settings(
         said.push(format!("Couldn't read the settings: {why}"));
         SavedSettings::default()
     });
-    // `--ascii` or `--theme` gives the glyphs, and `--theme` the palette,
-    // from a file read once.
-    let flagged_glyphs = (args.ascii || args.theme.is_some()).then(|| glyph_set(args, None));
-    let (glyphs, glyph_theme) = match flagged_glyphs {
+    let (glyphs, glyph_theme) = match glyph_set(args) {
         Some(pick) => {
             let theme = flagged(&pick, data)?;
             (pick, theme)
@@ -300,13 +289,9 @@ pub fn settings(
         )
         .unwrap_or_else(|| (Pick::BuiltIn(GlyphSet::Cp437), GlyphSet::Cp437.source())),
     };
-    let (palette, palette_theme) = match &args.theme {
-        Some(path) if glyphs == Pick::File(path.clone()) => {
-            (Pick::File(path.clone()), glyph_theme.clone())
-        }
-        Some(path) => {
-            let pick = Pick::File(path.clone());
-            let theme = flagged(&pick, data)?;
+    let (palette, palette_theme) = match palette(args) {
+        Some(pick) => {
+            let theme = palette_theme(&pick, &glyphs, &glyph_theme, data)?;
             (pick, theme)
         }
         None => saved_part(
@@ -317,9 +302,8 @@ pub fn settings(
             &mut said,
         )
         .unwrap_or_else(|| {
-            let palette = self::palette(args, None, no_color);
-            let theme = flagged(&palette, data).expect("a built-in palette");
-            (palette, theme)
+            let palette = unpicked_palette(no_color);
+            (Pick::BuiltIn(palette), palette.source())
         }),
     };
     said.dedup();

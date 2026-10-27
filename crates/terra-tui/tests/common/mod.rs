@@ -849,3 +849,39 @@ pub const DRIVE_COLOURS: [(&str, ratatui::style::Color); 9] = {
         ("anxiety", Color::LightGreen),
     ]
 };
+
+// The settings (design §6.2, §6.7, #307).
+
+/// An 11×8 grass world with a starter sprite on (2, 2), for the settings
+/// screen to open over.
+pub fn settings_world() -> World {
+    WorldBuilder::grass(11, 8)
+        .starters(&[at(2, 2)])
+        .seed(7)
+        .build()
+}
+
+/// Settings with every row changed: ASCII glyphs, a theme file's colours,
+/// motion off and square tiles on.
+pub fn every_row() -> terra_tui::settings::SavedSettings {
+    terra_tui::settings::SavedSettings {
+        glyphs: Some("ASCII".into()),
+        colours: Some("night.ron".into()),
+        motion: Some(false),
+        square_tiles: Some(true),
+    }
+}
+
+/// The CP437 glyphs in the mono palette, which has no colour.
+pub fn mono() -> Theme {
+    use terra_tui::theme::{ColourPalette, GlyphSet};
+    Theme::built_in(GlyphSet::Cp437, ColourPalette::Mono)
+}
+
+/// Opens the settings screen on row `row`, by its number.
+pub fn on_row(app: &mut App, world: &World, row: terra_tui::settings::Setting) {
+    use terra_tui::settings::Setting;
+    apply(app, world, Action::OpenSettings);
+    let number = Setting::ALL.iter().position(|&s| s == row).unwrap() + 1;
+    apply(app, world, Action::Pick(number as u8));
+}

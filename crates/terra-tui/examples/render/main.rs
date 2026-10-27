@@ -22,6 +22,7 @@ use std::process::ExitCode;
 
 use terra_sim::{DataPack, Playback};
 use terra_tui::args::Args;
+use terra_tui::settings::SavedSettings;
 use terra_tui::start;
 use terra_tui::theme::{Pick, Theme};
 
@@ -164,11 +165,13 @@ fn world_clip(options: &Options, scene: &WorldScene, framing: &Framing) -> Resul
 /// `--theme`'s. The renderer reads neither the settings nor `NO_COLOR`, so
 /// a clip comes out the same on every computer.
 fn theme(options: &Options, data: &DataPack) -> Result<Theme, String> {
-    let glyphs = start::glyph_set(&options.world, None);
-    let palette = options
-        .colours
-        .map_or_else(|| start::palette(&options.world, None, None), Pick::BuiltIn);
-    start::theme(&glyphs, &palette, data)
+    let nothing_saved = Ok(SavedSettings::default());
+    let (settings, _) = start::settings(&options.world, nothing_saved, None, None, data)?;
+    let look = settings.look;
+    match options.colours {
+        Some(palette) => start::theme(look.glyphs(), &Pick::BuiltIn(palette), data),
+        None => Ok(look.theme()),
+    }
 }
 
 /// The world the flags ask for: the replay's, or a new one from the seed.

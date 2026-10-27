@@ -8,7 +8,7 @@ mod common;
 use common::screen::{HUNGRY_GENOME, SPEED_10, one_sprite_among};
 use common::{
     SCORCHED, SCREEN, WorldBuilder, app_on, apply, at, ball_world, cell_of_text, died, field,
-    frame, frame_on, lone_line, pack_changing, pointer_on, render, scratch_folder, select,
+    frame, frame_on, lone_line, mono, pack_changing, pointer_on, render, scratch_folder, select,
     sized_app, sprite_on,
 };
 
@@ -27,7 +27,7 @@ use terra_tui::clock::Speed;
 use terra_tui::input::Action;
 use terra_tui::policy::{InfoPolicy, Panel, Subject};
 use terra_tui::start;
-use terra_tui::theme::{self, ColourPalette, GlyphSet, MotionLook, Theme};
+use terra_tui::theme::{self, MotionLook, Theme};
 use terra_tui::title::Title;
 use terra_tui::ui;
 
@@ -2355,11 +2355,6 @@ fn tab_to_a_sprite_the_pan_is_passing_pans_on_to_it() {
 }
 
 // Mono (design §6.2, §6.9, #307).
-
-/// The CP437 glyphs in the mono palette, which has no colour.
-fn mono() -> Theme {
-    Theme::built_in(GlyphSet::Cp437, ColourPalette::Mono)
-}
 
 #[test]
 fn in_mono_motion_s_colours_don_t_play() {

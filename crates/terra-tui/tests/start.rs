@@ -2,6 +2,9 @@
 //! makes the new world, and which theme draws it; and from the settings
 //! the player saved (#307).
 
+mod common;
+use common::every_row;
+
 use std::path::{Path, PathBuf};
 
 use terra_sim::{DataPack, Mode};
@@ -69,9 +72,9 @@ fn a_preset_that_wont_load_is_refused_naming_it() {
 /// The theme the flags ask for, as the game starts with no saved choice
 /// and no `NO_COLOR`.
 fn flagged_theme(args: &Args, data: &DataPack) -> Result<Theme, String> {
-    let glyphs = start::glyph_set(args, None);
-    let palette = start::palette(args, None, None);
-    start::theme(&glyphs, &palette, data)
+    let nothing_saved = Ok(SavedSettings::default());
+    start::settings(args, nothing_saved, None, None, data)
+        .map(|(settings, _)| settings.look.theme())
 }
 
 #[test]
@@ -134,89 +137,30 @@ fn ascii_with_a_theme_file_draws_the_file_s_palette_in_ascii() {
 }
 
 #[test]
-fn the_glyph_set_is_the_flags_then_the_saved_one_then_cp437() {
+fn the_flags_give_the_glyph_set_ascii_s_over_a_theme_file_s() {
     // Design §6.2, §6.7 (#307): a flag lasts only for its run, and wins.
-    let theme = |file: &str| Args {
-        theme: Some(file.into()),
-        ..Args::default()
+    let themes = folder("glyph-flags", &[("day.ron", ASCII)]);
+    let day = themes.join("day.ron");
+    let glyphs = |args: Args| {
+        let (settings, _) = started(&args, Ok(SavedSettings::default()), None);
+        settings.look.glyphs().clone()
     };
+    assert_eq!(glyphs(Args::default()), Pick::BuiltIn(GlyphSet::Cp437));
     let ascii = Args {
         ascii: true,
         ..Args::default()
     };
-    let saved = Some(Pick::File("themes/night.ron".into()));
-    let none = Args::default();
-    assert_eq!(
-        start::glyph_set(&none, None),
-        Pick::BuiltIn(GlyphSet::Cp437)
-    );
-    assert_eq!(
-        start::glyph_set(&none, saved.clone()),
-        saved.clone().unwrap()
-    );
-    assert_eq!(
-        start::glyph_set(&ascii, saved.clone()),
-        Pick::BuiltIn(GlyphSet::Ascii)
-    );
-    assert_eq!(
-        start::glyph_set(&theme("day.ron"), saved.clone()),
-        Pick::File("day.ron".into())
-    );
+    assert_eq!(glyphs(ascii), Pick::BuiltIn(GlyphSet::Ascii));
+    let theme = Args {
+        theme: Some(day.clone()),
+        ..Args::default()
+    };
+    assert_eq!(glyphs(theme.clone()), Pick::File(day));
     let both = Args {
         ascii: true,
-        ..theme("day.ron")
+        ..theme
     };
-    assert_eq!(
-        start::glyph_set(&both, saved),
-        Pick::BuiltIn(GlyphSet::Ascii)
-    );
-}
-
-#[test]
-fn the_palette_is_the_flags_then_the_saved_one_then_no_color_s_mono_then_the_default() {
-    // Design §6.2 (#307): `NO_COLOR` set to anything but nothing starts
-    // the game in mono, as no-color.org asks, unless the player has picked
-    // a palette on the settings screen or with `--theme`.
-    let none = Args::default();
-    let built_in = Pick::BuiltIn;
-    let palette = |args: &Args, saved, no_color| start::palette(args, saved, no_color);
-    assert_eq!(palette(&none, None, None), built_in(ColourPalette::Default));
-    assert_eq!(
-        palette(&none, None, Some("1")),
-        built_in(ColourPalette::Mono)
-    );
-    assert_eq!(
-        palette(&none, None, Some("")),
-        built_in(ColourPalette::Default)
-    );
-    let contrast = Some(built_in(ColourPalette::HighContrast));
-    assert_eq!(
-        palette(&none, contrast.clone(), Some("1")),
-        built_in(ColourPalette::HighContrast)
-    );
-    let night = Some(Pick::File("themes/night.ron".into()));
-    assert_eq!(palette(&none, night.clone(), None), night.clone().unwrap());
-    let theme = Args {
-        theme: Some("day.ron".into()),
-        ..Args::default()
-    };
-    assert_eq!(
-        palette(&theme, contrast.clone(), Some("1")),
-        Pick::File("day.ron".into())
-    );
-    // `--ascii` picks only the glyphs.
-    let ascii = Args {
-        ascii: true,
-        ..Args::default()
-    };
-    assert_eq!(
-        palette(&ascii, None, Some("1")),
-        built_in(ColourPalette::Mono)
-    );
-    assert_eq!(
-        palette(&ascii, contrast, Some("1")),
-        built_in(ColourPalette::HighContrast)
-    );
+    assert_eq!(glyphs(both), Pick::BuiltIn(GlyphSet::Ascii));
 }
 
 #[test]
@@ -418,17 +362,6 @@ fn started(
     start::settings(args, saved, themes, None, &data).expect("started")
 }
 
-/// Every row changed: ASCII glyphs, a theme file's colours, motion off
-/// and square tiles on.
-fn every_row() -> SavedSettings {
-    SavedSettings {
-        glyphs: Some("ASCII".into()),
-        colours: Some("night.ron".into()),
-        motion: Some(false),
-        square_tiles: Some(true),
-    }
-}
-
 #[test]
 fn the_game_starts_as_the_settings_say() {
     let themes = folder("saved", &[("night.ron", HIGH_CONTRAST)]);
@@ -549,6 +482,25 @@ fn a_theme_file_the_settings_name_that_no_longer_loads_falls_back_to_the_default
 }
 
 #[test]
+fn a_theme_file_both_rows_name_that_won_t_load_is_said_once() {
+    let themes = folder("both-broken", &[("night.ron", "not a theme")]);
+    let saved = SavedSettings {
+        glyphs: Some("night.ron".into()),
+        colours: Some("night.ron".into()),
+        ..every_row()
+    };
+    let (settings, said) = started(&Args::default(), Ok(saved), Some(&themes));
+    assert_eq!(settings.look, Settings::default().look);
+    let said = said.expect("said");
+    assert_eq!(
+        said.matches("Couldn't use theme night: ").count(),
+        1,
+        "{said}"
+    );
+    assert!(!said.contains("; "), "{said}");
+}
+
+#[test]
 fn a_built_in_is_named_in_the_settings_in_any_case() {
     let saved = SavedSettings {
         glyphs: Some("ascii".into()),
@@ -564,21 +516,38 @@ fn a_built_in_is_named_in_the_settings_in_any_case() {
 }
 
 #[test]
-fn no_color_starts_the_game_in_mono_unless_the_settings_pick_colours() {
-    // Design §6.2 (#307), as no-color.org asks.
+fn no_color_starts_the_game_in_mono_unless_a_flag_or_the_settings_pick_colours() {
+    // Design §6.2 (#307): `NO_COLOR` set to anything but nothing, as
+    // no-color.org asks.
     let data = DataPack::builtin().expect("valid pack");
-    let start = |saved: SavedSettings| {
-        let (settings, _) =
-            start::settings(&Args::default(), Ok(saved), None, Some("1"), &data).unwrap();
+    let themes = folder("no-color", &[("day.ron", ASCII)]);
+    let palette = |args: &Args, saved: SavedSettings, no_color| {
+        let (settings, _) = start::settings(args, Ok(saved), None, no_color, &data).unwrap();
         settings.look.palette().clone()
     };
-    assert_eq!(
-        start(SavedSettings::default()),
-        Pick::BuiltIn(ColourPalette::Mono)
-    );
-    let default = SavedSettings {
+    let (none, nothing) = (Args::default(), SavedSettings::default());
+    let mono = Pick::BuiltIn(ColourPalette::Mono);
+    let default = Pick::BuiltIn(ColourPalette::Default);
+    assert_eq!(palette(&none, nothing.clone(), Some("1")), mono);
+    assert_eq!(palette(&none, nothing.clone(), Some("")), default);
+    assert_eq!(palette(&none, nothing.clone(), None), default);
+    let picked = SavedSettings {
         colours: Some("default".into()),
         ..SavedSettings::default()
     };
-    assert_eq!(start(default), Pick::BuiltIn(ColourPalette::Default));
+    assert_eq!(palette(&none, picked, Some("1")), default);
+    let day = Args {
+        theme: Some(themes.join("day.ron")),
+        ..Args::default()
+    };
+    assert_eq!(
+        palette(&day, nothing.clone(), Some("1")),
+        Pick::File(themes.join("day.ron"))
+    );
+    // `--ascii` picks only the glyphs.
+    let ascii = Args {
+        ascii: true,
+        ..Args::default()
+    };
+    assert_eq!(palette(&ascii, nothing, Some("1")), mono);
 }

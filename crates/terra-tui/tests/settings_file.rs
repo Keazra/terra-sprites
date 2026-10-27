@@ -3,7 +3,7 @@
 //! `o` is pressed, and read at start. Never part of a world's save.
 
 mod common;
-use common::{WorldBuilder, apply, at, map_app, scratch_folder};
+use common::{apply, every_row, map_app, on_row, scratch_folder, settings_world};
 
 use std::path::{Path, PathBuf};
 
@@ -16,16 +16,6 @@ use terra_tui::settings::{self, SavedSettings, Setting, Settings};
 use terra_tui::start;
 
 const ASCII_THEME: &str = include_str!("../../../themes/ascii.ron");
-
-/// Every row changed, a theme file's name among them.
-fn every_row() -> SavedSettings {
-    SavedSettings {
-        glyphs: Some("ASCII".into()),
-        colours: Some("night.ron".into()),
-        motion: Some(false),
-        square_tiles: Some(true),
-    }
-}
 
 #[test]
 fn the_file_holds_only_what_the_player_has_changed() {
@@ -123,14 +113,6 @@ fn a_file_that_can_t_be_read_says_why() {
 
 // The settings screen saves what changes.
 
-/// An 11×8 grass world with a starter sprite on (2, 2).
-fn world() -> World {
-    WorldBuilder::grass(11, 8)
-        .starters(&[at(2, 2)])
-        .seed(7)
-        .build()
-}
-
 /// An app saving its settings in `folder`, reading themes from it too.
 fn saving_in(world: &World, folder: &Path) -> (App, PathBuf) {
     let mut app = map_app(world, Rect::new(1, 2, 40, 12));
@@ -142,9 +124,7 @@ fn saving_in(world: &World, folder: &Path) -> (App, PathBuf) {
 
 /// Changes row `row` of the settings screen to the next value.
 fn change(app: &mut App, world: &World, row: Setting) {
-    apply(app, world, Action::OpenSettings);
-    let number = Setting::ALL.iter().position(|&s| s == row).unwrap() + 1;
-    apply(app, world, Action::Pick(number as u8));
+    on_row(app, world, row);
     apply(app, world, Action::Enter);
     apply(app, world, Action::Back);
 }
@@ -157,7 +137,7 @@ fn saved(path: &Path) -> SavedSettings {
 #[test]
 fn each_row_changed_is_saved_and_only_what_has_changed() {
     let folder = scratch_folder("rows");
-    let world = world();
+    let world = settings_world();
     let (mut app, path) = saving_in(&world, &folder);
     assert!(!path.exists(), "nothing changed yet");
     change(&mut app, &world, Setting::Colours);
@@ -186,7 +166,7 @@ fn each_row_changed_is_saved_and_only_what_has_changed() {
 fn a_theme_file_is_saved_by_its_file_name() {
     let folder = scratch_folder("file");
     std::fs::write(folder.join("night.ron"), ASCII_THEME).unwrap();
-    let world = world();
+    let world = settings_world();
     let (mut app, path) = saving_in(&world, &folder);
     change(&mut app, &world, Setting::Glyphs);
     change(&mut app, &world, Setting::Glyphs);
@@ -196,7 +176,7 @@ fn a_theme_file_is_saved_by_its_file_name() {
 #[test]
 fn pressing_o_saves_square_tiles() {
     let folder = scratch_folder("o");
-    let world = world();
+    let world = settings_world();
     let (mut app, path) = saving_in(&world, &folder);
     apply(&mut app, &world, Action::Zoom);
     assert_eq!(saved(&path).square_tiles, Some(true));
@@ -208,7 +188,7 @@ fn pressing_o_saves_square_tiles() {
 fn a_theme_refused_saves_nothing() {
     let folder = scratch_folder("refused");
     std::fs::write(folder.join("broken.ron"), "not a theme").unwrap();
-    let world = world();
+    let world = settings_world();
     let (mut app, path) = saving_in(&world, &folder);
     change(&mut app, &world, Setting::Glyphs);
     change(&mut app, &world, Setting::Glyphs);
@@ -219,7 +199,7 @@ fn a_theme_refused_saves_nothing() {
 #[test]
 fn settings_that_can_t_be_saved_say_so_and_still_change() {
     let folder = scratch_folder("unsaved");
-    let world = world();
+    let world = settings_world();
     let (mut app, path) = saving_in(&world, &folder);
     std::fs::create_dir_all(&path).unwrap();
     change(&mut app, &world, Setting::Colours);
@@ -253,7 +233,7 @@ fn settings_that_couldn_t_be_read_are_kept_aside_before_the_first_save() {
     let broken = folder.join("settings.ron.broken");
     std::fs::write(&path, "(colours: 7)").unwrap();
     std::fs::write(&broken, "an older one").unwrap();
-    let world = world();
+    let world = settings_world();
     let (mut app, _) = saving_in(&world, &folder);
     app.use_settings(started_from(&path, &world));
     // Into another world before anything changes, as the game carries them.
@@ -287,7 +267,7 @@ fn settings_that_couldn_t_be_read_are_kept_aside_before_the_first_save() {
 
 #[test]
 fn why_the_saved_settings_weren_t_taken_shows_as_the_world_opens() {
-    let world = world();
+    let world = settings_world();
     let mut app = map_app(&world, Rect::new(1, 2, 40, 12));
     let why = "Couldn't read the settings: 1:10: Expected a boolean";
     app.note_unread_settings(why.into());

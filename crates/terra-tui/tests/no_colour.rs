@@ -4,7 +4,7 @@
 
 mod common;
 use common::screen::{HUNGRY_GENOME, app_for, garden_with_sprites, one_sprite_among, render};
-use common::{at, render_on};
+use common::{at, mono, render_on};
 
 use std::time::Duration;
 
@@ -16,13 +16,9 @@ use terra_tui::app::App;
 use terra_tui::args::Args;
 use terra_tui::input::Action;
 use terra_tui::start;
-use terra_tui::theme::{ColourPalette, GlyphSet, Theme};
+use terra_tui::theme::Theme;
 use terra_tui::title::{self, Title};
 use terra_tui::ui;
-
-fn mono() -> Theme {
-    Theme::built_in(GlyphSet::Cp437, ColourPalette::Mono)
-}
 
 /// Where `screen` has a colour, if anywhere: the first cell with one.
 fn coloured(screen: &Buffer) -> Option<(u16, u16, Color, Color)> {
