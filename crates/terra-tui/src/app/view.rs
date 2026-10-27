@@ -64,8 +64,9 @@ impl App {
     /// view, the inspector's left column or the event log's title row,
     /// points at the last column or row, so every tile in view can be
     /// pointed at. Past the wall, at the glass or space, it points at no
-    /// tile (M2 design §11.4). On a pop-up's box, or a cell down and right
-    /// of one, it points at nothing on the map beneath (design §6.1).
+    /// tile (M2 design §11.4). Where the tile it points at is under a
+    /// pop-up's box, it points at nothing (design §6.1): on the box's left
+    /// edge, it still points at the tile beside it.
     pub(super) fn pointed_xy(&self, cell: Position) -> Option<(i32, i32)> {
         let area = self.tile_area;
         let reach = Rect::new(
@@ -81,10 +82,7 @@ impl App {
             cell.x.saturating_sub(1).max(area.x),
             cell.y.saturating_sub(1).max(area.y),
         );
-        if [cell, pointed]
-            .iter()
-            .any(|&at| self.spot_at(at) == Some(Spot::PopUp))
-        {
+        if self.spot_at(pointed) == Some(Spot::PopUp) {
             return None;
         }
         let (col, row) = (pointed.x - area.x, pointed.y - area.y);
@@ -201,9 +199,10 @@ impl App {
     /// follows a sprite. Where it points at no tile, both stay on their last
     /// tile: past the wall, where the Cursor can't reach and isn't drawn,
     /// or off the map view, where it's drawn there again (M2 design
-    /// §11.4).
+    /// §11.4). Where the pointer is on screen is noted as the pointer
+    /// moves, whatever's open (`apply`), not here, since the view settling
+    /// points again from the last tile pointed at.
     pub(super) fn point(&mut self, cell: Position) {
-        self.mouse = Some(cell);
         let xy = self.pointed_xy(cell);
         self.pointer = xy.map(|_| cell);
         // While the player aims, the pointer pulls, past the wall too (M2

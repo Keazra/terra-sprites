@@ -570,35 +570,72 @@ fn a_pop_up_takes_the_pointer_before_what_is_under_it() {
 }
 
 #[test]
-fn no_tooltip_opens_where_a_click_does_not_do_what_it_says() {
-    // Only on the world's screen and its quit prompt (design §6.1): the
-    // palette, the Place menu and naming take keys, not the tabs' clicks.
-    let opens = [Action::Palette, Action::Rename, Action::Back];
-    for open in opens {
-        let (world, mut app, _) = selected(SCREEN, Tab::Body);
-        let brain = cell_of_text(&app, &world, SCREEN, "Brain");
-        apply(&mut app, &world, open);
-        let said = pointing_at(&mut app, &world, SCREEN, brain);
-        let quitting = app.screen() == Screen::QuitPrompt;
-        assert_eq!(said.is_some(), quitting, "{open:?}: {said:?}");
-    }
+fn off_the_world_s_screen_no_tooltip_opens_and_nothing_is_lit() {
+    // Only on the world's own screen (design §6.1): the palette, the Place
+    // menu, naming and the quit prompt take keys, so a tooltip's keys
+    // wouldn't do what it says. The log's filters have room for one off
+    // each of their boxes.
     let (world, mut app, _) = selected(SCREEN, Tab::Body);
-    let brain = cell_of_text(&app, &world, SCREEN, "Brain");
-    // `C` twice opens the Place menu.
-    for _ in 0..2 {
-        apply(&mut app, &world, Action::Mode(CursorMode::Grab));
+    let filters = cell_of_text(&app, &world, SCREEN, "selected major");
+    let lit = |app: &App| {
+        render(app, &world)[filters]
+            .modifier
+            .contains(Modifier::REVERSED)
+    };
+    let unlit = lit(&app);
+    assert!(pointing_at(&mut app, &world, SCREEN, filters).is_some());
+    assert_ne!(lit(&app), unlit, "on the world's screen, it's lit");
+    let place_menu = [Action::Mode(CursorMode::Grab); 2];
+    let opens: [(&str, &[Action]); 4] = [
+        ("the palette", &[Action::Palette]),
+        ("naming", &[Action::Rename]),
+        ("the quit prompt", &[Action::Back]),
+        ("the Place menu", &place_menu),
+    ];
+    for (what, keys) in opens {
+        let (world, mut app, _) = selected(SCREEN, Tab::Body);
+        for &key in keys {
+            apply(&mut app, &world, key);
+        }
+        assert_ne!(app.screen(), Screen::Normal, "{what}");
+        let said = pointing_at(&mut app, &world, SCREEN, filters);
+        assert!(said.is_none(), "{what}: {said:?}");
+        let screen = render(&app, &world);
+        let lit = screen[filters].modifier.contains(Modifier::REVERSED);
+        assert_eq!(lit, unlit, "{what}: not lit");
     }
-    assert_eq!(app.screen(), Screen::PlaceMenu);
-    assert!(pointing_at(&mut app, &world, SCREEN, brain).is_none());
 }
 
 #[test]
-fn a_tooltip_keeps_off_the_debug_overlay() {
-    let (world, mut app, _) = selected(SCREEN, Tab::Body);
-    apply(&mut app, &world, Action::DebugOverlay);
-    // The overlay's box, from its top corners down to its bottom right one.
-    let screen = render(&app, &world);
-    let title = cell_of_text(&app, &world, SCREEN, " Debug ");
+fn on_the_quit_prompt_a_log_line_lights_no_sprite_up() {
+    let world = field(&[], &[at(2, 2)]);
+    let id = sprite_on(&world, at(2, 2));
+    let grew_up = Event {
+        tick: 1,
+        kind: EventKind::GrewUp { id },
+    };
+    for quitting in [false, true] {
+        let mut app = app_on(&world);
+        app.record(std::slice::from_ref(&grew_up), &world);
+        let name = cell_of_text(&app, &world, SCREEN, &format!("Sprite #{} grew up", id.0));
+        if quitting {
+            apply(&mut app, &world, Action::Back);
+            assert_eq!(app.screen(), Screen::QuitPrompt);
+        }
+        apply(&mut app, &world, Action::Point(name));
+        let cell = app.cell_of(at(2, 2)).expect("in view");
+        let lit = render(&app, &world)[cell]
+            .modifier
+            .contains(Modifier::REVERSED);
+        assert_eq!(lit, !quitting, "quitting: {quitting}");
+    }
+}
+
+/// Where the debug overlay's box is drawn on a `SCREEN`, from its top
+/// corners down to its bottom right one.
+fn overlay_box(app: &App, world: &World) -> Rect {
+    let screen = render(app, world);
+    let title = cell_of_text(app, world, SCREEN, " Debug ");
     let is = |x: u16, y: u16, symbol: &str| screen[(x, y)].symbol() == symbol;
     let left = (0..title.x)
         .rev()
@@ -610,14 +647,42 @@ fn a_tooltip_keeps_off_the_debug_overlay() {
     let bottom = (title.y..SCREEN.height)
         .find(|&y| is(right, y, "┘"))
         .expect("┘");
-    let overlay = Rect::new(left, title.y, right - left + 1, bottom - title.y + 1);
+    Rect::new(left, title.y, right - left + 1, bottom - title.y + 1)
+}
+
+#[test]
+fn beside_the_debug_overlay_every_tile_can_still_be_pointed_at() {
+    // The pointer points at the tile up and to the left of it, so on the
+    // box's left edge it points at the tile beside the box, and just below
+    // the box at one under its bottom edge, which is nothing (design §6.1).
+    let (world, mut app, ..) = under_the_overlay(true);
+    let overlay = overlay_box(&app, &world);
+    let beside = app
+        .tile_at(Position::new(overlay.x - 1, overlay.y + 1))
+        .expect("a tile beside the box");
+    apply(
+        &mut app,
+        &world,
+        Action::Point(Position::new(overlay.x, overlay.y + 2)),
+    );
+    assert_eq!(app.cursor(), beside, "on its left edge");
+    let below = Position::new(overlay.x + 4, overlay.bottom());
+    apply(&mut app, &world, Action::Point(below));
+    assert_eq!(app.cursor(), beside, "just below it, the Cursor stays");
+}
+
+#[test]
+fn a_tooltip_keeps_off_the_debug_overlay() {
+    let (world, mut app, _) = selected(SCREEN, Tab::Body);
+    apply(&mut app, &world, Action::DebugOverlay);
+    let overlay = overlay_box(&app, &world);
     let drawn = |screen: &Buffer| -> Vec<String> {
         overlay
             .positions()
             .map(|cell| screen[cell].symbol().to_string())
             .collect()
     };
-    let shown = drawn(&screen);
+    let shown = drawn(&render(&app, &world));
     // Where it would cover the box, it goes elsewhere, or where there's
     // nowhere else, isn't drawn.
     let mut drawn_somewhere = 0;
@@ -761,12 +826,16 @@ fn a_starting_level_and_an_unknown_gene_say_what_they_are_too() {
         said.words,
         "A starting level: boredom starts at .2 when it hatches"
     );
-    // An unknown gene is all name, and to its end.
+    // An unknown gene is all name, the commas between its parts too.
     apply(&mut app, &world, Action::Point(Position::new(0, 0)));
-    let bytes = cell_of_text(&app, &world, TALL, "3 bytes");
-    let end = Position::new(bytes.x + 6, bytes.y);
-    let said = pointing_at(&mut app, &world, TALL, end).expect("a tooltip");
-    assert_eq!(said.words, "A gene this version of the game can't read");
+    let line = "type 900, version 1, 3 bytes";
+    let start = cell_of_text(&app, &world, TALL, line);
+    for past in [0, 8, 19, line.len() - 1] {
+        let cell = Position::new(start.x + past as u16, start.y);
+        let said = pointing_at(&mut app, &world, TALL, cell).expect("a tooltip");
+        assert_eq!(said.words, "A gene this version of the game can't read");
+        apply(&mut app, &world, Action::Point(Position::new(0, 0)));
+    }
 }
 
 #[test]

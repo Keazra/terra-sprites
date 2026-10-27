@@ -826,7 +826,7 @@ A part of the screen the pointer can be on that says what it is in a tooltip, or
 _Avoid_: hotspot, hit box
 
 **Tooltip** (#304):
-The box beside the pointer, below it and to its left, saying what the spot under it is: its name, what it is, and what a click or a key does with it. It's drawn afresh each frame, only on the world's own screen, never over the pointer's cell or a pop-up, and takes nothing: it isn't a pop-up. A key press puts it away until the pointer moves.
+The box beside the pointer, below it and to its left, saying what the spot under it is: its name, what it is, and what a click or a key does with it. It's drawn afresh each frame, only on the world's own screen, never over the pointer's cell or a pop-up, and takes nothing: it isn't a pop-up. A key press puts it away until the pointer moves, with what the pointer lights up.
 _Avoid_: hover box, pop-up (that's a menu or an overlay)
 
 **Sprite list**:

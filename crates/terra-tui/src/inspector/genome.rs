@@ -164,17 +164,21 @@ pub(super) fn name_spotted(
             let mut row = TabLine::from(line);
             row.minor = minor;
             let mut column = 0;
+            // Whether the word before was the name's, so this one joins
+            // its spot, over the space and any comma between.
+            let mut joined = false;
             for token in text.split(' ') {
                 let word = token.trim_end_matches(',');
-                if !word.is_empty() && words.peek() == Some(&word) {
+                let named = !word.is_empty() && words.peek() == Some(&word);
+                if named {
                     words.next();
                     let end = column + word.chars().count() as u16;
                     match row.spots.last_mut() {
-                        // The word before's, with a space between.
-                        Some((columns, _)) if columns.end + 1 == column => columns.end = end,
+                        Some((columns, _)) if joined => columns.end = end,
                         _ => row.spots.push((column..end, Spot::Gene(index))),
                     }
                 }
+                joined = named;
                 column += token.chars().count() as u16 + 1;
             }
             row
@@ -360,7 +364,8 @@ fn numbers(gene: &GeneView) -> Vec<String> {
 
 /// The words of `gene`'s name as its line on the Genome tab has them, the
 /// line's words but its numbers (#304): its name, but for a starting
-/// level, whose line says it `starts at` its number.
+/// level, whose line says it `starts at` its number. An unknown gene's name
+/// is its whole line.
 pub(super) fn name_on_its_line(gene: &GeneView) -> String {
     match *gene {
         GeneView::InitialConcentration { chem, .. } => {

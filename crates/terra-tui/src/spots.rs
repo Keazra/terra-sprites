@@ -24,7 +24,8 @@ pub(crate) enum Spot {
     /// chemical's on the Chem tab. By its name in the data pack.
     Chemical { name: String, kind: ChemicalKind },
     /// A gene's name on the Genome tab, the words of its line but its
-    /// numbers, by its place in the genome.
+    /// numbers, or an unknown gene's whole line, by its place in the
+    /// genome.
     Gene(usize),
     /// A line of the Brain tab that opens or shuts a memory block (design
     /// v40 §6.1).
@@ -53,8 +54,9 @@ impl Spot {
     }
 
     /// Whether it says what it is, in a tooltip, and so is drawn in the
-    /// theme's spot style (design §6.1, §6.2): all but a memory heading,
-    /// which is a heading, and a pop-up's box.
+    /// theme's spot style unless it keeps a look of its own (design §6.1,
+    /// §6.2): all but a memory heading, which is a heading, and a pop-up's
+    /// box.
     pub(crate) fn explains(&self) -> bool {
         !matches!(self, Spot::Memory(_) | Spot::PopUp)
     }

@@ -120,12 +120,12 @@ pub(crate) fn mark_spots(buf: &mut Buffer, app: &App, spots: &Spots) {
 
 /// Where the pointer is, for its tooltip and what it lights up (design
 /// §6.1): only on the world's own screen, the map with the inspector and
-/// the event log, or its quit prompt, where a click does what a tooltip
-/// says, and only while no key has been pressed since it moved, which puts
-/// them away until it moves again.
+/// the event log, where a click or a key does what a tooltip says, and only
+/// while no key has been pressed since it moved, which puts them away until
+/// it moves again.
 pub(crate) fn pointer(app: &App) -> Option<Position> {
     app.shown_pointer()
-        .filter(|_| matches!(app.screen(), Screen::Normal | Screen::QuitPrompt))
+        .filter(|_| app.screen() == Screen::Normal)
 }
 
 /// Lights up the spot the pointer is on, all of it, a gene's name on each

@@ -827,8 +827,9 @@ fn a_drive_bar_is_ten_cells_whatever_the_level() {
     assert_eq!(bar_parts(f32::NAN).concat(), "░░░░░░░░░░");
 }
 
-/// A gene of every kind, and what its tooltip says it does (#304).
-fn genes_of_every_kind() -> Vec<(terra_sim::GeneView<'static>, &'static str)> {
+/// A gene of every kind, the words lit on its line, which a tooltip
+/// explains, and what its tooltip says it does (#304).
+fn genes_of_every_kind() -> Vec<(terra_sim::GeneView<'static>, &'static str, &'static str)> {
     use terra_sim::{EmitterMode, GeneView, Trait, Whom};
     let emitter = |mode, invert, threshold, gain| GeneView::Emitter {
         locus: "injury",
@@ -841,22 +842,27 @@ fn genes_of_every_kind() -> Vec<(terra_sim::GeneView<'static>, &'static str)> {
     vec![
         (
             emitter(EmitterMode::Level, true, 0.3, 0.004),
+            "low injury → pain",
             "An emitter: pain rises while injury is below .7",
         ),
         (
             emitter(EmitterMode::Level, false, 0.6, -0.1),
+            "injury → pain",
             "An emitter: pain falls while injury is above .6",
         ),
         (
             emitter(EmitterMode::Level, false, 0.0, 0.3),
+            "injury → pain",
             "An emitter: injury raises pain",
         ),
         (
             emitter(EmitterMode::Rise, false, 0.0, 10.0),
+            "injury rises → pain",
             "An emitter: pain rises as injury rises",
         ),
         (
             emitter(EmitterMode::Fall, false, 0.1, -1.0),
+            "injury falls → pain",
             "An emitter: pain falls as injury falls, once past .1",
         ),
         (
@@ -864,6 +870,7 @@ fn genes_of_every_kind() -> Vec<(terra_sim::GeneView<'static>, &'static str)> {
                 chem: "hunger",
                 ticks: 2_000,
             },
+            "hunger halves",
             "A half-life: hunger fades by itself, by half every 2,000 ticks",
         ),
         (
@@ -872,6 +879,7 @@ fn genes_of_every_kind() -> Vec<(terra_sim::GeneView<'static>, &'static str)> {
                 products: vec![("food", 1)],
                 rate: 0.1,
             },
+            "hunger + food → food",
             "A reaction: each tick, hunger + food turns into food",
         ),
         (
@@ -881,6 +889,7 @@ fn genes_of_every_kind() -> Vec<(terra_sim::GeneView<'static>, &'static str)> {
                 gain: -2.0,
                 target: "curiosity_mod",
             },
+            "h0 → curiosity mod",
             "A receptor: h0 lowers its curiosity mod",
         ),
         (
@@ -888,6 +897,7 @@ fn genes_of_every_kind() -> Vec<(terra_sim::GeneView<'static>, &'static str)> {
                 chem: "h4",
                 value: 0.5,
             },
+            "h4 starts at",
             "A starting level: h4 starts at .5 when it hatches",
         ),
         (
@@ -895,6 +905,7 @@ fn genes_of_every_kind() -> Vec<(terra_sim::GeneView<'static>, &'static str)> {
                 param: "tau_base",
                 value: 0.1,
             },
+            "tau base",
             "A brain setting: its tau base is .1, one of the numbers its brain works by",
         ),
         (
@@ -903,6 +914,7 @@ fn genes_of_every_kind() -> Vec<(terra_sim::GeneView<'static>, &'static str)> {
                 verb: Verb::Drink,
                 weight: 0.5,
             },
+            "thirst & not target adjacent → drink",
             "An instinct: thirst & not target adjacent leans it towards drink",
         ),
         (
@@ -912,6 +924,7 @@ fn genes_of_every_kind() -> Vec<(terra_sim::GeneView<'static>, &'static str)> {
                 whom: Whom::Kin,
                 weight: -1.0,
             },
+            "arousal → attends to its kin (sprite)",
             "An attention instinct: arousal draws its eye away from its kin (sprite)",
         ),
         (
@@ -919,6 +932,7 @@ fn genes_of_every_kind() -> Vec<(terra_sim::GeneView<'static>, &'static str)> {
                 which: Trait::GrowsUp,
                 value: 4_500.0,
             },
+            "grows up",
             "A trait: grows up is the age it grows up at",
         ),
         (
@@ -927,6 +941,7 @@ fn genes_of_every_kind() -> Vec<(terra_sim::GeneView<'static>, &'static str)> {
                 version: 1,
                 bytes: 3,
             },
+            "type 40, version 1, 3 bytes",
             "A gene this version of the game can't read",
         ),
     ]
@@ -934,15 +949,16 @@ fn genes_of_every_kind() -> Vec<(terra_sim::GeneView<'static>, &'static str)> {
 
 #[test]
 fn a_gene_says_what_it_does_in_a_sentence_of_its_kind() {
-    for (gene, words) in genes_of_every_kind() {
+    for (gene, _, words) in genes_of_every_kind() {
         assert_eq!(gene_about(&gene), words, "{gene:?}");
     }
 }
 
 #[test]
 fn every_kind_of_gene_has_the_words_of_its_line_but_its_numbers_as_its_spot() {
-    // #304: what's lit on the Genome tab, and what a tooltip explains.
-    for (gene, _) in genes_of_every_kind() {
+    // #304: what's lit on the Genome tab, and what a tooltip explains, one
+    // spot over the name's words and what's between them.
+    for (gene, lit, _) in genes_of_every_kind() {
         let name = genome::name_on_its_line(&gene);
         let lines = wrapped(&genome::gene_text(&gene), 1, Style::new(), Style::new());
         let mut spotted = Vec::new();
@@ -954,11 +970,6 @@ fn every_kind_of_gene_has_the_words_of_its_line_but_its_numbers_as_its_spot() {
                 spotted.push(drawn[columns].iter().collect::<String>());
             }
         }
-        // Its words, but for a comma after one, which is the line's.
-        let words: Vec<&str> = name
-            .split_whitespace()
-            .map(|word| word.trim_end_matches(','))
-            .collect();
-        assert_eq!(spotted.join(" "), words.join(" "), "{gene:?}");
+        assert_eq!(spotted, [lit], "{gene:?}");
     }
 }
