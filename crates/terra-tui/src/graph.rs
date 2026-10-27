@@ -173,8 +173,9 @@ impl Plot {
         label_width(self.top, self.shares) + 3
     }
 
-    /// The graph's `rows` rows, each with its label, in `look`.
-    fn rows(&self, rows: usize, look: &PopulationLook) -> Vec<Line<'static>> {
+    /// The graph's `rows` rows, each with its label, in `look`, in colour
+    /// if `coloured`.
+    fn rows(&self, rows: usize, look: &PopulationLook, coloured: bool) -> Vec<Line<'static>> {
         let rows = rows.max(1);
         let halves = 2 * rows;
         let width = label_width(self.top, self.shares);
@@ -220,7 +221,13 @@ impl Plot {
                 let lower = 2 * (rows - 1 - row);
                 for stack in &stacks {
                     let on_limit = limit_row == Some(row);
-                    spans.push(block(stack[lower], stack[lower + 1], on_limit, look));
+                    spans.push(block(
+                        stack[lower],
+                        stack[lower + 1],
+                        on_limit,
+                        look,
+                        coloured,
+                    ));
                 }
                 Line::from(spans)
             })
@@ -281,14 +288,19 @@ impl Plot {
     }
 
     /// The legend: each band's swatch and name, then the limit's line, or
-    /// with shares, that they're shares, in `muted` (design §6.2).
-    fn legend(&self, look: &PopulationLook, muted: Style) -> Line<'static> {
+    /// with shares, that they're shares, in `muted` (design §6.2). Without
+    /// colour, a band's swatch is its own character.
+    fn legend(&self, look: &PopulationLook, coloured: bool, muted: Style) -> Line<'static> {
         let mut spans = vec![Span::raw(" ")];
         for band in Band::ALL {
-            spans.push(Span::styled(
-                look.full.to_string(),
-                Style::default().fg(look.colour(band)),
-            ));
+            spans.push(if coloured {
+                Span::styled(
+                    look.full.to_string(),
+                    Style::default().fg(look.colour(band)),
+                )
+            } else {
+                Span::raw(look.character(band).to_string())
+            });
             spans.push(Span::raw(format!(" {}  ", band.plural())));
         }
         if self.shares {
@@ -440,15 +452,20 @@ fn band_at(count: &PopulationCount, half: usize, step: f64) -> Option<Band> {
 }
 
 /// One character of the graph: its lower half's band and its upper half's,
-/// in `look`; an empty one on the limit's row is a dot of its line.
+/// in `look`; an empty one on the limit's row is a dot of its line. Without
+/// colour (design §6.2, #307), a character with a band in both halves is
+/// the lower band's own, as M2 design §14.2 draws them, since a half in one
+/// band over another can't be told apart.
 fn block(
     lower: Option<Band>,
     upper: Option<Band>,
     on_limit: bool,
     look: &PopulationLook,
+    coloured: bool,
 ) -> Span<'static> {
     let colour = |band| look.colour(band);
     match (lower, upper) {
+        (Some(lower), Some(_)) if !coloured => Span::raw(look.character(lower).to_string()),
         (Some(lower), Some(upper)) if lower == upper => {
             Span::styled(look.full.to_string(), Style::default().fg(colour(lower)))
         }
@@ -507,14 +524,14 @@ pub(crate) fn rows_above_axis(rows: usize) -> usize {
 /// The full graph's lines, `width` columns and `rows` rows inside its
 /// border, with the picked column marked and read.
 pub(crate) fn lines(app: &App, world: &World, width: usize, rows: usize) -> Vec<Line<'static>> {
-    let look = app.theme.population();
+    let (look, coloured) = (app.theme.population(), app.theme.has_colour());
     let plot = Plot::full(world, width);
-    let mut lines = plot.rows(rows_above_axis(rows), &look);
+    let mut lines = plot.rows(rows_above_axis(rows), &look, coloured);
     let column = plot.column_of(app.graph_pick());
     lines.push(plot.axis(Some(column)));
     lines.push(plot.ticks());
     lines.push(Line::default());
-    lines.push(plot.legend(&look, app.theme.text().muted));
+    lines.push(plot.legend(&look, coloured, app.theme.text().muted));
     lines.extend(plot.reading(column, world.data()).map(Line::from));
     lines
 }
@@ -523,11 +540,11 @@ pub(crate) fn lines(app: &App, world: &World, width: usize, rows: usize) -> Vec<
 /// heading, in the theme's heading colour (design §6.2), the graph and its
 /// axis.
 pub(crate) fn small(app: &App, world: &World, width: usize) -> Vec<Line<'static>> {
-    let look = app.theme.population();
+    let (look, coloured) = (app.theme.population(), app.theme.has_colour());
     let plot = Plot::small(world, width);
     let heading = format!(" population, {}", covers(world));
     let mut lines = vec![Line::styled(heading, app.theme.text().heading)];
-    lines.extend(plot.rows(SMALL_ROWS, &look));
+    lines.extend(plot.rows(SMALL_ROWS, &look, coloured));
     lines.push(plot.axis(None));
     lines
 }

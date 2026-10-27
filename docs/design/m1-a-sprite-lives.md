@@ -1516,7 +1516,7 @@ The species is dropped into a world it doesn't know and has to learn about it. I
 - **Drawn from meaning:** the map renders **semantic tiles**, e.g. `Terrain(Grass)`, `Object("berry_bush", "fruiting")`, `Sprite { colour_mode_state }`, `Emote(Hurt)`, never characters directly.
 - **Themes** (`themes/*.ron`) map each semantic tile to a character, colours and modifiers.
   - Themes are **UI assets**. They aren't part of the sim data pack, and don't affect saves or replays.
-  - **A theme is a glyph set and a palette, chosen apart** (#307). The **glyph set** gives every character a theme holds: the map's, the Cursor's, the emotes', the glass's and the stars', and the graph's blocks. The **palette** gives the rest: each glyph's colour, bold and reverse video, the drives', the lineage's and the graph's colours, the text roles, the attention marker, the panel shades and motion's colours (§6.9). So a player can draw the map in ASCII with high contrast without a theme file of their own.
+  - **A theme is a glyph set and a palette, chosen apart** (#307). The **glyph set** gives every character a theme holds: the map's, the Cursor's, the emotes', the glass's and the stars', and the graph's blocks and each band's own character. The **palette** gives the rest: each glyph's colour, bold and reverse video, the drives', the lineage's and the graph's colours, the text roles, the attention marker, the panel shades and motion's colours (§6.9). So a player can draw the map in ASCII with high contrast without a theme file of their own.
   - **Built in:** two glyph sets, CP437 (the default) and ASCII (`--ascii`), and four palettes:
 
     | Palette | What it's for |

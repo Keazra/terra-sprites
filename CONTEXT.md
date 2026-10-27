@@ -885,7 +885,7 @@ A mapping from semantic tiles to glyphs and colours, and from each text role to 
 _Avoid_: skin
 
 **Glyph set** (#307):
-The characters a theme draws with: the map's, the Cursor's, the emotes', the glass's, the stars' and the graph's blocks. Two are built in, CP437 and ASCII (`--ascii`).
+The characters a theme draws with: the map's, the Cursor's, the emotes', the glass's, the stars' and the graph's blocks and bands. Two are built in, CP437 and ASCII (`--ascii`).
 _Avoid_: font, charset, tileset (that's the Tiles milestone's)
 
 **Palette** (#307):

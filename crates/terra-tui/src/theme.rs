@@ -120,8 +120,9 @@ pub struct Glyph {
 }
 
 /// How a theme draws the population graph (M2 design §14): the colour of
-/// each life stage and of eggs, the blocks they're stacked in, and the
-/// dotted line of the world's limit.
+/// each life stage and of eggs, the blocks they're stacked in, each band's
+/// own character for a palette with no colour, and the dotted line of the
+/// world's limit.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PopulationLook {
     pub young: Color,
@@ -133,8 +134,22 @@ pub struct PopulationLook {
     /// The lower half of a character: drawn in the band below, over the band
     /// above, or over nothing at the top of the stack.
     pub half: char,
+    /// Each band's own character, which a palette with no colour draws it
+    /// in, so the bands are told apart without colour (design §6.2, #307).
+    pub bands: PopulationBands,
     /// A dot of the line at the world's limit.
     pub limit: Glyph,
+}
+
+/// The character of each band of the population graph where the palette
+/// has no colour (design §6.2, #307): in the CP437 glyph set, `░` eggs, `▓`
+/// young, `█` adults and `▒` old, as M2 design §14.2 draws them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PopulationBands {
+    pub young: char,
+    pub adult: char,
+    pub old: char,
+    pub egg: char,
 }
 
 impl PopulationLook {
@@ -145,6 +160,18 @@ impl PopulationLook {
             Band::Adults => self.adult,
             Band::Old => self.old,
             Band::Eggs => self.egg,
+        }
+    }
+
+    /// The character the graph draws `band` in where the palette has no
+    /// colour.
+    pub(crate) fn character(&self, band: Band) -> char {
+        let bands = self.bands;
+        match band {
+            Band::Young => bands.young,
+            Band::Adults => bands.adult,
+            Band::Old => bands.old,
+            Band::Eggs => bands.egg,
         }
     }
 }
@@ -556,6 +583,7 @@ impl Theme {
             population: PopulationLook {
                 full: glyphs.population.full,
                 half: glyphs.population.half,
+                bands: glyphs.population.bands,
                 limit: drawn(glyphs.population.limit, graph.limit),
                 ..graph
             },
@@ -923,9 +951,14 @@ impl Theme {
             .stars
             .iter()
             .map(|(depth, glyph)| (format!("the {} stars", snake_case(depth)), glyph.symbol));
+        let bands = self.population.bands;
         let graph = [
             ("the population graph's full", self.population.full),
             ("the population graph's half", self.population.half),
+            ("the population graph's egg band", bands.egg),
+            ("the population graph's young band", bands.young),
+            ("the population graph's adult band", bands.adult),
+            ("the population graph's old band", bands.old),
             ("the population graph's limit", self.population.limit.symbol),
         ]
         .map(|(what, symbol)| (what.to_string(), symbol));
@@ -1102,6 +1135,9 @@ struct PopulationFile {
     /// The lower half of a character.
     #[serde(default, deserialize_with = "implicit_some")]
     half: Option<char>,
+    /// Each stage's own character, for a palette with no colour.
+    #[serde(default)]
+    bands: BandsFile,
     /// A dot of the line at the world's limit.
     #[serde(default, deserialize_with = "implicit_some")]
     limit: Option<GlyphEntry>,
@@ -1112,6 +1148,7 @@ impl PopulationFile {
     /// leaves out: `None` if both leave a part out.
     fn look(self, default: PopulationFile) -> Option<PopulationLook> {
         let (theirs, ours) = (self.stages, default.stages);
+        let (their_bands, our_bands) = (self.bands, default.bands);
         Some(PopulationLook {
             young: theirs.young.or(ours.young)?.into(),
             adult: theirs.adult.or(ours.adult)?.into(),
@@ -1119,9 +1156,30 @@ impl PopulationFile {
             egg: theirs.egg.or(ours.egg)?.into(),
             full: self.full.or(default.full)?,
             half: self.half.or(default.half)?,
+            bands: PopulationBands {
+                young: their_bands.young.or(our_bands.young)?,
+                adult: their_bands.adult.or(our_bands.adult)?,
+                old: their_bands.old.or(our_bands.old)?,
+                egg: their_bands.egg.or(our_bands.egg)?,
+            },
             limit: glyph(self.limit.or(default.limit)?),
         })
     }
+}
+
+/// Each life stage's own character on the population graph, for a palette
+/// with no colour.
+#[derive(Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct BandsFile {
+    #[serde(default, deserialize_with = "implicit_some")]
+    young: Option<char>,
+    #[serde(default, deserialize_with = "implicit_some")]
+    adult: Option<char>,
+    #[serde(default, deserialize_with = "implicit_some")]
+    old: Option<char>,
+    #[serde(default, deserialize_with = "implicit_some")]
+    egg: Option<char>,
 }
 
 /// The colour of each life stage on the population graph.

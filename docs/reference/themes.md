@@ -24,7 +24,7 @@ A theme is two parts, chosen apart (design §6.2): a **glyph set**, every charac
 
 | Part | What it gives |
 |---|---|
-| Glyph set | Each `glyph:` character in `tiles`, `objects` and `cursor`; the Cursor's `arrows`, `followed_arrows`, `visible_frame` and `status_marks`; `space`'s glass and stars; and `population`'s `full` and `half` characters and its `limit`'s. |
+| Glyph set | Each `glyph:` character in `tiles`, `objects` and `cursor`; the Cursor's `arrows`, `followed_arrows`, `visible_frame` and `status_marks`; `space`'s glass and stars; and `population`'s `full`, `half` and `bands` characters and its `limit`'s. |
 | Palette | Every glyph's `fg`, `bold` and `reversed`; `drives`; `attention_marker`; `population`'s `stages` and its `limit`'s colour; `lineage`; `text`; `panels`; `motion`; and `colour`. |
 
 Every theme file is whole, and picked as both, on both of the settings screen's rows or with `--theme`, it draws as written. Taken as a glyph set, only its characters are used; taken as a palette, everything but them. An object type or state that one part leaves out falls back in that part, as under [`objects`](#objects) below. The game has these built in:
@@ -116,13 +116,14 @@ The map view can scroll past the map's wall, into space (M2 design §11). `space
 
 ### `population`
 
-The population graph (`p`, and small at the top of the World tab) stacks the eggs and the sprites by life stage, youngest to oldest from the bottom, eggs, young, adults and old, each in its colour: full screen as shares of each column, and small as how many, with a dotted line at the most sprites the world holds (M2 design §14). `population` is a record of four fields, each of which may be left out and is then drawn as the default theme draws it. A field the game doesn't know is refused, naming it.
+The population graph (`p`, and small at the top of the World tab) stacks the eggs and the sprites by life stage, youngest to oldest from the bottom, eggs, young, adults and old, each in its colour, or without colour in its own character: full screen as shares of each column, and small as how many, with a dotted line at the most sprites the world holds (M2 design §14). `population` is a record of five fields, each of which may be left out and is then drawn as the default theme draws it. A field the game doesn't know is refused, naming it.
 
 | Field | Meaning |
 |---|---|
 | `stages` | A colour for each life stage and for eggs: `(young: light_green, adult: cyan, old: gray, egg: light_yellow)`, any of them left out as you like. |
 | `full` | A character wholly of one stage: `'█'` in the default theme, `'#'` in the ASCII one. |
 | `half` | A character's lower half, `'▄'` or `'_'`: it's drawn in the stage below, on the stage above as its background, or on nothing at the top of the stack. |
+| `bands` | A character for each life stage and for eggs, which a palette without [colour](#colour) draws it in, so the stages are told apart without colour: `(young: '▓', adult: '█', old: '▒', egg: '░')` in the default theme, `(young: '+', adult: '#', old: '=', egg: ':')` in the ASCII one, any of them left out as you like. A character of two stages is then the lower's, and the legend shows each stage's own. |
 | `limit` | A glyph, a dot of the small graph's line at the most sprites the world holds, drawn where nothing else is. |
 
 ### `lineage`

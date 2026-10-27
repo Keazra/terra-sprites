@@ -19,6 +19,7 @@ A theme's characters and its colours are chosen apart, three palettes join the d
 | # | Change | Source | Sections |
 |---|---|---|---|
 | 1 | **Square tiles are remembered between runs,** a row of the settings screen. | #307 | §11.7 |
+| 2 | **Without colour, the population graph draws each band in a character of its own,** from the glyph set (`░ ▓ █ ▒` in CP437), a character of two bands showing the lower, and its legend the same. | #307 | §14.2 |
 
 ## Glossary (`CONTEXT.md`)
 
