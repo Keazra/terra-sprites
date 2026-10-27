@@ -13,10 +13,11 @@ pub enum Panel {
     /// A sprite's colour on the map, which tells its strongest drive (design
     /// §6.3).
     MapColours,
-    /// A sprite's emotes on the map (design §6.3).
+    /// A sprite's emotes on the map (design §6.3), and the motion of its
+    /// egg's crack, its hatching and its death (§6.9).
     Emotes,
     /// The selected sprite's Decision and Attention markers on the map
-    /// (design §6.1).
+    /// (design §6.1), and its trail (§6.9).
     Markers,
     /// A line of the event log.
     EventLog,

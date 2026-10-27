@@ -128,18 +128,18 @@ The same key in capitals or lower case does the same thing.
 | `--replay <file>` | Play a replay back, such as `last_session.replay`, which every session writes to the game's folder (the help screen shows where). Time, the view and the inspector work, but nothing can change the world until you take it over with `Ctrl+R`. It pauses at the end, and if the replay ever drifts from what was recorded, it pauses and says between which ticks. See [replays](reference/saves.md#replays) |
 | `--ascii` | Draw the map in plain ASCII instead of CP437 |
 | `--theme <file>` | Start with a theme of your own, such as an edited copy of [`themes/cp437.ron`](../themes/cp437.ron), rather than picking it with `Ctrl+T` each time |
-| `--no-motion` | Draw the screen without [motion](#motion): no flash where a sprite dies, no egg cracking or sparks where one hatches, no trail, the water still, tabs and pop-ups shown at once, a drive's bar jumping to its new level, and the view jumping to a sprite rather than panning. For a slow terminal, or if you'd rather not have it |
+| `--no-motion` | Draw the screen without [motion](#motion): no flash where a sprite dies, no egg cracking or sparks where one hatches, no trail, the water still, tabs and pop-ups shown at once, a drive's bar jumping to its new level, and the view jumping to a sprite or egg rather than panning. For a slow terminal, or if you'd rather not have it |
 | `--fast-forward <hours>` | Run a Lab world with no screen for that many hours of play at 1×, then save it; see [fast-forward](#fast-forward) |
 | `--save <name>` | With `--fast-forward`, the name to save under |
 | `--version` | Print the game's version and the commit it was built from, and stop |
 
 ## Motion
 
-Small movements on the screen show what just happened. They're timed in real time, so they last as long at every speed, and while the game is paused:
+Small movements on the screen show what just happened. They're timed in real time, not by the game's ticks, so up to 2× they last as long at every speed, and while the game is paused (at 4× and up there's less of it, below):
 
 - Where a sprite dies, its tile flashes and its ghost fades to grey. An egg about to hatch cracks first: on the tick before, its tile starts to glow, and stays so until the young appears. Where one hatches, sparks light up round the egg, and the young warms from the egg's colour to its own.
 - The selected sprite leaves a trail: the tiles it has just left keep a tint that fades over a second and a half, at most 8 of them.
-- When the view centres on a sprite more than 2 tiles away, with `Tab`, the sprite list, the family tree, a sprite's name in the event log or `T`, it pans there rather than jumping, quickly and then slowing. A click while it pans lands on the tile drawn under the pointer, and the Cursor goes to the tile under a still pointer once the pan ends. Scrolling jumps, as before.
+- When the view centres on a sprite or an egg more than 2 tiles away, with `Tab`, the sprite list, the family tree, a name in the event log or `T`, it pans there rather than jumping, quickly and then slowing. A click while it pans lands on the tile drawn under the pointer, and the Cursor goes to the tile under a still pointer once the pan ends. Scrolling jumps, as before.
 - A tab sweeps in as it opens, the menus, help and the other pop-ups fade in and out, a drive's bar on the Body tab eases to its new level, and the water drifts between two shades, in waves.
 
 At 4× and up there's less of it: deaths, hatchings and the trail are over in half the time, at most 2 deaths and hatchings play at once rather than 4, eggs don't crack, and the bars and the view jump. `--no-motion` starts the game with all of it off. The blinking that tells you something stays either way: the `X` where the selected sprite is heading, the leash, and the chosen card on the family tree.

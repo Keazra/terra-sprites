@@ -742,8 +742,8 @@ The part of the map currently shown in the map view. It can go a quarter of the 
 _Avoid_: camera
 
 **Pan** (#306):
-The map view easing over to a sprite the view centres on, rather than jumping, as part of motion. Only the drawing moves: the viewport jumps at once, and the Cursor moves only once the pan has ended.
-_Avoid_: glide (a slide's word), scroll (the player's own moving of the view), camera move
+The map view easing over to a sprite or egg the view centres on, rather than jumping, as part of motion. Only the drawing moves: the viewport jumps at once, and the Cursor goes to the tile under a still pointer only once the pan has ended (a moving pointer goes by what's drawn).
+_Avoid_: glide, scroll (the player's own moving of the view), camera move
 
 **Glass**:
 How the wall is drawn where it faces space: a line of light cyan one tile outside the map (Slice 31). It isn't a tile, so nothing on the map reaches it. On the ship (#181), it's drawn one tile outside a sector, over a tile of space.

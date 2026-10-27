@@ -771,7 +771,7 @@ pub(crate) fn play_on_map(
         let age = age(moment.began, now);
         match moment.happening {
             // What tells the player something about a sprite asks first
-            // (design §6.4).
+            // (design §6.4, §6.9).
             Happening::Death { id, .. } | Happening::Hatching { id, .. }
                 if !app.can_view(Panel::Emotes, Subject::Sprite(id)) => {}
             Happening::Death {
