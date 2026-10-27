@@ -112,9 +112,9 @@ pub(crate) fn mark_spots(buf: &mut Buffer, app: &App, spots: &Spots) {
 
 /// Where the pointer is, for its tooltip and what it lights up (design
 /// §6.1): only on the world's own screen, the map with the inspector and
-/// the event log, where a click or a key does what a tooltip says, and only
-/// while no key has been pressed since it moved, which puts them away until
-/// it moves again.
+/// the event log, or the inspector filling it (#305), where a click or a
+/// key does what a tooltip says, and only while no key has been pressed
+/// since it moved, which puts them away until it moves again.
 pub(crate) fn pointer(app: &App) -> Option<Position> {
     app.shown_pointer()
         .filter(|_| app.screen() == Screen::Normal)

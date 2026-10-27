@@ -212,7 +212,7 @@ impl App {
 
     /// Whether screen cell `cell` is on the inspector, as it's drawn just
     /// now.
-    pub(super) fn on_the_inspector(&self, cell: Position) -> bool {
+    pub(crate) fn on_the_inspector(&self, cell: Position) -> bool {
         self.inspector_area()
             .is_some_and(|area| area.contains(cell))
     }

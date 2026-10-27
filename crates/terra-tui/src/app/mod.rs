@@ -1094,7 +1094,11 @@ impl App {
             // the cursor modes (design v22 §6.5).
             Action::Wheel { at, notches } => {
                 self.point(at);
-                if self.on_the_inspector(at) {
+                // A pop-up's box over the inspector, as the debug overlay
+                // is over its top while it's over the map view or fills
+                // the screen, takes the wheel there (design §6.1).
+                let on_a_pop_up = self.spot_at(at) == Some(Spot::PopUp);
+                if self.on_the_inspector(at) && !on_a_pop_up {
                     self.scroll_tab(notches * WHEEL_LINES, world);
                 } else if self.pointed_place(at).is_some() {
                     self.mode = self.mode.along(notches);

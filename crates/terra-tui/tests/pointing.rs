@@ -855,3 +855,148 @@ fn a_name_too_long_for_its_tooltip_ends_with_dots() {
     let room = usize::from(said.area.width) - 6;
     assert!(said.name.chars().count() <= room, "{said:?}");
 }
+
+/// That sprite `id` grew up, at tick 1: a line in the event log about it.
+fn grew_up(id: EntityId) -> Event {
+    Event {
+        tick: 1,
+        kind: EventKind::GrewUp { id },
+    }
+}
+
+/// A screen with room for three columns of the inspector's lines while it
+/// fills the screen (#305).
+const WIDE: Size = Size::new(140, 40);
+
+/// A screen under 100 columns, where the inspector pops over the map view,
+/// with room for the event log (#305).
+const NARROW: Size = Size::new(80, 30);
+
+#[test]
+fn filling_the_screen_a_gene_in_a_later_column_says_what_it_is_and_a_tab_takes_a_click() {
+    let (world, mut app, _) = selected(WIDE, Tab::Genome);
+    apply(&mut app, &world, Action::Inspector);
+    assert!(app.full_screen());
+    let spot = Theme::cp437().text().spot.fg.expect("a colour");
+    let screen = render_on(&app, &world, WIDE);
+    // The second column of lines is 47 cells right of the first.
+    let name = (2..WIDE.height - 1)
+        .flat_map(|y| (48..93).map(move |x| Position::new(x, y)))
+        .find(|&cell| screen[cell].fg == spot)
+        .expect("a gene's name in the second column");
+    let drawn: String = (name.x..93)
+        .map(|x| screen[(x, name.y)].symbol().to_string())
+        .collect();
+    let first_word = drawn.split_whitespace().next().expect("a word");
+    let said = pointing_at(&mut app, &world, WIDE, name).expect("a tooltip");
+    assert!(said.name.contains(first_word), "{said:?} at {drawn:?}");
+    let brain = cell_of_text(&app, &world, WIDE, "Brain");
+    apply(&mut app, &world, Action::left_click(brain));
+    assert_eq!(app.tab(), Tab::Brain);
+}
+
+#[test]
+fn filling_the_screen_the_inspector_leaves_nothing_beneath_it_to_point_at() {
+    let world = field(&[], &[at(2, 2)]);
+    let mut app = app_on(&world);
+    let id = sprite_on(&world, at(2, 2));
+    app.record(&[grew_up(id)], &world);
+    let line = cell_of_text(&app, &world, SCREEN, &format!("Sprite #{} grew up", id.0));
+    apply(&mut app, &world, Action::Inspector);
+    assert!(app.full_screen());
+    assert!(
+        pointing_at(&mut app, &world, SCREEN, line).is_none(),
+        "the log's line beneath says nothing"
+    );
+    apply(&mut app, &world, Action::left_click(line));
+    assert_eq!(app.selection(), None, "and takes no click");
+}
+
+#[test]
+fn zoomed_a_log_line_lights_up_all_of_its_sprite_s_tile() {
+    let world = field(&[], &[at(2, 2), at(7, 4)]);
+    let mut app = app_on(&world);
+    apply(&mut app, &world, Action::Zoom);
+    let id = sprite_on(&world, at(7, 4));
+    app.record(&[grew_up(id)], &world);
+    let name = cell_of_text(&app, &world, SCREEN, &format!("Sprite #{} grew up", id.0));
+    apply(&mut app, &world, Action::Point(name));
+    let cell = app.cell_of(at(7, 4)).expect("in view");
+    let screen = render(&app, &world);
+    for x in [cell.x, cell.x + 1] {
+        let lit = screen[(x, cell.y)].modifier.contains(Modifier::REVERSED);
+        assert!(lit, "its cell at {x}");
+    }
+}
+
+/// A world with a starter sprite on a tile the inspector is drawn over
+/// while it's open over the map view, and an app on it on a `NARROW`
+/// screen, the inspector open and a line in the log about the sprite: the
+/// world, the app, the tile and where the sprite's name is in the line.
+fn under_the_inspector() -> (World, App, Pos, Position) {
+    let empty = WorldBuilder::grass(120, 60).build();
+    let mut app = sized_app(&empty, Theme::cp437(), NARROW);
+    apply(&mut app, &empty, Action::Inspector);
+    let inspector = app.inspector_area().expect("open over the map");
+    let tile = app
+        .tile_at(Position::new(inspector.x + 10, inspector.y + 5))
+        .expect("a tile beneath it");
+    let world = WorldBuilder::grass(120, 60).starters(&[tile]).build();
+    let id = sprite_on(&world, tile);
+    let mut app = sized_app(&world, Theme::cp437(), NARROW);
+    app.record(&[grew_up(id)], &world);
+    apply(&mut app, &world, Action::Inspector);
+    let name = cell_of_text(&app, &world, NARROW, &format!("Sprite #{} grew up", id.0));
+    (world, app, tile, name)
+}
+
+#[test]
+fn a_sprite_under_the_inspector_open_over_the_map_is_not_lit_from_its_line_in_the_log() {
+    let (world, mut app, tile, name) = under_the_inspector();
+    apply(&mut app, &world, Action::Point(name));
+    let cell = app.cell_of(tile).expect("in view");
+    assert!(app.inspector_area().expect("open").contains(cell));
+    let lit = |app: &App| {
+        render_on(app, &world, NARROW)[cell]
+            .modifier
+            .contains(Modifier::REVERSED)
+    };
+    assert!(!lit(&app), "the inspector over it isn't lit");
+    // Shut, the sprite is lit as ever.
+    apply(&mut app, &world, Action::Back);
+    assert!(!app.inspector_open());
+    apply(&mut app, &world, Action::Point(name));
+    assert!(lit(&app), "shut, it's lit");
+}
+
+#[test]
+fn a_click_on_a_log_line_about_a_sprite_under_the_inspector_brings_it_out_beside_it() {
+    let (world, mut app, tile, name) = under_the_inspector();
+    let view = app.viewport();
+    apply(&mut app, &world, Action::left_click(name));
+    let id = sprite_on(&world, tile);
+    assert_eq!(app.selection(), Some(Selection::Living(id)));
+    assert_ne!(app.viewport(), view, "the view moves");
+    let cell = app.cell_of(tile).expect("in view");
+    let inspector = app.inspector_area().expect("still open");
+    assert!(!inspector.contains(cell), "beside the inspector");
+}
+
+#[test]
+fn the_wheel_on_the_debug_overlay_over_the_inspector_scrolls_no_tab() {
+    let (world, mut app, _) = selected(NARROW, Tab::Genome);
+    apply(&mut app, &world, Action::Inspector);
+    assert!(app.inspector_open());
+    apply(&mut app, &world, Action::DebugOverlay);
+    let corner = cell_of_text(&app, &world, NARROW, " Debug ");
+    let on_the_box = Position::new(corner.x + 2, corner.y + 2);
+    let inspector = app.inspector_area().expect("open");
+    assert!(inspector.contains(on_the_box), "the box is over it");
+    let wheel = |at| Action::Wheel { at, notches: 1 };
+    apply(&mut app, &world, wheel(on_the_box));
+    assert_eq!(app.tab_scroll(), 0, "the box takes the wheel");
+    // Below the box, on the inspector, the wheel scrolls the tab.
+    let below = Position::new(on_the_box.x, inspector.bottom() - 1);
+    apply(&mut app, &world, wheel(below));
+    assert!(app.tab_scroll() > 0, "below it, the tab scrolls");
+}

@@ -1415,18 +1415,23 @@ fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
 }
 
 /// Lights up sprite or egg `id` on the map, in `buf`, as a selected one is
-/// drawn, in reverse video, while the pointer is on a line of the event log
-/// about it (design §6.1): unless a pop-up the frame drew, its `spots`, is
-/// over it.
+/// drawn, in reverse video, all of its tile, while the pointer is on a line
+/// of the event log about it (design §6.1, M2 design §11.7): but where
+/// what the frame drew over the map hides it, a pop-up, among its `spots`,
+/// or the inspector open over the map view (#305).
 fn light_up(buf: &mut Buffer, app: &App, world: &World, id: EntityId, spots: &Spots) {
-    let Some(cell) = in_the_world(world, id)
+    let Some(first) = in_the_world(world, id)
         .flatten()
         .and_then(|pos| app.cell_of(pos))
     else {
         return;
     };
-    if spots.at(cell).is_none() {
-        buf[cell].modifier.insert(Modifier::REVERSED);
+    for x in 0..app.tile_width() {
+        let cell = Position::new(first.x + x, first.y);
+        let shown = app.tile_at(cell).is_some() && !app.on_the_inspector(cell);
+        if shown && spots.at(cell).is_none() {
+            buf[cell].modifier.insert(Modifier::REVERSED);
+        }
     }
 }
 
