@@ -175,8 +175,8 @@ impl App {
     /// going, after any pan: out of view, or under the inspector open over
     /// the map view (design §6.1, #305).
     pub(super) fn out_of_sight(&self, tile: Pos) -> bool {
-        self.cell_from(self.viewport, tile)
-            .is_none_or(|cell| self.inspector_open() && self.on_the_inspector(cell))
+        self.cell_from(self.viewport, tile).is_none()
+            || self.under_the_inspector_from(self.viewport, tile)
     }
 
     /// The screen cell where `tile` is drawn by a map view drawn from
@@ -260,9 +260,16 @@ impl App {
     /// Whether `tile` is drawn under the inspector, open over the map view
     /// (design §6.1, #305).
     pub(super) fn under_the_inspector(&self, tile: Pos) -> bool {
+        self.under_the_inspector_from(self.shown_viewport(), tile)
+    }
+
+    /// Whether `tile` is drawn under the inspector, open over the map view,
+    /// by a map view drawn from `origin`: the one rule `under_the_inspector`
+    /// and `out_of_sight` go by (design §6.1, #305).
+    fn under_the_inspector_from(&self, origin: Origin, tile: Pos) -> bool {
         self.inspector_open()
             && self
-                .cell_of(tile)
+                .cell_from(origin, tile)
                 .is_some_and(|cell| self.on_the_inspector(cell))
     }
 
