@@ -7,10 +7,11 @@ mod common;
 use common::screen::{app_for, garden_with_sprites, render};
 use common::{app_in, frame_on, game_kid, lines, on_the_ramp, pairs, render_on, select};
 
+use std::collections::BTreeSet;
 use std::time::Duration;
 
 use ratatui::buffer::Buffer;
-use ratatui::layout::{Position, Size};
+use ratatui::layout::{Position, Rect, Size};
 use ratatui::style::Color;
 use ratatui::{Terminal, backend::TestBackend};
 use terra_sim::EntityId;
@@ -19,6 +20,7 @@ use terra_tui::args::Args;
 use terra_tui::campbell;
 use terra_tui::input::Action;
 use terra_tui::start;
+use terra_tui::theme;
 use terra_tui::title::{self, Title};
 use terra_tui::ui;
 
@@ -211,4 +213,46 @@ fn in_game_kid_a_sprite_keeps_its_own_colour_in_the_lineage_colours() {
     assert_ne!(app.theme.lineage().elders, own);
     assert_eq!((colour(&app, 1), colour(&app, 2)), (own, own));
     assert_eq!(own, Color::Rgb(0xdc, 0xf0, 0x90));
+}
+
+/// Game Kid's file, for the exact colours it names.
+const GAME_KID: &str = include_str!("../../../themes/game_kid.ron");
+
+#[test]
+fn in_256_colours_game_kid_s_darkest_greens_and_panel_shade_turn_grey() {
+    // Design §6.2: on a terminal that doesn't show exact colours, such as
+    // macOS's Terminal, each is drawn as the nearest of the 256. The lighter
+    // greens stay greens of the colour cube, two pairs of them as one, and
+    // #c5dc58 as a yellow; the darkest two of the four, #0f380f and #306230,
+    // and the panels' shade are nearest a grey, and the dark is black.
+    let nearest = [
+        ("#0c0c0c", 232), // #080808
+        ("#0f1f0f", 233), // #121212, a grey
+        ("#0f380f", 234), // #1c1c1c, a grey
+        ("#306230", 238), // #444444, a grey
+        ("#5e871f", 64),  // #5f8700
+        ("#70961a", 64),  // #5f8700
+        ("#8bac0f", 106), // #87af00
+        ("#9bbc0f", 106), // #87af00
+        ("#c5dc58", 185), // #d7d75f, a yellow
+        ("#dcf090", 192), // #d7ff87
+    ];
+    let named: BTreeSet<&str> = GAME_KID
+        .match_indices("\"#")
+        .map(|(at, _)| &GAME_KID[at + 1..at + 8])
+        .collect();
+    let listed: BTreeSet<&str> = nearest.iter().map(|&(hex, _)| hex).collect();
+    assert_eq!(named, listed, "every exact colour the file names");
+    let mut buffer = Buffer::empty(Rect::new(0, 0, nearest.len() as u16, 1));
+    for (x, &(hex, _)) in nearest.iter().enumerate() {
+        let channel = |from: usize| u8::from_str_radix(&hex[from..from + 2], 16).expect("hex");
+        let exact = Color::Rgb(channel(1), channel(3), channel(5));
+        buffer[(x as u16, 0)].set_fg(exact).set_bg(exact);
+    }
+    theme::in_256_colours(&mut buffer);
+    for (x, &(hex, index)) in nearest.iter().enumerate() {
+        let cell = &buffer[(x as u16, 0)];
+        let index = Color::Indexed(index);
+        assert_eq!((cell.fg, cell.bg), (index, index), "{hex}");
+    }
 }
