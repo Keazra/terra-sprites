@@ -962,7 +962,7 @@ impl App {
                     self.full_screen = false;
                     return Flow::Continue;
                 }
-                _ if the_maps(&action) => {
+                _ if needs_the_map(&action) => {
                     self.refuse(MAP_HIDDEN.into());
                     return Flow::Continue;
                 }
@@ -1249,7 +1249,7 @@ pub(crate) fn spoken_duration(time: Duration) -> String {
 /// §6.1, #305): scrolling and tracking the view, its sprite colours, square
 /// tiles and the log's filter, and the Cursor's keys. The pointer's go on
 /// as ever, and point at nothing there.
-fn the_maps(action: &Action) -> bool {
+pub(crate) fn needs_the_map(action: &Action) -> bool {
     matches!(
         action,
         Action::Scroll { .. }

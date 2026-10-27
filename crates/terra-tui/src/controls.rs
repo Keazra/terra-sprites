@@ -866,16 +866,17 @@ fn meets(need: Need, app: &App, world: &World) -> bool {
 }
 
 /// Whether `key` works: in a replay, nothing that would change the world
-/// does (design §2.7), so its hint is greyed.
+/// does (design §2.7), and while the inspector fills the screen, none of
+/// the map's keys do (design §6.1, #305), so its hint is greyed.
 fn key_works(key: &Key, app: &App) -> bool {
-    !app.replaying()
-        || key
-            .action
-            .is_none_or(|action| !crate::app::changes_the_world(&action, false))
+    key.action.is_none_or(|action| {
+        !(app.replaying() && crate::app::changes_the_world(&action, false))
+            && !(app.full_screen() && crate::app::needs_the_map(&action))
+    })
 }
 
 /// Whether the palette can press `key` just now: it has an action, and
-/// a replay wouldn't refuse it.
+/// neither a replay nor the inspector filling the screen would refuse it.
 pub fn pressable(key: &Key, app: &App) -> bool {
     key.action.is_some() && key_works(key, app)
 }

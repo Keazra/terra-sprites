@@ -16,7 +16,7 @@ use terra_tui::app::{App, CursorMode, MAP_HIDDEN, Screen, Selection, Tab};
 use terra_tui::input::{Action, Button};
 use terra_tui::saves::{self, QUICKSAVE};
 use terra_tui::theme::Theme;
-use terra_tui::ui;
+use terra_tui::{controls, ui};
 
 /// A field of grass bigger than any map view here, with sprites at (5, 5)
 /// and (30, 8) and a ball at (7, 7).
@@ -363,10 +363,17 @@ fn i_fills_the_screen_with_the_open_tab_in_columns_and_i_or_esc_takes_it_back() 
 #[test]
 fn filling_the_screen_the_inspector_takes_its_own_keys_and_time_s_but_not_the_map_s() {
     let world = field_world();
-    let mut app = sized_app(&world, Theme::cp437(), Size::new(100, 30));
-    select(&mut app, &world, sprite_on(&world, at(5, 5)));
-    apply(&mut app, &world, Action::Inspector);
-    let (viewport, colours) = (app.viewport(), app.colour_mode());
+    let selected = sprite_on(&world, at(5, 5));
+    // Each key from a fresh status line, with the Cursor on the other
+    // sprite, which `Q`, `F` and `H` would reach.
+    let full_screen = || {
+        let mut app = sized_app(&world, Theme::cp437(), Size::new(100, 30));
+        select(&mut app, &world, selected);
+        point(&mut app, &world, at(30, 8));
+        apply(&mut app, &world, Action::Inspector);
+        app
+    };
+    let before = full_screen();
     for action in [
         Action::Mode(CursorMode::Grab),
         Action::Scroll { dx: 3, dy: 0 },
@@ -374,20 +381,75 @@ fn filling_the_screen_the_inspector_takes_its_own_keys_and_time_s_but_not_the_ma
         Action::Track,
         Action::CycleColours,
         Action::CycleEventFilter,
+        Action::Press {
+            button: Button::Left,
+            amplified: false,
+        },
+        Action::Follow { at: None },
+        Action::ToggleVisible,
     ] {
+        let mut app = full_screen();
+        assert_eq!(app.refusal(), None);
         apply(&mut app, &world, action);
         assert_eq!(app.refusal(), Some(MAP_HIDDEN), "{action:?} says why");
+        assert_eq!(app.mode(), CursorMode::Select, "{action:?}");
+        assert_eq!(app.viewport(), before.viewport(), "{action:?}");
+        assert_eq!(app.tile_width(), 1, "{action:?}");
+        assert!(!app.tracking(), "{action:?}");
+        assert_eq!(app.colour_mode(), before.colour_mode(), "{action:?}");
+        assert_eq!(app.event_filter(), before.event_filter(), "{action:?}");
+        assert_eq!(
+            app.selection(),
+            Some(Selection::Living(selected)),
+            "{action:?}"
+        );
+        assert_eq!(app.followed(), None, "{action:?}");
+        assert!(!app.visible(), "{action:?}");
+        assert!(app.full_screen(), "{action:?}");
     }
-    assert_eq!(app.mode(), CursorMode::Select);
-    assert_eq!(app.viewport(), viewport);
-    assert_eq!(app.tile_width(), 1);
-    assert!(!app.tracking());
-    assert_eq!(app.colour_mode(), colours);
+    let mut app = full_screen();
     apply(&mut app, &world, Action::NextTab);
     assert_eq!(app.tab(), Tab::Brain);
     apply(&mut app, &world, Action::TogglePause);
     assert!(app.clock.is_paused());
+    assert_eq!(app.refusal(), None);
     assert!(app.full_screen());
+}
+
+#[test]
+fn filling_the_screen_the_palette_mutes_the_map_s_keys() {
+    let world = field_world();
+    let mut app = sized_app(&world, Theme::cp437(), Size::new(100, 30));
+    let pressable = |app: &App, action: Action| {
+        app.palette_rows()
+            .iter()
+            .find(|row| row.key.action == Some(action))
+            .is_some_and(|row| controls::pressable(&row.key, app))
+    };
+    apply(&mut app, &world, Action::Palette);
+    assert!(pressable(&app, Action::Zoom), "beside the map");
+    apply(&mut app, &world, Action::Back);
+    apply(&mut app, &world, Action::Inspector);
+    apply(&mut app, &world, Action::Palette);
+    for action in [Action::Zoom, Action::Track, Action::CycleEventFilter] {
+        assert!(!pressable(&app, action), "{action:?}");
+    }
+    assert!(pressable(&app, Action::SpriteList), "the rest");
+}
+
+#[test]
+fn shrunk_to_no_room_the_inspector_no_longer_fills_the_screen() {
+    let world = field_world();
+    let size = Size::new(100, 30);
+    let mut app = sized_app(&world, Theme::cp437(), size);
+    apply(&mut app, &world, Action::Inspector);
+    assert!(app.full_screen());
+    app.fit(ui::areas(Size::new(40, 20)));
+    assert!(!app.full_screen(), "no room");
+    let screen = render_on(&app, &world, Size::new(40, 20));
+    assert!(shows_grass(&screen), "the map alone");
+    app.fit(ui::areas(size));
+    assert!(!app.full_screen(), "and grown again, the map");
 }
 
 #[test]

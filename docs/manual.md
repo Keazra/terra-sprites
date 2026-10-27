@@ -110,7 +110,7 @@ The same key in capitals or lower case does the same thing.
 | `g` | Save the selected sprite's genome to the genomes folder (the status line says where); the Place menu reads it back |
 | `[` / `]` | Previous / next inspector tab; or click a tab |
 | `PgUp` / `PgDn`, or the mouse wheel over the inspector | Scroll a long tab |
-| `i` | The inspector, bigger: on a window under 100 columns, where it's hidden, open it over the map's right side; otherwise the open tab fills the screen, in as many columns as fit, which suits the Brain and Genome tabs, and every key but the map's works as usual. Again, or `Esc`, to go back |
+| `i` | The inspector, bigger: on a window under 100 columns, where it's hidden, open it over the map's right side; otherwise the open tab fills the screen, in as many columns as fit, which suits the Brain and Genome tabs, and every key but the map's and the event log's works as usual (those say so on the status line). Again, `Esc`, or loading a world goes back |
 | `F5` / `F9` | Quicksave / quickload. Loading over a world that has run since it was last saved asks first (`y` to load), and a loaded world starts paused |
 | `Ctrl+S` / `Ctrl+O` | Save under a name you type / pick a save to load, newest first. The world also saves itself every 10 minutes of running time and when you quit, keeping the last 3 autosaves. See [saves](reference/saves.md) |
 | `Ctrl+T` | Pick a theme: how the map is drawn. It lists the two built-in themes, then your own from the `themes` folder of the game's folder; see [themes](reference/themes.md) |

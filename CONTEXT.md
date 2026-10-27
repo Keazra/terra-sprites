@@ -770,7 +770,7 @@ The two corners of the Cursor, top right and bottom left, that report on it: in 
 _Avoid_: indicators, lights, flash (on its own)
 
 **Inspector**:
-The side panel of tabs about the selected sprite (Body, Brain, Chem, Genome) or the world (World). With an egg selected, the sprite tabs show its card: when it hatches and its parents. On a screen under 100 columns it pops over the map view's right side while it's open. At any size, `i` fills the screen with it, its lines in columns (#305).
+The side panel of tabs about the selected sprite (Body, Brain, Chem, Genome) or the world (World). With an egg selected, the sprite tabs show its card: when it hatches and its parents. On a screen under 100 columns it pops over the map view's right side while it's open. Wherever there's room for it, `i` fills the screen with it, its lines in columns, once it's open (#305).
 _Avoid_: sidebar, details
 
 **Observed list**:

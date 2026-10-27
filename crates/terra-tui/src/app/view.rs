@@ -167,6 +167,9 @@ impl App {
     pub fn fit(&mut self, areas: Areas) {
         self.tile_area = areas.tiles;
         self.inspector = InspectorRoom::of(&areas, self.inspector);
+        // With no room for the inspector, it can't fill the screen either
+        // (design §6.1, #305).
+        self.full_screen &= self.inspector != InspectorRoom::Nowhere;
         self.event_log_area = areas.event_log;
         self.overlay = areas.overlay;
         self.settle();
