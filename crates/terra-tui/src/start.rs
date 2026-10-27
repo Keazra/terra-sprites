@@ -278,6 +278,7 @@ pub fn settings(
     data: &DataPack,
 ) -> Result<(Settings, Option<String>), String> {
     let mut said = Vec::new();
+    let unreadable = saved.is_err();
     let saved = saved.unwrap_or_else(|why| {
         said.push(format!("Couldn't read the settings: {why}"));
         SavedSettings::default()
@@ -327,6 +328,7 @@ pub fn settings(
         motion: !args.no_motion && saved.motion.unwrap_or(true),
         square_tiles: saved.square_tiles.unwrap_or(false),
         saved,
+        unreadable,
     };
     Ok((settings, (!said.is_empty()).then(|| said.join("; "))))
 }

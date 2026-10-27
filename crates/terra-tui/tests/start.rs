@@ -503,7 +503,14 @@ fn a_theme_the_flags_name_that_won_t_load_still_stops_the_game() {
 #[test]
 fn settings_that_can_t_be_read_start_the_game_on_the_defaults_saying_so() {
     let (settings, said) = started(&Args::default(), Err("expected `(`".into()), None);
-    assert_eq!(settings, Settings::default());
+    // The file is kept aside before the first save (design §6.7).
+    assert_eq!(
+        settings,
+        Settings {
+            unreadable: true,
+            ..Settings::default()
+        }
+    );
     assert_eq!(
         said.as_deref(),
         Some("Couldn't read the settings: expected `(`")

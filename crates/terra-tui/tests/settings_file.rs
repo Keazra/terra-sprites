@@ -10,8 +10,10 @@ use std::path::{Path, PathBuf};
 use ratatui::layout::Rect;
 use terra_sim::World;
 use terra_tui::app::App;
+use terra_tui::args::Args;
 use terra_tui::input::Action;
-use terra_tui::settings::{self, SavedSettings, Setting};
+use terra_tui::settings::{self, SavedSettings, Setting, Settings};
+use terra_tui::start;
 
 const ASCII_THEME: &str = include_str!("../../../themes/ascii.ron");
 
@@ -230,6 +232,57 @@ fn settings_that_can_t_be_saved_say_so_and_still_change() {
         app.look().palette(),
         &terra_tui::theme::Pick::BuiltIn(terra_tui::theme::ColourPalette::HighContrast)
     );
+}
+
+/// The settings the game starts with from the `settings.ron` at `path`, as
+/// `main.rs` reads it, with no flags.
+fn started_from(path: &Path, world: &World) -> Settings {
+    let saved = settings::read(path);
+    let folder = path.parent();
+    let (settings, _) =
+        start::settings(&Args::default(), saved, folder, None, world.data()).expect("started");
+    settings
+}
+
+#[test]
+fn settings_that_couldn_t_be_read_are_kept_aside_before_the_first_save() {
+    // Design §6.7: what the player wrote in it isn't lost to the next row
+    // changed.
+    let folder = scratch_folder("kept");
+    let path = folder.join(settings::FILE);
+    let broken = folder.join("settings.ron.broken");
+    std::fs::write(&path, "(colours: 7)").unwrap();
+    std::fs::write(&broken, "an older one").unwrap();
+    let world = world();
+    let (mut app, _) = saving_in(&world, &folder);
+    app.use_settings(started_from(&path, &world));
+    // Into another world before anything changes, as the game carries them.
+    let (mut next, _) = saving_in(&world, &folder);
+    next.use_settings(app.settings());
+    change(&mut next, &world, Setting::Colours);
+    assert_eq!(std::fs::read_to_string(&broken).unwrap(), "(colours: 7)");
+    assert_eq!(
+        saved(&path),
+        SavedSettings {
+            colours: Some("high contrast".into()),
+            ..SavedSettings::default()
+        }
+    );
+    assert_eq!(
+        next.notice(),
+        Some("The settings couldn't be read, so they were kept as settings.ron.broken")
+    );
+    // Once: the next change writes over the file just saved.
+    change(&mut next, &world, Setting::Motion);
+    assert_eq!(std::fs::read_to_string(&broken).unwrap(), "(colours: 7)");
+    assert_eq!(saved(&path).motion, Some(false));
+    assert_eq!(next.notice(), Some("Motion: off"));
+    // A file that was read is written over as ever.
+    let (mut again, _) = saving_in(&world, &folder);
+    again.use_settings(started_from(&path, &world));
+    change(&mut again, &world, Setting::SquareTiles);
+    assert_eq!(std::fs::read_to_string(&broken).unwrap(), "(colours: 7)");
+    assert_eq!(again.notice(), Some("Square tiles: on"));
 }
 
 #[test]

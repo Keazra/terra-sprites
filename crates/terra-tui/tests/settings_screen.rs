@@ -433,6 +433,7 @@ fn every_row_changed() -> Settings {
             motion: Some(true),
             square_tiles: Some(true),
         },
+        unreadable: false,
     }
 }
 

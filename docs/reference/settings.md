@@ -60,7 +60,7 @@ Each row starts as the first of these that gives it:
 
 When `settings.ron` is wrong, the game still starts:
 
-- **A file it can't read,** or one that isn't settings, is left as it is, and every row starts on its default. The title screen says "Couldn't read the settings: …", with what's wrong, or the status line does if a flag opened a world straight away. The next row you change writes a new file in its place, holding that row.
+- **A file it can't read,** or one that isn't settings, is left as it is, and every row starts on its default. The title screen says "Couldn't read the settings: …", with what's wrong, or the status line does if a flag opened a world straight away. So that what's in it isn't lost, the next row you change first moves it aside as `settings.ron.broken`, beside it, in place of any kept there before, and the status line says "The settings couldn't be read, so they were kept as settings.ron.broken". Then it writes a new file in its place, holding that row. To use what the old one held, mend `settings.ron.broken` while the game is closed and rename it `settings.ron`.
 - **A theme file it names that no longer loads,** or a name the game doesn't know, starts that row on its default, saying "Couldn't use theme night: …" or "Couldn't read the settings: there are no glyphs called …". The file keeps the name, so once the theme loads again, the row starts on it again, unless you've changed the row since.
 
 ## Carried over

@@ -301,6 +301,7 @@ impl App {
         fresh.look = self.look.clone();
         fresh.saved_settings = std::mem::take(&mut self.saved_settings);
         fresh.settings_file = self.settings_file.take();
+        fresh.settings_unreadable = self.settings_unreadable;
         // The Cursor as the world left it: where it was, what it has hold
         // of, in Grab mode, which holds and leads, and whether sprites can
         // see it.

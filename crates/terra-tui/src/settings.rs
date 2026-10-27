@@ -130,6 +130,10 @@ pub struct Settings {
     /// Whether tiles are drawn two cells wide (M2 design §11.7).
     pub square_tiles: bool,
     pub saved: SavedSettings,
+    /// Whether the `settings.ron` there is couldn't be read as the game
+    /// started, and nothing has been saved over it since: the first save
+    /// keeps it aside first, as `settings.ron.broken` (§6.7).
+    pub unreadable: bool,
 }
 
 impl Default for Settings {
@@ -141,6 +145,7 @@ impl Default for Settings {
             motion: true,
             square_tiles: false,
             saved: SavedSettings::default(),
+            unreadable: false,
         }
     }
 }
@@ -224,6 +229,22 @@ pub fn read(path: &Path) -> Result<SavedSettings, String> {
 /// one cut short never breaks the one there (design §6.7).
 pub fn write(path: &Path, saved: &SavedSettings) -> io::Result<()> {
     files::write_in_place(path, saved.to_ron().as_bytes())
+}
+
+/// What a `settings.ron` that couldn't be read is kept as, beside it
+/// (design §6.7).
+pub const BROKEN: &str = "settings.ron.broken";
+
+/// Keeps the `settings.ron` at `path`, which couldn't be read, aside as
+/// `settings.ron.broken` beside it, in place of any kept before, so the
+/// next save doesn't lose what it holds (design §6.7). Says whether there
+/// was one to keep: one gone since has nothing to keep.
+pub fn keep_unreadable(path: &Path) -> io::Result<bool> {
+    match std::fs::rename(path, path.with_file_name(BROKEN)) {
+        Ok(()) => Ok(true),
+        Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(false),
+        Err(err) => Err(err),
+    }
 }
 
 /// The name the game shows `pick` by (design §6.7): a built-in one's, or a

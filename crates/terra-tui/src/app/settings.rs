@@ -36,13 +36,34 @@ impl App {
     }
 
     /// Saves what the player has changed of the settings, if there's a file
-    /// to save them in, saying so if they can't be (design §6.7, #307).
+    /// to save them in, saying so if they can't be (design §6.7, #307). A
+    /// file that couldn't be read as the game started is kept aside first,
+    /// as `settings.ron.broken`, saying so once, rather than written over.
     pub(super) fn save_settings(&mut self) {
-        let Some(path) = &self.settings_file else {
+        let Some(path) = self.settings_file.clone() else {
             return;
         };
-        if let Err(err) = settings::write(path, &self.saved_settings) {
+        let mut kept = false;
+        if self.settings_unreadable {
+            match settings::keep_unreadable(&path) {
+                Ok(was_there) => kept = was_there,
+                Err(err) => {
+                    let broken = settings::BROKEN;
+                    self.refuse(format!(
+                        "Couldn't save the settings: couldn't keep the old ones as {broken}: {err}"
+                    ));
+                    return;
+                }
+            }
+            self.settings_unreadable = false;
+        }
+        if let Err(err) = settings::write(&path, &self.saved_settings) {
             self.refuse(format!("Couldn't save the settings: {err}"));
+        } else if kept {
+            let broken = settings::BROKEN;
+            self.tell_player(format!(
+                "The settings couldn't be read, so they were kept as {broken}"
+            ));
         }
     }
 
@@ -54,6 +75,7 @@ impl App {
             motion: self.motion(),
             square_tiles: self.zoom,
             saved: self.saved_settings.clone(),
+            unreadable: self.settings_unreadable,
         }
     }
 
@@ -66,6 +88,7 @@ impl App {
         self.set_motion(settings.motion);
         self.set_square_tiles(settings.square_tiles);
         self.saved_settings = settings.saved;
+        self.settings_unreadable = settings.unreadable;
     }
 
     /// The glyph set and the palette the player has picked (design §6.2,

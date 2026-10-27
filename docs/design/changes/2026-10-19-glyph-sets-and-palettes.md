@@ -10,7 +10,7 @@ A theme's characters and its colours are chosen apart, three palettes join the d
 | 2 | **Three new palettes:** high contrast, colour-blind (Okabe and Ito's colours, never red against green) and mono (bold and reverse video only), beside the default. Shades go with the palette, so ASCII glyphs in the default palette sit on shades, and high contrast and mono draw lines. | #307 | §6.1, §6.2 |
 | 3 | **`NO_COLOR` starts the game in mono,** unless the player has picked a palette. | #307 | §6.2 |
 | 4 | **`Ctrl+T` opens the settings screen,** where the Themes menu was: glyphs, colours, motion and square tiles, a row each. Look 8 adds the bell and focus. | #307 | §6.1, §6.5, §6.7 |
-| 5 | **The settings are saved in `settings.ron`** in the game's folder, never in a world save, only what the player changed, read at start. Flags last only for their run and win over it. A broken file, or a theme it names that won't load, falls back to the defaults and says so. | #307 | §6.7 |
+| 5 | **The settings are saved in `settings.ron`** in the game's folder, never in a world save, only what the player changed, read at start. Flags last only for their run and win over it. A broken file, or a theme it names that won't load, falls back to the defaults and says so; a broken file is kept aside as `settings.ron.broken` before the first save, rather than written over. | #307 | §6.7 |
 | 6 | **The look carries back to the title screen and into the next world,** as well as over a load. | #307 | §6.7 |
 | 7 | **`--ascii` picks only the glyphs,** so it can go with `--theme`. | #307 | §6.2, §6.7 |
 

@@ -541,6 +541,9 @@ pub struct App {
     saved_settings: SavedSettings,
     /// Where the settings are saved, if anywhere.
     settings_file: Option<PathBuf>,
+    /// Whether the settings file couldn't be read as the game started, and
+    /// nothing has been saved over it since (design §6.7).
+    settings_unreadable: bool,
     /// While naming: the sprite, the name so far, and whether the player
     /// has typed it, rather than it being an offered random one.
     naming: Option<Naming>,
@@ -824,6 +827,7 @@ impl App {
             theme_files: Vec::new(),
             saved_settings: SavedSettings::default(),
             settings_file: None,
+            settings_unreadable: false,
             naming: None,
             names_offered: 0,
             notice: None,
