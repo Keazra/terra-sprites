@@ -37,6 +37,10 @@
 //! - **It thins out at 4× and up** ([`thins_out`]): fewer deaths and
 //!   hatchings at once, and shorter, as the trail is, the bars and the
 //!   view jump, and the bars' waves don't play.
+//! - **A hatching's shell** is characters, the glyph set's ([`ShellLook`]):
+//!   the egg cracked, and then its pieces on the tiles round it that show
+//!   bare ground. Being characters, it plays in a palette with no colour
+//!   too, where the rest of motion's colours on the map don't.
 //! - **Colours** are the theme's `motion` section's, but for a bar's waves,
 //!   which glow from its drive's colour towards white. A fade blends exact
 //!   colours, so a named one is blended as Campbell draws it
@@ -46,9 +50,10 @@
 //!   green. On the panels, what an effect leaves as it was keeps its own
 //!   colour, named or the terminal's, so tachyonfx never sees the
 //!   terminal's own colour, which it would take for white or black.
-//! - **The same on every computer:** only colour effects that depend on
-//!   nothing but their age, eased by polynomials (`QuadOut`) and blended in
-//!   RGB, and no `sin`, `cos`, `powf` or `exp`.
+//! - **The same on every computer:** only effects that depend on nothing
+//!   but their age, eased by polynomials (`QuadOut`) or evenly, as the
+//!   shell's pieces fade, and blended in RGB, and no `sin`, `cos`, `powf` or
+//!   `exp`.
 
 use std::collections::{BTreeMap, VecDeque};
 use std::time::Duration;
@@ -67,13 +72,29 @@ use crate::policy::{Panel, Subject};
 use crate::space::{Pattern, Place};
 use crate::spots::Spots;
 use crate::text;
-use crate::theme::{BarWaves, MotionLook};
+use crate::theme::{BarWaves, MotionLook, ShellLook};
 use crate::ui;
 
 /// How long a death plays, and a hatching (design §6.9): half as long at
 /// 4× and up.
 const DEATH: Duration = Duration::from_millis(1200);
 const HATCHING: Duration = Duration::from_millis(1000);
+
+/// How long a hatching shows the egg cracked before the young appears, at
+/// 1× (design §6.9): half as long at 4× and up, as the hatching is.
+const CRACK: Duration = Duration::from_millis(150);
+
+/// When a hatching's shell's halves slide a tile further out, from when
+/// the egg stops showing cracked, at 1× (design §6.9).
+const HALVES_SLIDE: Duration = Duration::from_millis(210);
+
+/// When a hatching's shell's halves start to fade from the egg's colour to
+/// their tile's own, and when they've faded and go, from when the egg
+/// stops showing cracked, at 1× (design §6.9). They fade evenly between.
+const HALVES_FADE: (Duration, Duration) = (Duration::from_millis(110), Duration::from_millis(700));
+
+/// And its crumbs' (design §6.9).
+const CRUMBS_FADE: (Duration, Duration) = (Duration::from_millis(60), Duration::from_millis(600));
 
 /// How many ticks before it hatches an egg on the map starts to flash
 /// (design §6.9): from 100 ticks left down to the last.
@@ -158,10 +179,10 @@ const PAN: Duration = Duration::from_millis(300);
 const PAN_PAST: i32 = 2;
 
 /// Whether motion's colours play over the screen (design §6.9): while
-/// motion is on, in a palette with colour. Mono has none, so its deaths,
-/// hatchings, flashing eggs, trail, tab sweeps and pop-up fades don't
-/// play, though the pan and the bars, which move no colour, still do (§6.2,
-/// #307).
+/// motion is on, in a palette with colour. Mono has none, so its deaths, a
+/// hatching's warming and sparks, flashing eggs, trail, tab sweeps and
+/// pop-up fades don't play, though the pan, the bars and a hatching's
+/// shell, which are no colour, still do (§6.2, #307).
 pub(crate) fn colours_play(app: &App) -> bool {
     app.motion() && app.theme.has_colour()
 }
@@ -1290,7 +1311,9 @@ pub(crate) fn bar_waves(
 /// before the marks go over them (design §6.9): the trail, each egg about
 /// to hatch flashing among the items `lying` there, and then each death
 /// and hatching, oldest first. `bare` are the screen cells it drew bare
-/// ground in, with no sprite, object or mark, where a death's ghost shows.
+/// ground in, with no sprite, object or mark, where a death's ghost and a
+/// hatching's shell show. In a palette with no colour only the hatching's
+/// cracked egg and shell play, which are characters (§6.2).
 pub(crate) fn play_on_map(
     buf: &mut Buffer,
     inner: Rect,
@@ -1298,7 +1321,7 @@ pub(crate) fn play_on_map(
     world: &World,
     (bare, lying): (&[Position], &[Lying]),
 ) {
-    if !colours_play(app) {
+    if !app.motion() {
         return;
     }
     let on = OnMap {
@@ -1307,10 +1330,13 @@ pub(crate) fn play_on_map(
         world,
         look: app.theme.motion(),
         bare,
+        colours: colours_play(app),
     };
     let now = app.running_for();
-    trail(buf, &on, now);
-    flash(buf, &on, lying, now);
+    if on.colours {
+        trail(buf, &on, now);
+        flash(buf, &on, lying, now);
+    }
     let drawn = |id, tile| could_draw(app, id, tile);
     for moment in app.motion_kept().playing(now, app.clock.speed(), drawn) {
         let age = age(moment.began, now);
@@ -1320,7 +1346,8 @@ pub(crate) fn play_on_map(
                 symbol,
                 colour,
                 ..
-            } => death(buf, &on, tile, (symbol, colour), age, moment.lasts),
+            } if on.colours => death(buf, &on, tile, (symbol, colour), age, moment.lasts),
+            Happening::Death { .. } => {}
             Happening::Hatching {
                 id,
                 tile,
@@ -1446,13 +1473,14 @@ fn play_over(
 
 /// The map view that motion plays over: where its tiles are drawn,
 /// `inner`, the app and world drawn there, the theme's colours for motion,
-/// and the cells that show bare ground.
+/// the cells that show bare ground, and whether motion's colours play.
 struct OnMap<'a> {
     inner: Rect,
     app: &'a App,
     world: &'a World,
     look: MotionLook,
     bare: &'a [Position],
+    colours: bool,
 }
 
 impl OnMap<'_> {
@@ -1475,6 +1503,16 @@ impl OnMap<'_> {
     fn shows_bare(&self, cell: Position) -> bool {
         self.bare.contains(&cell)
     }
+
+    /// The tiles with looks of their own, which the trail and a hatching's
+    /// shell leave as they are (design §6.9): the Cursor's and the attended
+    /// one.
+    fn own_looks(&self) -> [Option<Pos>; 2] {
+        [
+            self.app.shown_cursor(),
+            ui::attended_by(self.app, self.world),
+        ]
+    }
 }
 
 /// Tints the tiles the selected sprite has just left, each fading back to
@@ -1489,7 +1527,7 @@ fn trail(buf: &mut Buffer, on: &OnMap, now: Duration) {
     if ui::marked(on.app) != Some(trail.sprite) {
         return;
     }
-    let own_looks = [on.app.shown_cursor(), ui::attended_by(on.app, on.world)];
+    let own_looks = on.own_looks();
     let dark = campbell::rgb(on.look.dark).unwrap_or(campbell::BACKGROUND);
     let tint = campbell::exact(on.look.trail, dark);
     for left in &trail.left {
@@ -1577,41 +1615,119 @@ fn death(
 
 /// The sprite a hatching hatched, the colour its egg was drawn in, and
 /// whether it was flashing.
+#[derive(Clone, Copy)]
 struct Young {
     id: EntityId,
     egg: Color,
     flashed: bool,
 }
 
+/// `full`, how long a part of a hatching takes at 1×, in one that `lasts`:
+/// half as long at 4× and up, as the hatching is (design §6.9).
+fn paced(full: Duration, lasts: Duration) -> Duration {
+    let ms = |duration: Duration| u32::try_from(duration.as_millis()).unwrap_or(u32::MAX);
+    full * ms(lasts) / ms(HATCHING)
+}
+
 /// Plays a hatching from the egg on `tile`, `age` into `moment` (design
-/// §6.9): the young starts in the egg's colour and warms to its own over
-/// the first half, the last flash of an egg that was flashing fading from
-/// its tile as it does, and the tiles round the egg spark at scattered
-/// moments and fade back. On the young's own tile its warming plays rather
-/// than a spark.
+/// §6.9): for a moment the egg shows cracked where the young is drawn, and
+/// then the young appears and the shell splits round the egg's tile. Where
+/// motion's colours play, the young warms from the egg's colour as the
+/// last flash of an egg that was flashing fades, and the tiles round the
+/// egg spark at scattered moments and fade back.
 fn hatching(buf: &mut Buffer, on: &OnMap, tile: Pos, young: Young, moment: &Moment, age: Duration) {
     let lasts = moment.lasts;
-    let warming = lasts / 2;
+    let crack = paced(CRACK, lasts);
     let sprite = on.world.sprite(young.id);
     let drawn = sprite
         .as_ref()
         .map_or(Vec::new(), |sprite| on.cells(sprite.pos()));
     let emoting = sprite.is_some_and(|sprite| ui::is_emote(on.app, &sprite));
+    let egg = campbell::exact(young.egg, own_text(on.app));
+    match age.checked_sub(crack) {
+        None => cracked(buf, on, &drawn, (egg, young.flashed), (age, crack)),
+        Some(since) => {
+            if on.colours {
+                let warming = lasts / 2;
+                warms(buf, on, &drawn, (young, emoting), (since, warming));
+            }
+            shell(buf, on, tile, egg, (since, lasts));
+        }
+    }
+    if on.colours {
+        sparks(buf, on, tile, &drawn, moment, age);
+    }
+}
+
+/// Draws the egg cracked on the screen cells `drawn` where the young is,
+/// `age` into a crack that lasts `crack` (design §6.9): in its tile's first
+/// cell, as the young's glyph is, in the egg's colour, `egg`. Where
+/// motion's colours play, an egg that `flashed` glows where its last flash
+/// left it, seven tenths of the way to the sparks' colour.
+fn cracked(
+    buf: &mut Buffer,
+    on: &OnMap,
+    drawn: &[Position],
+    (egg, flashed): (Color, bool),
+    (age, crack): (Duration, Duration),
+) {
+    let symbol = on.app.theme.shell().cracked;
+    for (n, &cell) in drawn.iter().enumerate() {
+        if n == 0 {
+            buf[cell].set_char(symbol).set_fg(egg);
+        }
+        if flashed && on.colours {
+            let bg = glow(buf, on, cell, FLASH_BRIGHTEST);
+            play(fx::paint_bg(bg, timer(crack)), age, buf, cell);
+        }
+    }
+}
+
+/// Plays the young warming on the screen cells `drawn`, `since` it
+/// appeared, over `warming` (design §6.9): from the egg's colour to its
+/// own, but while it's `emoting`, whose emote keeps its colours, and the
+/// last flash of an egg that was flashing fading from its tile.
+fn warms(
+    buf: &mut Buffer,
+    on: &OnMap,
+    drawn: &[Position],
+    (young, emoting): (Young, bool),
+    (since, warming): (Duration, Duration),
+) {
+    if since >= warming {
+        return;
+    }
     let text = own_text(on.app);
-    if age < warming && !emoting {
+    if !emoting {
         let egg = campbell::exact(young.egg, text);
-        for &cell in &drawn {
+        for &cell in drawn {
             exact_fg(buf, cell, text);
-            play(fx::fade_from_fg(egg, timer(warming)), age, buf, cell);
+            play(fx::fade_from_fg(egg, timer(warming)), since, buf, cell);
         }
     }
-    if age < warming && young.flashed {
-        for &cell in &drawn {
-            let way = FLASH_BRIGHTEST * (1.0 - eased(age, warming));
+    if young.flashed {
+        for &cell in drawn {
+            let way = FLASH_BRIGHTEST * (1.0 - eased(since, warming));
             let bg = glow(buf, on, cell, way);
-            play(fx::paint_bg(bg, timer(warming)), age, buf, cell);
+            play(fx::paint_bg(bg, timer(warming)), since, buf, cell);
         }
     }
+}
+
+/// Plays a hatching's sparks, `age` into `moment` (design §6.9): the egg's
+/// tile, `tile`, and the eight round it light up at scattered moments and
+/// fade back, but the screen cells `drawn` where the young is, which warm
+/// instead.
+fn sparks(
+    buf: &mut Buffer,
+    on: &OnMap,
+    tile: Pos,
+    drawn: &[Position],
+    moment: &Moment,
+    age: Duration,
+) {
+    let lasts = moment.lasts;
+    let text = own_text(on.app);
     let spark = campbell::exact(on.look.spark, text);
     let sparks_for = lasts * 2 / 5;
     let map = on.world.map();
@@ -1631,6 +1747,115 @@ fn hatching(buf: &mut Buffer, on: &OnMap, tile: Pos, young: Young, moment: &Mome
                     play(fx::fade_from_fg(spark, timer(sparks_for)), into, buf, cell);
                 }
             }
+        }
+    }
+}
+
+/// A piece of a hatching's shell: where it lies from the egg's tile,
+/// across and down, its character, and how far it has faded from the egg's
+/// colour to its tile's own, from 0 to 1.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Piece {
+    dx: i32,
+    dy: i32,
+    symbol: char,
+    faded: f32,
+}
+
+/// The pieces of a hatching's shell drawn in `look`, `since` the egg
+/// stopped showing cracked, in a hatching that `lasts` (design §6.9): its
+/// halves either side of the egg's tile, a tile further out once they've
+/// slid, and its crumbs on the tiles at its corners, each until it has
+/// faded.
+fn pieces(look: ShellLook, since: Duration, lasts: Duration) -> Vec<Piece> {
+    let mut pieces = Vec::new();
+    if let Some(faded) = fading(since, HALVES_FADE, lasts) {
+        let out = if since < paced(HALVES_SLIDE, lasts) {
+            1
+        } else {
+            2
+        };
+        pieces.push(Piece {
+            dx: -out,
+            dy: 0,
+            symbol: look.left_half,
+            faded,
+        });
+        pieces.push(Piece {
+            dx: out,
+            dy: 0,
+            symbol: look.right_half,
+            faded,
+        });
+    }
+    if let Some(faded) = fading(since, CRUMBS_FADE, lasts) {
+        let crumbs = [
+            (-1, -1, look.up_left),
+            (1, -1, look.up_right),
+            (-1, 1, look.down_left),
+            (1, 1, look.down_right),
+        ];
+        for (dx, dy, symbol) in crumbs {
+            pieces.push(Piece {
+                dx,
+                dy,
+                symbol,
+                faded,
+            });
+        }
+    }
+    pieces
+}
+
+/// How far a piece of a hatching's shell that fades `from` one time `to`
+/// another at 1× has faded `since` the egg stopped showing cracked, in a
+/// hatching that `lasts`, from 0 to 1, evenly between: none once it has,
+/// and it's gone (design §6.9).
+fn fading(since: Duration, (from, to): (Duration, Duration), lasts: Duration) -> Option<f32> {
+    let (from, to) = (paced(from, lasts), paced(to, lasts));
+    let into = since.saturating_sub(from).as_micros() as f32;
+    (since < to).then(|| into / (to - from).as_micros() as f32)
+}
+
+/// Plays a hatching's shell from the egg on `tile`, `since` the egg
+/// stopped showing cracked, in a hatching that `lasts` (design §6.9): each
+/// piece in its tile's first cell, as a mark is, the rest of a tile two
+/// cells wide blank, fading from the egg's colour, `egg`, to the one its
+/// tile's own glyph has. Only on tiles that show bare ground, and not the
+/// Cursor's or the attended one, which have looks of their own: a piece
+/// over anything else is left out.
+fn shell(
+    buf: &mut Buffer,
+    on: &OnMap,
+    tile: Pos,
+    egg: Color,
+    (since, lasts): (Duration, Duration),
+) {
+    let own_looks = on.own_looks();
+    let text = own_text(on.app);
+    let map = on.world.map();
+    for piece in pieces(on.app.theme.shell(), since, lasts) {
+        let x = u16::try_from(i32::from(tile.x) + piece.dx).ok();
+        let y = u16::try_from(i32::from(tile.y) + piece.dy).ok();
+        let Some(at) = x.zip(y).map(|(x, y)| Pos { x, y }) else {
+            continue;
+        };
+        if at.x >= map.width() || at.y >= map.height() || own_looks.contains(&Some(at)) {
+            continue;
+        }
+        let cells = on.cells(at);
+        if cells.is_empty() || !cells.iter().all(|&cell| on.shows_bare(cell)) {
+            continue;
+        }
+        for (n, cell) in cells.into_iter().enumerate() {
+            if n > 0 {
+                buf[cell].set_char(' ');
+                continue;
+            }
+            let own = campbell::exact(buf[cell].fg, text);
+            buf[cell]
+                .set_char(piece.symbol)
+                .set_fg(mix(egg, own, piece.faded));
         }
     }
 }
@@ -1726,6 +1951,69 @@ mod tests {
         // One .004 left of the last hundred: .01984 a tick.
         assert!(about(rising(waves.pace_of(0.02)), amp(0.02 / 0.01984)));
         assert!(about(rising(waves.pace_of(0.02)), 0.25), "all .02 now");
+    }
+
+    #[test]
+    fn a_hatching_s_shell_slides_and_fades_as_fauxpaw_picked_it() {
+        // Design §6.9, from the mock-up Fauxpaw picked: from when the egg
+        // stops showing cracked, its halves lie a tile either side, slide
+        // a tile further out at 210 ms, hold the egg's colour to 110 ms
+        // and fade evenly to their tile's by 700 ms, when they go; its
+        // crumbs hold to 60 ms and fade by 600 ms. All in half the time at
+        // 4× and up, as the hatching is.
+        let look = crate::theme::Theme::cp437().shell();
+        let shell = |since: Duration, lasts| {
+            pieces(look, since, lasts)
+                .into_iter()
+                .map(|piece| (piece.dx, piece.dy, piece.symbol, piece.faded))
+                .collect::<Vec<_>>()
+        };
+        let halves = |out: i32, faded: f32| [(-out, 0, '(', faded), (out, 0, ')', faded)];
+        let crumbs = |faded: f32| {
+            [
+                (-1, -1, '`', faded),
+                (1, -1, '\'', faded),
+                (-1, 1, ',', faded),
+                (1, 1, '.', faded),
+            ]
+        };
+        let both = |(out, halves_faded): (i32, f32), crumbs_faded: f32| {
+            let mut all = halves(out, halves_faded).to_vec();
+            all.extend(crumbs(crumbs_faded));
+            all
+        };
+        let same = |got: Vec<(i32, i32, char, f32)>, expected: Vec<(i32, i32, char, f32)>| {
+            got.len() == expected.len()
+                && got
+                    .iter()
+                    .zip(&expected)
+                    .all(|(a, b)| (a.0, a.1, a.2) == (b.0, b.1, b.2) && (a.3 - b.3).abs() < 1e-4)
+        };
+        let ms = Duration::from_millis;
+        for (lasts, halved) in [(HATCHING, 1), (HATCHING / 2, 2)] {
+            let at = |n: u64| Duration::from_micros(n * 1000 / halved);
+            let cases = [
+                (at(0), both((1, 0.0), 0.0)),
+                (at(60), both((1, 0.0), 0.0)),
+                (at(110), both((1, 0.0), 50.0 / 540.0)),
+                (at(209), both((1, 99.0 / 590.0), 149.0 / 540.0)),
+                (at(210), both((2, 100.0 / 590.0), 0.277_777_8)),
+                (at(330), both((2, 220.0 / 590.0), 0.5)),
+                (at(405), both((2, 0.5), 345.0 / 540.0)),
+                (at(599), both((2, 489.0 / 590.0), 539.0 / 540.0)),
+                (at(600), halves(2, 490.0 / 590.0).to_vec()),
+                (at(699), halves(2, 589.0 / 590.0).to_vec()),
+                (at(700), Vec::new()),
+                (ms(5000), Vec::new()),
+            ];
+            for (since, expected) in cases {
+                let got = shell(since, lasts);
+                assert!(
+                    same(got.clone(), expected.clone()),
+                    "{since:?} into {lasts:?}: {got:?}, not {expected:?}"
+                );
+            }
+        }
     }
 
     #[test]

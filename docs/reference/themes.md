@@ -1,6 +1,6 @@
 # Themes
 
-A **theme** says how the map is drawn: the character and colour of each kind of ground, each plant and toy, sprites, their emotes, the Cursor, the glass round the map and the stars in space past it (design §6.2, M2 design §11), the colours and blocks of the population graph (M2 design §14), and the lineage colours (§17). It also colours the screen's text by its job, shades the panels beside and under the map, or leaves them to lines (design §6.1, §6.2), and gives motion its colours and the look of a drive's bar's waves (design §6.9). A theme is two parts, chosen apart: a **glyph set**, its characters, and a **palette**, the rest (below). The game's own are theme files in [`themes/`](../../themes), [`cp437.ron`](../../themes/cp437.ron) the default. To draw it your own way, copy one, edit it, and put it in the `themes` folder of the game's folder (design §6.7). The help screen (`?`) shows where the game's folder is:
+A **theme** says how the map is drawn: the character and colour of each kind of ground, each plant and toy, sprites, their emotes, the Cursor, the glass round the map and the stars in space past it (design §6.2, M2 design §11), the colours and blocks of the population graph (M2 design §14), and the lineage colours (§17). It also colours the screen's text by its job, shades the panels beside and under the map, or leaves them to lines (design §6.1, §6.2), and gives motion its colours, the look of a drive's bar's waves and the characters of a hatching's shell (design §6.9). A theme is two parts, chosen apart: a **glyph set**, its characters, and a **palette**, the rest (below). The game's own are theme files in [`themes/`](../../themes), [`cp437.ron`](../../themes/cp437.ron) the default. To draw it your own way, copy one, edit it, and put it in the `themes` folder of the game's folder (design §6.7). The help screen (`?`) shows where the game's folder is:
 
 | System | The themes folder |
 |---|---|
@@ -24,7 +24,7 @@ A theme is two parts, chosen apart (design §6.2): a **glyph set**, every charac
 
 | Part | What it gives |
 |---|---|
-| Glyph set | Each `glyph:` character in `tiles`, `objects` and `cursor`; the Cursor's `arrows`, `followed_arrows`, `visible_frame` and `status_marks`; `space`'s glass and stars; and `population`'s `full`, `half` and `bands` characters and its `limit`'s. |
+| Glyph set | Each `glyph:` character in `tiles`, `objects` and `cursor`; the Cursor's `arrows`, `followed_arrows`, `visible_frame` and `status_marks`; `space`'s glass and stars; `population`'s `full`, `half` and `bands` characters and its `limit`'s; and `shell`. |
 | Palette | Every glyph's `fg`, `bold` and `reversed`; `drives`; `attention_marker`; `population`'s `stages` and its `limit`'s colour; `lineage`; `text`; `panels`; `motion`; `colour`; `foreground`; and `colour_modes`. |
 
 Every theme file is whole, and picked as both, on both of the settings screen's rows or with `--theme`, it draws as written. Taken as a glyph set, only its characters are used; taken as a palette, everything but them. An object type or state that one part leaves out falls back in that part, as under [`objects`](#objects) below. The game has these built in:
@@ -51,7 +51,7 @@ Each palette's file draws the CP437 glyphs, so it loads as a whole theme too: `-
 
 ## Fields
 
-A theme is one record with fourteen fields. The first five are needed; `colour`, `foreground`, `colour_modes`, `space`, `population`, `lineage`, `text`, `panels` and `motion` may be left out.
+A theme is one record with fifteen fields. The first five are needed; `colour`, `foreground`, `colour_modes`, `space`, `population`, `lineage`, `text`, `panels`, `motion` and `shell` may be left out.
 
 | Field | Meaning |
 |---|---|
@@ -66,6 +66,7 @@ A theme is one record with fourteen fields. The first five are needed; `colour`,
 | `text` | The screen's text, styled by its job (below). Optional, as `space` is. |
 | `panels` | The shades the inspector and the event log sit on (below). Optional: a theme without them draws lines between the panels instead. |
 | `motion` | Motion's colours, and how a drive's bar shows its drive's pace (below). Optional, as `space` is. |
+| `shell` | The characters of a hatching's shell, which cracks and splits while motion is on (below). Optional, as `space` is. |
 | `colour` | `false` for a palette with no colour at all, as mono's (below). Optional: `true` if it's left out. |
 | `foreground` | A colour: what the game leaves in the terminal's own text colour is drawn in it, and every grey on the screen in its shades, as Game Kid's are (below). Optional: a theme without it leaves them to the terminal. |
 | `colour_modes` | `false` for a palette whose colours can't tell the drives or the lineage apart, as Game Kid's can't (below). Optional: `true` if it's left out. |
@@ -178,9 +179,21 @@ Motion is the small effects drawn over the screen as things happen, such as a de
 - **`crashing`**, crashing waves: while the drive rises, a crest runs up the filled part to the bar's end, breaks there, the end block flaring, and its spray runs on into one to three empty blocks past the level and dies away, changing their colour but not their `░`, so the level never looks higher than it is. The faster the rise against its usual rise, the taller the crest, the more often it comes, the brighter the flare and the further the spray.
 - **`ripple`**, a running ripple: while the drive rises, a crest runs up the filled part and off the bar's end, taller and more often the faster, with no flare or spray. No built-in palette chooses it, and the settings screen doesn't offer it, so it's chosen only by a theme file of your own.
 
+### `shell`
+
+While motion is on, an egg that hatches shows cracked for a moment where its young will be, and then splits: its two halves lie either side of the young and slide a tile further out, and four crumbs lie on the tiles at its corners, each fading from the egg's colour to its tile's own (design §6.9). `shell` is a record of the seven characters it's drawn with, each of which may be left out and is then drawn as the default theme draws it. A field the game doesn't know is refused, naming it. They're the glyph set's characters, and must be in CP437 as the rest are; their colours are the egg's and the ground's.
+
+| Field | Meaning | Default theme | ASCII theme |
+|---|---|---|---|
+| `cracked` | The egg cracked, on the young's tile before it appears. | `'Θ'` | `'Q'` |
+| `left_half`, `right_half` | The shell's halves, left and right of the young. | `'('` `')'` | the same |
+| `up_left`, `up_right`, `down_left`, `down_right` | The crumbs on the tiles at the young's four corners. | `` '`' `` `'\''` `','` `'.'` | the same |
+
+ASCII has no `Θ`, an egg cracked across, and its egg is `0` and a sprite `@`, so it draws the egg cracked as `Q`, a ring with a break in it. A piece lies only on a tile that shows bare ground, never over a sprite, an object, a mark, the Cursor or the tile the selected sprite attends to, which keep their looks. In a palette with [`colour: false`](#colour), the shell still cracks and splits, in the terminal's own colours.
+
 ### `colour`
 
-`colour: false` draws the whole screen in the terminal's own colours, with nothing but bold and reverse video, as the mono palette does: every colour the theme names, and every one the game draws itself, such as the title screen's greys, gives way to the terminal's. The theme still names its colours, since the fields above need them, but they're never seen: mono's are all `white`. The tile the selected sprite attends to, which `attention_marker` would give a background, is underlined instead, which no glyph is, so it never reads as a fruiting bush's bold; and motion's colours don't play, a drive's bar's waves among them, though the view still pans and a drive's bar still eases (design §6.9).
+`colour: false` draws the whole screen in the terminal's own colours, with nothing but bold and reverse video, as the mono palette does: every colour the theme names, and every one the game draws itself, such as the title screen's greys, gives way to the terminal's. The theme still names its colours, since the fields above need them, but they're never seen: mono's are all `white`. The tile the selected sprite attends to, which `attention_marker` would give a background, is underlined instead, which no glyph is, so it never reads as a fruiting bush's bold; and motion's colours don't play, a drive's bar's waves among them, though the view still pans, a drive's bar still eases and a hatching's [shell](#shell) still cracks and splits (design §6.9).
 
 ### `foreground`
 

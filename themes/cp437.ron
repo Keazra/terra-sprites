@@ -184,4 +184,20 @@
         // runs a plain ripple up it instead.
         bar: crashing,
     ),
+    // A hatching's shell, while motion is on (design §6.9): the egg cracked
+    // across, on the young's tile for a moment before it appears; then the
+    // egg's two halves, either side of the young, and four crumbs, on the
+    // tiles at its corners, fading from the egg's colour to their tile's
+    // own. Characters only: their colours are the egg's and the tile's.
+    // What a theme leaves out of this section, it draws as the default
+    // theme does.
+    shell: (
+        cracked: 'Θ',
+        left_half: '(',
+        right_half: ')',
+        up_left: '`',
+        up_right: '\'',
+        down_left: ',',
+        down_right: '.',
+    ),
 )

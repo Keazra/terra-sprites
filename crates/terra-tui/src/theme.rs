@@ -1,6 +1,7 @@
 //! Themes map semantic tiles to glyphs and colours, and each text role to a
 //! style, may give the panels their shades (design §6.2), and give motion
-//! its colours and say how a drive's bar shows its drive's pace (§6.9).
+//! its colours, say how a drive's bar shows its drive's pace and give the
+//! characters of a hatching's shell (§6.9).
 //! They are UI assets and never affect the simulation.
 //! A theme is a glyph set, its characters, and a palette, the rest, chosen
 //! apart (#307). Two glyph sets and five palettes are embedded in the
@@ -276,6 +277,29 @@ pub struct MotionLook {
     pub bar: BarWaves,
 }
 
+/// The pieces of an egg's shell as it hatches, while motion is on (design
+/// §6.9): the egg cracked, on the young's tile for a moment, then its two
+/// halves either side of the young and four crumbs on the tiles at its
+/// corners. Characters only, from the glyph set: they're drawn in the egg's
+/// colour, fading to their tile's own.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ShellLook {
+    /// The egg cracked across, before the young appears.
+    pub cracked: char,
+    /// The half left of the young.
+    pub left_half: char,
+    /// The half right of it.
+    pub right_half: char,
+    /// The crumb up and left of it.
+    pub up_left: char,
+    /// The crumb up and right of it.
+    pub up_right: char,
+    /// The crumb down and left of it.
+    pub down_left: char,
+    /// The crumb down and right of it.
+    pub down_right: char,
+}
+
 /// How a drive's bar shows how fast its drive moves, while motion is on
 /// (design §6.9): waves that come taller, more often and further the
 /// faster it rises against its usual rise, and a quiet dip while it falls.
@@ -527,6 +551,8 @@ pub struct Theme {
     panels: Option<PanelLook>,
     /// Motion's colours, and the bars' waves (design §6.9).
     motion: MotionLook,
+    /// A hatching's shell, its glyph set's (design §6.9).
+    shell: ShellLook,
     /// Whether its palette has colour at all: mono's has none (design
     /// §6.2, #307).
     colour: bool,
@@ -556,10 +582,10 @@ impl Theme {
     }
 
     /// `glyphs`' glyph set in `palette`'s palette (design §6.2, #307): every
-    /// character `glyphs` draws, each in the colour, bold and reverse video
-    /// `palette` gives what it stands for, and `palette`'s drives, lineage,
-    /// graph colours, text roles, attention marker, panel shades and
-    /// motion's section. An object one of them has no glyph for falls back
+    /// character `glyphs` draws, a hatching's shell's too (§6.9), each in
+    /// the colour, bold and reverse video `palette` gives what it stands
+    /// for, and `palette`'s drives, lineage, graph colours, text roles,
+    /// attention marker, panel shades and motion's section. An object one of them has no glyph for falls back
     /// in that one, as [`Theme::object_glyph`] says.
     pub fn compose(glyphs: &Theme, palette: &Theme) -> Theme {
         let tiles = redrawn(&palette.tiles, |tile| glyphs.glyph(tile));
@@ -602,6 +628,7 @@ impl Theme {
                 limit: drawn(glyphs.population.limit, graph.limit),
                 ..graph
             },
+            shell: glyphs.shell,
             ..palette.clone()
         }
     }
@@ -730,6 +757,12 @@ impl Theme {
     /// (design §6.9).
     pub fn motion(&self) -> MotionLook {
         self.motion
+    }
+
+    /// A hatching's shell: the egg cracked, its halves and its crumbs
+    /// (design §6.9).
+    pub fn shell(&self) -> ShellLook {
+        self.shell
     }
 
     /// The colour this theme's palette draws what the game leaves in the
@@ -881,6 +914,12 @@ impl Theme {
             .unwrap_or_default()
             .look(builtin.motion.unwrap_or_default())
             .expect("the built-in cp437 theme has all of motion's section");
+        // And any piece of a hatching's shell (design §6.9).
+        let shell = file
+            .shell
+            .unwrap_or_default()
+            .look(builtin.shell.unwrap_or_default())
+            .expect("the built-in cp437 theme has every piece of the shell");
         let theme = Theme {
             tiles,
             objects,
@@ -909,6 +948,7 @@ impl Theme {
                 title: panels.title.into(),
             }),
             motion,
+            shell,
             colour: file.colour,
             foreground: file.foreground.map(Color::from),
             colour_modes: file.colour_modes,
@@ -996,6 +1036,17 @@ impl Theme {
             ("the population graph's limit", self.population.limit.symbol),
         ]
         .map(|(what, symbol)| (what.to_string(), symbol));
+        let s = self.shell;
+        let shell = [
+            ("cracked", s.cracked),
+            ("left_half", s.left_half),
+            ("right_half", s.right_half),
+            ("up_left", s.up_left),
+            ("up_right", s.up_right),
+            ("down_left", s.down_left),
+            ("down_right", s.down_right),
+        ]
+        .map(|(piece, symbol)| (format!("the shell's {piece}"), symbol));
         tiles
             .chain(objects)
             .chain(arrows)
@@ -1005,6 +1056,7 @@ impl Theme {
             .chain(glass)
             .chain(stars)
             .chain(graph)
+            .chain(shell)
             .collect()
     }
 }
@@ -1122,6 +1174,10 @@ struct ThemeFile {
     /// the default theme's.
     #[serde(default, deserialize_with = "implicit_some")]
     motion: Option<MotionFile>,
+    /// A hatching's shell (design §6.9). A theme without it, or without
+    /// some of it, draws the default theme's.
+    #[serde(default, deserialize_with = "implicit_some")]
+    shell: Option<ShellFile>,
     /// `false` for a palette with no colour at all, as mono is (design
     /// §6.2, #307): every colour is drawn as the terminal's own, keeping
     /// bold and reverse video. A theme without it has colour.
@@ -1382,6 +1438,42 @@ impl MotionFile {
             trail: self.trail.or(default.trail)?.into(),
             dark: self.dark.or(default.dark)?.into(),
             bar: self.bar.or(default.bar)?,
+        })
+    }
+}
+
+/// A theme file's `shell` section: a hatching's shell (design §6.9).
+#[derive(Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ShellFile {
+    #[serde(default, deserialize_with = "implicit_some")]
+    cracked: Option<char>,
+    #[serde(default, deserialize_with = "implicit_some")]
+    left_half: Option<char>,
+    #[serde(default, deserialize_with = "implicit_some")]
+    right_half: Option<char>,
+    #[serde(default, deserialize_with = "implicit_some")]
+    up_left: Option<char>,
+    #[serde(default, deserialize_with = "implicit_some")]
+    up_right: Option<char>,
+    #[serde(default, deserialize_with = "implicit_some")]
+    down_left: Option<char>,
+    #[serde(default, deserialize_with = "implicit_some")]
+    down_right: Option<char>,
+}
+
+impl ShellFile {
+    /// The pieces this section gives, with `default`'s for any it leaves
+    /// out: `None` if both leave one out.
+    fn look(self, default: ShellFile) -> Option<ShellLook> {
+        Some(ShellLook {
+            cracked: self.cracked.or(default.cracked)?,
+            left_half: self.left_half.or(default.left_half)?,
+            right_half: self.right_half.or(default.right_half)?,
+            up_left: self.up_left.or(default.up_left)?,
+            up_right: self.up_right.or(default.up_right)?,
+            down_left: self.down_left.or(default.down_left)?,
+            down_right: self.down_right.or(default.down_right)?,
         })
     }
 }

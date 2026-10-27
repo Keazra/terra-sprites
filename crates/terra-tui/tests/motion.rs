@@ -701,9 +701,11 @@ fn a_hatched_young_warms_from_the_egg_s_colour_to_its_own() {
             break young;
         }
     };
+    // It appears once the egg has shown cracked, 150 ms in (design §6.9),
+    // and warms over the next half second.
     let first = cell(&on, world.sprite(young).expect("hatched").pos());
     let egg = campbell::exact(on.theme.object_glyph("egg", "default").fg, FOREGROUND);
-    let start = frame(&mut on, &world, Duration::ZERO);
+    let start = frame(&mut on, &world, ms(150));
     assert_eq!(start[first].fg, egg);
     let quarter = frame(&mut on, &world, ms(250));
     let fg = quarter[first].fg;
@@ -712,8 +714,266 @@ fn a_hatched_young_warms_from_the_egg_s_colour_to_its_own() {
         "{fg:?}"
     );
     let half = frame(&mut on, &world, ms(250));
-    let plain = frame(&mut off, &world, ms(500));
+    let plain = frame(&mut off, &world, ms(650));
     assert_eq!(half[first].fg, plain[first].fg);
+}
+
+// A hatching's shell (design §6.9).
+
+/// A 12×6 field with a berry bush on (3, 3) and, on (5, 2), a sprite who
+/// lays alone and quickly: her first egg hatches on `NEST`, the only one
+/// to hatch then, with the bush left of it and her up and right of it.
+fn by_a_bush() -> World {
+    let [quick, eggs] = common::QUICK;
+    WorldBuilder::grass(12, 6)
+        .objects(&[(at(3, 3), "berry_bush")])
+        .genes(&[(at(5, 2), LONE_MOTHER)])
+        .data(pack_changing(&[quick, eggs, common::LONE]))
+        .seed(7)
+        .build()
+}
+
+/// Where `by_a_bush`'s first egg hatches.
+const NEST: Pos = at(4, 3);
+
+/// Twins on `by_a_bush`, in `theme`, that have taken in each tick until
+/// its first egg hatched on `NEST`, and the world then.
+fn hatched_by_a_bush(theme: Theme) -> (App, App, World) {
+    let mut world = by_a_bush();
+    let (mut on, mut off) = twins_in(&world, theme, SCREEN);
+    let young = until_a_hatching(&mut world, &mut on, &mut off);
+    assert_eq!(world.sprite(young).map(|sprite| sprite.pos()), Some(NEST));
+    (on, off, world)
+}
+
+/// The egg's colour in the default theme, light yellow, as Campbell draws
+/// it.
+const EGG: Color = Color::Rgb(0xF9, 0xF1, 0xA5);
+
+#[test]
+fn a_hatching_shows_the_egg_cracked_for_150_ms_then_the_young() {
+    // Design §6.9, as Fauxpaw picked it from the mock-ups: for a moment the
+    // egg shows cracked across, `Θ`, in its own colour, its tile glowing
+    // where its last flash left it, seven tenths of the way to the sparks'
+    // colour; then the young appears, the glow fading from there.
+    let (mut on, mut off, world) = hatched_by_a_bush(Theme::cp437());
+    let first = cell(&on, NEST);
+    for step in [0, 149] {
+        let (shown, _) = frames(&mut on, &mut off, &world, ms(step));
+        let cracked = (shown[first].symbol(), shown[first].fg, shown[first].bg);
+        assert_eq!(cracked, ("Θ", EGG, LAST_FLASH), "{step} ms on");
+    }
+    let (shown, plain) = frames(&mut on, &mut off, &world, ms(1));
+    assert_eq!(shown[first].symbol(), plain[first].symbol(), "the young");
+    assert_ne!(shown[first].symbol(), "Θ");
+    assert_eq!(shown[first].bg, LAST_FLASH);
+}
+
+/// The symbols `app` draws on `screen` on the tiles from `from` to `to`, a
+/// row or a column, each tile's first cell's.
+fn symbols(app: &App, screen: &Buffer, from: Pos, to: Pos) -> String {
+    let tiles = (from.y..=to.y).flat_map(|y| (from.x..=to.x).map(move |x| at(x, y)));
+    tiles.map(|tile| screen[cell(app, tile)].symbol()).collect()
+}
+
+/// The twins' Cursors moved out of the way of a hatching on `NEST`: the
+/// Cursor's tile has a look of its own.
+fn cursors_away(on: &mut App, off: &mut App, world: &World) {
+    for app in [on, off] {
+        cursor_to(app, world, at(10, 0));
+    }
+}
+
+#[test]
+fn the_shell_splits_into_halves_either_side_of_the_young_that_slide_out_at_360_ms() {
+    // Design §6.9: once the egg has shown cracked, its halves lie either
+    // side of the young, and 210 ms later they slide a tile further out.
+    // The bush left of the young, a seedling yet, `'`, keeps its look: no
+    // half is drawn over it.
+    let (mut on, mut off, world) = hatched_by_a_bush(Theme::cp437());
+    cursors_away(&mut on, &mut off, &world);
+    let row = |app: &App, screen: &Buffer| symbols(app, screen, at(1, 3), at(7, 3));
+    let (cracked, _) = frames(&mut on, &mut off, &world, ms(149));
+    assert_eq!(row(&on, &cracked), "..'Θ...");
+    for step in [1, 209] {
+        let (shown, plain) = frames(&mut on, &mut off, &world, ms(step));
+        let young = plain[cell(&on, NEST)].symbol();
+        assert_eq!(row(&on, &shown), format!("..'{young}).."), "{step} ms on");
+    }
+    let (shown, plain) = frames(&mut on, &mut off, &world, ms(1));
+    let young = plain[cell(&on, NEST)].symbol();
+    assert_eq!(row(&on, &shown), format!(".('{young}.)."), "slid out");
+}
+
+/// Grass's colour, green, as Campbell draws it.
+const GRASS: Color = Color::Rgb(0x13, 0xA1, 0x0E);
+
+#[test]
+fn the_shell_leaves_crumbs_on_the_tiles_at_the_young_s_corners_for_600_ms() {
+    // Design §6.9: `` ` `` up and left of the young, `'` up and right, `,`
+    // down and left and `.` down and right, from when the egg stops showing
+    // cracked until 600 ms on. Up and right stands the young's mother, who
+    // keeps her look: no crumb is drawn over her.
+    let (mut on, mut off, world) = hatched_by_a_bush(Theme::cp437());
+    cursors_away(&mut on, &mut off, &world);
+    let corners = |app: &App, screen: &Buffer| {
+        let above = symbols(app, screen, at(3, 2), at(5, 2));
+        (above, symbols(app, screen, at(3, 4), at(5, 4)))
+    };
+    let mother = cell(&on, at(5, 2));
+    let (cracked, plain) = frames(&mut on, &mut off, &world, ms(149));
+    let her = plain[mother].symbol();
+    assert_eq!(corners(&on, &cracked), (format!("..{her}"), "...".into()));
+    let down_right = cell(&on, at(5, 4));
+    for step in [1, 599] {
+        let (shown, plain) = frames(&mut on, &mut off, &world, ms(step));
+        let her = plain[mother].symbol();
+        let crumbs = (format!("`.{her}"), ",..".into());
+        assert_eq!(corners(&on, &shown), crumbs, "{step} ms on");
+        // The `.` is the shell's, not the grass's: it starts in the egg's
+        // colour, which a spark may light up, never in the grass's.
+        if step == 1 {
+            let fg = shown[down_right].fg;
+            assert!(fg != Color::Green && fg != GRASS, "{fg:?}");
+        }
+    }
+    let (gone, plain) = frames(&mut on, &mut off, &world, ms(1));
+    let her = plain[mother].symbol();
+    assert_eq!(corners(&on, &gone), (format!("..{her}"), "...".into()));
+}
+
+#[test]
+fn the_shell_s_halves_fade_evenly_from_the_egg_s_colour_to_their_tile_s() {
+    // Design §6.9: from when the egg stops showing cracked, a half holds
+    // the egg's colour for 110 ms and fades evenly to its tile's own by 700
+    // ms, when it goes: half way at 405 ms, from light yellow to green
+    // `#86c959`. Seen out on the far tiles, where no spark lights it.
+    let (mut on, mut off, world) = hatched_by_a_bush(Theme::cp437());
+    cursors_away(&mut on, &mut off, &world);
+    let halves = [cell(&on, at(2, 3)), cell(&on, at(6, 3))];
+    let (slid, _) = frames(&mut on, &mut off, &world, ms(360));
+    for half in halves {
+        let Color::Rgb(red, ..) = slid[half].fg else {
+            panic!("{:?}", slid[half].fg)
+        };
+        assert!(red < 0xF9 && red > 0xF9 - (0xF9 - 0x13) / 4, "{red:#x}");
+    }
+    let (half_way, _) = frames(&mut on, &mut off, &world, ms(195));
+    for half in halves {
+        assert_eq!(half_way[half].fg, Color::Rgb(0x86, 0xC9, 0x59));
+    }
+    let (faded, _) = frames(&mut on, &mut off, &world, ms(294));
+    for half in halves {
+        assert!(near(faded[half].fg, GRASS), "{:?}", faded[half].fg);
+    }
+    let (gone, plain) = frames(&mut on, &mut off, &world, ms(1));
+    for half in halves {
+        assert_eq!(gone[half], plain[half]);
+    }
+}
+
+#[test]
+fn no_piece_of_the_shell_is_drawn_on_the_cursor_s_tile() {
+    // Design §6.9: it has a look of its own, as the trail leaves it. The
+    // Cursor starts on (6, 3), where the right half slides at 360 ms.
+    let (mut on, mut off, world) = hatched_by_a_bush(Theme::cp437());
+    assert_eq!(on.cursor(), at(6, 3));
+    let (left, right) = (cell(&on, at(2, 3)), cell(&on, at(6, 3)));
+    let (shown, plain) = frames(&mut on, &mut off, &world, ms(360));
+    assert_eq!(shown[left].symbol(), "(");
+    assert_eq!(shown[right], plain[right]);
+}
+
+#[test]
+fn at_4x_the_shell_cracks_and_splits_in_half_the_time() {
+    // Design §6.9: as the hatching plays in half the time, so does its
+    // shell: the egg shows cracked for 75 ms, the halves slide out 105 ms
+    // later, and the crumbs go 300 ms after the crack and the halves 350.
+    let mut world = by_a_bush();
+    let (mut on, mut off) = twins(&world);
+    at_4x(&mut on);
+    at_4x(&mut off);
+    let young = until_a_hatching(&mut world, &mut on, &mut off);
+    assert_eq!(world.sprite(young).map(|sprite| sprite.pos()), Some(NEST));
+    cursors_away(&mut on, &mut off, &world);
+    let (first, up_left) = (cell(&on, NEST), cell(&on, at(3, 2)));
+    let row = |app: &App, screen: &Buffer| symbols(app, screen, at(1, 3), at(7, 3));
+    let (shown, _) = frames(&mut on, &mut off, &world, ms(74));
+    assert_eq!(shown[first].symbol(), "Θ");
+    for (step, (halves, crumb)) in [
+        (1, ("..'Y)..", "`")),
+        (104, ("..'Y)..", "`")),
+        (1, (".('Y.).", "`")),
+        (194, (".('Y.).", "`")),
+        (1, (".('Y.).", ".")),
+        (49, (".('Y.).", ".")),
+        (1, ("..'Y...", ".")),
+    ] {
+        let (shown, plain) = frames(&mut on, &mut off, &world, ms(step));
+        let halves = halves.replace('Y', plain[first].symbol());
+        assert_eq!((row(&on, &shown), shown[up_left].symbol()), (halves, crumb));
+    }
+}
+
+#[test]
+fn the_shell_is_drawn_from_the_glyph_set_in_ascii_a_q_cracked() {
+    // Design §6.2, §6.9: ASCII has no `Θ`, so the egg shows cracked as a
+    // ring with a break in it.
+    let (mut on, mut off, world) = hatched_by_a_bush(Theme::ascii());
+    cursors_away(&mut on, &mut off, &world);
+    let first = cell(&on, NEST);
+    let (cracked, _) = frames(&mut on, &mut off, &world, Duration::ZERO);
+    assert_eq!(cracked[first].symbol(), "Q");
+    let (split, plain) = frames(&mut on, &mut off, &world, ms(150));
+    let young = plain[first].symbol();
+    let row = symbols(&on, &split, at(1, 3), at(7, 3));
+    assert_eq!(row, format!("..'{young}).."));
+    assert_eq!(split[cell(&on, at(3, 2))].symbol(), "`");
+}
+
+#[test]
+fn in_mono_the_shell_still_cracks_and_splits_in_the_terminal_s_own_colours() {
+    // Design §6.9: the egg cracked and its pieces are characters, which
+    // mono draws, though their fade, the young's warming and the sparks,
+    // which are only colour, don't play: nothing but the characters differs
+    // from the screen with motion off.
+    let (mut on, mut off, world) = hatched_by_a_bush(mono());
+    cursors_away(&mut on, &mut off, &world);
+    let first = cell(&on, NEST);
+    let only_characters_differ = |shown: &Buffer, plain: &Buffer| {
+        let mut shown = shown.clone();
+        for (cell, was) in shown.content.iter_mut().zip(&plain.content) {
+            cell.set_symbol(was.symbol());
+        }
+        assert_eq!(&shown, plain);
+    };
+    let (cracked, plain) = frames(&mut on, &mut off, &world, Duration::ZERO);
+    assert_eq!(cracked[first].symbol(), "Θ");
+    only_characters_differ(&cracked, &plain);
+    let (split, plain) = frames(&mut on, &mut off, &world, ms(360));
+    let young = plain[first].symbol();
+    let row = symbols(&on, &split, at(1, 3), at(7, 3));
+    assert_eq!(row, format!(".('{young}.)."));
+    only_characters_differ(&split, &plain);
+    let (over, plain) = frames(&mut on, &mut off, &world, ms(500));
+    assert_eq!(over, plain);
+}
+
+#[test]
+fn in_mono_a_death_takes_no_place_from_a_hatching_s_shell() {
+    // Design §6.9: only what can be drawn counts towards how many play at
+    // once, and in mono a death, which is nothing but colour, draws
+    // nothing. Two play at once at 4×: two deaths after the hatching leave
+    // it playing.
+    let mut world = by_a_bush();
+    let (mut on, mut off) = twins_in(&world, mono(), SCREEN);
+    at_4x(&mut on);
+    at_4x(&mut off);
+    let young = until_a_hatching(&mut world, &mut on, &mut off);
+    let mother = sprite_on(&world, at(5, 2));
+    on.record(&deaths(&[mother, young]), &world);
+    let screen = frame(&mut on, &world, Duration::ZERO);
+    assert_eq!(screen[cell(&on, NEST)].symbol(), "Θ");
 }
 
 /// Runs `world` one tick, both apps taking it in: its events.
@@ -955,9 +1215,10 @@ fn an_egg_picked_up_stops_flashing_and_put_down_flashes_afresh() {
 #[test]
 fn a_hatching_takes_over_from_the_flashing_its_last_flash_fading_as_the_young_warms() {
     // Design §6.9, #306: on its last tick, while no tick comes, an egg
-    // flashes every 120 ms until the young appears, which starts where the
-    // last flash peaks, seven tenths of the way to the sparks' colour, and
-    // the glow fades as the young warms.
+    // flashes every 120 ms until it hatches, which starts where the last
+    // flash peaks, seven tenths of the way to the sparks' colour, and holds
+    // so while the egg shows cracked; the glow fades as the young warms,
+    // from 150 ms to 650.
     let mut world = lone_line(0);
     let (mut on, mut off) = twins(&world);
     let (egg, tile) = until_about_to_hatch(&mut world, &mut on, &mut off);
@@ -975,13 +1236,15 @@ fn a_hatching_takes_over_from_the_flashing_its_last_flash_fading_as_the_young_wa
     let young = cell(&on, world.sprite(egg).expect("hatched").pos());
     let start = frame(&mut on, &world, Duration::ZERO);
     assert_eq!(start[young].bg, LAST_FLASH);
+    let appears = frame(&mut on, &world, ms(150));
+    assert_eq!(appears[young].bg, LAST_FLASH);
     let warming = frame(&mut on, &world, ms(250))[young].bg;
     assert!(
         brightness(warming) < brightness(LAST_FLASH) && brightness(warming) > brightness(DARK),
         "{warming:?}"
     );
     let warm = frame(&mut on, &world, ms(250));
-    let plain = frame(&mut off, &world, ms(500));
+    let plain = frame(&mut off, &world, ms(650));
     assert_eq!(warm[young].bg, plain[young].bg);
 }
 
@@ -1127,6 +1390,12 @@ fn the_same_app_drawn_twice_draws_the_same_screen() {
     let world = hunger_on_the_move(0.396, 0.004);
     let mut app = watching(&world);
     for step in [130, 520] {
+        app.animate(ms(step));
+        assert_eq!(render(&app, &world), render(&app, &world));
+    }
+    // An egg cracked, and its shell split and fading.
+    let (mut app, _, world) = hatched_by_a_bush(Theme::cp437());
+    for step in [100, 300] {
         app.animate(ms(step));
         assert_eq!(render(&app, &world), render(&app, &world));
     }

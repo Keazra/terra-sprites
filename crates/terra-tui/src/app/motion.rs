@@ -44,8 +44,13 @@ impl App {
 
     /// Starts the death or hatching `event` sets off, if it does: only
     /// those that could be drawn just now count towards how many play at
-    /// once (design §6.9).
+    /// once (design §6.9). A death is nothing but colour, so where motion's
+    /// colours don't play, as in mono, it isn't started, and takes no place
+    /// from a hatching, whose shell plays there.
     pub(super) fn set_off(&mut self, event: &EventKind) {
+        if matches!(event, EventKind::Died { .. }) && !motion::colours_play(self) {
+            return;
+        }
         let drawn: Vec<(EntityId, Pos)> = self
             .motion
             .at_stake(event)

@@ -121,6 +121,9 @@ fn a_theme_draws_one_theme_s_glyphs_in_another_s_palette() {
             coloured.limit.fg
         ]
     );
+    // A hatching's shell is characters only (design §6.9).
+    assert_eq!(theme.shell(), glyphs.shell());
+    assert_ne!(theme.shell(), palette.shell());
     for drive in pack.drives() {
         assert_eq!(theme.drive_colour(drive), palette.drive_colour(drive));
     }

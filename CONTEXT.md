@@ -885,7 +885,7 @@ A mapping from semantic tiles to glyphs and colours, and from each text role to 
 _Avoid_: skin
 
 **Glyph set** (#307):
-The characters a theme draws with: the map's, the Cursor's, the emotes', the glass's, the stars' and the graph's blocks and bands. Two are built in, CP437 and ASCII (`--ascii`).
+The characters a theme draws with: the map's, the Cursor's, the emotes', the glass's, the stars', the graph's blocks and bands, and a hatching's shell. Two are built in, CP437 and ASCII (`--ascii`).
 _Avoid_: font, charset, tileset (that's the Tiles milestone's)
 
 **Palette** (#307):
@@ -905,12 +905,16 @@ The background a palette may give the inspector and the event log, a little ligh
 _Avoid_: border, frame, box (pop-ups have boxes; the panels don't)
 
 **Motion** (#306):
-The small effects drawn over the finished screen in real time, not ticks: a death's flash and ghost, an egg flashing before it hatches and a hatching's sparks, a tab sweeping in, a pop-up fading, a drive's bar easing and its waves, which show how fast the drive moves against its usual rise, the pan and the trail. One switch turns it all off; it thins out at 4× and up.
+The small effects drawn over the finished screen in real time, not ticks: a death's flash and ghost, an egg flashing before it hatches and a hatching's shell and sparks, a tab sweeping in, a pop-up fading, a drive's bar easing and its waves, which show how fast the drive moves against its usual rise, the pan and the trail. One switch turns it all off; it thins out at 4× and up.
 _Avoid_: animation (the emotes' swapping is older, and not part of it)
 
 **Usual rise** (#306):
 How fast a drive of the selected sprite usually rises: the average of its last hundred rises a tick that the screen has taken in since the sprite was selected, its falls and steady ticks left out. A drive's bar's waves weigh each rise against it, crashing taller, more often and further the faster. The screen keeps it and never saves it.
 _Avoid_: normal rate, base rate
+
+**Shell** (#306):
+The pieces of an egg drawn as it hatches, part of motion: for a moment the egg cracked where its young will be, and then its two halves either side of the young, sliding a tile further out, and four crumbs on the tiles at its corners, each fading to its tile's own colour, only where bare ground shows. The glyph set gives its characters. It's only drawn: the world has no shell, and it does nothing.
+_Avoid_: eggshell, debris, broken egg (M3's thrown egg that breaks, with its young inside)
 
 ### The Cursor
 

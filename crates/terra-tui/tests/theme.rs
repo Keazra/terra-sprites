@@ -73,12 +73,69 @@ fn every_terrain_and_object_type_has_its_own_glyphs_in_each_theme() {
 
 #[test]
 fn theme_glyphs_are_cp437_and_the_ascii_themes_are_plain_ascii() {
-    for (symbol, kind) in map_glyphs(&Theme::cp437()) {
+    // A hatching's shell is drawn on the map too (design §6.9).
+    let shell = |theme: &Theme| shell(theme).map(|symbol| (symbol, "the shell".to_string()));
+    let cp437_theme = Theme::cp437();
+    for (symbol, kind) in map_glyphs(&cp437_theme)
+        .into_iter()
+        .chain(shell(&cp437_theme))
+    {
         assert!(cp437::contains(symbol), "{symbol:?} for {kind}");
     }
-    for (symbol, kind) in map_glyphs(&Theme::ascii()) {
+    let ascii_theme = Theme::ascii();
+    for (symbol, kind) in map_glyphs(&ascii_theme)
+        .into_iter()
+        .chain(shell(&ascii_theme))
+    {
         assert!(symbol.is_ascii_graphic(), "{symbol:?} for {kind}");
     }
+}
+
+/// A theme's hatching shell (design §6.9): the egg cracked, its left and
+/// right halves, and its crumbs up left, up right, down left and down
+/// right.
+fn shell(theme: &Theme) -> [char; 7] {
+    let look = theme.shell();
+    [
+        look.cracked,
+        look.left_half,
+        look.right_half,
+        look.up_left,
+        look.up_right,
+        look.down_left,
+        look.down_right,
+    ]
+}
+
+#[test]
+fn the_themes_draw_a_hatching_s_shell_as_the_design_says() {
+    // Design §6.9, as Fauxpaw picked it from the mock-ups: the egg cracked
+    // across, `Θ`, which ASCII hasn't, so it's a ring with a break in it,
+    // `Q`; then its halves either side of the young and its crumbs at its
+    // corners, the same in both.
+    assert_eq!(shell(&Theme::cp437()), ['Θ', '(', ')', '`', '\'', ',', '.']);
+    assert_eq!(shell(&Theme::ascii()), ['Q', '(', ')', '`', '\'', ',', '.']);
+}
+
+#[test]
+fn a_theme_from_before_the_shell_draws_the_default_theme_s() {
+    // Design §6.9.
+    let theme = ascii_from_before("    // A hatching's shell", "shell:");
+    assert_eq!(theme.shell(), Theme::cp437().shell());
+}
+
+#[test]
+fn a_theme_draws_what_it_leaves_out_of_the_shell_as_the_default_theme_does() {
+    // Design §6.9: a piece at a time.
+    let pack = pack();
+    let edited = ascii_with("        cracked: 'Q',\n", "");
+    let edited = edited.replacen("left_half: '('", "left_half: '['", 1);
+    let theme = Theme::from_ron(&edited, &pack).expect("loads");
+    assert_eq!(shell(&theme), ['Θ', '[', ')', '`', '\'', ',', '.']);
+    // A misspelt key is refused, rather than quietly drawn as the default.
+    let misspelt = ascii_with("cracked:", "craked:");
+    let error = Theme::from_ron(&misspelt, &pack).expect_err("refused");
+    assert!(error.contains("craked"), "{error}");
 }
 
 #[test]
@@ -385,6 +442,7 @@ fn a_theme_glyph_outside_cp437_is_refused() {
             "glass's top_left",
         ),
         ("far:     (glyph: '.'", "far:     (glyph: '✦'", "far stars"),
+        ("cracked: 'Q'", "cracked: 'λ'", "the shell's cracked"),
     ] {
         let error = Theme::from_ron(&ascii_with(from, to), &pack).expect_err("refused");
         let glyph = to.chars().rev().nth(1).unwrap();

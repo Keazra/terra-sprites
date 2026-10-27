@@ -438,8 +438,10 @@ fn draw_tiles(buf: &mut Buffer, inner: Rect, app: &App, world: &World) {
     let cursor = app.shown_cursor();
     let lineage = lineage_on_map(app, world);
     let width = app.tile_width();
-    // Where bare ground shows, for a death's ghost, and an item lying on the
-    // map, for an egg about to hatch, for motion to play over (design §6.9).
+    // Where bare ground shows, for a death's ghost and a hatching's shell,
+    // and an item lying on the map, for an egg about to hatch, for motion to
+    // play over (design §6.9). The shell plays in mono too, so bare ground
+    // is gathered whenever motion is on.
     let (mut bare, mut lying) = (Vec::new(), Vec::new());
     for y in inner.top()..inner.bottom() {
         for x in inner.left()..inner.right() {
@@ -512,7 +514,7 @@ fn draw_tiles(buf: &mut Buffer, inner: Rect, app: &App, world: &World) {
             } else {
                 glyph.symbol
             };
-            if on_terrain && motion::colours_play(app) {
+            if on_terrain && app.motion() {
                 bare.push(Position::new(x, y));
             }
             let mut style = Style::default().fg(glyph.fg);
