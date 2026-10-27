@@ -599,9 +599,23 @@ fn zoomed_the_cursor_frames_its_two_cell_tile() {
         screen[(centre.x + 2, centre.y)].symbol(),
         arrows.left.to_string()
     );
+    // An arrow over each of its cells, and under each.
+    for x in [centre.x, centre.x + 1] {
+        assert_eq!(screen[(x, centre.y - 1)].symbol(), arrows.down.to_string());
+        assert_eq!(screen[(x, centre.y + 1)].symbol(), arrows.up.to_string());
+    }
+    // So the frame of light has two `═` above and two below while sprites
+    // can see it.
+    apply(&mut app, &world, Action::ToggleVisible);
+    let screen = render(&app, &world);
+    let frame = app.theme.visible_frame();
+    for x in [centre.x, centre.x + 1] {
+        assert_eq!(screen[(x, centre.y - 1)].symbol(), frame.down.to_string());
+        assert_eq!(screen[(x, centre.y + 1)].symbol(), frame.up.to_string());
+    }
     assert_eq!(
-        screen[(centre.x, centre.y - 1)].symbol(),
-        arrows.down.to_string()
+        screen[(centre.x + 2, centre.y)].symbol(),
+        frame.left.to_string()
     );
 }
 

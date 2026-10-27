@@ -627,6 +627,15 @@ fn marked(app: &App) -> Option<EntityId> {
 /// → ☺ ←      Y, N: the status marks
 /// N ↑ M
 /// ```
+///
+/// Round a tile two cells wide, its arrows above and below come in twos,
+/// one over each cell, as does a frame of light's (M2 design §11.7):
+///
+/// ```text
+/// M ↓↓ Y
+/// → ☺  ←
+/// N ↑↑ M
+/// ```
 fn draw_cursor(buf: &mut Buffer, app: &App, world: &World) {
     let Some(centre) = app.shown_cursor().and_then(|cursor| app.cell_of(cursor)) else {
         return;
@@ -645,19 +654,19 @@ fn draw_cursor(buf: &mut Buffer, app: &App, world: &World) {
             .unwrap_or_else(|| held_glyph(app, world))
     });
     let mark = app.theme.mode_mark(app.mode());
-    // Round its tile, two cells wide while zoomed (M2 design §11.7).
+    // Round its tile, two cells wide while zoomed, with an arrow over and
+    // under each (M2 design §11.7).
     let right = app.tile_width() as i16;
+    let above_and_below = (0..right).flat_map(|dx| [(dx, -1, arrows.down), (dx, 1, arrows.up)]);
     let pieces = [
         (-1, -1, mark.symbol),
-        (0, -1, arrows.down),
         (right, -1, y),
         (-1, 0, arrows.right),
         (right, 0, arrows.left),
         (-1, 1, n),
-        (0, 1, arrows.up),
         (right, 1, mark.symbol),
     ];
-    for (dx, dy, glyph) in pieces {
+    for (dx, dy, glyph) in pieces.into_iter().chain(above_and_below) {
         let x = centre.x.checked_add_signed(dx);
         let y = centre.y.checked_add_signed(dy);
         if let Some(cell) = x.zip(y).map(|(x, y)| Position::new(x, y))
