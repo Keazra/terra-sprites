@@ -741,6 +741,10 @@ _Avoid_: wide tiles, double width
 The part of the map currently shown in the map view. It can go a quarter of the map view past the wall, where the glass and space show; a map small enough to fit with its glass sits in the middle of it, with space all round (Slice 31, #180).
 _Avoid_: camera
 
+**Pan** (#306):
+The map view easing over to a sprite the view centres on, rather than jumping, as part of motion. Only the drawing moves: the viewport jumps at once, and the Cursor moves only once the pan has ended.
+_Avoid_: glide (a slide's word), scroll (the player's own moving of the view), camera move
+
 **Glass**:
 How the wall is drawn where it faces space: a line of light cyan one tile outside the map (Slice 31). It isn't a tile, so nothing on the map reaches it. On the ship (#181), it's drawn one tile outside a sector, over a tile of space.
 _Avoid_: window, border
@@ -813,6 +817,10 @@ _Avoid_: destination (that's the tile itself), cursor, highlight
 The steady grey shading on the map of the one thing the selected sprite is paying attention to.
 _Avoid_: highlight, attention mark
 
+**Trail** (#306):
+The fading tint on the tiles the selected sprite has just left, part of motion.
+_Avoid_: path (that's where a throw or an aim line goes), tracks
+
 **Event log**:
 The panel that lists what just happened to sprites, newest first.
 _Avoid_: events panel, console, feed
@@ -883,6 +891,10 @@ _Avoid_: colour scheme, highlight (for a role)
 **Panel shade** (#302):
 The background a theme may give the inspector and the event log, a little lighter than the terminal's black, with their title rows lighter again, in place of lines between the panels. A theme without shades, such as ASCII, draws a line instead.
 _Avoid_: border, frame, box (pop-ups have boxes; the panels don't)
+
+**Motion** (#306):
+The small effects drawn over the finished screen in real time, not ticks: a death's flash and ghost, a hatching's sparks, a tab sweeping in, a pop-up fading, water shimmering, a drive's bar easing, the pan and the trail. One switch turns it all off; it thins out at 4× and up.
+_Avoid_: animation (the emotes' swapping is older, and not part of it)
 
 ### The Cursor
 

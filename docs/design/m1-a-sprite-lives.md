@@ -1545,7 +1545,7 @@ The species is dropped into a world it doesn't know and has to learn about it. I
 | Attention marker | the tile's own glyph | the tile's own glyph | dark grey background |
 
 - Every **terrain and object type** on the map, and sprites, has a unique glyph. Colour is used only for **state**, and the status line always names what's under the Cursor. The Cursor's arrows and marks are UI drawn over the map, and may share glyphs with each other (grab and release are arrows).
-- **Colours** (#302) are the 16 terminal colours by name, which follow the player's terminal scheme, or exact, `"#rrggbb"`. The default theme keeps names for the map and uses exact colours only where no name fits: the panels' shades, and Look 5's fades once they're built (#306). A terminal that doesn't say it shows exact colours, in `COLORTERM`, such as macOS's Terminal, which draws them wrongly, is given the nearest of the 256 colours nearly every terminal shows instead; on Windows, every terminal shows them.
+- **Colours** (#302) are the 16 terminal colours by name, which follow the player's terminal scheme, or exact, `"#rrggbb"`. The default theme keeps names for the map and uses exact colours only where no name fits: the panels' shades, and motion's colours (§6.9). A terminal that doesn't say it shows exact colours, in `COLORTERM`, such as macOS's Terminal, which draws them wrongly, is given the nearest of the 256 colours nearly every terminal shows instead; on Windows, every terminal shows them.
 - **Text has colours by its job** (#302): a theme's `text` section styles seven roles (the seventh, Spot, from #304), and every built-in theme sets them. A role a theme leaves out is styled as the default theme styles it. Colour never carries a meaning alone: the signs, the arrows and the capitals stay, so the screen reads the same in ASCII and to a colour-blind player.
 
   | Role | What it styles | Default and ASCII themes |
@@ -1747,6 +1747,7 @@ N ═ M
   3. render, at about 30 fps
 - At Max, the sim uses whatever time rendering leaves.
 - **Each frame is timed** (#311): its ticks and the time they took, as the budget counts it, and the time drawing took. The debug overlay reads them (§6.1).
+- **Motion is timed by the frame's real time** (§6.9, #306): after input, each frame hands the app the time since the last one, as it does for emotes, and every effect's age counts from it. Tests and the renderer hand it a fixed step.
 
 ### 6.7 Files
 
@@ -1762,14 +1763,43 @@ N ═ M
   - **Genomes** (v28) are exported to, and the Place menu reads them from, its `genomes` folder.
   - **Themes** (v34) are read from its `themes` folder: `Ctrl+T` opens a menu, `Themes`, of the built-in `cp437` and `ascii`, then each `.ron` file there by name, in order, picked as the Place menu's items are. The map switches at once and the status line says "Theme: night"; a theme that doesn't load is refused on the status line, "Couldn't use theme night: …", and the theme in use stays. The theme picked lasts until the game is closed.
   - **Saves** (v32) go in its `saves` folder: `quicksave.tspr`, `autosave-1.tspr` (the newest) to `autosave-3.tspr`, and each save by name as its name, with any character a file name can't hold on some system made a `-`, the dots and spaces Windows drops from a name's end left off, and a `-` after a name Windows keeps for a device (`con`, `lpt1`). The game says a save's name as it's stored, which is the name the load list shows. A save is written beside its file and then put in its place, so one cut short never breaks a good one.
-- **Command-line flags:** `--seed <n>`, `--preset <file>`, `--data <dir>`, `--ascii`, `--theme <file>` (v34; not with `--ascii`), `--replay <file>`. `--seed`, `--preset` and `--data` make a new world, so each is refused with `--replay` (v35). M2 adds `--lab`, `--load <save>`, and `--fast-forward <hours>` with `--save <name>` (M2 design §16). `--version` prints the version and the commit the game was built from, as `terra-sprites 0.1.0 (cc96347)`, and stops (2026-10-08).
+- **Command-line flags:** `--seed <n>`, `--preset <file>`, `--data <dir>`, `--ascii`, `--theme <file>` (v34; not with `--ascii`), `--replay <file>`, `--no-motion` (#306: the game starts with motion off, §6.9). `--seed`, `--preset` and `--data` make a new world, so each is refused with `--replay` (v35). M2 adds `--lab`, `--load <save>`, and `--fast-forward <hours>` with `--save <name>` (M2 design §16). `--version` prints the version and the commit the game was built from, as `terra-sprites 0.1.0 (cc96347)`, and stops (2026-10-08).
 
 ### 6.8 UI architecture
 
-- **`App`** holds the UI state: where the Cursor is, cursor mode (and each mode's reserve), Follow (v21 as the lock), viewport, selection, screen state (Normal / Menu / Prompt / Help / Sprite list), colour mode, emote and feedback timers, from #328 the levels the sparklines draw (§6.1), and the active `InfoPolicy`.
+- **`App`** holds the UI state: where the Cursor is, cursor mode (and each mode's reserve), Follow (v21 as the lock), viewport, selection, screen state (Normal / Menu / Prompt / Help / Sprite list), colour mode, emote and feedback timers, from #328 the levels the sparklines draw (§6.1), from #306 the motion it's playing and when each effect began (§6.9), and the active `InfoPolicy`.
 - **Input:** a keybinding table maps keys to UI `Action`s. Each `Action` either changes `App` or produces a `Command`.
-- **Rendering** is a pure function, `render(frame, &App, &World)`. Its one product besides the frame is the frame's spots (§6.1, #304), which it hands the app to keep until the next frame, for what the pointer is over and what a click lands on.
+- **Rendering** is a pure function, `render(frame, &App, &World)`. Its one product besides the frame is the frame's spots (§6.1, #304), which it hands the app to keep until the next frame, for what the pointer is over and what a click lands on. Motion keeps it pure (§6.9): each frame builds every effect afresh and plays it to its age, so the same app drawn twice gives the same picture.
 - **Panic hook:** it restores the terminal; the replay is written as the panic carries on (v35, §2.9).
+
+
+### 6.9 Motion
+
+- **Small motion is drawn over the finished screen** (#306), so the eye goes to what just happened: a death, a hatching, a tab opened. tachyonfx draws it, the Ratatui organisation's effects crate (0.25.2), in `terra-tui` only.
+- **Real time, not ticks:** every effect is timed by the real time the frame loop hands the app (§6.6), so it lasts as long at ½× as at 4×, and while paused. Tests and the renderer hand it a fixed step, so their pictures are the same on every run.
+- **Drawing stays pure** (§6.8): the app keeps when each effect began and what it needs, and each frame builds the effect afresh and plays it to its age.
+- **One switch turns all motion off,** and it's on by default, for slow terminals and players who'd rather not. `--no-motion` starts the game with it off; Look 6's settings screen gives it a row (#307). Off, the screen is drawn as it was before. The older blinking isn't this slice's motion and stays either way, since each tells the player something: the Decision marker, the leash, and the chosen card blinking on the family tree.
+
+| Motion | What the player sees | How long | At 4× and up |
+|---|---|---|---|
+| A death | The tile's background flashes and fades back. The sprite's glyph stays on its tile as a ghost, fading from its colour to ash grey, unless something else is drawn there by then. | 1.2 s | 0.6 s |
+| A hatching | Sparks: the egg's tile and the eight round it light up at scattered moments and fade back. The young starts in the egg's colour and warms to its own, as if the shell fell away, which reads differently from a death's flash and grey (M3's breaking eggs). | 1 s | 0.5 s |
+| A tab opened | The new tab sweeps in from the side it's on, out of the panel's shade. | 0.25 s | the same |
+| A pop-up | Fades in out of the dark as it opens, and what was under it fades back as it closes. Tooltips and the debug overlay don't fade. | 0.15 s | the same |
+| Water | Shallow and deep water each drift slowly between two shades, in waves across the lake. | a 4 s cycle | the same |
+| A drive's bar | On the Body tab, eases to its new value a block at a time rather than jumping. | 0.4 s | jumps |
+| The pan | When the view centres on a sprite more than 2 tiles away (`Tab`, the sprite list, the family tree, a click on a log line, Track), it pans there, quickly at first and then slowing. Scrolling, loading, square tiles and a new screen size don't pan. | 0.3 s | jumps |
+| The trail | The tiles the selected sprite has just left keep a tint that fades, at most 8 of them. | 1.5 s a tile | 0.75 s a tile |
+
+- **Only a few things move at once:** at most 4 deaths and hatchings play together, 2 at 4× and up, a new one taking the oldest one's place. Every effect eases out, fast and then slowing, and nothing in a panel loops: only the water does, on the map.
+- **It thins out at 4× and up,** which takes in Lab's faster speeds (M2 design §16.2), so a busy screen doesn't fizz: as the table says, deaths, hatchings and the trail are shorter and fewer, and the bars and the view jump.
+- **Colour only in panels:** the tab's sweep and a pop-up's fade change no characters, and a bar easing steps through its own blocks. On the map, a death's ghost is the sprite's own glyph. Nothing is drawn outside the glyph set, so CP437 holds (§6.2).
+- **Exact colours** (#302): a fade blends exact colours, and a colour the theme names blends from how Windows Terminal's default scheme, Campbell, draws it, the scheme the renderer draws in. While motion is on, water is drawn in its exact shades.
+- **The theme's `motion` section** gives motion's colours: a death's flash, the ash grey, the sparks, the trail's tint, the dark a pop-up fades from, and each water's two shades. A theme without one uses the default theme's.
+- **Motion that tells the player something asks first** (§6.4): a death's and a hatching's ask `Emotes` about their sprite, and the trail asks `Markers` about the selected sprite.
+- **The pan moves only what's drawn.** The viewport jumps at once, as before, and the map view is drawn from wherever the pan has reached. The pointer is over the tile drawn beneath it, where a click lands, and the Cursor is moved to the tile under a still pointer only once the pan ends, so the world never hears of the tiles between (§6.5).
+- **Where a sprite died is remembered by the screen:** the world removes a dead sprite before it says it died, so after each tick it takes in, the screen notes where each sprite is and the glyph and colour it's drawn in.
+- **Not here:** the title screen (Look 9, #310), and the call ripple, which waits for calls drawn as waves in Slice 34 (#273, M3 design §8.5).
 
 ---
 
