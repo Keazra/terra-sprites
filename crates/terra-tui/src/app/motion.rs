@@ -22,9 +22,13 @@ impl App {
     }
 
     /// Turns motion on or off (design §6.9). Off, the screen is drawn as
-    /// it was before there was motion.
+    /// it was before there was motion, and a pan under way ends at once,
+    /// the Cursor going to the tile under a still pointer, as when one
+    /// ends.
     pub fn set_motion(&mut self, on: bool) {
-        self.motion.switch(on);
+        if self.motion.switch(on) {
+            self.repoint();
+        }
     }
 
     /// What the app keeps for motion, for the screen to draw it.

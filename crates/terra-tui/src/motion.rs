@@ -369,8 +369,11 @@ impl Motion {
 
     /// Turns motion on or off. Off, it forgets what it saw and what was
     /// playing, so the screen is drawn as it was before there was motion.
-    pub(crate) fn switch(&mut self, on: bool) {
+    /// Says whether that ended a pan, the moment the Cursor goes to the
+    /// tile under a still pointer, as when one ends (design §6.9).
+    pub(crate) fn switch(&mut self, on: bool) -> bool {
         self.on = on;
+        let ended_a_pan = !on && self.pan.is_some();
         if !on {
             self.seen.clear();
             self.moments.clear();
@@ -382,6 +385,7 @@ impl Motion {
             self.trail = None;
             self.pan = None;
         }
+        ended_a_pan
     }
 
     /// Starts tab `to` sweeping in at `now`, opened from `from` while the

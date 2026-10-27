@@ -3,7 +3,9 @@
 //! square tiles, each changed at once.
 
 mod common;
-use common::{SCREEN, WorldBuilder, apply, at, lines, map_app, render, scratch_folder, sized_app};
+use common::{
+    SCREEN, WorldBuilder, apply, at, lines, map_app, pointer_on, render, scratch_folder, sized_app,
+};
 
 use std::path::Path;
 
@@ -257,6 +259,27 @@ fn the_motion_row_turns_motion_on_and_off() {
     apply(&mut app, &world, Action::Scroll { dx: 1, dy: 0 });
     assert!(app.motion());
     assert_eq!(app.notice(), Some("Motion: on"));
+}
+
+#[test]
+fn motion_turned_off_while_the_view_pans_puts_the_cursor_under_a_still_pointer() {
+    // Design §6.9: the pan ends at once, so the Cursor goes to the tile
+    // under the pointer then, as it would have as the pan ended.
+    let world = WorldBuilder::grass(150, 12)
+        .starters(&[at(10, 5), at(140, 5)])
+        .build();
+    let mut app = sized_app(&world, Theme::cp437(), SCREEN);
+    app.set_motion(true);
+    let pointer = pointer_on(&app, at(90, 6));
+    apply(&mut app, &world, Action::Point(pointer));
+    // `Tab` to the sprite in the west: the view pans from column 48 to -13.
+    apply(&mut app, &world, Action::SelectNext);
+    assert_eq!(app.cursor(), at(90, 6), "waiting for the pan");
+    on_row(&mut app, &world, Setting::Motion);
+    apply(&mut app, &world, Action::Enter);
+    assert!(!app.motion());
+    // Where column 90 was, 42 columns into the view from column -13.
+    assert_eq!(app.cursor(), at(29, 6));
 }
 
 #[test]
