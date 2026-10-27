@@ -822,11 +822,14 @@ pub(crate) struct Bare {
 }
 
 /// Whether `app` could draw a death or a hatching of sprite `id` on `tile`
-/// just now (design §6.9): on the map view, and only if the policy lets
-/// what tells the player something about the sprite show (§6.4). Only those
-/// count towards how many play at once.
+/// just now (design §6.9): on the map view, not under the inspector open
+/// over it (§6.1), and only if the policy lets what tells the player
+/// something about the sprite show (§6.4). Only those count towards how
+/// many play at once.
 pub(crate) fn could_draw(app: &App, id: EntityId, tile: Pos) -> bool {
-    app.cell_of(tile).is_some() && app.can_view(Panel::Emotes, Subject::Sprite(id))
+    app.cell_of(tile).is_some()
+        && !app.under_the_inspector(tile)
+        && app.can_view(Panel::Emotes, Subject::Sprite(id))
 }
 
 /// Plays the map's motion over the tiles `ui::draw_tiles` drew in `inner`,

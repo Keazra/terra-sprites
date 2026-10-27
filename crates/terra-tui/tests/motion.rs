@@ -537,6 +537,50 @@ fn a_death_off_the_map_view_takes_no_place_from_one_the_player_sees() {
 }
 
 #[test]
+fn a_death_under_the_inspector_takes_no_place_from_one_the_player_sees() {
+    // Design §6.9: on a screen under 100 columns the inspector opens over
+    // the map view, and a tile under it isn't seen.
+    let size = Size::new(80, 24);
+    let empty = WorldBuilder::grass(150, 40).build();
+    let mut probe = sized_app(&empty, Theme::cp437(), size);
+    apply(&mut probe, &empty, Action::Inspector);
+    let inspector = probe.inspector_area().expect("open over the map");
+    let under = |tile| probe.cell_of(tile).map(|cell| inspector.contains(cell));
+    let tiles: Vec<Pos> = (0..150)
+        .flat_map(|x| (0..40).map(move |y| at(x, y)))
+        .collect();
+    let seen = *tiles
+        .iter()
+        .find(|&&tile| under(tile) == Some(false))
+        .unwrap();
+    let unseen: Vec<Pos> = tiles
+        .iter()
+        .copied()
+        .filter(|&tile| under(tile) == Some(true))
+        .step_by(3)
+        .take(4)
+        .collect();
+    let before = WorldBuilder::grass(150, 40)
+        .starters(&[&[seen][..], &unseen[..]].concat())
+        .build();
+    let after = WorldBuilder::grass(150, 40).build();
+    let mut app = sized_app(&before, Theme::cp437(), size);
+    app.set_motion(true);
+    plain(&mut app, &before);
+    apply(&mut app, &before, Action::Inspector);
+    assert_eq!(app.inspector_area(), Some(inspector));
+    app.record(&[], &before);
+    let ids: Vec<EntityId> = [&[seen][..], &unseen[..]]
+        .concat()
+        .iter()
+        .map(|&tile| sprite_on(&before, tile))
+        .collect();
+    app.record(&deaths(&ids), &after);
+    let screen = frame_on(&mut app, &after, Duration::ZERO, size);
+    assert!(flashing(&app, &screen, seen));
+}
+
+#[test]
 fn each_death_of_a_frame_s_ticks_finds_where_its_sprite_was() {
     // The screen notes the sprites once the frame's ticks are all taken
     // in, so a death on its second tick still finds its sprite.

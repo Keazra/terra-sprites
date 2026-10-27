@@ -278,7 +278,7 @@ impl App {
 
     /// Whether `tile` is drawn under the inspector, open over the map view
     /// (design §6.1, #305).
-    pub(super) fn under_the_inspector(&self, tile: Pos) -> bool {
+    pub(crate) fn under_the_inspector(&self, tile: Pos) -> bool {
         self.under_the_inspector_from(self.shown_viewport(), tile)
     }
 
