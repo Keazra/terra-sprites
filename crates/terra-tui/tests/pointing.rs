@@ -401,7 +401,7 @@ fn the_spot_the_pointer_is_on_is_lit_in_reverse_video_a_gene_s_name_alone() {
 }
 
 #[test]
-fn a_log_line_s_name_says_which_sprite_it_is_about_and_lights_it_up_on_the_map() {
+fn a_log_line_s_name_lights_its_sprite_up_on_the_map_and_says_nothing() {
     let world = field(&[], &[at(2, 2), at(7, 4)]);
     let mut app = app_on(&world);
     let (first, second) = (sprite_on(&world, at(2, 2)), sprite_on(&world, at(7, 4)));
@@ -418,34 +418,73 @@ fn a_log_line_s_name_says_which_sprite_it_is_about_and_lights_it_up_on_the_map()
             .contains(Modifier::REVERSED)
     };
     assert!(!lit(&app, at(7, 4)));
-    let said = pointing_at_text(&mut app, &world, SCREEN, &format!("{label} grew up"));
-    assert_eq!(said.name, label);
-    assert_eq!(said.words, "Whom this line is about click to select it");
+    // Its name says whom the line is about, so it opens no tooltip
+    // (Fauxpaw, 2026-10-27), but it lights up, and so does its sprite.
+    let line = cell_of_text(&app, &world, SCREEN, &format!("{label} grew up"));
+    assert!(pointing_at(&mut app, &world, SCREEN, line).is_none());
+    let screen = render(&app, &world);
+    assert!(
+        screen[line].modifier.contains(Modifier::REVERSED),
+        "its name"
+    );
     assert!(lit(&app, at(7, 4)), "the sprite it's about");
     assert!(!lit(&app, at(2, 2)), "not another");
-    // What happened, after the name, says nothing.
+    // What happened, after the name, lights nothing.
     let rest = cell_of_text(&app, &world, SCREEN, "grew up");
     assert!(pointing_at(&mut app, &world, SCREEN, rest).is_none());
+    assert!(!lit(&app, at(7, 4)), "not from the rest of the line");
     // A click on the name selects it.
-    let line = cell_of_text(&app, &world, SCREEN, &format!("{label} grew up"));
     apply(&mut app, &world, Action::left_click(line));
     assert_eq!(app.selection(), Some(Selection::Living(second)));
-    let said = pointing_at(&mut app, &world, SCREEN, line).expect("a tooltip");
-    assert_eq!(said.words, "The selected sprite, whom this line is about");
+    assert!(pointing_at(&mut app, &world, SCREEN, line).is_none());
     assert_ne!(first, second);
 }
 
 #[test]
-fn a_click_on_a_line_about_a_sprite_no_longer_living_selects_nothing() {
-    let world = field(&[], &[at(2, 2)]);
+fn a_line_about_a_sprite_no_longer_living_is_plain_and_takes_no_click() {
+    // Water runs out in two ticks, and then dehydration kills in two more.
+    let pack = pack_changing(&[(
+        "physiology.ron",
+        &[
+            ("hydration_loss: 0.00033", "hydration_loss: 0.5"),
+            ("dehydration: 0.0011", "dehydration: 0.5"),
+        ],
+    )]);
+    let mut world = WorldBuilder::grass(10, 5)
+        .starters(&[at(1, 1)])
+        .data(pack)
+        .seed(7)
+        .build();
+    let dying = sprite_on(&world, at(1, 1));
     let mut app = app_on(&world);
+    while world.dead(dying).is_none() {
+        assert!(world.tick() < 100, "it dies of thirst");
+        let events = world.step();
+        app.record(&events, &world);
+    }
+    // And one the world has forgotten.
     let gone = EntityId(9_999);
-    app.record(&[died(1, gone, DeathCause::Starvation, 40)], &world);
-    let said = pointing_at_text(&mut app, &world, SCREEN, "Sprite #9999");
-    assert_eq!(said.words, "Whom this line is about, who has died");
-    let line = cell_of_text(&app, &world, SCREEN, "Sprite #9999");
-    apply(&mut app, &world, Action::left_click(line));
-    assert_eq!(app.selection(), None);
+    app.record(
+        &[died(world.tick(), gone, DeathCause::Starvation, 40)],
+        &world,
+    );
+    let spot = Theme::cp437().text().spot.fg.expect("a colour");
+    for name in [format!("Sprite #{} died", dying.0), "Sprite #9999".into()] {
+        let line = cell_of_text(&app, &world, SCREEN, &name);
+        let screen = render(&app, &world);
+        assert_ne!(screen[line].fg, spot, "{name}: not in the spot colour");
+        assert!(
+            pointing_at(&mut app, &world, SCREEN, line).is_none(),
+            "{name}"
+        );
+        let screen = render(&app, &world);
+        let lit = screen[line].modifier.contains(Modifier::REVERSED);
+        assert!(!lit, "{name}: not lit");
+        let cursor = app.cursor();
+        apply(&mut app, &world, Action::left_click(line));
+        assert_eq!(app.selection(), None, "{name}");
+        assert_eq!(app.cursor(), cursor, "{name}: nor does it reach the map");
+    }
 }
 
 #[test]
@@ -788,10 +827,12 @@ fn a_log_line_that_does_not_name_its_sprite_is_all_of_it_its_spot() {
     for x in start.x..start.x + width {
         assert_eq!(screen[(x, start.y)].fg, spot, "at {x}");
     }
+    // Its end lights up its sprite as its start does.
     let end = Position::new(start.x + width - 1, start.y);
-    let said = pointing_at(&mut app, &world, SCREEN, end).expect("a tooltip");
-    assert_eq!(said.name, app.names().label(id));
-    assert_eq!(said.words, "Whom this line is about click to select it");
+    apply(&mut app, &world, Action::Point(end));
+    let tile = app.cell_of(at(2, 2)).expect("in view");
+    let screen = render(&app, &world);
+    assert!(screen[tile].modifier.contains(Modifier::REVERSED));
 }
 
 /// Genes the starter genome has none of: a gene with no effect, a starting
@@ -926,10 +967,15 @@ fn filling_the_screen_the_inspector_leaves_nothing_beneath_it_to_point_at() {
     let line = cell_of_text(&app, &world, SCREEN, &format!("Sprite #{} grew up", id.0));
     apply(&mut app, &world, Action::Inspector);
     assert!(app.full_screen());
-    assert!(
-        pointing_at(&mut app, &world, SCREEN, line).is_none(),
-        "the log's line beneath says nothing"
-    );
+    // The log's line beneath lights nothing up.
+    let reversed = |app: &App| {
+        render(app, &world)[line]
+            .modifier
+            .contains(Modifier::REVERSED)
+    };
+    assert!(!reversed(&app));
+    assert!(pointing_at(&mut app, &world, SCREEN, line).is_none());
+    assert!(!reversed(&app), "the log's line beneath lights nothing up");
     apply(&mut app, &world, Action::left_click(line));
     assert_eq!(app.selection(), None, "and takes no click");
 }
@@ -1048,7 +1094,7 @@ fn without_a_tooltip(app: &mut App, world: &World, size: Size) -> Vec<Position> 
 }
 
 #[test]
-fn on_a_screen_short_of_room_every_spot_still_says_what_it_is() {
+fn on_a_screen_short_of_room_every_spot_still_says_what_it_is_or_lights_up_its_sprite() {
     // Under 100 columns, with the inspector open over the map, and short
     // of rows, where a whole tooltip doesn't fit beside much of what can
     // be pointed at (#305).
@@ -1068,14 +1114,34 @@ fn on_a_screen_short_of_room_every_spot_still_says_what_it_is() {
             assert!(missing.is_empty(), "{size:?} {tab:?}: {missing:?}");
         }
     }
-    // With no room for the inspector, a line of the event log is as wide
-    // as the screen.
+    // With no room for the inspector, the event log is as wide as the
+    // screen: its filters still say what they are, and the name in a line
+    // of it, which says nothing, still lights up its sprite.
     for width in [24, 30, 40] {
         let size = Size::new(width, 30);
         let world = field(&[], &[at(2, 2)]);
         let mut app = sized_app(&world, Theme::cp437(), size);
         app.record(&[grew_up(sprite_on(&world, at(2, 2)))], &world);
-        let missing = without_a_tooltip(&mut app, &world, size);
-        assert!(missing.is_empty(), "{size:?}: {missing:?}");
+        let tile = app.cell_of(at(2, 2)).expect("in view");
+        let lit = |app: &App| {
+            render_on(app, &world, size)[tile]
+                .modifier
+                .contains(Modifier::REVERSED)
+        };
+        assert!(!lit(&app));
+        let cells = spot_cells(&render_on(&app, &world, size));
+        assert!(!cells.is_empty(), "something to point at at {size:?}");
+        let (mut idle, mut lighting) = (Vec::new(), 0);
+        for cell in cells {
+            let said = pointing_at(&mut app, &world, size, cell);
+            let says = said.is_some_and(|said| !said.name.is_empty() && !said.area.contains(cell));
+            if lit(&app) {
+                lighting += 1;
+            } else if !says {
+                idle.push(cell);
+            }
+        }
+        assert!(idle.is_empty(), "{size:?}: {idle:?}");
+        assert!(lighting > 0, "{size:?}: the name lights up its sprite");
     }
 }

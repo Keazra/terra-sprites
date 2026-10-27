@@ -826,7 +826,7 @@ The box `:` opens near the top of the map view: typing finds any control that wo
 _Avoid_: command line, console, search (that's the help's)
 
 **Spot** (#304):
-A part of the screen the pointer can be on that says what it is in a tooltip, or takes a click, or both: a name, such as a drive's, a gene's or the sprite's in a line of the event log, or an inspector tab's or a Brain tab memory heading, which takes a click and says nothing. The inspector, the event log and each pop-up note their spots as they're drawn, afresh each frame, and a pop-up's box is one too, which says nothing and takes the pointer before what's under it. A spot a tooltip can explain is drawn in the theme's Spot colour, unless it keeps a look of its own until the pointer is on it, as a gene with no effect keeps its muted one.
+A part of the screen the pointer can be on that says what it is in a tooltip, lights something up, or takes a click: a name, such as a drive's or a gene's, which says what it is; the sprite's in a line of the event log, which lights it up on the map and takes a click; or an inspector tab's or a Brain tab memory heading, which takes a click and says nothing. The inspector, the event log and each pop-up note their spots as they're drawn, afresh each frame, and a pop-up's box is one too, which says nothing and takes the pointer before what's under it. A spot a tooltip can explain, or the name of a log line's sprite, is drawn in the theme's Spot colour, unless it keeps a look of its own until the pointer is on it, as a gene with no effect keeps its muted one.
 _Avoid_: hotspot, hit box
 
 **Tooltip** (#304):
@@ -861,7 +861,7 @@ A mapping from semantic tiles to glyphs and colours, and from each text role to 
 _Avoid_: skin
 
 **Text role** (#302):
-What a piece of the screen's text is for, which the theme styles: a heading, muted (minor) text, good (a gain, or a reward felt), bad (a loss, or a punishment felt), a key in a hint, selected (what's chosen, such as the open tab), or a spot (what a tooltip can explain). Colour never carries a meaning alone: the signs, arrows and capitals stay.
+What a piece of the screen's text is for, which the theme styles: a heading, muted (minor) text, good (a gain, or a reward felt), bad (a loss, or a punishment felt), a key in a hint, selected (what's chosen, such as the open tab), or a spot (what a tooltip can explain, and the name of a log line's sprite). Colour never carries a meaning alone: the signs, arrows and capitals stay.
 _Avoid_: colour scheme, highlight (for a role)
 
 **Panel shade** (#302):

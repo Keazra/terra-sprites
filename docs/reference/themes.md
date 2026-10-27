@@ -124,7 +124,7 @@ The screen's text is coloured by what it is, so a tab reads at a glance (design 
 | `bad` | A loss, `-.19`, and a punishment felt | `light_red` |
 | `key` | The key in a hint, `Z` of `Z select`, the top bar's `?`, the keys in a question such as `(y/n)` and in an overlay's corner, and help's keys | bold |
 | `selected` | What's chosen: the open tab, a menu's highlighted item, the sprite list's highlighted row | reversed |
-| `spot` | What a tooltip can explain when the pointer is on it: a drive's name on the Body tab, a chemical's on the Chem tab, a gene's name on the Genome tab, the event log's filters and the name in each of its lines, but a gene with no effect, which keeps `muted`. The one the pointer is on is drawn in it in reverse video, with its tooltip beside the pointer | `"#87afd7"`, a soft blue |
+| `spot` | What a tooltip can explain when the pointer is on it: a drive's name on the Body tab, a chemical's on the Chem tab, a gene's name on the Genome tab and the event log's filters; and a sprite's name in a line of the log while it's in the world, which lights the sprite up on the map instead; but a gene with no effect, which keeps `muted`. The one the pointer is on is drawn in it in reverse video, with its tooltip, if it has one, beside the pointer | `"#87afd7"`, a soft blue |
 
 A zero, `+.00`, is neither good nor bad, and a chemical's change on the Chem tab stays plain, since a rise is good for food and bad for hunger. A drive's bar on the Body tab is drawn in the colour `drives` gives the drive.
 

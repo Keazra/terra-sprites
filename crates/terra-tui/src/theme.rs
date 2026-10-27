@@ -186,9 +186,9 @@ pub struct TextLook {
     pub key: Style,
     /// What's chosen, such as the open tab.
     pub selected: Style,
-    /// What the pointer can explain, such as a drive's name or a gene's
-    /// (design §6.1, #304). The spot under the pointer is drawn in it in
-    /// reverse video.
+    /// What a tooltip can explain, such as a drive's name or a gene's, and
+    /// the name of a log line's sprite (design §6.1, #304). The spot under
+    /// the pointer is drawn in it in reverse video.
     pub spot: Style,
 }
 

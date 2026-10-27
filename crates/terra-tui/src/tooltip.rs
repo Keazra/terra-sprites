@@ -1,9 +1,10 @@
 //! Tooltips (design §6.1, #304): what the pointer is over, said in a box
 //! below it and to its left, and the spot under it lit up. What the event
-//! log's filters do, a chemical's name and what its data says it is, what
-//! a gene does, and which sprite a line of the log is about. Whatever a
-//! tooltip can explain is drawn in the theme's spot style, so the player
-//! can see what to point at.
+//! log's filters do, a chemical's name and what its data says it is, and
+//! what a gene does. Whatever a tooltip can explain is drawn in the
+//! theme's spot style, so the player can see what to point at, and so is
+//! the name of a log line's sprite, which pointing at lights the sprite up
+//! on the map.
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Margin, Position, Rect};
@@ -11,7 +12,7 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use terra_sim::{ChemicalKind, World};
 
-use crate::app::{App, Screen, Selection, in_the_world};
+use crate::app::{App, Screen};
 use crate::controls;
 use crate::inspector;
 use crate::spots::{Spot, Spots};
@@ -35,10 +36,11 @@ pub(crate) struct Explained {
     pub(crate) hint: Option<String>,
 }
 
-/// What `spot` says it is, if anything. A tab's name says nothing, since
-/// it says what the tab shows (Fauxpaw, 2026-10-27), a memory heading says
-/// nothing, since it's a heading, and a pop-up's box says nothing, so the
-/// pointer on one explains nothing beneath it.
+/// What `spot` says it is, if anything. A tab's name says nothing, since it
+/// says what the tab shows, nor does the name of a log line's sprite, since
+/// it says whom the line is about (Fauxpaw, 2026-10-27). A memory heading
+/// says nothing, since it's a heading, and a pop-up's box says nothing, so
+/// the pointer on one explains nothing beneath it.
 pub(crate) fn explained(spot: &Spot, app: &App, world: &World) -> Option<Explained> {
     match spot {
         Spot::Filters => Some(Explained {
@@ -74,20 +76,7 @@ pub(crate) fn explained(spot: &Spot, app: &App, world: &World) -> Option<Explain
                 hint: None,
             })
         }
-        Spot::LogLine(id) => {
-            let selected = app.selection().map(Selection::id) == Some(*id);
-            let (about, hint) = match in_the_world(world, *id) {
-                Some(_) if selected => ("The selected sprite, whom this line is about", None),
-                Some(_) => ("Whom this line is about", Some("click to select it".into())),
-                None => ("Whom this line is about, who has died", None),
-            };
-            Some(Explained {
-                name: app.names().label(*id),
-                about: about.into(),
-                hint,
-            })
-        }
-        Spot::Tab(_) | Spot::Memory(_) | Spot::PopUp => None,
+        Spot::Tab(_) | Spot::Memory(_) | Spot::LogLine(_) | Spot::PopUp => None,
     }
 }
 
@@ -102,10 +91,11 @@ fn kind_words(kind: ChemicalKind) -> &'static str {
     }
 }
 
-/// Draws whatever a tooltip can explain in the theme's spot style, where
-/// nothing drawn later is over it (design §6.1, §6.2), but what keeps a
-/// look of its own: what's minor stays muted, so a gene with no effect
-/// still reads as one until it's pointed at.
+/// Draws whatever a tooltip can explain, and the name of a log line's
+/// sprite, in the theme's spot style, where nothing drawn later is over it
+/// (design §6.1, §6.2), but what keeps a look of its own: what's minor
+/// stays muted, so a gene with no effect still reads as one until it's
+/// pointed at.
 pub(crate) fn mark_spots(buf: &mut Buffer, app: &App, spots: &Spots) {
     let look = app.theme.text();
     for spot in spots.marked() {

@@ -1601,10 +1601,10 @@ fn render_event_log(buf: &mut Buffer, area: Rect, app: &App, world: &World, spot
         // The tick is minor beside what happened (design §6.2).
         let tick = format!(" {:>7}", thousands(tick));
         let happened = format!("  {text}{times}");
-        // The name of the sprite it's about, where a tooltip says which
-        // sprite that is, and a click selects it (design §6.1, #304); the
-        // whole of what happened if it isn't named.
-        if let Some(id) = about {
+        // The name of the sprite it's about, while it's in the world, which
+        // pointing at lights up on the map and a click selects (design
+        // §6.1, #304); the whole of what happened if it isn't named.
+        if let Some(id) = about.filter(|&id| in_the_world(world, id).is_some()) {
             let label = app.names().label(id);
             let (start, width) = match happened.find(&label) {
                 Some(at) => (happened[..at].chars().count(), label.chars().count()),

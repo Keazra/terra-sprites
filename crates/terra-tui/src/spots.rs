@@ -13,7 +13,8 @@ use crate::app::Tab;
 use crate::inspector::MemoryOpen;
 
 /// Something on screen the pointer can be on, which a tooltip can say
-/// something about, or a click lands on (design §6.1).
+/// something about, pointing at lights up, or a click lands on (design
+/// §6.1).
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Spot {
     /// An inspector tab's name, in its title row, which takes a click and
@@ -33,7 +34,10 @@ pub(crate) enum Spot {
     /// v40 §6.1).
     Memory(MemoryOpen),
     /// The name in a line of the event log of the sprite or egg it's
-    /// about: the first it names.
+    /// about, the first it names, while it's in the world: pointing at it
+    /// lights its sprite up on the map, and a click selects it. It says
+    /// nothing, since its name says whom the line is about (Fauxpaw,
+    /// 2026-10-27).
     LogLine(EntityId),
     /// A pop-up's box, over whatever is drawn beneath it.
     PopUp,
@@ -55,11 +59,12 @@ impl Spot {
         !matches!(self, Spot::Chemical { .. } | Spot::Gene(_))
     }
 
-    /// Whether it says what it is, in a tooltip, and so is drawn in the
-    /// theme's spot style unless it keeps a look of its own (design §6.1,
-    /// §6.2): all but a tab's name, a memory heading, which is a heading,
-    /// and a pop-up's box.
-    pub(crate) fn explains(&self) -> bool {
+    /// Whether it's drawn in the theme's spot style, unless it keeps a look
+    /// of its own (design §6.1, §6.2): what a tooltip says something about,
+    /// and the name of a log line's sprite, which pointing at lights the
+    /// sprite up on the map. Not a tab's name, a memory heading, which is a
+    /// heading, nor a pop-up's box.
+    pub(crate) fn coloured(&self) -> bool {
         !matches!(self, Spot::Tab(_) | Spot::Memory(_) | Spot::PopUp)
     }
 
@@ -77,7 +82,7 @@ pub(crate) struct Spots(Vec<(Rect, Spot, bool)>);
 
 impl Spots {
     /// Notes that `spot` is drawn over `area`, marked in the theme's spot
-    /// style if it explains itself (design §6.2).
+    /// style if it's of a kind drawn in it (design §6.2).
     pub(crate) fn note(&mut self, area: Rect, spot: Spot) {
         self.noted(area, spot, true);
     }
@@ -116,12 +121,12 @@ impl Spots {
     }
 
     /// Every spot noted to be marked in the theme's spot style, in the
-    /// order they were drawn: those that explain themselves, but what
-    /// keeps a look of its own.
+    /// order they were drawn: those of a kind drawn in it, but what keeps
+    /// a look of its own.
     pub(crate) fn marked(&self) -> impl Iterator<Item = &Spot> {
         self.0
             .iter()
-            .filter(|(_, spot, marked)| *marked && spot.explains())
+            .filter(|(_, spot, marked)| *marked && spot.coloured())
             .map(|(_, spot, _)| spot)
     }
 
@@ -164,7 +169,7 @@ mod tests {
     }
 
     #[test]
-    fn only_what_explains_itself_and_keeps_no_look_of_its_own_is_marked() {
+    fn only_what_is_coloured_and_keeps_no_look_of_its_own_is_marked() {
         let mut spots = Spots::default();
         spots.note(Rect::new(0, 0, 4, 1), Spot::Gene(2));
         spots.note_unmarked(Rect::new(0, 1, 4, 1), Spot::Gene(3));

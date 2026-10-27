@@ -714,7 +714,7 @@ fn the_themes_style_text_by_its_job_as_the_design_table_says() {
     ];
     assert_eq!(text(&Theme::cp437()), styles);
     assert_eq!(text(&Theme::ascii()), styles);
-    // And what a tooltip can explain, in a soft blue (#304), which is one
+    // And what the pointer can be on, in a soft blue (#304), which is one
     // of the 256 colours, so it looks the same where exact ones aren't
     // shown.
     let spot = Style::default().fg(Color::Rgb(0x87, 0xaf, 0xd7));

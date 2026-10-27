@@ -5,7 +5,7 @@
 // light_green, light_yellow, light_blue, light_magenta, light_cyan, white;
 // or an exact colour, "#rrggbb". A name follows the player's terminal colours,
 // so this theme uses exact ones only where no name fits: the panels' shades,
-// and the soft blue of what a tooltip can explain.
+// and the soft blue of what the pointer can be on.
 (
     tiles: {
         terrain(grass):         (glyph: '.', fg: green),

@@ -203,14 +203,10 @@ fn the_event_log_s_ticks_are_muted_beside_what_happened() {
     let screen = render(&app, &world, 100, 30);
     let tick = cells(&screen, "4,012  Sprite #31 d", 26);
     assert!(tick[..5].iter().all(|cell| styled(cell, look().muted)));
-    // The name, which a tooltip explains, is in the spot colour (#304).
-    let name = "Sprite #31".len();
-    assert!(
-        tick[7..7 + name]
-            .iter()
-            .all(|cell| styled(cell, look().spot))
-    );
-    assert!(tick[7 + name..].iter().all(|cell| cell.fg == Color::Reset));
+    // What happened is plain, and so is the name of the sprite it's
+    // about once it has died, since pointing at it lights nothing up
+    // (#304); a living sprite's is in the spot colour (tests/pointing.rs).
+    assert!(tick[7..].iter().all(|cell| cell.fg == Color::Reset));
 }
 
 #[test]

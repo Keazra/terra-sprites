@@ -600,9 +600,9 @@ pub const MEMORY_ENTER: Control = control(
 pub const POINT: Control = control(
     "point",
     &[],
-    "a highlighted name: a tooltip says what it is",
+    "a highlighted name says what it is, or lights up its sprite",
     &[Heading::Pointer],
-    "hover tooltip explain drive chemical gene filter name",
+    "hover tooltip explain drive chemical gene filter name log light",
 );
 
 // The debug overlay (design §6.1, #311).
