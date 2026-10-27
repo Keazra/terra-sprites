@@ -828,7 +828,9 @@ fn line_between(from: Pos, to: Pos) -> Vec<Pos> {
 
 /// Draws the open menu, if any (design v28 §6.5): over the map, from its top-left
 /// tile, its items numbered and the highlighted one in the theme's style for
-/// what's chosen (design §6.2), inside a border; as far as the screen goes.
+/// what's chosen (design §6.2), inside a border, with the key hint in its
+/// corner if it has one, as the settings screen's box does (§6.7, #307); as
+/// far as the screen goes.
 fn render_menu(buf: &mut Buffer, screen: Rect, app: &App, world: &World) -> Option<Rect> {
     let (Some(menu), Some(title)) = (app.menu_area(world), app.menu_title()) else {
         return None;
@@ -837,8 +839,15 @@ fn render_menu(buf: &mut Buffer, screen: Rect, app: &App, world: &World) -> Opti
     if area.width < 3 || area.height < 3 {
         return None;
     }
-    blank(buf, area);
-    draw_border(buf, area, title);
+    match app.menu_corner() {
+        Some(corner) => {
+            clear_box(buf, area, title, corner, app.theme.text());
+        }
+        None => {
+            blank(buf, area);
+            draw_border(buf, area, title);
+        }
+    }
     let items = app.menu_items(world);
     let room = usize::from(area.width - 2);
     if items.is_empty() {

@@ -8,15 +8,15 @@ A **theme** says how the map is drawn: the character and colour of each kind of 
 | macOS | `~/Library/Application Support/terra-sprites/themes` |
 | Linux and others | `$XDG_DATA_HOME/terra-sprites/themes`, or `~/.local/share/terra-sprites/themes` |
 
-Then press `Ctrl+T` in the game. The **Themes** menu lists the two built-in themes, then each `.ron` file in the folder by name; pick one with its number, the arrows and `Enter`, or a click, and the map is drawn with it at once. The status line says "Theme: my-theme". No rebuilding is needed, and you can edit the file and pick it again to see the change.
+Then press `Ctrl+T` in the game. The [settings screen](settings.md) offers each `.ron` file in the folder by name, after the built-in ones, on two of its rows: **Glyphs**, the glyph set, and **Colours**, the palette (below). Choose a row with `↑` and `↓`, change it with `←` and `→`, `Enter` or a click, and the map is drawn in it at once. The status line says what changed, such as "Colours: my-theme". To draw your theme whole, pick it on both rows. No rebuilding is needed, and you can edit the file and pick it again to see the change.
 
-The game doesn't remember the theme you picked once it's closed. To start in one, give its file when you start the game:
+The game remembers what you picked, in [`settings.ron`](settings.md), and starts in it next time. To start in a theme for one run only, give its file when you start the game, and it's drawn whole:
 
 ```bash
 cargo run --release -- --theme my-theme.ron --seed 7
 ```
 
-`--ascii` picks only the glyph set, so it goes with `--theme`: `--ascii --theme my-theme.ron` draws your theme's palette in plain ASCII. A theme only changes how things look: it isn't part of the world, so it never changes what happens, and a save or replay plays out the same in any theme. The characters of frames and text are the same in every theme: a theme sets only their colours.
+`--ascii` picks only the glyph set, so it goes with `--theme`: `--ascii --theme my-theme.ron` draws your theme's palette in plain ASCII. Neither is saved: the next run starts in what you picked on the settings screen. A theme only changes how things look: it isn't part of the world, so it never changes what happens, and a save or replay plays out the same in any theme. The characters of frames and text are the same in every theme: a theme sets only their colours.
 
 ## Glyph sets and palettes
 
@@ -27,7 +27,7 @@ A theme is two parts, chosen apart (design §6.2): a **glyph set**, every charac
 | Glyph set | Each `glyph:` character in `tiles`, `objects` and `cursor`; the Cursor's `arrows`, `followed_arrows`, `visible_frame` and `status_marks`; `space`'s glass and stars; and `population`'s `full` and `half` characters and its `limit`'s. |
 | Palette | Every glyph's `fg`, `bold` and `reversed`; `drives`; `attention_marker`; `population`'s `stages` and its `limit`'s colour; `lineage`; `text`; `panels`; `motion`; and `colour`. |
 
-Every theme file is whole, and picked as both, as `Ctrl+T` and `--theme` do, it draws as written. Taken as a glyph set, only its characters are used; taken as a palette, everything but them. An object type or state that one part leaves out falls back in that part, as under [`objects`](#objects) below. The game has these built in:
+Every theme file is whole, and picked as both, on both of the settings screen's rows or with `--theme`, it draws as written. Taken as a glyph set, only its characters are used; taken as a palette, everything but them. An object type or state that one part leaves out falls back in that part, as under [`objects`](#objects) below. The game has these built in:
 
 | Built in | File | What it is |
 |---|---|---|
@@ -36,9 +36,9 @@ Every theme file is whole, and picked as both, as `Ctrl+T` and `--theme` do, it 
 | Default palette | [`cp437.ron`](../../themes/cp437.ron) | Named colours on the map and the text, which follow the terminal's own scheme, and exact ones only where no name fits. The panels sit on shades. |
 | High contrast | [`high_contrast.ron`](../../themes/high_contrast.ron) | Bright exact colours, the same in every terminal, each at 7:1 or more against Windows Terminal's black: minor text light grey rather than dark, headings and keys bold, a brighter attention marker, and lines between the panels in place of shades. |
 | Colour-blind | [`colour_blind.ron`](../../themes/colour_blind.ron) | Exact colours from Okabe and Ito's set for colour-blind readers, so the drives, the lineage, a gain against a loss and the graph's stages are told apart without red against green. |
-| Mono | [`mono.ron`](../../themes/mono.ron) | No colour at all ([`colour: false`](#colour), below), only bold and reverse video, and lines between the panels. What colour tells in the others is read from the signs, arrows and capitals, which stay. `NO_COLOR` set to anything but nothing starts the game in it, as [no-color.org](https://no-color.org) asks, unless `--theme` gives a palette. |
+| Mono | [`mono.ron`](../../themes/mono.ron) | No colour at all ([`colour: false`](#colour), below), only bold and reverse video, and lines between the panels. What colour tells in the others is read from the signs, arrows and capitals, which stay. `NO_COLOR` set to anything but nothing starts the game in it, as [no-color.org](https://no-color.org) asks, unless you've picked a palette on the settings screen or with `--theme`. |
 
-Each palette's file draws the CP437 glyphs, so it loads as a whole theme too: `--theme themes/high_contrast.ron` starts the game in high contrast, and `--ascii --theme themes/mono.ron` in mono and ASCII. Copied into your themes folder, they're on the `Ctrl+T` menu as well.
+Each palette's file draws the CP437 glyphs, so it loads as a whole theme too: `--theme themes/high_contrast.ron` starts the game in high contrast, and `--ascii --theme themes/mono.ron` in mono and ASCII. Copied into your themes folder, they're on the settings screen's rows as well, after the built-in ones.
 
 ## The rules
 
@@ -46,7 +46,7 @@ Each palette's file draws the CP437 glyphs, so it loads as a whole theme too: `-
 - **Colours** are the 16 terminal colours, by name: `black`, `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `gray`, `dark_gray`, `light_red`, `light_green`, `light_yellow`, `light_blue`, `light_magenta`, `light_cyan`, `white`. How each looks is up to the terminal's own colours. Terminals have no brown, so the default palette draws dirt in `yellow`.
 - **A colour can also be exact,** written `"#rrggbb"` in double quotes, such as `"#181a22"`. A named colour follows the player's terminal colours and an exact one doesn't, so the default palette uses exact colours only where no name fits: the panels' shades, since even `dark_gray` is far too bright for a background (`#767676` in Windows Terminal), and motion's colours. High contrast and colour-blind use exact colours throughout, to look the same in every terminal. On a terminal that doesn't say it shows exact colours, such as macOS's Terminal, the game draws each as the nearest of the 256 colours nearly every terminal shows (design §6.2). A colour that's neither a name nor `"#rrggbb"` is refused, naming it.
 - **Give each kind of thing its own character,** and use colour for its state, as the built-in glyph sets do: then a player who can't tell colours apart can still tell a bush from a thornbush. The game doesn't enforce this.
-- **A theme that's wrong is refused,** with a message saying what's wrong. Picked from the menu, the status line says so, such as "Couldn't use theme my-theme: it has no glyph for terrain(rock)", and the map keeps the theme it had. Given with `--theme`, the game doesn't start, and says the same.
+- **A theme that's wrong is refused,** with a message saying what's wrong. Picked on the settings screen, the status line says so, such as "Couldn't use theme my-theme: it has no glyph for terrain(rock)", and the row keeps what it had. Given with `--theme`, the game doesn't start, and says the same.
 
 ## Fields
 
@@ -253,4 +253,4 @@ A bright theme, for a terminal whose dark colours are hard to see: light colours
 )
 ```
 
-Save it as `bright.ron` in the themes folder and pick it with `Ctrl+T`. Boredom, crowdedness, arousal and anxiety are left out of `drives`, so a sprite bored, crowded, aroused or anxious above all else draws in white. `space` gives only the far stars, in gray rather than dark gray, so the glass and the nearer stars are drawn as the default theme draws them. `population` draws old sprites in white and the line of the world's limit in gray; the rest of the graph is drawn as in the default theme. `lineage` draws the sprites outside the lineage in gray, a little brighter than the default's dark gray. `text` makes headings light yellow and minor text gray, so they stand out more; gains, losses, keys and the open tab are styled as in the default theme. `panels` sets the shades in neutral greys. `motion` makes a death's flash white, and its other colours are the default theme's, but the water's: it leaves their shades out, so the light cyan and light blue it draws water in each drift to a lighter shade of their own.
+Save it as `bright.ron` in the themes folder and pick it as the Glyphs and the Colours on the settings screen (`Ctrl+T`). Boredom, crowdedness, arousal and anxiety are left out of `drives`, so a sprite bored, crowded, aroused or anxious above all else draws in white. `space` gives only the far stars, in gray rather than dark gray, so the glass and the nearer stars are drawn as the default theme draws them. `population` draws old sprites in white and the line of the world's limit in gray; the rest of the graph is drawn as in the default theme. `lineage` draws the sprites outside the lineage in gray, a little brighter than the default's dark gray. `text` makes headings light yellow and minor text gray, so they stand out more; gains, losses, keys and the open tab are styled as in the default theme. `panels` sets the shades in neutral greys. `motion` makes a death's flash white, and its other colours are the default theme's, but the water's: it leaves their shades out, so the light cyan and light blue it draws water in each drift to a lighter shade of their own.

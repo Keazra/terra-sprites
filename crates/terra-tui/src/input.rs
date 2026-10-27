@@ -132,9 +132,8 @@ pub enum Action {
     SaveAs,
     /// Pick a save to load from a list (`Ctrl+O`).
     OpenSaves,
-    /// Pick a theme from the built-in ones and the themes folder (`Ctrl+T`,
-    /// design v34 §6.7).
-    OpenThemes,
+    /// Open the settings screen (`Ctrl+T`, design §6.7, #307).
+    OpenSettings,
     /// In a replay, take it over and play on from where it is (`Ctrl+R`,
     /// design v36 §2.7).
     TakeOver,
@@ -389,7 +388,7 @@ impl Keys {
                 // A held key would save or open the list again and again.
                 KeyCode::Char('s' | 'S') if !held => Action::SaveAs,
                 KeyCode::Char('o' | 'O') if !held => Action::OpenSaves,
-                KeyCode::Char('t' | 'T') if !held => Action::OpenThemes,
+                KeyCode::Char('t' | 'T') if !held => Action::OpenSettings,
                 KeyCode::Char('r' | 'R') if !held => Action::TakeOver,
                 KeyCode::Char('s' | 'S' | 'o' | 'O' | 't' | 'T' | 'r' | 'R') => return None,
                 _ => Action::Dismiss,

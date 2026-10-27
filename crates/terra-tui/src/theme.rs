@@ -364,6 +364,47 @@ pub enum Pick<T> {
     File(PathBuf),
 }
 
+/// One of the two parts a theme is chosen in, as the game builds them in
+/// (design §6.2, #307): a glyph set or a palette.
+pub trait Part: Copy + Eq + 'static {
+    /// Every one built in, in the order the game offers them.
+    fn all() -> &'static [Self];
+
+    /// Its name, as the game shows it.
+    fn name(self) -> &'static str;
+
+    /// The built-in theme it's taken from.
+    fn source(self) -> Theme;
+}
+
+impl Part for GlyphSet {
+    fn all() -> &'static [GlyphSet] {
+        &GlyphSet::ALL
+    }
+
+    fn name(self) -> &'static str {
+        GlyphSet::name(self)
+    }
+
+    fn source(self) -> Theme {
+        GlyphSet::source(self)
+    }
+}
+
+impl Part for ColourPalette {
+    fn all() -> &'static [ColourPalette] {
+        &ColourPalette::ALL
+    }
+
+    fn name(self) -> &'static str {
+        ColourPalette::name(self)
+    }
+
+    fn source(self) -> Theme {
+        ColourPalette::source(self)
+    }
+}
+
 /// The egg's object type in the built-in data pack (M2 design §10.4), which
 /// a theme from before eggs were items drew with its `egg` tile.
 const EGG: &str = "egg";

@@ -868,7 +868,7 @@ fn the_same_app_drawn_twice_draws_the_same_screen() {
     take_in(&mut app, &after);
     apply(&mut app, &after, Action::NextTab);
     apply(&mut app, &after, Action::PreviousTab);
-    apply(&mut app, &after, Action::OpenThemes);
+    apply(&mut app, &after, Action::OpenSettings);
     app.animate(ms(60));
     let screen = render(&app, &after);
     assert_eq!(render(&app, &after), screen);
@@ -1325,10 +1325,11 @@ fn a_pop_up_fades_out_to_the_dark_as_it_closes_and_what_was_under_it_back() {
 #[test]
 fn each_pop_up_fades_in_as_it_opens_and_out_as_it_closes() {
     // The menus, help, the command palette, the sprite list, the
-    // population graph and the family tree (design §6.1).
+    // population graph and the family tree (design §6.1). The settings
+    // screen, which says whether motion is on, has a test of its own.
     let world = one_on_a_field();
     for opens in [
-        Action::OpenThemes,
+        Action::OpenSaves,
         Action::Help,
         Action::Palette,
         Action::SpriteList,
@@ -1357,6 +1358,34 @@ fn each_pop_up_fades_in_as_it_opens_and_out_as_it_closes() {
         let (end, plain) = frames(&mut on, &mut off, &world, ms(75));
         assert_eq!(end, plain, "{opens:?}");
     }
+}
+
+#[test]
+fn the_settings_screen_fades_in_as_it_opens_and_out_as_it_closes() {
+    // As the menus do (design §6.7, §6.9). Its Motion row says whether
+    // motion is on, so it's drawn against itself with motion on, once it
+    // has opened and once what was under it is back, paused, so the stars
+    // stay still, and once the twins' notices have gone.
+    let world = one_on_a_field();
+    let (mut on, _) = selected(&world);
+    apply(&mut on, &world, Action::TogglePause);
+    let plain = frame(&mut on, &world, ms(3000));
+    apply(&mut on, &world, Action::OpenSettings);
+    let start = frame(&mut on, &world, Duration::ZERO);
+    let open = frame(&mut on, &world, ms(150));
+    all_that_differs_is_dark(&start, &open);
+    assert_eq!(frame(&mut on, &world, ms(1000)), open);
+    apply(&mut on, &world, Action::Back);
+    let start = frame(&mut on, &world, Duration::ZERO);
+    assert_ne!(start, plain);
+    for cell in start.area.positions() {
+        assert!(
+            start[cell] == open[cell] || start[cell] == plain[cell],
+            "{cell:?}"
+        );
+    }
+    all_that_differs_is_dark(&frame(&mut on, &world, ms(75)), &plain);
+    assert_eq!(frame(&mut on, &world, ms(75)), plain);
 }
 
 #[test]

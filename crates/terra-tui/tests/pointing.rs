@@ -641,7 +641,7 @@ fn a_pop_up_takes_the_pointer_before_what_is_under_it() {
 #[test]
 fn off_the_world_s_screen_no_tooltip_opens_and_nothing_is_lit() {
     // Only on the world's own screen (design §6.1): the palette, the Place
-    // menu, naming and the quit prompt take keys, so a tooltip's keys
+    // menu, the settings screen, naming and the quit prompt take keys, so a tooltip's keys
     // wouldn't do what it says. The log's filters have room for one off
     // each of their boxes.
     let (world, mut app, _) = selected(SCREEN, Tab::Body);
@@ -655,11 +655,12 @@ fn off_the_world_s_screen_no_tooltip_opens_and_nothing_is_lit() {
     assert!(pointing_at(&mut app, &world, SCREEN, filters).is_some());
     assert_ne!(lit(&app), unlit, "on the world's screen, it's lit");
     let place_menu = [Action::Mode(CursorMode::Grab); 2];
-    let opens: [(&str, &[Action]); 4] = [
+    let opens: [(&str, &[Action]); 5] = [
         ("the palette", &[Action::Palette]),
         ("naming", &[Action::Rename]),
         ("the quit prompt", &[Action::Back]),
         ("the Place menu", &place_menu),
+        ("the settings screen", &[Action::OpenSettings]),
     ];
     for (what, keys) in opens {
         let (world, mut app, _) = selected(SCREEN, Tab::Body);

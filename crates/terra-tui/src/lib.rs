@@ -20,6 +20,7 @@ mod motion;
 pub mod policy;
 pub mod saves;
 pub mod session;
+pub mod settings;
 pub mod space;
 mod spots;
 pub mod sprite_list;

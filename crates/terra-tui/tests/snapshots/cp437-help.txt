@@ -15,7 +15,7 @@
 │ :          find a command       F5 F9      quicksave / load     PgUp PgDn  scroll a tab          │
 │ esc        let go, back, quit?  Ctrl+S     save as...           i          open, or full screen  │
 │ Ctrl+C     quit at once         Ctrl+O     load a save          DEBUG                            │
-│                                 Ctrl+T     pick a theme         F3         how it's running      │
+│                                 Ctrl+T     settings             F3         how it's running      │
 │                                 Ctrl+R     take over a replay                                    │
 │                                                                                                  │
 │ COLOURS: a sprite's strongest drive, once it's above half                                        │

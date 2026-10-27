@@ -4,7 +4,8 @@
 //! action. Each area's methods are in a module of its own: the Cursor,
 //! aiming, the map view, the selection, what each tick brings, what shows
 //! for a while, the menus, the sprite list, the population graph, the
-//! family tree, naming, saves and replays, and motion.
+//! family tree, naming, saves and replays, motion, and the settings
+//! screen.
 
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
@@ -28,6 +29,7 @@ use crate::listed::listed_enum;
 use crate::motion::Motion;
 use crate::policy::{InfoPolicy, Omniscient, Panel, Subject};
 use crate::saves::{QUICKSAVE, SaveFile};
+use crate::settings::{Look, SavedSettings};
 use crate::space::Place;
 use crate::spots::{Spot, Spots};
 use crate::sprite_list::SortBy;
@@ -46,6 +48,7 @@ mod population;
 mod replay;
 mod saving;
 mod selection;
+mod settings;
 mod spots;
 mod status;
 mod tree;
@@ -87,8 +90,8 @@ pub enum Screen {
     /// "Load …? (y/n)" is waiting for an answer: the world has run since it
     /// was last saved (design §6.7).
     LoadPrompt,
-    /// The list of themes is open (`Ctrl+T`, design v34 §6.7).
-    ThemeMenu,
+    /// The settings screen is open (`Ctrl+T`, design §6.7, #307).
+    Settings,
     /// The help screen is open (design §6.1).
     Help,
     /// The sprite list is open (design §6.1).
@@ -527,9 +530,17 @@ pub struct App {
     /// The folder the player's own themes are read from, if there is one
     /// (design v34 §6.7).
     theme_folder: Option<PathBuf>,
-    /// The theme files the themes menu lists after the built-in themes, by
-    /// name, with their paths.
+    /// The theme files the settings screen offers after the built-in glyph
+    /// sets and palettes, by name, with their paths (design §6.7, #307).
     theme_files: Vec<(String, PathBuf)>,
+    /// The glyph set and the palette the player has picked, which `theme`
+    /// is made from (design §6.2, §6.7, #307).
+    look: Look,
+    /// What the player has changed on the settings screen, as
+    /// `settings.ron` holds it (design §6.7, #307).
+    saved_settings: SavedSettings,
+    /// Where the settings are saved, if anywhere.
+    settings_file: Option<PathBuf>,
     /// While naming: the sprite, the name so far, and whether the player
     /// has typed it, rather than it being an offered random one.
     naming: Option<Naming>,
@@ -754,7 +765,9 @@ const EMOTE_FOR: Duration = Duration::from_secs(1);
 
 impl App {
     /// A new UI for `map`, with the cursor at the map's centre and the viewport
-    /// centred on it, and its panels drawn in `areas`.
+    /// centred on it, and its panels drawn in `areas`, in `theme`, taken as
+    /// the CP437 glyph set in the default palette until `use_settings` says
+    /// what the player has picked (design §6.7, #307).
     pub fn new(map: &Map, theme: Theme, seed: u64, areas: Areas) -> App {
         let cursor = Pos {
             x: map.width() / 2,
@@ -762,6 +775,7 @@ impl App {
         };
         let mut app = App {
             clock: Clock::new(),
+            look: Look::of(&theme),
             theme,
             seed,
             screen: Screen::Normal,
@@ -808,6 +822,8 @@ impl App {
             genome_files: Vec::new(),
             theme_folder: None,
             theme_files: Vec::new(),
+            saved_settings: SavedSettings::default(),
+            settings_file: None,
             naming: None,
             names_offered: 0,
             notice: None,
@@ -964,7 +980,7 @@ impl App {
             return Flow::Quit;
         }
         match self.screen {
-            Screen::PlaceMenu | Screen::GenomeMenu | Screen::LoadMenu | Screen::ThemeMenu => {
+            Screen::PlaceMenu | Screen::GenomeMenu | Screen::LoadMenu | Screen::Settings => {
                 return self.apply_in_menu(action, world);
             }
             Screen::Naming => return self.apply_naming(action, world),
@@ -1101,7 +1117,7 @@ impl App {
             Action::Quickload => self.quickload(world),
             Action::SaveAs => self.start_save_naming(world),
             Action::OpenSaves => self.list_saves(),
-            Action::OpenThemes => self.list_themes(),
+            Action::OpenSettings => self.open_settings(),
             Action::TakeOver => self.take_over(world),
             Action::SelectNext => self.select_along(world, Direction::Next),
             Action::SelectPrevious => self.select_along(world, Direction::Previous),

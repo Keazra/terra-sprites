@@ -107,6 +107,25 @@ pub fn data_folder_files(dir: &Path) -> Result<DataFolder, String> {
     })
 }
 
+/// The settings' file, `settings.ron`, in the game's folder (design §6.7,
+/// #307).
+pub fn settings_file() -> Option<PathBuf> {
+    data_folder().map(|folder| folder.join(crate::settings::FILE))
+}
+
+/// Writes `bytes` as the file at `path`, making its folder if need be. It
+/// writes a file beside it first, then puts that in place, so a file cut
+/// short never leaves a broken one where a good one was (design §6.7).
+pub fn write_in_place(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    if let Some(folder) = path.parent() {
+        std::fs::create_dir_all(folder)?;
+    }
+    let mut partial = path.as_os_str().to_owned();
+    partial.push(".partial");
+    std::fs::write(&partial, bytes)?;
+    std::fs::rename(&partial, path)
+}
+
 /// The folder the player's own themes are read from (design v34 §6.7).
 pub fn theme_folder() -> Option<PathBuf> {
     data_folder().map(|folder| folder.join("themes"))

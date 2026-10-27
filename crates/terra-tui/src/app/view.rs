@@ -79,14 +79,33 @@ impl App {
         width.min(self.tile_area.width).div_ceil(self.tile_width())
     }
 
-    /// `o`: tiles two cells wide, or back to one, keeping the tile at the
-    /// middle of the view where it is (M2 design §11.7, #305).
+    /// `o`: tiles two cells wide, or back to one, as `set_square_tiles`
+    /// does, saying which (M2 design §11.7, #305), and saving it.
     pub(super) fn toggle_zoom(&mut self) {
+        self.set_square_tiles(!self.zoom);
+        self.tell_player(if self.zoom {
+            "Tiles two cells wide, so they're square".into()
+        } else {
+            "Tiles one cell wide".into()
+        });
+        // It's saved with the settings (design §6.7, #307).
+        self.saved_settings.square_tiles = Some(self.zoom);
+        self.save_settings();
+    }
+
+    /// Tiles two cells wide, so they're square, or one, `on`, keeping the
+    /// tile at the middle of the view where it is (M2 design §11.7, #305):
+    /// the switch `o` and the settings screen's row turn, and a world
+    /// starts with, as the settings say (#307).
+    pub(super) fn set_square_tiles(&mut self, on: bool) {
+        if self.zoom == on {
+            return;
+        }
         let middle = Origin {
             x: self.viewport.x + i32::from(self.seen_columns() / 2),
             y: self.viewport.y,
         };
-        self.zoom = !self.zoom;
+        self.zoom = on;
         self.viewport = Origin {
             x: middle.x - i32::from(self.seen_columns() / 2),
             y: middle.y,
@@ -95,11 +114,6 @@ impl App {
         self.jump_to_tracked();
         self.motion.stop_pan();
         self.settle();
-        self.tell_player(if self.zoom {
-            "Tiles two cells wide, so they're square".into()
-        } else {
-            "Tiles one cell wide".into()
-        });
     }
 
     /// The tile drawn at screen cell `cell`, if the map view draws one there.

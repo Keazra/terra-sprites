@@ -1,11 +1,13 @@
 //! What the game starts with, from its flags (design §6.7): which preset
-//! makes the new world, and which theme draws it.
+//! makes the new world, and which theme draws it; and from the settings
+//! the player saved (#307).
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use terra_sim::{DataPack, Mode};
 use terra_tui::args::Args;
 use terra_tui::saves;
+use terra_tui::settings::{SavedSettings, Settings};
 use terra_tui::start;
 use terra_tui::theme::{ColourPalette, GlyphSet, Pick, SemanticTile, Theme};
 
@@ -398,4 +400,178 @@ fn a_preset_is_named_by_its_file() {
         ..Args::default()
     };
     assert_eq!(start::preset_name(&args), "big-lake");
+}
+
+// The settings saved (design §6.7, #307).
+
+const HIGH_CONTRAST: &str = include_str!("../../../themes/high_contrast.ron");
+const ASCII: &str = include_str!("../../../themes/ascii.ron");
+
+/// How the game starts with the settings `saved`, as read, its theme files
+/// in `themes`, and `NO_COLOR` unset; and what it says of them.
+fn started(
+    args: &Args,
+    saved: Result<SavedSettings, String>,
+    themes: Option<&Path>,
+) -> (Settings, Option<String>) {
+    let data = DataPack::builtin().expect("valid pack");
+    start::settings(args, saved, themes, None, &data).expect("started")
+}
+
+/// Every row changed: ASCII glyphs, a theme file's colours, motion off
+/// and square tiles on.
+fn every_row() -> SavedSettings {
+    SavedSettings {
+        glyphs: Some("ASCII".into()),
+        colours: Some("night.ron".into()),
+        motion: Some(false),
+        square_tiles: Some(true),
+    }
+}
+
+#[test]
+fn the_game_starts_as_the_settings_say() {
+    let themes = folder("saved", &[("night.ron", HIGH_CONTRAST)]);
+    let (settings, said) = started(&Args::default(), Ok(every_row()), Some(&themes));
+    assert_eq!(said, None);
+    let look = &settings.look;
+    assert_eq!(look.glyphs(), &Pick::BuiltIn(GlyphSet::Ascii));
+    assert_eq!(look.palette(), &Pick::File(themes.join("night.ron")));
+    assert_eq!(
+        look.theme(),
+        Theme::built_in(GlyphSet::Ascii, ColourPalette::HighContrast)
+    );
+    assert!(!settings.motion);
+    assert!(settings.square_tiles);
+    assert_eq!(settings.saved, every_row());
+    // With nothing saved, the defaults.
+    let (settings, said) = started(&Args::default(), Ok(SavedSettings::default()), None);
+    assert_eq!((settings, said), (Settings::default(), None));
+    assert_eq!(Settings::default().look.theme(), Theme::cp437());
+    assert!(Settings::default().motion);
+    assert!(!Settings::default().square_tiles);
+}
+
+#[test]
+fn the_flags_win_over_the_settings_for_their_run_and_aren_t_saved() {
+    let themes = folder(
+        "flags-win",
+        &[("night.ron", HIGH_CONTRAST), ("day.ron", ASCII)],
+    );
+    let saved = SavedSettings {
+        glyphs: Some("night.ron".into()),
+        motion: Some(true),
+        ..every_row()
+    };
+    let ascii = Args {
+        ascii: true,
+        no_motion: true,
+        ..Args::default()
+    };
+    let (settings, said) = started(&ascii, Ok(saved.clone()), Some(&themes));
+    assert_eq!(said, None);
+    assert_eq!(settings.look.glyphs(), &Pick::BuiltIn(GlyphSet::Ascii));
+    assert_eq!(
+        settings.look.palette(),
+        &Pick::File(themes.join("night.ron"))
+    );
+    assert!(!settings.motion);
+    assert_eq!(settings.saved, saved, "as the file has it");
+    let day = Args {
+        theme: Some(themes.join("day.ron")),
+        ..Args::default()
+    };
+    let (settings, _) = started(&day, Ok(saved), Some(&themes));
+    assert_eq!(settings.look.glyphs(), &Pick::File(themes.join("day.ron")));
+    assert_eq!(settings.look.palette(), &Pick::File(themes.join("day.ron")));
+    assert_eq!(settings.look.theme(), Theme::ascii());
+    assert!(settings.motion, "the file's");
+}
+
+#[test]
+fn a_theme_the_flags_name_that_won_t_load_still_stops_the_game() {
+    let data = DataPack::builtin().expect("valid pack");
+    let args = Args {
+        theme: Some("missing.ron".into()),
+        ..Args::default()
+    };
+    let err = start::settings(&args, Ok(SavedSettings::default()), None, None, &data)
+        .expect_err("refused");
+    assert!(err.starts_with("can't use theme missing.ron: "), "{err}");
+}
+
+#[test]
+fn settings_that_can_t_be_read_start_the_game_on_the_defaults_saying_so() {
+    let (settings, said) = started(&Args::default(), Err("expected `(`".into()), None);
+    assert_eq!(settings, Settings::default());
+    assert_eq!(
+        said.as_deref(),
+        Some("Couldn't read the settings: expected `(`")
+    );
+}
+
+#[test]
+fn a_theme_file_the_settings_name_that_no_longer_loads_falls_back_to_the_default() {
+    let themes = folder("gone", &[("broken.ron", "not a theme")]);
+    let saved = SavedSettings {
+        glyphs: Some("gone.ron".into()),
+        colours: Some("broken.ron".into()),
+        ..every_row()
+    };
+    let (settings, said) = started(&Args::default(), Ok(saved.clone()), Some(&themes));
+    assert_eq!(settings.look, Settings::default().look);
+    assert!(
+        !settings.motion && settings.square_tiles,
+        "the rest as saved"
+    );
+    assert_eq!(settings.saved, saved, "the file left as it is");
+    let said = said.expect("said");
+    assert!(said.starts_with("Couldn't use theme gone: "), "{said}");
+    assert!(said.contains("; Couldn't use theme broken: "), "{said}");
+    // A glyph set or palette with a name the game doesn't know.
+    let saved = SavedSettings {
+        glyphs: Some("runes".into()),
+        ..SavedSettings::default()
+    };
+    let (settings, said) = started(&Args::default(), Ok(saved), Some(&themes));
+    assert_eq!(settings.look, Settings::default().look);
+    assert_eq!(
+        said.as_deref(),
+        Some("Couldn't read the settings: there are no glyphs called runes")
+    );
+}
+
+#[test]
+fn a_built_in_is_named_in_the_settings_in_any_case() {
+    let saved = SavedSettings {
+        glyphs: Some("ascii".into()),
+        colours: Some("High Contrast".into()),
+        ..SavedSettings::default()
+    };
+    let (settings, said) = started(&Args::default(), Ok(saved), None);
+    assert_eq!(said, None);
+    assert_eq!(
+        settings.look.theme(),
+        Theme::built_in(GlyphSet::Ascii, ColourPalette::HighContrast)
+    );
+}
+
+#[test]
+fn no_color_starts_the_game_in_mono_unless_the_settings_pick_colours() {
+    // Design §6.2 (#307), as no-color.org asks.
+    let data = DataPack::builtin().expect("valid pack");
+    let start = |saved: SavedSettings| {
+        let (settings, _) =
+            start::settings(&Args::default(), Ok(saved), None, Some("1"), &data).unwrap();
+        settings.look.palette().clone()
+    };
+    assert_eq!(
+        start(SavedSettings::default()),
+        Pick::BuiltIn(ColourPalette::Mono)
+    );
+    let default = SavedSettings {
+        colours: Some("default".into()),
+        ..SavedSettings::default()
+    };
+    assert_eq!(start(default), Pick::BuiltIn(ColourPalette::Default));
 }
