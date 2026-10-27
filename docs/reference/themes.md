@@ -182,7 +182,7 @@ Most of the screen's text, and its frames, are drawn in the terminal's own text 
 
 ### `colour_modes`
 
-`b` colours each sprite on the map by its strongest drive, or by where it stands in the selected sprite's lineage (design §6.3). `colour_modes: false` says the palette's colours can't tell them apart, as Game Kid's greens can't tell nine drives apart: then every sprite is drawn in its own colour, whatever `b` says, and `b` says where they're read instead, "Colours: lineage, which this palette can't show: see the family tree (k)", and the help's colour legend says the same, as in mono. Its `drives` and `lineage` may still be given; they're not drawn. A palette with [`colour: false`](#colour) can't show them either, whatever this says.
+`b` colours each sprite on the map by its strongest drive, or by where it stands in the selected sprite's lineage (design §6.3). `colour_modes: false` says the palette's colours can't tell them apart, as Game Kid's greens can't tell nine drives apart: then every sprite is drawn in its own colour, whatever `b` says, and `b` says where they're read instead, "Colours: lineage, which this palette can't show: see the family tree (k)", and the help's colour legend says the same, as in mono. Its `lineage` may still be given, and isn't drawn. Its `drives` may be too, and aren't drawn on the map, but still colour a drive's bar on the Body tab and the drive in the sprite list's Drive column. A palette with [`colour: false`](#colour) can't show them either, whatever this says.
 
 ## Working example
 
