@@ -48,7 +48,7 @@ The ground, the plants and toys, a sprite's body and instincts, and how the map 
 
 ## Where it's going
 
-Milestone 1, *A Sprite Lives*, and milestone 2, *Generations*, are done, and v0.2.0 is the second's release. Next come bodies (limbs that let sprites grab, push, pull and carry things), then the terrarium turns out to be a ship, then a wilder world, and one day words. The [roadmap](docs/manual.md#roadmap) has the list, and the [designs](docs/design/) have the details.
+Milestone 1, *A Sprite Lives*, and milestone 2, *Generations*, are done, and v0.2.0 is the second's release. Next come bodies (limbs that let sprites grab, push, pull and carry things), then the terrarium turns out to be a ship, then a wilder world, and one day words. The [road map](https://claude.ai/artifact/8bcCKraEa32we24zPw4Fhe) shows every step and how far along it is, the manual's [roadmap](docs/manual.md#roadmap) has the short list, and the [designs](docs/design/) have the details.
 
 Curious what goes on inside a sprite? [How a sprite lives](https://claude.ai/artifact/GyyEVVjN6TbKhPASDFwRmy) walks through it.
 
