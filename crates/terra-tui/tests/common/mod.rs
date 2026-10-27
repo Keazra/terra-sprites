@@ -878,6 +878,43 @@ pub fn mono() -> Theme {
     Theme::built_in(GlyphSet::Cp437, ColourPalette::Mono)
 }
 
+/// The CP437 glyphs in the Game Kid palette, all greens.
+pub fn game_kid() -> Theme {
+    use terra_tui::theme::{ColourPalette, GlyphSet};
+    Theme::built_in(GlyphSet::Cp437, ColourPalette::GameKid)
+}
+
+/// The hue of `[r, g, b]` in degrees, and its saturation from 0 to 1, as
+/// HSV has them.
+pub fn hue_and_saturation([r, g, b]: [u8; 3]) -> (f64, f64) {
+    let [r, g, b] = [r, g, b].map(|c| f64::from(c) / 255.0);
+    let (max, min) = (r.max(g).max(b), r.min(g).min(b));
+    let range = max - min;
+    let saturation = if max > 0.0 { range / max } else { 0.0 };
+    let hue = if range == 0.0 {
+        0.0
+    } else if max == r {
+        60.0 * ((g - b) / range).rem_euclid(6.0)
+    } else if max == g {
+        60.0 * ((b - r) / range + 2.0)
+    } else {
+        60.0 * ((r - g) / range + 4.0)
+    };
+    (hue, saturation)
+}
+
+/// Whether `[r, g, b]` is a green on the ramp of the original Game Boy's
+/// four, which Game Kid is after (design §6.2): their hues run from
+/// #9bbc0f's 71° to #0f380f's and #306230's 120°, so a hue from 65° to
+/// 125° keeps to them, short of yellow at 60° and of the teal past 130°;
+/// and their saturations from #306230's .51 to #9bbc0f's .92, so one of .3
+/// or more lets in a pale green lighter than the lightest, while still a
+/// green on black, and no grey, which has none.
+pub fn on_the_ramp(colour: [u8; 3]) -> bool {
+    let (hue, saturation) = hue_and_saturation(colour);
+    (65.0..=125.0).contains(&hue) && saturation >= 0.3
+}
+
 /// Opens the settings screen on row `row`, by its number.
 pub fn on_row(app: &mut App, world: &World, row: terra_tui::settings::Setting) {
     use terra_tui::settings::Setting;

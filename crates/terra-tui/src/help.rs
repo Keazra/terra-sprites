@@ -244,10 +244,10 @@ fn legends(
                 heading: None,
                 lines: vec![line],
             };
-            // A palette with no colour can't show a sprite's, so the
-            // legends of them say where they're read instead (design §6.2,
-            // #307).
-            let coloured = app.theme.has_colour();
+            // A palette that can't show a sprite's colours, with no colour
+            // or all greens, says in the legends where they're read
+            // instead (design §6.2, §6.3).
+            let coloured = app.theme.shows_colour_modes();
             let colours = if coloured {
                 Legend {
                     heading: Some(Line::from(headed(

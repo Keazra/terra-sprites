@@ -3,7 +3,7 @@
 //! from another.
 
 mod common;
-use common::pack;
+use common::{hue_and_saturation, on_the_ramp, pack};
 
 use ratatui::style::{Color, Modifier};
 use terra_tui::app::CursorMode;
@@ -129,6 +129,16 @@ fn a_theme_draws_one_theme_s_glyphs_in_another_s_palette() {
     assert_eq!(theme.text(), palette.text());
     assert_eq!(theme.panels(), palette.panels());
     assert_eq!(theme.motion(), palette.motion());
+    // Game Kid's foreground and its colour modes go with its palette.
+    let game_kid = ColourPalette::GameKid.source();
+    for (glyphs, palette) in [
+        (&game_kid, Theme::cp437()),
+        (&Theme::cp437(), game_kid.clone()),
+    ] {
+        let theme = Theme::compose(glyphs, &palette);
+        assert_eq!(theme.foreground(), palette.foreground());
+        assert_eq!(theme.shows_colour_modes(), palette.shows_colour_modes());
+    }
     // And it really is a mix of the two.
     assert_eq!(theme.glyph(SemanticTile::Sprite).symbol, '☺');
     assert_eq!(
@@ -393,24 +403,10 @@ type ToldApart = (&'static str, Vec<Named>);
 
 /// The colours colour tells apart, each set by what it is: the drives,
 /// with the sprite's own colour, which a sprite with none above half is
-/// drawn in; the lineage, with the selected sprite's own; a gain and a
-/// loss; the graph's stages; and a bush bare and fruiting, the same glyph.
+/// drawn in, and the lineage, with the selected sprite's own, if the
+/// palette shows them; a gain and a loss; the graph's stages; and a bush
+/// bare and fruiting, the same glyph.
 fn told_apart(theme: &Theme) -> Vec<ToldApart> {
-    let own = (
-        "own colour".to_string(),
-        rgb(theme.glyph(SemanticTile::Sprite).fg),
-    );
-    let pack = pack();
-    let mut drives: Vec<Named> = pack
-        .drives()
-        .map(|drive| {
-            (
-                drive.to_string(),
-                rgb(theme.drive_colour(drive).expect("a colour")),
-            )
-        })
-        .collect();
-    drives.push(own.clone());
     let (lineage, graph, text) = (theme.lineage(), theme.population(), theme.text());
     let named = |colours: &[(&str, Color)]| {
         colours
@@ -418,17 +414,33 @@ fn told_apart(theme: &Theme) -> Vec<ToldApart> {
             .map(|&(what, colour)| (what.to_string(), rgb(colour)))
             .collect::<Vec<_>>()
     };
-    let mut kin = named(&[
-        ("elders", lineage.elders),
-        ("siblings", lineage.siblings),
-        ("young", lineage.young),
-        ("others", lineage.others),
-    ]);
-    kin.push(own);
+    let mut sets = Vec::new();
+    if theme.shows_colour_modes() {
+        let own = (
+            "own colour".to_string(),
+            rgb(theme.glyph(SemanticTile::Sprite).fg),
+        );
+        let mut drives: Vec<Named> = pack()
+            .drives()
+            .map(|drive| {
+                (
+                    drive.to_string(),
+                    rgb(theme.drive_colour(drive).expect("a colour")),
+                )
+            })
+            .collect();
+        drives.push(own.clone());
+        let mut kin = named(&[
+            ("elders", lineage.elders),
+            ("siblings", lineage.siblings),
+            ("young", lineage.young),
+            ("others", lineage.others),
+        ]);
+        kin.push(own);
+        sets.extend([("drives", drives), ("lineage", kin)]);
+    }
     let fg = |style: ratatui::style::Style| style.fg.expect("a colour");
-    vec![
-        ("drives", drives),
-        ("lineage", kin),
+    sets.extend([
         (
             "gains",
             named(&[("good", fg(text.good)), ("bad", fg(text.bad))]),
@@ -449,7 +461,8 @@ fn told_apart(theme: &Theme) -> Vec<ToldApart> {
                 ("fruiting", theme.object_glyph("berry_bush", "fruiting").fg),
             ]),
         ),
-    ]
+    ]);
+    sets
 }
 
 #[test]
@@ -565,6 +578,130 @@ fn mono_has_no_colour_only_bold_reverse_video_and_lines() {
     assert_eq!(theme.panels(), None);
 }
 
+/// The original Game Boy's four greens, darkest to lightest, which Game
+/// Kid is after.
+const HANDHELD_GREENS: [[u8; 3]; 4] = [
+    [0x0F, 0x38, 0x0F],
+    [0x30, 0x62, 0x30],
+    [0x8B, 0xAC, 0x0F],
+    [0x9B, 0xBC, 0x0F],
+];
+
+/// Every colour `theme` draws with, with what it's for, a named one as
+/// Campbell draws it: the map's and the text's, the attention marker, the
+/// panels' shades, the foreground, and motion's colours but the dark, which
+/// is the terminal's black a pop-up fades from. A colour left to the
+/// terminal's own is drawn in the foreground.
+fn every_colour(theme: &Theme) -> Vec<(String, [u8; 3])> {
+    let foreground = theme.foreground().expect("a foreground");
+    let mut colours = foreground_colours(theme);
+    let motion = theme.motion();
+    colours.extend([
+        ("the foreground".to_string(), foreground),
+        ("the attention marker".into(), theme.attention_marker()),
+        ("a death's flash".into(), motion.flash),
+        ("a hatching's sparks".into(), motion.spark),
+        ("the trail".into(), motion.trail),
+    ]);
+    if let Some(panels) = theme.panels() {
+        colours.push(("the panels' shade".into(), panels.shade));
+        colours.push(("their title rows' shade".into(), panels.title));
+    }
+    colours
+        .into_iter()
+        .map(|(what, colour)| {
+            let drawn = if colour == Color::Reset {
+                foreground
+            } else {
+                colour
+            };
+            (what, campbell::rgb(drawn).expect("a colour"))
+        })
+        .collect()
+}
+
+#[test]
+fn game_kid_draws_everything_in_the_handheld_s_four_greens_and_greens_on_their_ramp() {
+    // Design §6.2: after the original Game Boy's four greens, on the
+    // terminal's own black, with greens on the same ramp, lighter or
+    // darker, where text must be read on black or things kept apart.
+    let theme = ColourPalette::GameKid.source();
+    assert!(theme.has_colour());
+    let colours = every_colour(&theme);
+    for (what, colour) in &colours {
+        let (hue, saturation) = hue_and_saturation(*colour);
+        assert!(
+            on_the_ramp(*colour),
+            "{what}, {colour:?}, has a hue of {hue:.0}° and a saturation of {saturation:.2}"
+        );
+    }
+    for green in HANDHELD_GREENS {
+        assert!(
+            colours.iter().any(|(_, colour)| *colour == green),
+            "{green:?} isn't used"
+        );
+    }
+    assert_eq!(
+        campbell::rgb(theme.motion().dark),
+        Some(campbell::BACKGROUND),
+        "the terminal's black"
+    );
+    assert!(theme.panels().is_some(), "shades from the dark greens");
+}
+
+#[test]
+fn game_kid_s_text_reads_on_black_minor_text_at_three_to_one_the_rest_at_four_and_a_half() {
+    // Design §6.2: WCAG's ratios for text, against the black the renderer
+    // draws on, Campbell's; the text with no role of its own is drawn in
+    // the foreground.
+    let theme = ColourPalette::GameKid.source();
+    let text = theme.text();
+    let foreground = theme.foreground().expect("a foreground");
+    for (role, colour, least) in [
+        ("body", Some(foreground), 4.5),
+        ("heading", text.heading.fg, 4.5),
+        ("key", text.key.fg, 4.5),
+        ("good", text.good.fg, 4.5),
+        ("bad", text.bad.fg, 4.5),
+        ("selected", text.selected.fg, 4.5),
+        ("spot", text.spot.fg, 4.5),
+        ("muted", text.muted.fg, 3.0),
+    ] {
+        let colour = campbell::rgb(colour.unwrap_or(foreground)).expect("a colour");
+        let ratio = contrast(colour, campbell::BACKGROUND);
+        assert!(ratio >= least, "{role}, {colour:?}, is {ratio:.2}:1");
+    }
+    assert!(text.heading.add_modifier.contains(Modifier::BOLD));
+    assert!(text.key.add_modifier.contains(Modifier::BOLD));
+    assert!(text.selected.add_modifier.contains(Modifier::REVERSED));
+}
+
+#[test]
+fn game_kid_can_t_show_the_colour_modes_and_keeps_the_rest_apart_by_lightness() {
+    // Design §6.2, §6.3: greens can't tell nine drives, or the lineage,
+    // apart, so it says it can't show them, as mono does, and `b` and the
+    // help say where they're read instead. A gain against a loss, the
+    // graph's stages and a bush bare and fruiting are told apart, as
+    // colour-blind's are, by a CIELAB distance of 10 or more, about four
+    // just-noticeable differences: here it's nearly all lightness.
+    let theme = ColourPalette::GameKid.source();
+    assert!(theme.has_colour(), "motion still plays");
+    assert!(!theme.shows_colour_modes());
+    let sets = told_apart(&theme);
+    assert_eq!(
+        sets.iter().map(|(set, _)| *set).collect::<Vec<_>>(),
+        ["gains", "stages", "bushes"]
+    );
+    for (set, colours) in sets {
+        for (i, (a, ca)) in colours.iter().enumerate() {
+            for (b, cb) in &colours[i + 1..] {
+                let apart = distance(seen(*ca, None), seen(*cb, None));
+                assert!(apart >= 10.0, "{set}: {a} and {b} are {apart:.1} apart");
+            }
+        }
+    }
+}
+
 #[test]
 fn every_built_in_palette_loads_as_a_theme_file_would_drawing_the_cp437_glyphs() {
     // Each is a whole theme file, checked as `--theme` checks one, whose
@@ -587,13 +724,18 @@ fn every_built_in_palette_loads_as_a_theme_file_would_drawing_the_cp437_glyphs()
             ColourPalette::Mono,
             include_str!("../../../themes/mono.ron"),
         ),
+        (
+            ColourPalette::GameKid,
+            include_str!("../../../themes/game_kid.ron"),
+        ),
     ] {
         let name = palette.name();
         let theme = Theme::from_ron(file, &pack).unwrap_or_else(|e| panic!("{name}: {e}"));
         assert_eq!(theme, palette.source(), "{name}");
         assert_eq!(Theme::compose(&Theme::cp437(), &theme), theme, "{name}");
     }
-    assert_eq!(ColourPalette::ALL.len(), 4);
+    assert_eq!(ColourPalette::ALL.len(), 5);
+    assert_eq!(ColourPalette::GameKid.name(), "Game Kid");
     // A palette with no colour has none in any glyph set.
     assert!(!Theme::built_in(GlyphSet::Ascii, ColourPalette::Mono).has_colour());
     assert!(Theme::compose(&ColourPalette::Mono.source(), &Theme::cp437()).has_colour());

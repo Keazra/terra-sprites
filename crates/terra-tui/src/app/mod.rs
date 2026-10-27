@@ -1170,14 +1170,15 @@ impl App {
             Action::CycleColours => {
                 self.colour_mode = along(&ColourMode::ALL, self.colour_mode, 1);
                 let mode = self.colour_mode;
-                // A palette with no colour can't show a sprite's, so it says
-                // where they're read instead (design §6.2, #307).
+                // A palette that can't show a sprite's colours, with no
+                // colour or all greens, says where they're read instead
+                // (design §6.2, §6.3).
                 let unseen = match mode {
                     ColourMode::Drive => Some("the sprite list (l)"),
                     ColourMode::Lineage => Some("the family tree (k)"),
                     ColourMode::Plain => None,
                 }
-                .filter(|_| !self.theme.has_colour());
+                .filter(|_| !self.theme.shows_colour_modes());
                 self.tell_player(match unseen {
                     None => format!("Colours: {}", mode.label()),
                     Some(read_in) => format!(

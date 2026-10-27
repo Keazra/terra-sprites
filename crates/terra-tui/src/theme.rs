@@ -2,7 +2,7 @@
 //! style, may give the panels their shades (design §6.2), and give motion
 //! its colours (§6.9). They are UI assets and never affect the simulation.
 //! A theme is a glyph set, its characters, and a palette, the rest, chosen
-//! apart (#307). Two glyph sets and four palettes are embedded in the
+//! apart (#307). Two glyph sets and five palettes are embedded in the
 //! binary, and `--theme <file>` loads one the player has edited (design v34
 //! §6.7).
 
@@ -15,6 +15,7 @@ use serde::Deserialize;
 use terra_sim::{DataPack, Terrain};
 
 use crate::app::{CursorMode, StatusMark};
+use crate::campbell;
 use crate::family_tree::Lineage;
 use crate::graph::Band;
 use crate::listed::listed_enum;
@@ -286,6 +287,9 @@ const COLOUR_BLIND: &str = include_str!("../../../themes/colour_blind.ron");
 /// The mono palette's file.
 const MONO: &str = include_str!("../../../themes/mono.ron");
 
+/// The Game Kid palette's file.
+const GAME_KID: &str = include_str!("../../../themes/game_kid.ron");
+
 listed_enum! {
     /// A glyph set built into the game (design §6.2, #307): the characters a
     /// theme draws with.
@@ -330,6 +334,9 @@ listed_enum! {
         /// No colour at all, only bold and reverse video, where `NO_COLOR`
         /// starts the game.
         Mono => "mono",
+        /// Greens on the terminal's black, after the original Game Boy's
+        /// four.
+        GameKid => "Game Kid",
     }
 
     /// Every palette built in, in the order the game offers them.
@@ -348,6 +355,7 @@ impl ColourPalette {
             ColourPalette::HighContrast => Theme::builtin("high contrast", HIGH_CONTRAST),
             ColourPalette::ColourBlind => Theme::builtin("colour-blind", COLOUR_BLIND),
             ColourPalette::Mono => Theme::builtin("mono", MONO),
+            ColourPalette::GameKid => Theme::builtin("Game Kid", GAME_KID),
         }
     }
 }
@@ -505,6 +513,12 @@ pub struct Theme {
     /// Whether its palette has colour at all: mono's has none (design
     /// §6.2, #307).
     colour: bool,
+    /// The colour its palette draws the terminal's own text colour in, if
+    /// it gives one, as Game Kid does (design §6.2).
+    foreground: Option<Color>,
+    /// Whether its palette's colours can tell the drives and the lineage
+    /// apart: Game Kid's greens can't (design §6.2, §6.3).
+    colour_modes: bool,
 }
 
 impl Theme {
@@ -700,6 +714,34 @@ impl Theme {
         self.motion
     }
 
+    /// The colour this theme's palette draws what the game leaves in the
+    /// terminal's own text colour, or `None` to leave it to the terminal
+    /// (design §6.2).
+    pub fn foreground(&self) -> Option<Color> {
+        self.foreground
+    }
+
+    /// What this theme's palette does to the finished screen, which the
+    /// screen's drawing calls last (design §6.2): with no colour, it draws
+    /// none ([`without_colour`]), and with a foreground, every grey in its
+    /// shades ([`in_shades_of`]).
+    pub fn finish(&self, buffer: &mut Buffer) {
+        if !self.colour {
+            without_colour(buffer);
+        } else if let Some(foreground) = self.foreground {
+            in_shades_of(buffer, foreground);
+        }
+    }
+
+    /// Whether this theme's palette can show the colour modes (design §6.2,
+    /// §6.3): a sprite's colour by its strongest drive, or by its lineage.
+    /// One that can't, such as mono, with no colour, or Game Kid, whose
+    /// greens can't tell them apart, draws every sprite in its own colour,
+    /// and `b` and the help say where they're read instead.
+    pub fn shows_colour_modes(&self) -> bool {
+        self.colour && self.colour_modes
+    }
+
     /// Whether this theme's palette has colour at all (design §6.2, #307).
     /// One without, such as mono, is drawn in the terminal's own colours,
     /// with only bold and reverse video ([`without_colour`]); the tile the
@@ -850,6 +892,8 @@ impl Theme {
             }),
             motion,
             colour: file.colour,
+            foreground: file.foreground.map(Color::from),
+            colour_modes: file.colour_modes,
         };
         if let Some((what, symbol)) = theme
             .symbols()
@@ -1065,10 +1109,25 @@ struct ThemeFile {
     /// bold and reverse video. A theme without it has colour.
     #[serde(default = "has_colour")]
     colour: bool,
+    /// The colour of what the game leaves in the terminal's own text
+    /// colour, as Game Kid gives it (design §6.2). A theme without it
+    /// leaves that to the terminal.
+    #[serde(default, deserialize_with = "implicit_some")]
+    foreground: Option<Colour>,
+    /// `false` for a palette whose colours can't tell the drives or the
+    /// lineage apart, as Game Kid's greens can't (design §6.2, §6.3). A
+    /// theme without it can, if it has colour.
+    #[serde(default = "shows_colour_modes")]
+    colour_modes: bool,
 }
 
 /// A theme file has colour unless it says otherwise.
 fn has_colour() -> bool {
+    true
+}
+
+/// And its colours can show the colour modes.
+fn shows_colour_modes() -> bool {
     true
 }
 
@@ -1470,6 +1529,42 @@ pub fn without_colour(buffer: &mut Buffer) {
         cell.fg = Color::Reset;
         cell.bg = Color::Reset;
         cell.underline_color = Color::Reset;
+    }
+}
+
+/// Every grey in `buffer` drawn in a shade of `foreground`, for a palette
+/// that gives one, such as Game Kid (design §6.2): the terminal's own text
+/// colour, Campbell's `#cccccc`, as `foreground` itself; the terminal's
+/// black, Campbell's `#0c0c0c`, as it is, and anything darker as that; and
+/// a grey between or past them as far along from that black to
+/// `foreground`, lighter or darker in its hue. So the game's own greys,
+/// such as the title screen's, and the text it leaves in the terminal's own
+/// colour, are drawn in the palette. What isn't grey stays, and so does the
+/// terminal's own background. The screen's drawing calls it last.
+pub fn in_shades_of(buffer: &mut Buffer, foreground: Color) {
+    let Some(to) = campbell::rgb(foreground) else {
+        return;
+    };
+    let [black, own] = [campbell::BACKGROUND[0], campbell::FOREGROUND[0]].map(i32::from);
+    let shade = |colour: Color, terminal_s: Option<campbell::Rgb>| {
+        let Some([r, g, b]) = campbell::rgb(colour).or(terminal_s) else {
+            return colour;
+        };
+        if r != g || g != b {
+            return colour;
+        }
+        let along = (i32::from(r) - black).max(0);
+        let [r, g, b] = to.map(|channel| {
+            let way = along * (i32::from(channel) - black);
+            let steps = (way + (own - black) / 2).div_euclid(own - black);
+            (black + steps).clamp(0, 255) as u8
+        });
+        Color::Rgb(r, g, b)
+    };
+    for cell in &mut buffer.content {
+        cell.fg = shade(cell.fg, Some(campbell::FOREGROUND));
+        cell.bg = shade(cell.bg, None);
+        cell.underline_color = shade(cell.underline_color, None);
     }
 }
 

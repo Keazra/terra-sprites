@@ -1,0 +1,123 @@
+// The Game Kid palette (design §6.2): greens on the terminal's own black,
+// after the four of an old handheld's screen, #0f380f, #306230, #8bac0f
+// and #9bbc0f, darkest to lightest. They're used as they are wherever
+// they work; where text must be read on black, or things must be kept
+// apart, it adds greens on the same ramp, lighter or darker: #0f1f0f, a
+// shade for the panels; #5e871f, for minor text and the attention marker;
+// #70961a, for a loss; and two lighter than the lightest, #c5dc58 and
+// #dcf090, for headings, sprites and what stands out. `foreground` draws
+// the text the game leaves in the terminal's own colour in green too, and
+// every grey the game draws itself, such as the title screen's, in its
+// shades. Greens can't tell the drives or the lineage apart, so, as in
+// mono, a sprite keeps its own colour, and `b` and the help say where
+// they're read instead. The population graph's stages are greens of
+// clearly different lightness, and motion plays in greens. As a palette
+// only its colours, bold and reverse video are taken; its glyphs are the
+// CP437 set's, so the file reads as a whole theme too.
+(
+    foreground: "#9bbc0f",
+    colour_modes: false,
+    tiles: {
+        terrain(grass):         (glyph: '.', fg: "#306230"),
+        terrain(dirt):          (glyph: ',', fg: "#306230"),
+        terrain(sand):          (glyph: ':', fg: "#9bbc0f"),
+        terrain(shallow_water): (glyph: '~', fg: "#8bac0f"),
+        terrain(deep_water):    (glyph: '≈', fg: "#306230"),
+        terrain(rock):          (glyph: '#', fg: "#8bac0f"),
+        sprite:                 (glyph: '☺', fg: "#dcf090"),
+        selected_sprite:        (glyph: '☻', fg: "#dcf090", reversed: true),
+        young_sprite:           (glyph: 'ö', fg: "#dcf090"),
+        selected_young_sprite:  (glyph: 'ö', fg: "#dcf090", reversed: true),
+        decision_marker:        (glyph: 'X', fg: "#dcf090"),
+        emote(hurt):            (glyph: '!', fg: "#dcf090"),
+        emote(pleased):         (glyph: '♥', fg: "#c5dc58"),
+        emote(shocked):         (glyph: '‼', fg: "#dcf090"),
+        emote(failed):          (glyph: '?', fg: "#8bac0f"),
+        emote(resting):         (glyph: 'z', fg: "#8bac0f"),
+        emote(dancing):         (glyph: '♫', fg: "#c5dc58"),
+        emote(calling):         (glyph: '♪', fg: "#c5dc58"),
+    },
+    // No drive colours a sprite: the sprite list and the Body tab say
+    // which drive is strongest.
+    drives: {},
+    objects: {
+        "berry_bush": {
+            "seedling": (glyph: '\'', fg: "#306230"),
+            "default":  (glyph: '♣', fg: "#306230"),
+            // Light and bold against the bare bush's dark green.
+            "fruiting": (glyph: '♣', fg: "#c5dc58", bold: true),
+        },
+        "berry":     { "default": (glyph: '•', fg: "#c5dc58") },
+        "thornbush": { "default": (glyph: '♠', fg: "#8bac0f") },
+        "ball":      { "default": (glyph: '○', fg: "#dcf090") },
+        "egg":       { "default": (glyph: 'o', fg: "#c5dc58") },
+    },
+    attention_marker: "#5e871f",
+    cursor: (
+        arrows: (up: '↑', down: '↓', left: '←', right: '→'),
+        followed_arrows: (up: '▲', down: '▼', left: '◄', right: '►'),
+        visible_frame: (up: '═', down: '═', left: '║', right: '║'),
+        status_marks: (
+            idle: '·', sent: '+', applied: '☼', rejected: '?',
+            grab: '↑', empty: '░', release: '↓',
+        ),
+        mode_marks: {
+            select: (glyph: '♦', fg: "#dcf090"),
+            train:  (glyph: '±', fg: "#c5dc58"),
+            grab:   (glyph: '∩', fg: "#9bbc0f"),
+        },
+        leash: (glyph: '·', fg: "#9bbc0f"),
+        aim: (path: (glyph: '·', fg: "#9bbc0f"), end: (glyph: '°', fg: "#9bbc0f")),
+    ),
+    space: (
+        glass: {
+            horizontal:   (glyph: '═', fg: "#8bac0f"),
+            vertical:     (glyph: '║', fg: "#8bac0f"),
+            top_left:     (glyph: '╔', fg: "#8bac0f"),
+            top_right:    (glyph: '╗', fg: "#8bac0f"),
+            bottom_left:  (glyph: '╚', fg: "#8bac0f"),
+            bottom_right: (glyph: '╝', fg: "#8bac0f"),
+        },
+        stars: {
+            far:     (glyph: '·', fg: "#306230"),
+            near:    (glyph: '∙', fg: "#8bac0f"),
+            nearest: (glyph: '*', fg: "#dcf090"),
+        },
+    ),
+    // Greens of clearly different lightness, so the stages are told apart
+    // without hue: the young lightest, then eggs, adults, and the old
+    // darkest.
+    population: (
+        stages: (young: "#dcf090", adult: "#9bbc0f", old: "#306230", egg: "#c5dc58"),
+        full: '█',
+        half: '▄',
+        limit: (glyph: '·', fg: "#5e871f"),
+    ),
+    // Never drawn, as `colour_modes` says, but greens, so a copy that draws
+    // them stays on the ramp.
+    lineage: (elders: "#c5dc58", siblings: "#8bac0f", young: "#dcf090", others: "#306230"),
+    // Every role has a green of its own, at 4.5:1 or more against the
+    // terminal's black but minor text, at 3:1 or more: headings and keys
+    // bold, a gain lighter than the text and a loss darker, and what's
+    // chosen in reverse video.
+    text: (
+        heading:  (fg: "#c5dc58", bold: true),
+        muted:    (fg: "#5e871f"),
+        good:     (fg: "#dcf090"),
+        bad:      (fg: "#70961a"),
+        key:      (fg: "#9bbc0f", bold: true),
+        selected: (fg: "#9bbc0f", reversed: true),
+        spot:     (fg: "#c5dc58"),
+    ),
+    // The darkest classic green for the title rows, on a shade darker
+    // still, as light as the default palette's.
+    panels: (shade: "#0f1f0f", title: "#0f380f"),
+    // The pop-ups fade from the terminal's black.
+    motion: (
+        flash: "#dcf090",
+        ash: "#306230",
+        spark: "#dcf090",
+        trail: "#0f380f",
+        dark: "#0c0c0c",
+    ),
+)

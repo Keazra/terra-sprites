@@ -73,7 +73,7 @@ usage: render title [options] -o <file>
   --theme <file>       draw with a theme of your own: its glyphs, unless
                        --ascii, and its colours, unless --colours
   --colours <name>     draw in a built-in palette: default, high-contrast,
-                       colour-blind or mono
+                       colour-blind, mono or game-kid
   --font <file.ttf>    draw with this font instead of Cascadia Mono
   --bold-font <file>   and its bold face (default: --font's own)
 
@@ -660,7 +660,16 @@ mod tests {
             colours("world --ascii --colours default -o a.gif"),
             Some(ColourPalette::Default)
         );
+        assert_eq!(
+            colours("world --colours game-kid -o a.gif"),
+            Some(ColourPalette::GameKid)
+        );
+        assert_eq!(
+            colours("title --colours Game_Kid -o a.gif"),
+            Some(ColourPalette::GameKid)
+        );
         assert!(USAGE.contains("--colours"));
+        assert!(USAGE.contains("game-kid"));
     }
 
     #[test]
@@ -743,7 +752,7 @@ mod tests {
         refused("world --track bob -o a.gif", "bob");
         refused(
             "world --colours pink -o a.gif",
-            "--colours is default, high-contrast, colour-blind or mono, not `pink`",
+            "--colours is default, high-contrast, colour-blind, mono or game-kid, not `pink`",
         );
         refused(
             "world --ascii --theme a.ron --colours mono -o a.gif",

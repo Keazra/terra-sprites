@@ -38,8 +38,10 @@
 //! - **Colours** are the theme's `motion` section's. A fade blends exact
 //!   colours, so a named one is blended as Campbell draws it
 //!   ([`campbell::exact`]), and a tile with no background of its own takes
-//!   the theme's dark. On the panels, what an effect leaves as it was keeps
-//!   its own colour, named or the terminal's, so tachyonfx never sees the
+//!   the theme's dark. The terminal's own text colour is blended as the
+//!   palette draws it ([`own_text`]): as Campbell's, or in Game Kid as its
+//!   green. On the panels, what an effect leaves as it was keeps its own
+//!   colour, named or the terminal's, so tachyonfx never sees the
 //!   terminal's own colour, which it would take for white or black.
 //! - **The same on every computer:** only colour effects that depend on
 //!   nothing but their age, eased by polynomials (`QuadOut`) and blended in
@@ -131,6 +133,16 @@ const PAN_PAST: i32 = 2;
 /// #307).
 pub(crate) fn colours_play(app: &App) -> bool {
     app.motion() && app.theme.has_colour()
+}
+
+/// The terminal's own text colour as the theme's palette draws it, for a
+/// fade to blend from (design §6.2, §6.9): its foreground, if it gives one,
+/// as Game Kid does, or else as Campbell draws it.
+fn own_text(app: &App) -> Rgb {
+    app.theme
+        .foreground()
+        .and_then(campbell::rgb)
+        .unwrap_or(FOREGROUND)
 }
 
 /// Whether motion thins out at `speed` (design §6.9): at 4× and up, which
@@ -952,6 +964,7 @@ pub(crate) fn play_on_panels(buf: &mut Buffer, app: &App, spots: &Spots) {
     }
     let (kept, now) = (app.motion_kept(), app.running_for());
     let dark = campbell::rgb(app.theme.motion().dark).unwrap_or(campbell::BACKGROUND);
+    let own = (own_text(app), dark);
     let [r, g, b] = dark;
     let dark_colour = Color::Rgb(r, g, b);
     let under_a_pop_up = |cell: Position| spots.under_a_pop_up(cell);
@@ -970,7 +983,7 @@ pub(crate) fn play_on_panels(buf: &mut Buffer, app: &App, spots: &Spots) {
         let effect = fx::sweep_in(direction, SWEEP_EDGE, 0, faded, timer(TAB_SWEEP));
         let age = age(sweep.began, now);
         let body = inspector::tab_area(inspector);
-        play_over(effect, age, buf, body, dark, under_a_pop_up);
+        play_over(effect, age, buf, body, own, under_a_pop_up);
     }
     let fade_in = |lasts| fx::fade_from(dark_colour, dark_colour, timer(lasts));
     if let Some((drawn, began)) = kept.closing(now) {
@@ -986,38 +999,39 @@ pub(crate) fn play_on_panels(buf: &mut Buffer, app: &App, spots: &Spots) {
                     }
                 }
                 let fade_out = fx::fade_to(dark_colour, dark_colour, timer(half));
-                play_over(fade_out, age, buf, area, dark, under_a_pop_up);
+                play_over(fade_out, age, buf, area, own, under_a_pop_up);
             } else {
-                play_over(fade_in(half), age - half, buf, area, dark, under_a_pop_up);
+                play_over(fade_in(half), age - half, buf, area, own, under_a_pop_up);
             }
         }
     }
     if let Some(began) = kept.opening(now) {
         for area in spots.fading() {
             let over_it = |cell: Position| !spots.fades_at(cell);
-            play_over(fade_in(POP_UP), age(began, now), buf, area, dark, over_it);
+            play_over(fade_in(POP_UP), age(began, now), buf, area, own, over_it);
         }
     }
 }
 
 /// Plays `effect` over `area` of `buf`, `age` into it, but on the cells
 /// `kept` keeps as they are (design §6.9). It blends exact colours in RGB:
-/// a named one as Campbell draws it, the terminal's own text colour as
-/// Campbell's and its own background as `dark`. What the effect leaves as
-/// it was keeps the colour it had, named or the terminal's own, so a fade
-/// that's played out, or a cell it doesn't reach, is drawn as before.
+/// a named one as Campbell draws it, and the terminal's own text colour
+/// and background as `text` and `dark`, as the palette draws its text and
+/// its dark. What the effect leaves as it was keeps the colour it had,
+/// named or the terminal's own, so a fade that's played out, or a cell it
+/// doesn't reach, is drawn as before.
 fn play_over(
     effect: Effect,
     age: Duration,
     buf: &mut Buffer,
     area: Rect,
-    dark: Rgb,
+    (text, dark): (Rgb, Rgb),
     kept: impl Fn(Position) -> bool,
 ) {
     let area = area.intersection(buf.area);
     let exact = |cell: &Cell| {
         (
-            campbell::exact(cell.fg, FOREGROUND),
+            campbell::exact(cell.fg, text),
             campbell::exact(cell.bg, dark),
         )
     };
@@ -1139,9 +1153,10 @@ fn glow(buf: &Buffer, on: &OnMap, cell: Position, way: f32) -> Color {
     ColorSpace::Rgb.lerp(&own, &campbell::exact(on.look.spark, dark), way)
 }
 
-/// `cell`'s colour as an exact one, for a fade to blend from (design §6.9).
-fn exact_fg(buf: &mut Buffer, cell: Position) {
-    let fg = campbell::exact(buf[cell].fg, FOREGROUND);
+/// `cell`'s colour as an exact one, for a fade to blend from (design §6.9),
+/// the terminal's own as `text`.
+fn exact_fg(buf: &mut Buffer, cell: Position, text: Rgb) {
+    let fg = campbell::exact(buf[cell].fg, text);
     buf[cell].set_fg(fg);
 }
 
@@ -1159,6 +1174,7 @@ fn death(
 ) {
     let look = on.look;
     let dark = campbell::rgb(look.dark).unwrap_or(campbell::BACKGROUND);
+    let text = own_text(on.app);
     let flash = campbell::exact(look.flash, dark);
     let back = eased(age, lasts);
     for (n, cell) in on.cells(tile).into_iter().enumerate() {
@@ -1166,8 +1182,8 @@ fn death(
             let ghost = if n == 0 { symbol } else { ' ' };
             buf[cell]
                 .set_char(ghost)
-                .set_fg(campbell::exact(colour, FOREGROUND));
-            let ash = campbell::exact(look.ash, FOREGROUND);
+                .set_fg(campbell::exact(colour, text));
+            let ash = campbell::exact(look.ash, text);
             play(fx::fade_to_fg(ash, timer(lasts)), age, buf, cell);
         }
         let own = campbell::exact(buf[cell].bg, dark);
@@ -1198,10 +1214,11 @@ fn hatching(buf: &mut Buffer, on: &OnMap, tile: Pos, young: Young, moment: &Mome
         .as_ref()
         .map_or(Vec::new(), |sprite| on.cells(sprite.pos()));
     let emoting = sprite.is_some_and(|sprite| ui::is_emote(on.app, &sprite));
+    let text = own_text(on.app);
     if age < warming && !emoting {
-        let egg = campbell::exact(young.egg, FOREGROUND);
+        let egg = campbell::exact(young.egg, text);
         for &cell in &drawn {
-            exact_fg(buf, cell);
+            exact_fg(buf, cell, text);
             play(fx::fade_from_fg(egg, timer(warming)), age, buf, cell);
         }
     }
@@ -1212,7 +1229,7 @@ fn hatching(buf: &mut Buffer, on: &OnMap, tile: Pos, young: Young, moment: &Mome
             play(fx::paint_bg(bg, timer(warming)), age, buf, cell);
         }
     }
-    let spark = campbell::exact(on.look.spark, FOREGROUND);
+    let spark = campbell::exact(on.look.spark, text);
     let sparks_for = lasts * 2 / 5;
     let map = on.world.map();
     for y in tile.y.saturating_sub(1)..=tile.y.saturating_add(1) {
@@ -1227,7 +1244,7 @@ fn hatching(buf: &mut Buffer, on: &OnMap, tile: Pos, young: Young, moment: &Mome
             };
             for cell in on.cells(round) {
                 if !drawn.contains(&cell) {
-                    exact_fg(buf, cell);
+                    exact_fg(buf, cell, text);
                     play(fx::fade_from_fg(spark, timer(sparks_for)), into, buf, cell);
                 }
             }

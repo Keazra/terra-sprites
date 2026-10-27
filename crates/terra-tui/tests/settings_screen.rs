@@ -164,6 +164,7 @@ fn the_colours_row_goes_through_the_built_in_palettes_then_the_theme_files() {
             "high contrast",
             "colour-blind",
             "mono",
+            "Game Kid",
             "bright",
             "night",
             "default"
@@ -200,7 +201,7 @@ fn a_theme_file_gives_its_glyphs_on_one_row_and_its_colours_on_the_other() {
     assert_eq!(shows(&app, Setting::Glyphs), "night");
     assert_eq!(app.theme, Theme::compose(&night, &Theme::cp437()));
     assert_eq!(app.theme.glyph(SemanticTile::Sprite).symbol, 'N');
-    // Colours: default, high contrast, colour-blind, mono, night.
+    // Colours: default, high contrast, colour-blind, mono, Game Kid, night.
     apply(&mut app, &world, Action::Pick(2));
     apply(&mut app, &world, Action::Scroll { dx: -1, dy: 0 });
     assert_eq!(app.notice(), Some("Colours: night"));
@@ -225,7 +226,7 @@ fn a_theme_that_doesnt_load_is_refused_and_passed_over() {
     );
     // Each row from its last built-in one going on, and from its first
     // going back.
-    for (row, last_built_in) in [(Setting::Glyphs, 1), (Setting::Colours, 3)] {
+    for (row, last_built_in) in [(Setting::Glyphs, 1), (Setting::Colours, 4)] {
         for action in [on, Action::Enter, back] {
             let mut app = app_for(&world, &folder);
             on_row(&mut app, &world, row);
@@ -414,8 +415,8 @@ fn the_themes_folder_is_still_listed_after_a_load() {
 // The settings carry everywhere (design §6.7, #307): over a load, and back
 // to the title screen and into the next world.
 
-/// Every row changed on `app`: ASCII glyphs, mono, motion on and square
-/// tiles.
+/// Every row changed on `app`: ASCII glyphs, Game Kid, the last of the
+/// colours, motion on and square tiles.
 fn change_every_row(app: &mut App, world: &World) {
     on_row(app, world, Setting::Glyphs);
     apply(app, world, Action::Enter);
@@ -434,14 +435,14 @@ fn every_row_changed() -> Settings {
         look: Look::new(
             Pick::BuiltIn(GlyphSet::Ascii),
             GlyphSet::Ascii.source(),
-            Pick::BuiltIn(ColourPalette::Mono),
-            ColourPalette::Mono.source(),
+            Pick::BuiltIn(ColourPalette::GameKid),
+            ColourPalette::GameKid.source(),
         ),
         motion: true,
         square_tiles: true,
         saved: SavedSettings {
             glyphs: Some("ASCII".into()),
-            colours: Some("mono".into()),
+            colours: Some("Game Kid".into()),
             motion: Some(true),
             square_tiles: Some(true),
         },
@@ -465,7 +466,7 @@ fn the_app_hands_on_the_settings_as_the_player_left_them() {
     assert_eq!(app.settings(), every_row_changed());
     assert_eq!(
         app.theme,
-        Theme::built_in(GlyphSet::Ascii, ColourPalette::Mono)
+        Theme::built_in(GlyphSet::Ascii, ColourPalette::GameKid)
     );
 }
 
@@ -547,7 +548,7 @@ fn the_settings_carry_over_a_load() {
     assert_eq!(app.settings(), every_row_changed());
     assert_eq!(
         app.theme,
-        Theme::built_in(GlyphSet::Ascii, ColourPalette::Mono)
+        Theme::built_in(GlyphSet::Ascii, ColourPalette::GameKid)
     );
     // Saved in the same place.
     on_row(&mut app, &loaded, Setting::Motion);

@@ -9,7 +9,7 @@ The **settings screen** is where you choose how the game looks and feels: its gl
 | Row | What it changes | What it can be |
 |---|---|---|
 | Glyphs | The glyph set: the characters the map, the Cursor and the emotes are drawn with (design §6.2) | `CP437`, the default; `ASCII`; then each theme file in your themes folder, by name |
-| Colours | The palette: the colours, bold and reverse video, and the panels' shades | `default`; `high contrast`; `colour-blind`; `mono`; then each theme file in your themes folder, by name |
+| Colours | The palette: the colours, bold and reverse video, and the panels' shades | `default`; `high contrast`; `colour-blind`; `mono`; `Game Kid`; then each theme file in your themes folder, by name |
 | Motion | The screen's small movements ([manual](../manual.md#motion), design §6.9) | `on`, the default, or `off` |
 | Square tiles | Each tile drawn two cells wide, so the world looks its true shape; `o` is the same switch (M2 design §11.7) | `off`, the default, or `on` |
 
@@ -40,7 +40,7 @@ It holds only the rows you've changed. A row it leaves out takes the game's own 
 | Field | What it holds |
 |---|---|
 | `glyphs` | The glyph set: a built-in one by the name the screen shows it by, `"CP437"` or `"ASCII"`, or a theme file in your themes folder by its file's name, with its `.ron`, such as `"night.ron"`. |
-| `colours` | The palette, the same way: `"default"`, `"high contrast"`, `"colour-blind"` or `"mono"`, or a theme file's name. |
+| `colours` | The palette, the same way: `"default"`, `"high contrast"`, `"colour-blind"`, `"mono"` or `"Game Kid"`, or a theme file's name. |
 | `motion` | `true` or `false`. |
 | `square_tiles` | `true` or `false`. |
 

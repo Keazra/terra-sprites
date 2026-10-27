@@ -889,7 +889,7 @@ The characters a theme draws with: the map's, the Cursor's, the emotes', the gla
 _Avoid_: font, charset, tileset (that's the Tiles milestone's)
 
 **Palette** (#307):
-The rest of a theme: the colours, bold and reverse video of each glyph, the drives', the lineage's and the graph's colours, the text roles, the attention marker, the panel shades and motion's colours. Four are built in: default, high contrast, colour-blind and mono, which has no colour at all and is where `NO_COLOR` starts the game. The settings screen calls it **Colours**.
+The rest of a theme: the colours, bold and reverse video of each glyph, the drives', the lineage's and the graph's colours, the text roles, the attention marker, the panel shades and motion's colours, and whether it has colour, a foreground for the terminal's own text colour, and colours that can show the colour modes. Five are built in: default, high contrast, colour-blind, mono, which has no colour at all and is where `NO_COLOR` starts the game, and Game Kid, greens on black like an old handheld's screen, which can't show the colour modes. The settings screen calls it **Colours**.
 _Avoid_: colour scheme, colour mode (that's which colours a sprite takes, `b`), command palette (that's `:`'s box)
 
 **Settings screen** (#307):

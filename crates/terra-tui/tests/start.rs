@@ -502,17 +502,23 @@ fn a_theme_file_both_rows_name_that_won_t_load_is_said_once() {
 
 #[test]
 fn a_built_in_is_named_in_the_settings_in_any_case() {
-    let saved = SavedSettings {
-        glyphs: Some("ascii".into()),
-        colours: Some("High Contrast".into()),
-        ..SavedSettings::default()
-    };
-    let (settings, said) = started(&Args::default(), Ok(saved), None);
-    assert_eq!(said, None);
-    assert_eq!(
-        settings.look.theme(),
-        Theme::built_in(GlyphSet::Ascii, ColourPalette::HighContrast)
-    );
+    for (colours, palette) in [
+        ("High Contrast", ColourPalette::HighContrast),
+        ("game kid", ColourPalette::GameKid),
+    ] {
+        let saved = SavedSettings {
+            glyphs: Some("ascii".into()),
+            colours: Some(colours.into()),
+            ..SavedSettings::default()
+        };
+        let (settings, said) = started(&Args::default(), Ok(saved), None);
+        assert_eq!(said, None, "{colours}");
+        assert_eq!(
+            settings.look.theme(),
+            Theme::built_in(GlyphSet::Ascii, palette),
+            "{colours}"
+        );
+    }
 }
 
 #[test]

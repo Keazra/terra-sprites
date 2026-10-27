@@ -23,7 +23,7 @@ use crate::policy::{Panel, Subject};
 use crate::space::{self, Place};
 use crate::spots::{Spot, Spots};
 use crate::text::{display_name, terrain_name, thousands};
-use crate::theme::{self, Glyph, PanelLook, SemanticTile, TextLook};
+use crate::theme::{Glyph, PanelLook, SemanticTile, TextLook};
 use crate::tooltip;
 
 /// The narrowest terminal that has room for the inspector beside the map
@@ -83,10 +83,9 @@ pub fn render(frame: &mut Frame, app: &App, world: &World) {
 /// same parts, so the Cursor and the marks land where it says.
 pub fn render_with(frame: &mut Frame, app: &App, world: &World, parts: Parts) {
     draw_with(frame, app, world, parts);
-    // A palette with no colour draws none (design §6.2, #307).
-    if !app.theme.has_colour() {
-        theme::without_colour(frame.buffer_mut());
-    }
+    // A palette with no colour draws none, and Game Kid's draws every grey
+    // in its greens (design §6.2).
+    app.theme.finish(frame.buffer_mut());
 }
 
 /// Draws the frame `render_with` draws, in the theme's colours.
@@ -418,9 +417,7 @@ pub fn map_view_alone_areas(screen: Size) -> Areas {
 pub fn render_map_view_alone(frame: &mut Frame, app: &App, world: &World) {
     let area = frame.area();
     draw_tiles(frame.buffer_mut(), area, app, world);
-    if !app.theme.has_colour() {
-        theme::without_colour(frame.buffer_mut());
-    }
+    app.theme.finish(frame.buffer_mut());
 }
 
 /// Draws what the map view shows in `inner`: the tiles in view, the glass
@@ -606,9 +603,12 @@ pub(crate) fn sprite_look(app: &App, sprite: &SpriteView, lineage: Option<&Marke
 /// selected sprite keeps `own`, as every sprite does with none selected (M2
 /// design §17.4). A drive the theme has no colour for draws `own` too, and so
 /// does a sprite whose colour, or place on the family tree, the policy
-/// hides (design §6.4).
+/// hides (design §6.4), and every sprite in a palette that can't show the
+/// colour modes, such as Game Kid (§6.2).
 fn sprite_colour(app: &App, sprite: &SpriteView, own: Color, lineage: Option<&Marked>) -> Color {
-    if !app.can_view(Panel::MapColours, Subject::Sprite(sprite.id())) {
+    if !app.theme.shows_colour_modes()
+        || !app.can_view(Panel::MapColours, Subject::Sprite(sprite.id()))
+    {
         return own;
     }
     match app.colour_mode() {

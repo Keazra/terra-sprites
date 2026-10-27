@@ -807,6 +807,88 @@ fn a_theme_file_may_say_its_palette_has_no_colour() {
 }
 
 #[test]
+fn a_theme_file_may_say_its_palette_can_t_show_the_colour_modes() {
+    // Design §6.2, §6.3: as Game Kid does, whose greens can't tell the
+    // drives or the lineage apart; one with no colour can't either, and a
+    // theme that doesn't say can.
+    let pack = pack();
+    let loaded = |text: &str| Theme::from_ron(text, &pack).expect("loads");
+    assert!(loaded(ASCII_THEME).shows_colour_modes());
+    let with = |value: &str| {
+        let line = format!("(\n    colour_modes: {value},\n    tiles: {{");
+        ascii_with("(\n    tiles: {", &line)
+    };
+    assert!(!loaded(&with("false")).shows_colour_modes());
+    assert!(loaded(&with("true")).shows_colour_modes());
+    let colourless = ascii_with("(\n    tiles: {", "(\n    colour: false,\n    tiles: {");
+    assert!(!loaded(&colourless).shows_colour_modes());
+    let error = Theme::from_ron(&with("none"), &pack).expect_err("refused");
+    assert!(error.contains("bool"), "{error}");
+}
+
+#[test]
+fn a_theme_file_may_give_the_terminal_s_own_text_colour_one_of_its_own() {
+    // Design §6.2: what the game leaves in the terminal's own foreground,
+    // as Game Kid draws it in its green; a theme that doesn't say leaves it
+    // to the terminal.
+    let pack = pack();
+    let loaded = |text: &str| Theme::from_ron(text, &pack).expect("loads");
+    assert_eq!(loaded(ASCII_THEME).foreground(), None);
+    let with = |colour: &str| {
+        let line = format!("(\n    foreground: {colour},\n    tiles: {{");
+        ascii_with("(\n    tiles: {", &line)
+    };
+    assert_eq!(
+        loaded(&with("\"#9bbc0f\"")).foreground(),
+        Some(Color::Rgb(0x9b, 0xbc, 0x0f))
+    );
+    assert_eq!(
+        loaded(&with("light_green")).foreground(),
+        Some(Color::LightGreen)
+    );
+    let error = Theme::from_ron(&with("pink"), &pack).expect_err("refused");
+    assert!(error.contains("pink"), "{error}");
+}
+
+#[test]
+fn every_grey_on_the_screen_is_drawn_in_shades_of_the_foreground() {
+    // Design §6.2: the terminal's own text colour, Campbell's #cccccc, as
+    // the foreground itself; the terminal's black as it is; and a grey
+    // between or past them as far along from black to the foreground,
+    // so #767676 is 106/192 of the way and #f2f2f2 230/192, to the
+    // nearest whole step. What isn't grey, and the terminal's own
+    // background, stay.
+    let green = Color::Rgb(0x9b, 0xbc, 0x0f);
+    let cells = [
+        (Color::Reset, Color::Reset),
+        (Color::Gray, Color::DarkGray),
+        (Color::White, Color::Black),
+        (Color::Rgb(0x0c, 0x0c, 0x0c), Color::Rgb(0x76, 0x76, 0x76)),
+        (Color::Red, Color::Rgb(0x0f, 0x38, 0x0f)),
+        (Color::Rgb(0x08, 0x08, 0x08), Color::Rgb(0xff, 0xff, 0xff)),
+    ];
+    let mut buffer = Buffer::empty(Rect::new(0, 0, cells.len() as u16, 1));
+    for (x, &(fg, bg)) in cells.iter().enumerate() {
+        buffer[(x as u16, 0)].set_fg(fg).set_bg(bg);
+    }
+    theme::in_shades_of(&mut buffer, green);
+    let drawn: Vec<(Color, Color)> = buffer.content.iter().map(|c| (c.fg, c.bg)).collect();
+    let (dark_gray, white) = (Color::Rgb(0x5b, 0x6d, 0x0e), Color::Rgb(0xb7, 0xdf, 0x10));
+    let black = Color::Rgb(0x0c, 0x0c, 0x0c);
+    assert_eq!(
+        drawn,
+        [
+            (green, Color::Reset),
+            (green, dark_gray),
+            (white, black),
+            (black, dark_gray),
+            (Color::Red, Color::Rgb(0x0f, 0x38, 0x0f)),
+            (black, Color::Rgb(0xc1, 0xeb, 0x10)),
+        ]
+    );
+}
+
+#[test]
 fn a_gain_is_good_a_loss_bad_and_a_zero_neither() {
     // Design §6.2, #302.
     let look = Theme::cp437().text();

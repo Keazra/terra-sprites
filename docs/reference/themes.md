@@ -25,7 +25,7 @@ A theme is two parts, chosen apart (design §6.2): a **glyph set**, every charac
 | Part | What it gives |
 |---|---|
 | Glyph set | Each `glyph:` character in `tiles`, `objects` and `cursor`; the Cursor's `arrows`, `followed_arrows`, `visible_frame` and `status_marks`; `space`'s glass and stars; and `population`'s `full`, `half` and `bands` characters and its `limit`'s. |
-| Palette | Every glyph's `fg`, `bold` and `reversed`; `drives`; `attention_marker`; `population`'s `stages` and its `limit`'s colour; `lineage`; `text`; `panels`; `motion`; and `colour`. |
+| Palette | Every glyph's `fg`, `bold` and `reversed`; `drives`; `attention_marker`; `population`'s `stages` and its `limit`'s colour; `lineage`; `text`; `panels`; `motion`; `colour`; `foreground`; and `colour_modes`. |
 
 Every theme file is whole, and picked as both, on both of the settings screen's rows or with `--theme`, it draws as written. Taken as a glyph set, only its characters are used; taken as a palette, everything but them. An object type or state that one part leaves out falls back in that part, as under [`objects`](#objects) below. The game has these built in:
 
@@ -37,6 +37,7 @@ Every theme file is whole, and picked as both, on both of the settings screen's 
 | High contrast | [`high_contrast.ron`](../../themes/high_contrast.ron) | Bright exact colours, the same in every terminal, each at 7:1 or more against Windows Terminal's black: minor text light grey rather than dark, headings and keys bold, a brighter attention marker, and lines between the panels in place of shades. |
 | Colour-blind | [`colour_blind.ron`](../../themes/colour_blind.ron) | Exact colours from Okabe and Ito's set for colour-blind readers, so the drives, the lineage, a gain against a loss and the graph's stages are told apart without red against green. |
 | Mono | [`mono.ron`](../../themes/mono.ron) | No colour at all ([`colour: false`](#colour), below), only bold and reverse video, and lines between the panels. What colour tells in the others is read from the signs, arrows and capitals, which stay, and the population graph's bands from a character each ([`bands`](#population)). What it can't show is a sprite's colour (`b`): its strongest drive is read in the sprite list and the Body tab, and its lineage on the family tree, as `b` and the help say. `NO_COLOR` set to anything but nothing starts the game in it, as [no-color.org](https://no-color.org) asks, unless you've picked a palette on the settings screen or with `--theme`. |
+| Game Kid | [`game_kid.ron`](../../themes/game_kid.ron) | Greens on the terminal's own black, after the four of an old handheld's screen, `#0f380f`, `#306230`, `#8bac0f` and `#9bbc0f`, with greens on the same ramp, lighter or darker, where text must be read on black or things kept apart. Its [`foreground`](#foreground) draws the text the game leaves in the terminal's own colour in green, and every grey the game draws itself, such as the title screen's, in its shades. Greens can't tell the drives or the lineage apart, so it says [`colour_modes: false`](#colour_modes): as in mono, every sprite keeps its own colour, and `b` and the help say where its drive and lineage are read. The population graph's stages are greens of clearly different lightness, and motion plays in greens. The panels sit on dark green shades. |
 
 Each palette's file draws the CP437 glyphs, so it loads as a whole theme too: `--theme themes/high_contrast.ron` starts the game in high contrast, and `--ascii --theme themes/mono.ron` in mono and ASCII. Copied into your themes folder, they're on the settings screen's rows as well, after the built-in ones.
 
@@ -50,7 +51,7 @@ Each palette's file draws the CP437 glyphs, so it loads as a whole theme too: `-
 
 ## Fields
 
-A theme is one record with twelve fields. The first five are needed; `colour`, `space`, `population`, `lineage`, `text`, `panels` and `motion` may be left out.
+A theme is one record with fourteen fields. The first five are needed; `colour`, `foreground`, `colour_modes`, `space`, `population`, `lineage`, `text`, `panels` and `motion` may be left out.
 
 | Field | Meaning |
 |---|---|
@@ -66,6 +67,8 @@ A theme is one record with twelve fields. The first five are needed; `colour`, `
 | `panels` | The shades the inspector and the event log sit on (below). Optional: a theme without them draws lines between the panels instead. |
 | `motion` | Motion's colours (below). Optional, as `space` is. |
 | `colour` | `false` for a palette with no colour at all, as mono's (below). Optional: `true` if it's left out. |
+| `foreground` | A colour: what the game leaves in the terminal's own text colour is drawn in it, and every grey on the screen in its shades, as Game Kid's are (below). Optional: a theme without it leaves them to the terminal. |
+| `colour_modes` | `false` for a palette whose colours can't tell the drives or the lineage apart, as Game Kid's can't (below). Optional: `true` if it's left out. |
 
 A **glyph** is `(glyph: '♣', fg: green)`, with two optional flags: `bold: true`, and `reversed: true`, which swaps the colour and the background. Characters go in single quotes; a quote itself is `'\''`.
 
@@ -172,6 +175,14 @@ Motion is the small effects drawn over the screen as things happen, such as a de
 ### `colour`
 
 `colour: false` draws the whole screen in the terminal's own colours, with nothing but bold and reverse video, as the mono palette does: every colour the theme names, and every one the game draws itself, such as the title screen's greys, gives way to the terminal's. The theme still names its colours, since the fields above need them, but they're never seen: mono's are all `white`. The tile the selected sprite attends to, which `attention_marker` would give a background, is underlined instead, which no glyph is, so it never reads as a fruiting bush's bold; and motion's colours don't play, though the view still pans and a drive's bar still eases (design §6.9).
+
+### `foreground`
+
+Most of the screen's text, and its frames, are drawn in the terminal's own text colour, whatever the palette. `foreground` gives that a colour of its own: `foreground: "#9bbc0f"` draws them in Game Kid's lightest classic green. Every grey on the screen is then drawn in a shade of it, as the drawing of each frame ends: the terminal's own text colour, as Windows Terminal's Campbell scheme draws it, `#cccccc`, becomes the foreground itself; Campbell's black, `#0c0c0c`, stays as it is, and anything darker becomes it; and a grey between or past them becomes the colour as far along from that black to the foreground. So `dark_gray`, `#767676` in Campbell, is drawn a darker shade of the foreground, and `white` a lighter one, and the game's own greys, such as the title screen's, take its hue. That includes the greys a theme names itself, `gray` or `"#5c5c5c"` say, so a palette with a foreground names none it wants to stay grey. A colour that isn't grey stays as it is, and so does the terminal's own background. A fade blends the terminal's own text colour from the foreground, so it passes through no grey either (design §6.9). It does nothing in a palette with [`colour: false`](#colour), which has none.
+
+### `colour_modes`
+
+`b` colours each sprite on the map by its strongest drive, or by where it stands in the selected sprite's lineage (design §6.3). `colour_modes: false` says the palette's colours can't tell them apart, as Game Kid's greens can't tell nine drives apart: then every sprite is drawn in its own colour, whatever `b` says, and `b` says where they're read instead, "Colours: lineage, which this palette can't show: see the family tree (k)", and the help's colour legend says the same, as in mono. Its `drives` and `lineage` may still be given; they're not drawn. A palette with [`colour: false`](#colour) can't show them either, whatever this says.
 
 ## Working example
 
