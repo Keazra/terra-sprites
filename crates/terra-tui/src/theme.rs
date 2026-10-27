@@ -1100,8 +1100,7 @@ struct ThemeFile {
     #[serde(default, deserialize_with = "implicit_some")]
     panels: Option<PanelsFile>,
     /// Motion's colours (design §6.9). A theme without them, or without
-    /// some of them, draws the default theme's, but for water it draws in
-    /// a colour of its own.
+    /// some of them, draws the default theme's.
     #[serde(default, deserialize_with = "implicit_some")]
     motion: Option<MotionFile>,
     /// `false` for a palette with no colour at all, as mono is (design
