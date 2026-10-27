@@ -1,11 +1,12 @@
-//! What the pointer is over, said on the status line, and a click on a
-//! line of the event log (#304): each part of the screen notes what it is
-//! as it's drawn.
+//! Tooltips, saying what the pointer is over, and a click on a line of
+//! the event log (#304): each part of the screen notes what it is as it's
+//! drawn.
 
 mod common;
 use common::*;
 
-use ratatui::layout::{Position, Size};
+use ratatui::buffer::Buffer;
+use ratatui::layout::{Position, Rect, Size};
 use ratatui::style::Modifier;
 use terra_sim::{DeathCause, EntityId, Event, EventKind, World};
 use terra_tui::app::{App, Selection, Tab};
@@ -39,70 +40,148 @@ fn cell_of_text(app: &App, world: &World, size: Size, text: &str) -> Position {
     panic!("{text:?} isn't on screen:\n{}", lines(&screen).join("\n"));
 }
 
-/// The status line of a `size` screen once the pointer is on `text`.
-fn pointing_at_text(app: &mut App, world: &World, size: Size, text: &str) -> String {
-    let at = cell_of_text(app, world, size, text);
-    apply(app, world, Action::Point(at));
-    row(&render_on(app, world, size), size.height - 1)
+/// A tooltip as it's drawn: the name on its top edge, and the words inside
+/// it, its lines joined with spaces.
+#[derive(Debug)]
+struct Tooltip {
+    name: String,
+    words: String,
+    area: Rect,
+}
+
+/// The tooltip beside the pointer at `pointer` on `screen`, if one is
+/// drawn there: a box with a corner diagonally next to it.
+fn tooltip(screen: &Buffer, pointer: Position) -> Option<Tooltip> {
+    let at = |x: i32, y: i32| {
+        let (x, y) = (u16::try_from(x).ok()?, u16::try_from(y).ok()?);
+        screen.cell((x, y)).map(|cell| cell.symbol().to_string())
+    };
+    let is = |x: i32, y: i32, symbol: &str| at(x, y).as_deref() == Some(symbol);
+    let run = |from: i32, step: i32, stop: &dyn Fn(i32) -> bool| {
+        let mut along = from;
+        while !stop(along) {
+            along += step;
+            if !(0..400).contains(&along) {
+                return None;
+            }
+        }
+        Some(along)
+    };
+    let (x, y) = (i32::from(pointer.x), i32::from(pointer.y));
+    // Its corners: the top ones below the pointer, or the bottom ones
+    // above it, and to the left of it or to the right.
+    let (left, top, right, bottom) = if is(x - 1, y + 1, "┐") {
+        let left = run(x - 2, -1, &|along| is(along, y + 1, "┌"))?;
+        (
+            left,
+            y + 1,
+            x - 1,
+            run(y + 2, 1, &|along| is(x - 1, along, "┘"))?,
+        )
+    } else if is(x + 1, y + 1, "┌") {
+        let right = run(x + 2, 1, &|along| is(along, y + 1, "┐"))?;
+        (
+            x + 1,
+            y + 1,
+            right,
+            run(y + 2, 1, &|along| is(x + 1, along, "└"))?,
+        )
+    } else if is(x - 1, y - 1, "┘") {
+        let left = run(x - 2, -1, &|along| is(along, y - 1, "└"))?;
+        (
+            left,
+            run(y - 2, -1, &|along| is(x - 1, along, "┐"))?,
+            x - 1,
+            y - 1,
+        )
+    } else if is(x + 1, y - 1, "└") {
+        let right = run(x + 2, 1, &|along| is(along, y - 1, "┘"))?;
+        (
+            x + 1,
+            run(y - 2, -1, &|along| is(x + 1, along, "┌"))?,
+            right,
+            y - 1,
+        )
+    } else {
+        return None;
+    };
+    let text = |y: i32| -> String {
+        (left + 1..right)
+            .filter_map(|x| at(x, y))
+            .collect::<String>()
+    };
+    let words: Vec<String> = (top + 1..bottom)
+        .map(|y| text(y).trim().to_string())
+        .collect();
+    let area = Rect::new(
+        left as u16,
+        top as u16,
+        (right - left + 1) as u16,
+        (bottom - top + 1) as u16,
+    );
+    Some(Tooltip {
+        name: text(top).trim_matches(|c| c == '─' || c == ' ').to_string(),
+        words: words.join(" "),
+        area,
+    })
+}
+
+/// The tooltip on a `size` screen once the pointer is on cell `cell`.
+fn pointing_at(app: &mut App, world: &World, size: Size, cell: Position) -> Option<Tooltip> {
+    apply(app, world, Action::Point(cell));
+    tooltip(&render_on(app, world, size), cell)
+}
+
+/// The tooltip on a `size` screen once the pointer is on `text`.
+fn pointing_at_text(app: &mut App, world: &World, size: Size, text: &str) -> Tooltip {
+    let cell = cell_of_text(app, world, size, text);
+    pointing_at(app, world, size, cell).unwrap_or_else(|| panic!("a tooltip on {text:?}"))
 }
 
 #[test]
-fn a_drives_bar_says_what_raises_it_and_what_lowers_it() {
+fn a_drives_name_says_what_raises_it_and_what_lowers_it() {
     let (world, mut app, _) = selected(SCREEN, Tab::Body);
-    let status = pointing_at_text(&mut app, &world, SCREEN, "hunger");
-    assert!(
-        status.starts_with(" hunger: rises as energy runs low, and eating brings it down at once"),
-        "{status:?}"
+    let said = pointing_at_text(&mut app, &world, SCREEN, "hunger");
+    assert_eq!(said.name, "hunger");
+    assert_eq!(
+        said.words,
+        "Rises as energy runs low, and eating brings it down at once"
     );
-    // At the bar's end too, past the name.
-    let bar = cell_of_text(&app, &world, SCREEN, "tiredness");
-    apply(
-        &mut app,
-        &world,
-        Action::Point(Position::new(bar.x + 20, bar.y)),
-    );
-    let status = status_line(&app, &world);
-    assert!(
-        status.starts_with(" tiredness: rises as stamina"),
-        "{status:?}"
-    );
+    // Its bar says nothing: only what's in the spot colour does.
+    let name = cell_of_text(&app, &world, SCREEN, "tiredness");
+    let bar = Position::new(name.x + 20, name.y);
+    assert!(pointing_at(&mut app, &world, SCREEN, bar).is_none());
 }
 
 #[test]
 fn a_chemical_says_what_it_is_on_its_line_and_in_the_hormones_grid() {
     let (world, mut app, _) = selected(SCREEN, Tab::Chem);
-    let status = pointing_at_text(&mut app, &world, SCREEN, "energy");
+    let said = pointing_at_text(&mut app, &world, SCREEN, "energy");
     assert!(
-        status.starts_with(" energy: what it runs on: food in its gut turns into it"),
-        "{status:?}"
+        said.words
+            .starts_with("What it runs on: food in its gut turns into it"),
+        "{said:?}"
     );
-    let status = pointing_at_text(&mut app, &world, SCREEN, "h3 ");
+    let said = pointing_at_text(&mut app, &world, SCREEN, "h3 ");
+    assert_eq!(said.name, "h3");
     assert!(
-        status.starts_with(" h3: a spare hormone its genes may use for anything"),
-        "{status:?}"
+        said.words
+            .starts_with("A spare hormone its genes may use for anything"),
+        "{said:?}"
     );
-    // A later cell in the grid, to its last column, and not the gap after.
+    // A later cell in the grid, to its name's last column, and not its
+    // level after.
     let h7 = cell_of_text(&app, &world, SCREEN, "h7 ");
-    apply(
-        &mut app,
-        &world,
-        Action::Point(Position::new(h7.x + 7, h7.y)),
-    );
-    let status = status_line(&app, &world);
-    assert!(status.starts_with(" h7: "), "{status:?}");
-    apply(
-        &mut app,
-        &world,
-        Action::Point(Position::new(h7.x + 8, h7.y)),
-    );
-    let status = status_line(&app, &world);
-    assert!(!status.starts_with(" h"), "{status:?}");
+    let said = pointing_at(&mut app, &world, SCREEN, Position::new(h7.x + 1, h7.y));
+    assert_eq!(said.map(|said| said.name).as_deref(), Some("h7"));
+    let level = Position::new(h7.x + 5, h7.y);
+    assert!(pointing_at(&mut app, &world, SCREEN, level).is_none());
     // The named hormones are lower down.
     let (world, mut app, _) = selected(TALL, Tab::Chem);
-    let status = pointing_at_text(&mut app, &world, TALL, "receptivity");
+    let said = pointing_at_text(&mut app, &world, TALL, "receptivity");
     assert!(
-        status.starts_with(" receptivity: rises when she's danced for"),
-        "{status:?}"
+        said.words.starts_with("Rises when she's danced for"),
+        "{said:?}"
     );
 }
 
@@ -118,15 +197,12 @@ fn a_chemical_its_pack_says_nothing_of_says_what_sort_it_is() {
         .build();
     let mut app = app_on(&world);
     select(&mut app, &world, sprite_on(&world, at(2, 2)));
-    let status = pointing_at_text(&mut app, &world, SCREEN, "hunger");
-    assert!(
-        status.starts_with(" hunger: a drive, an urge it feels"),
-        "{status:?}"
-    );
+    let said = pointing_at_text(&mut app, &world, SCREEN, "hunger");
+    assert_eq!(said.words, "A drive, an urge it feels");
 }
 
 #[test]
-fn words_too_long_for_the_status_line_end_in_dots() {
+fn words_too_long_for_one_line_wrap_inside_the_tooltip() {
     let long = format!(r#"about: "{}""#, "ever so hungry, ".repeat(10));
     let wordy: &[(&str, &str)] = &[(
         r#"about: "rises as energy runs low, and eating brings it down at once""#,
@@ -138,104 +214,164 @@ fn words_too_long_for_the_status_line_end_in_dots() {
         .build();
     let mut app = app_on(&world);
     select(&mut app, &world, sprite_on(&world, at(2, 2)));
-    let status = pointing_at_text(&mut app, &world, SCREEN, "hunger");
-    assert!(status.starts_with(" hunger: ever so hungry"), "{status:?}");
-    assert!(status.trim_end().ends_with("..."), "{status:?}");
-    assert!(
-        status.chars().count() <= usize::from(SCREEN.width),
-        "{status:?}"
-    );
+    let said = pointing_at_text(&mut app, &world, SCREEN, "hunger");
+    let all = format!("Ever so hungry, {}", "ever so hungry, ".repeat(9));
+    assert_eq!(said.words, all.trim_end(), "none of it cut");
+    assert!(said.area.width <= 40 && said.area.height > 3, "{said:?}");
 }
 
 #[test]
-fn a_gene_says_what_it_does() {
+fn a_gene_s_name_says_what_it_does_and_its_numbers_say_nothing() {
     let (world, mut app, _) = selected(TALL, Tab::Genome);
     let says = |app: &mut App, text: &str| pointing_at_text(app, &world, TALL, text);
     // Spawn variation moves the numbers, so only the words are checked.
-    let status = says(&mut app, "hunger halves");
+    let said = says(&mut app, "hunger halves");
+    assert_eq!(said.name, "hunger halves");
     assert!(
-        status.starts_with(" A half-life: hunger fades by itself, by half every "),
-        "{status:?}"
+        said.words
+            .starts_with("A half-life: hunger fades by itself, by half every "),
+        "{said:?}"
     );
-    let status = says(&mut app, "low energy → hunger");
+    let said = says(&mut app, "low energy → hunger");
+    assert_eq!(said.name, "low energy → hunger");
     assert!(
-        status.starts_with(" An emitter: hunger rises while energy is below ."),
-        "{status:?}"
+        said.words
+            .starts_with("An emitter: hunger rises while energy is below ."),
+        "{said:?}"
     );
-    let status = says(&mut app, "ate → hunger");
+    let said = says(&mut app, "ate → hunger");
     assert!(
-        status.starts_with(" An emitter: ate lowers hunger"),
-        "{status:?}"
+        said.words.starts_with("An emitter: ate lowers hunger"),
+        "{said:?}"
     );
-    let status = says(&mut app, "fullness → hunger");
+    let said = says(&mut app, "fullness → hunger");
     assert!(
-        status.starts_with(" An emitter: hunger falls while fullness is above ."),
-        "{status:?}"
+        said.words
+            .starts_with("An emitter: hunger falls while fullness is above ."),
+        "{said:?}"
     );
+    // The number after a name, a space past it, isn't the gene's.
+    let name = cell_of_text(&app, &world, TALL, "low energy → hunger");
+    let number = Position::new(
+        name.x + "low energy → hunger ".chars().count() as u16,
+        name.y,
+    );
+    assert!(pointing_at(&mut app, &world, TALL, number).is_none());
 }
 
 #[test]
-fn each_trait_on_the_line_they_share_says_what_it_is() {
+fn each_trait_s_name_on_the_line_they_share_says_what_it_is() {
     let (world, mut app, _) = selected(TALL, Tab::Genome);
-    let status = pointing_at_text(&mut app, &world, TALL, "speed");
+    let said = pointing_at_text(&mut app, &world, TALL, "speed");
+    assert_eq!(said.name, "speed");
     assert!(
-        status.starts_with(" A trait: speed is how fast it walks"),
-        "{status:?}"
+        said.words
+            .starts_with("A trait: speed is how fast it walks"),
+        "{said:?}"
     );
-    let status = pointing_at_text(&mut app, &world, TALL, "sense");
+    let said = pointing_at_text(&mut app, &world, TALL, "sense");
     assert!(
-        status.starts_with(" A trait: sense is how far it senses"),
-        "{status:?}"
+        said.words
+            .starts_with("A trait: sense is how far it senses"),
+        "{said:?}"
     );
-    // Between them, the dot is neither.
+    // Between them, the dot is neither, and nor is a trait's number.
     let sense = cell_of_text(&app, &world, TALL, "sense");
-    apply(
-        &mut app,
-        &world,
-        Action::Point(Position::new(sense.x - 2, sense.y)),
-    );
-    let status = row(&render_on(&app, &world, TALL), TALL.height - 1);
-    assert!(!status.contains("A trait"), "{status:?}");
+    let dot = Position::new(sense.x - 2, sense.y);
+    assert!(pointing_at(&mut app, &world, TALL, dot).is_none());
+    let number = Position::new(sense.x + 6, sense.y);
+    assert!(pointing_at(&mut app, &world, TALL, number).is_none());
 }
 
 #[test]
 fn a_tab_says_what_it_shows_and_its_keys() {
     let (world, mut app, _) = selected(SCREEN, Tab::Body);
-    let status = pointing_at_text(&mut app, &world, SCREEN, "Brain");
-    assert!(
-        status.starts_with(
-            " Brain tab: what it notices and decides, and what it has learned · [ ] switch tabs"
-        ),
-        "{status:?}"
+    let said = pointing_at_text(&mut app, &world, SCREEN, "Brain");
+    assert_eq!(said.name, "Brain tab");
+    assert_eq!(
+        said.words,
+        "What it notices and decides, and what it has learned click to open it · [ ] switch tabs"
     );
 }
 
 #[test]
 fn the_event_filters_say_what_they_do() {
     let (world, mut app, _) = selected(SCREEN, Tab::Body);
-    let status = pointing_at_text(&mut app, &world, SCREEN, "selected major");
+    let said = pointing_at_text(&mut app, &world, SCREEN, "selected major");
+    assert_eq!(said.name, "Event filter");
     assert!(
-        status.starts_with(" Which events the log shows · click, or m, for the next"),
-        "{status:?}"
+        said.words.starts_with("Which events the log shows")
+            && said.words.ends_with("click, or m, for the next"),
+        "{said:?}"
     );
 }
 
 #[test]
-fn back_on_the_map_the_status_line_names_the_tile_again() {
+fn a_tooltip_opens_below_the_pointer_and_to_its_left() {
+    let (world, mut app, _) = selected(SCREEN, Tab::Body);
+    let cell = cell_of_text(&app, &world, SCREEN, "hunger");
+    let said = pointing_at(&mut app, &world, SCREEN, cell).expect("a tooltip");
+    assert_eq!(said.area.right(), cell.x, "{said:?}");
+    assert_eq!(said.area.y, cell.y + 1, "{said:?}");
+}
+
+#[test]
+fn the_status_line_keeps_to_the_tile_and_back_on_the_map_there_is_no_tooltip() {
     let (world, mut app, _) = selected(SCREEN, Tab::Body);
     pointing_at_text(&mut app, &world, SCREEN, "hunger");
+    let status = status_line(&app, &world);
+    assert!(!status.contains("rises as energy"), "{status:?}");
+    assert!(status.contains("SELECT"), "{status:?}");
     let tile = app.cell_of(at(5, 4)).expect("in view");
-    apply(
-        &mut app,
-        &world,
-        Action::Point(Position::new(tile.x + 1, tile.y + 1)),
-    );
+    let on_map = Position::new(tile.x + 1, tile.y + 1);
+    assert!(pointing_at(&mut app, &world, SCREEN, on_map).is_none());
     let status = status_line(&app, &world);
     assert!(status.starts_with(" (5,4) grass │ SELECT"), "{status:?}");
 }
 
 #[test]
-fn a_log_line_says_which_sprite_it_is_about_and_lights_it_up_on_the_map() {
+fn what_a_tooltip_can_explain_is_drawn_in_the_spot_colour() {
+    let (world, app, _) = selected(SCREEN, Tab::Body);
+    let spot = Theme::cp437().text().spot.fg.expect("a colour");
+    let screen = render(&app, &world);
+    let fg = |text: &str, past: u16| {
+        let cell = cell_of_text(&app, &world, SCREEN, text);
+        screen[(cell.x + past, cell.y)].fg
+    };
+    assert_eq!(fg("hunger", 0), spot, "a drive's name");
+    assert_eq!(fg("hunger", 5), spot, "to its end");
+    assert_ne!(fg("hunger", 6), spot, "not past it");
+    assert_eq!(fg("Brain", 0), spot, "a tab's name");
+    assert_eq!(fg("selected major", 0), spot, "the event filters");
+    let (world, app, _) = selected(TALL, Tab::Genome);
+    let screen = render_on(&app, &world, TALL);
+    let name = cell_of_text(&app, &world, TALL, "low energy → hunger");
+    let width = "low energy → hunger".chars().count() as u16;
+    for x in name.x..name.x + width {
+        assert_eq!(screen[(x, name.y)].fg, spot, "a gene's name, at {x}");
+    }
+    assert_ne!(
+        screen[(name.x + width + 1, name.y)].fg,
+        spot,
+        "not its number"
+    );
+}
+
+#[test]
+fn the_spot_the_pointer_is_on_is_lit_in_reverse_video_a_gene_s_name_alone() {
+    let (world, mut app, _) = selected(TALL, Tab::Genome);
+    let name = cell_of_text(&app, &world, TALL, "low energy → hunger");
+    apply(&mut app, &world, Action::Point(name));
+    let screen = render_on(&app, &world, TALL);
+    let lit = |x: u16| screen[(x, name.y)].modifier.contains(Modifier::REVERSED);
+    let width = "low energy → hunger".chars().count() as u16;
+    assert!((name.x..name.x + width).all(lit), "the name");
+    assert!(!lit(name.x + width + 1), "not its number");
+    assert!(!lit(name.x - 1), "nor the space before it");
+}
+
+#[test]
+fn a_log_line_s_name_says_which_sprite_it_is_about_and_lights_it_up_on_the_map() {
     let world = field(&[], &[at(2, 2), at(7, 4)]);
     let mut app = app_on(&world);
     let (first, second) = (sprite_on(&world, at(2, 2)), sprite_on(&world, at(7, 4)));
@@ -252,22 +388,20 @@ fn a_log_line_says_which_sprite_it_is_about_and_lights_it_up_on_the_map() {
             .contains(Modifier::REVERSED)
     };
     assert!(!lit(&app, at(7, 4)));
-    let status = pointing_at_text(&mut app, &world, SCREEN, "grew up");
-    assert!(
-        status.starts_with(&format!(" About {label} · click to select it")),
-        "{status:?}"
-    );
+    let said = pointing_at_text(&mut app, &world, SCREEN, &format!("{label} grew up"));
+    assert_eq!(said.name, label);
+    assert_eq!(said.words, "Whom this line is about click to select it");
     assert!(lit(&app, at(7, 4)), "the sprite it's about");
     assert!(!lit(&app, at(2, 2)), "not another");
-    // A click selects it.
-    let line = cell_of_text(&app, &world, SCREEN, "grew up");
+    // What happened, after the name, says nothing.
+    let rest = cell_of_text(&app, &world, SCREEN, "grew up");
+    assert!(pointing_at(&mut app, &world, SCREEN, rest).is_none());
+    // A click on the name selects it.
+    let line = cell_of_text(&app, &world, SCREEN, &format!("{label} grew up"));
     apply(&mut app, &world, Action::left_click(line));
     assert_eq!(app.selection(), Some(Selection::Living(second)));
-    let status = status_line(&app, &world);
-    assert!(
-        status.starts_with(&format!(" About {label}, the selected sprite")),
-        "{status:?}"
-    );
+    let said = pointing_at(&mut app, &world, SCREEN, line).expect("a tooltip");
+    assert_eq!(said.words, "The selected sprite, whom this line is about");
     assert_ne!(first, second);
 }
 
@@ -277,12 +411,9 @@ fn a_click_on_a_line_about_a_sprite_no_longer_living_selects_nothing() {
     let mut app = app_on(&world);
     let gone = EntityId(9_999);
     app.record(&[died(1, gone, DeathCause::Starvation, 40)], &world);
-    let status = pointing_at_text(&mut app, &world, SCREEN, "died");
-    assert!(
-        status.starts_with(" About Sprite #9999, who has died"),
-        "{status:?}"
-    );
-    let line = cell_of_text(&app, &world, SCREEN, "died");
+    let said = pointing_at_text(&mut app, &world, SCREEN, "Sprite #9999");
+    assert_eq!(said.words, "Whom this line is about, who has died");
+    let line = cell_of_text(&app, &world, SCREEN, "Sprite #9999");
     apply(&mut app, &world, Action::left_click(line));
     assert_eq!(app.selection(), None);
 }
@@ -307,6 +438,8 @@ fn a_click_on_a_log_line_moves_the_view_only_if_its_sprite_is_out_of_view() {
     apply(&mut app, &world, Action::left_click(near_line));
     assert_eq!(app.selection(), Some(Selection::Living(ids[0])));
     assert_eq!(app.viewport(), view, "in view, the view stays");
+    // Off the log, so the first line's tooltip is gone from over the next.
+    apply(&mut app, &world, Action::Point(Position::new(0, 0)));
     let far_line = line(&app, ids[1]);
     apply(&mut app, &world, Action::left_click(far_line));
     assert_eq!(app.selection(), Some(Selection::Living(ids[1])));
@@ -333,7 +466,12 @@ fn a_click_on_a_log_line_leaves_follow_as_it_is() {
         kind: EventKind::GrewUp { id: other },
     };
     app.record(&[grew_up], &world);
-    let line = cell_of_text(&app, &world, SCREEN, "grew up");
+    let line = cell_of_text(
+        &app,
+        &world,
+        SCREEN,
+        &format!("Sprite #{} grew up", other.0),
+    );
     apply(&mut app, &world, Action::left_click(line));
     assert_eq!(app.selection(), Some(Selection::Living(other)));
     assert_eq!(app.followed(), Some(followed));
@@ -374,10 +512,9 @@ fn a_pop_up_takes_the_pointer_before_what_is_under_it() {
     ];
     for open in opens {
         let (world, mut app, _) = selected(SCREEN, Tab::Body);
-        let bar = cell_of_text(&app, &world, SCREEN, "hunger");
+        let name = cell_of_text(&app, &world, SCREEN, "hunger");
         apply(&mut app, &world, open);
-        apply(&mut app, &world, Action::Point(bar));
-        let status = status_line(&app, &world);
-        assert!(!status.contains("hunger"), "{open:?}: {status:?}");
+        let said = pointing_at(&mut app, &world, SCREEN, name);
+        assert!(said.is_none(), "{open:?}: {said:?}");
     }
 }

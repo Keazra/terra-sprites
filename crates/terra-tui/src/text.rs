@@ -32,6 +32,14 @@ pub(crate) fn fitted(text: &str, width: usize) -> String {
     format!("{}...", kept.trim_end())
 }
 
+/// `text` with its first letter a capital.
+pub(crate) fn capitalised(text: &str) -> String {
+    let mut chars = text.chars();
+    chars.next().map_or_else(String::new, |first| {
+        first.to_uppercase().chain(chars).collect()
+    })
+}
+
 /// `text` after `first`, wrapped at its spaces to lines of at most `width`
 /// columns, each later line after `later`. A word after another needs a
 /// space before it; the first word on a line goes there whether it fits or

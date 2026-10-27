@@ -10,7 +10,7 @@ use std::time::Duration;
 
 use terra_sim::{DeathCause, EntityId, EventKind, World, drift, gene_values, middle_values};
 
-use crate::text::{cause_name, thousands};
+use crate::text::{capitalised, cause_name, thousands};
 
 /// Ticks in an hour of play at 1×, 1.25 ticks a second (design §6.6).
 pub const HOUR: u64 = 4_500;
@@ -452,14 +452,6 @@ pub fn population_table(world: &World) -> String {
         table += &table_line(row);
     }
     table
-}
-
-/// `text` with its first letter a capital.
-fn capitalised(text: &str) -> String {
-    let mut chars = text.chars();
-    chars.next().map_or_else(String::new, |first| {
-        first.to_uppercase().chain(chars).collect()
-    })
 }
 
 /// The genes table (M2 design §16.4): each of the starter genome's gene

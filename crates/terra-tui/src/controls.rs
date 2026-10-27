@@ -578,9 +578,9 @@ pub const MEMORY_ENTER: Control = control(
 pub const POINT: Control = control(
     "point",
     &[],
-    "what it is, on the status line",
+    "a highlighted name: a tooltip says what it is",
     &[Heading::Pointer],
-    "hover explain drive bar chemical gene tab",
+    "hover tooltip explain drive chemical gene tab name",
 );
 
 // The debug overlay (design §6.1, #311).

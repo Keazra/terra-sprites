@@ -123,5 +123,6 @@
         bad:      (fg: light_red),
         key:      (bold: true),
         selected: (reversed: true),
+        spot:     (fg: light_blue),
     ),
 )

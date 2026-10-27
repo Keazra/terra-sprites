@@ -25,4 +25,5 @@ pub mod start;
 mod text;
 pub mod theme;
 pub mod title;
+mod tooltip;
 pub mod ui;

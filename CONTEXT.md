@@ -822,8 +822,12 @@ The box `:` opens near the top of the map view: typing finds any control that wo
 _Avoid_: command line, console, search (that's the help's)
 
 **Spot** (#304):
-A part of the screen that says what it is when the pointer is on it, such as an inspector tab, a drive's bar, a gene or a line of the event log, and which a click may land on. The inspector, the event log and each pop-up note their spots as they're drawn, afresh each frame, and a pop-up's box is one too, so it takes the pointer before what's under it. The status line says what the spot under the pointer is.
-_Avoid_: hotspot, hit box, tooltip (nothing pops up; the status line says it)
+A part of the screen that says what it is when the pointer is on it, in a tooltip, and which a click may land on: a name, such as an inspector tab's, a drive's, a gene's or the sprite's in a line of the event log. The inspector, the event log and each pop-up note their spots as they're drawn, afresh each frame, and a pop-up's box is one too, so it takes the pointer before what's under it. A spot that says what it is is drawn in the theme's Spot colour.
+_Avoid_: hotspot, hit box
+
+**Tooltip** (#304):
+The box beside the pointer, below it and to its left, saying what the spot under it is: its name, what it is, and what a click or a key does with it. It's drawn afresh each frame, never over the pointer's cell, and takes nothing: it isn't a pop-up.
+_Avoid_: hover box, pop-up (that's a menu or an overlay)
 
 **Sprite list**:
 The overlay `l` opens: every sprite, one to a row, with its age, life stage, strongest drive, generation and what it's doing, sorted by number, name, age or drive. `/` filters it to the rows with a column that has the words typed, from their start. Choosing one selects it and centres the viewport on it.

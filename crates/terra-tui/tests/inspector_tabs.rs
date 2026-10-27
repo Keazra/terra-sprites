@@ -1264,8 +1264,12 @@ fn the_genome_tab_groups_genes_as_plain_lines_and_marks_those_with_no_effect() {
     );
     assert_eq!(screen[(x + 2, flagged + 1)].symbol(), "f");
     assert_eq!(screen[(x + 2, flagged + 1)].fg, Color::DarkGray);
+    // An expressed gene's name is in the spot colour, since a tooltip says
+    // what it does, and its numbers are plain (#304).
     let expressed = row_of("ate → hunger -.5") as u16;
-    assert_eq!(screen[(x, expressed)].fg, Color::Reset);
+    assert_eq!(screen[(x, expressed)].fg, Color::LightBlue);
+    let number = x + "ate → hunger ".chars().count() as u16;
+    assert_eq!(screen[(number, expressed)].fg, Color::Reset);
 }
 
 /// A genome whose Genome tab is 61 lines: the heading, then 60 emitters

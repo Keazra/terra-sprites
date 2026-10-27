@@ -17,7 +17,8 @@ use crate::theme::TextLook;
 /// colour when it's a reward and its bad when it's a punishment, and the
 /// hormones' heading in its heading colour (design §6.2). A change stays
 /// plain: a rise is good for food and bad for hunger. The pointer on a
-/// chemical, its line or its cell in the grid, says what it is (design §6.1).
+/// chemical's name, on its line or in the grid, says what it is (design
+/// §6.1).
 pub(super) fn chem_tab(sprite: &SpriteView, look: TextLook) -> Vec<TabLine> {
     let chemicals: Vec<ChemicalLevel> = sprite.chemicals().collect();
     let line = |c: &ChemicalLevel| {
@@ -38,7 +39,7 @@ pub(super) fn chem_tab(sprite: &SpriteView, look: TextLook) -> Vec<TabLine> {
             };
             spans.push(Span::styled(number, style));
         }
-        TabLine::spotted(Line::from(spans), spot(c))
+        TabLine::spotted_at(Line::from(spans), TabLine::name_columns(&name), spot(c))
     };
     let of_kinds = |kinds: &[ChemicalKind]| {
         chemicals
@@ -67,15 +68,15 @@ pub(super) fn chem_tab(sprite: &SpriteView, look: TextLook) -> Vec<TabLine> {
             !number.is_empty() && number.chars().all(|c| c.is_ascii_digit())
         });
     for four in numbered.chunks(4) {
-        // Each cell is its spot, 3 apart, after a space.
+        // Each cell's name is its spot, the cells 3 apart, after a space.
         let (mut text, mut spots) = (String::from(" "), Vec::new());
         for (i, c) in four.iter().enumerate() {
             if i > 0 {
                 text.push_str("   ");
             }
-            let start = text.chars().count() as u16;
-            text.push_str(&format!("{:<4}{:>4}", display_name(c.name), level(c.level)));
-            spots.push((start..text.chars().count() as u16, spot(c)));
+            let (start, name) = (text.chars().count() as u16, display_name(c.name));
+            text.push_str(&format!("{name:<4}{:>4}", level(c.level)));
+            spots.push((start..start + name.chars().count() as u16, spot(c)));
         }
         lines.push(TabLine {
             line: Line::from(text),
@@ -86,7 +87,7 @@ pub(super) fn chem_tab(sprite: &SpriteView, look: TextLook) -> Vec<TabLine> {
     lines
 }
 
-/// The spot of chemical `c`'s line or cell (design §6.1).
+/// The spot of chemical `c`'s name (design §6.1).
 fn spot(c: &ChemicalLevel) -> Spot {
     Spot::chemical(c.name, c.kind)
 }

@@ -62,8 +62,8 @@ impl GeneGroup {
 /// design §12), then the genes grouped under headings, each group in genome
 /// order, as plain lines. The expressed traits share one line. A gene with
 /// no effect is dimmed, with the reason below it. The pointer on a gene's
-/// lines, or a trait's part of the line they share, says what it does
-/// (design §6.1).
+/// name, its line's words but its numbers, says what it does (design
+/// §6.1, #304).
 pub(super) fn genome_tab(sprite: &SpriteView, app: &App) -> Vec<TabLine> {
     let genes: Vec<(usize, GeneView, Expression, Switch, f32)> = sprite
         .genes()
@@ -93,14 +93,14 @@ pub(super) fn genome_tab(sprite: &SpriteView, app: &App) -> Vec<TabLine> {
                 matches!(gene, GeneView::Trait { .. }) && *how == Expression::Expressed
             });
         if !together.is_empty() {
-            let traits: Vec<(usize, String)> = together
+            let traits: Vec<(usize, String, String)> = together
                 .iter()
                 .map(|(index, gene, _, _, health)| {
                     let text = format!("{}{}", gene_text(gene), health_text(*health));
-                    (*index, text)
+                    (*index, gene_name(gene), text)
                 })
                 .collect();
-            let texts: Vec<String> = traits.iter().map(|(_, text)| text.clone()).collect();
+            let texts: Vec<String> = traits.iter().map(|(.., text)| text.clone()).collect();
             lines.extend(traits_spotted(
                 wrapped(&listed(&texts), 1, plain, look.muted),
                 &traits,
@@ -113,14 +113,11 @@ pub(super) fn genome_tab(sprite: &SpriteView, app: &App) -> Vec<TabLine> {
                 switch_text(switch),
                 health_text(health)
             );
-            let spotted = |lines: Vec<Line<'static>>| {
-                lines
-                    .into_iter()
-                    .map(move |line| TabLine::spotted(line, Spot::Gene(index)))
-            };
+            let name = gene_name(gene);
             let reason = match how {
                 Expression::Expressed => {
-                    lines.extend(spotted(wrapped(&text, 1, plain, look.muted)));
+                    let shown = wrapped(&text, 1, plain, look.muted);
+                    lines.extend(name_spotted(shown, &name, index));
                     continue;
                 }
                 Expression::Flagged(reason) => format!("flagged: {reason}"),
@@ -132,17 +129,53 @@ pub(super) fn genome_tab(sprite: &SpriteView, app: &App) -> Vec<TabLine> {
                 Expression::Dormant => "dormant: switched off at this life stage".into(),
             };
             // A gene with no effect is minor, and says why (design §6.2).
-            lines.extend(spotted(wrapped(&text, 1, look.muted, look.muted)));
-            lines.extend(spotted(wrapped(&reason, 3, look.muted, look.muted)));
+            let shown = wrapped(&text, 1, look.muted, look.muted);
+            lines.extend(name_spotted(shown, &name, index));
+            lines.extend(
+                wrapped(&reason, 3, look.muted, look.muted)
+                    .into_iter()
+                    .map(TabLine::from),
+            );
         }
     }
     lines
 }
 
-/// The traits' shared `lines`, each trait's spot over its part of them:
-/// `traits` are each gene's place in the genome and its text, in the order
-/// the lines list them.
-fn traits_spotted(lines: Vec<Line<'static>>, traits: &[(usize, String)]) -> Vec<TabLine> {
+/// A gene's `lines`, as `wrapped` draws its text, with the spot of the
+/// gene at `index` over its name's words, `name`, where they are on them:
+/// not over its numbers, between them or after (#304).
+fn name_spotted(lines: Vec<Line<'static>>, name: &str, index: usize) -> Vec<TabLine> {
+    let name = name.replace(BOUND, " ");
+    let mut words = name.split_whitespace().peekable();
+    lines
+        .into_iter()
+        .map(|line| {
+            let text = line.to_string();
+            let mut row = TabLine::from(line);
+            let mut column = 0;
+            for token in text.split(' ') {
+                // A reaction's last word has a comma after it.
+                let word = token.trim_end_matches(',');
+                if !word.is_empty() && words.peek() == Some(&word) {
+                    words.next();
+                    let end = column + word.chars().count() as u16;
+                    match row.spots.last_mut() {
+                        // The word before's, with a space between.
+                        Some((columns, _)) if columns.end + 1 == column => columns.end = end,
+                        _ => row.spots.push((column..end, Spot::Gene(index))),
+                    }
+                }
+                column += token.chars().count() as u16 + 1;
+            }
+            row
+        })
+        .collect()
+}
+
+/// The traits' shared `lines`, each trait's spot over its name: `traits`
+/// are each gene's place in the genome, its name and its text, in the
+/// order the lines list them.
+fn traits_spotted(lines: Vec<Line<'static>>, traits: &[(usize, String, String)]) -> Vec<TabLine> {
     let mut traits = traits.iter().peekable();
     lines
         .into_iter()
@@ -150,14 +183,14 @@ fn traits_spotted(lines: Vec<Line<'static>>, traits: &[(usize, String)]) -> Vec<
             let text = line.to_string();
             let mut row = TabLine::from(line);
             let mut from = 0;
-            while let Some((index, trait_text)) = traits.peek() {
+            while let Some((index, name, trait_text)) = traits.peek() {
                 // As `wrapped` draws it, its spaces kept together as plain ones.
                 let trait_text = trait_text.replace(BOUND, " ");
                 let Some(at) = text[from..].find(&trait_text) else {
                     break;
                 };
                 let start = text[..from + at].chars().count() as u16;
-                let width = trait_text.chars().count() as u16;
+                let width = name.chars().count() as u16;
                 row.spots.push((start..start + width, Spot::Gene(*index)));
                 from += at + trait_text.len();
                 traits.next();
@@ -317,7 +350,7 @@ fn numbers(gene: &GeneView) -> Vec<String> {
 
 /// What a gene does, without its numbers: `low energy → hunger`, `thirst →
 /// drink`, `speed`.
-fn gene_name(gene: &GeneView) -> String {
+pub(crate) fn gene_name(gene: &GeneView) -> String {
     match *gene {
         GeneView::Trait { which, .. } => trait_name(which).into(),
         GeneView::HalfLife { chem, .. } => format!("{} halves", display_name(chem)),

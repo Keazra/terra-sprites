@@ -155,6 +155,7 @@
         bad:      (fg: light_red),
         key:      (bold: true),
         selected: (reversed: true),
+        spot:     (fg: light_blue),
     ),
     // The panels beside and under the map (design §6.1): the inspector and
     // the event log sit on `shade`, a little lighter than the terminal's

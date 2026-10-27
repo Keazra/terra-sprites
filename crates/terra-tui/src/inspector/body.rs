@@ -80,9 +80,11 @@ pub(super) fn body_tab(sprite: &SpriteView, app: &App, world: &World) -> Vec<Tab
         if !arrow.is_empty() {
             spans.push(Span::raw(format!(" {arrow}")));
         }
-        // The pointer on it says what raises and lowers it (design §6.1).
+        // The pointer on its name says what raises and lowers it (design
+        // §6.1).
         let spot = Spot::chemical(drive.name, drive.kind);
-        lines.push(TabLine::spotted(Line::from(spans), spot));
+        let name = TabLine::name_columns(&display_name(drive.name));
+        lines.push(TabLine::spotted_at(Line::from(spans), name, spot));
     }
     lines.push(Line::default().into());
     let physical: Vec<String> = chemicals

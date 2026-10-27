@@ -37,7 +37,7 @@ use brain::brain_rows;
 use chem::chem_tab;
 pub(crate) use event_log::{crashed_into, event_line, event_sprites, refusal_sprites};
 use genome::genome_tab;
-pub(crate) use genome::{gene_about, something_new};
+pub(crate) use genome::{gene_about, gene_name, something_new};
 use world::world_tab;
 
 /// The inspector's width, in columns, the column down its left included
@@ -171,10 +171,21 @@ impl From<Line<'static>> for TabLine {
 impl TabLine {
     /// `line`, all of it `spot`.
     fn spotted(line: Line<'static>, spot: Spot) -> TabLine {
+        TabLine::spotted_at(line, 0..WIDTH as u16, spot)
+    }
+
+    /// `line`, with `spot` over `columns` of it.
+    fn spotted_at(line: Line<'static>, columns: Range<u16>, spot: Spot) -> TabLine {
         TabLine {
             line,
-            spots: vec![(0..WIDTH as u16, spot)],
+            spots: vec![(columns, spot)],
         }
+    }
+
+    /// The columns of a name `name` long that starts a tab's line, after
+    /// the space at its left (design §6.1).
+    fn name_columns(name: &str) -> Range<u16> {
+        1..1 + name.chars().count() as u16
     }
 }
 
