@@ -128,7 +128,7 @@ The same key in capitals or lower case does the same thing.
 | `--replay <file>` | Play a replay back, such as `last_session.replay`, which every session writes to the game's folder (the help screen shows where). Time, the view and the inspector work, but nothing can change the world until you take it over with `Ctrl+R`. It pauses at the end, and if the replay ever drifts from what was recorded, it pauses and says between which ticks. See [replays](reference/saves.md#replays) |
 | `--ascii` | Draw the map in plain ASCII instead of CP437 |
 | `--theme <file>` | Start with a theme of your own, such as an edited copy of [`themes/cp437.ron`](../themes/cp437.ron), rather than picking it with `Ctrl+T` each time |
-| `--no-motion` | Draw the screen without motion: no flash where a sprite dies, no sparks where one hatches, and the water still. For a slow terminal, or if you'd rather not have it |
+| `--no-motion` | Draw the screen without motion: no flash where a sprite dies, no sparks where one hatches, the water still, tabs and pop-ups shown at once, and a drive's bar jumping to its new level. For a slow terminal, or if you'd rather not have it |
 | `--fast-forward <hours>` | Run a Lab world with no screen for that many hours of play at 1×, then save it; see [fast-forward](#fast-forward) |
 | `--save <name>` | With `--fast-forward`, the name to save under |
 | `--version` | Print the game's version and the commit it was built from, and stop |

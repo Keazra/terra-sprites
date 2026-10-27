@@ -151,17 +151,17 @@ pub fn render_with(frame: &mut Frame, app: &App, world: &World, parts: Parts) {
         }
         _ => {}
     }
-    // Over whatever's open, so it's in a screenshot of any of them (design
-    // §6.1).
-    if app.debug_overlay() {
-        pop_ups.push(render_debug_overlay(
-            frame.buffer_mut(),
-            map_view_area(area, parts),
-            app,
-        ));
-    }
+    // Each fades in as it opens and out as it closes (design §6.9).
     for pop_up in pop_ups.into_iter().flatten() {
-        spots.note(pop_up, Spot::PopUp);
+        spots.note_pop_up(pop_up, true);
+    }
+    // Over whatever's open, so it's in a screenshot of any of them (design
+    // §6.1). It doesn't fade (§6.9).
+    let debug = app
+        .debug_overlay()
+        .then(|| render_debug_overlay(frame.buffer_mut(), map_view_area(area, parts), app));
+    if let Some(debug) = debug.flatten() {
+        spots.note_pop_up(debug, false);
     }
     // What can be pointed at, what is, and a tooltip saying what it is,
     // between the bars (design §6.1, #304).
@@ -172,7 +172,7 @@ pub fn render_with(frame: &mut Frame, app: &App, world: &World, parts: Parts) {
     }
     // Motion over the panels and pop-ups, under the tooltip, which doesn't
     // move (design §6.9).
-    motion::play_on_panels(frame.buffer_mut(), area, app, &spots);
+    motion::play_on_panels(frame.buffer_mut(), app, &spots);
     let between_bars = Rect::new(
         area.x,
         area.y + parts.top_rows(),

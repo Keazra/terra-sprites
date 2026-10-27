@@ -131,7 +131,7 @@ A zero, `+.00`, is neither good nor bad, and a chemical's change on the Chem tab
 
 ### `panels`
 
-`panels` is a record of two colours: `shade`, what the inspector and the event log sit on, and `title`, what their title rows sit on (the inspector's tabs, the log's "Events" and its filters). Both are needed. The default theme's are `"#181a22"` and `"#282c3a"`, a shade and two lighter than black. A theme without `panels`, such as the ASCII one, draws a line instead: `│` between the map and the inspector, and a `─` rule over the log with its title and filters in it (design §6.1).
+`panels` is a record of two colours: `shade`, what the inspector and the event log sit on, and `title`, what their title rows sit on (the inspector's tabs, the log's "Events" and its filters). Both are needed. The default theme's are `"#181a22"` and `"#282c3a"`, a shade and two lighter than black. While motion is on, a tab opened sweeps in out of `shade` (design §6.9). A theme without `panels`, such as the ASCII one, draws a line instead: `│` between the map and the inspector, and a `─` rule over the log with its title and filters in it (design §6.1).
 
 ### `motion`
 
@@ -143,7 +143,7 @@ Motion is the small effects drawn over the screen as things happen, such as a de
 | `ash` | The grey a dead sprite's ghost fades to. | `"#5c5c5c"` |
 | `spark` | The sparks round an egg that hatches. | `"#ffe9a0"` |
 | `trail` | The tint on the tiles the selected sprite has just left. | `"#2b3047"` |
-| `dark` | What a pop-up fades in from, and the background a fade takes on a tile that has none of its own. | `"#0c0c0c"` |
+| `dark` | What a pop-up fades in from, and what was under one fades back from as it closes; what a tab opened sweeps in from in a theme without `panels`; and the background a fade takes on a tile that has none of its own. | `"#0c0c0c"` |
 | `shallow_water` | The two shades shallow water drifts between while motion is on, as `("#3a96dd", "#62b4f0")`. | `("#3a96dd", "#62b4f0")` |
 | `deep_water` | Deep water's two shades. | `("#0037da", "#2f62f2")` |
 

@@ -5,44 +5,52 @@
 //!
 //! - **What the app keeps** is [`Motion`]: the switch; how each sprite and
 //!   egg was drawn after the last ticks taken in ([`Seen`]), since the world
-//!   removes a dead sprite before it says so; and the deaths and hatchings
-//!   playing, each with when it began, in the app's `running_for`. Nothing
-//!   is stepped as it's drawn (§6.8).
+//!   removes a dead sprite before it says so; the deaths and hatchings
+//!   playing; the tab sweeping in, which `App::open` starts; what filled
+//!   the screen at the last frame, which the app's clock compares with
+//!   what does now to see a pop-up open or close, and where the last frame
+//!   drew the pop-ups that closed; and the selected sprite's drives' bars,
+//!   noted as ticks are taken in. Each effect keeps when it began, in the
+//!   app's `running_for`. Nothing is stepped as it's drawn (§6.8).
 //! - **Drawing** builds each tachyonfx effect afresh every frame and plays
-//!   it once to its age (`play`), so the same app drawn twice draws the same
-//!   screen. `ui::draw_tiles` calls [`play_on_map`] once the tiles are drawn
-//!   and before the marks go over them, and `ui::render_with` calls
-//!   [`play_on_panels`] once the panels and pop-ups are drawn and what can
-//!   be pointed at is marked, before the tooltip, which doesn't move.
+//!   it once to its age (`play` on the map, `play_over` on the panels), so
+//!   the same app drawn twice draws the same screen. `ui::draw_tiles` calls
+//!   [`play_on_map`] once the tiles are drawn and before the marks go over
+//!   them, and `ui::render_with` calls [`play_on_panels`] once the panels
+//!   and pop-ups are drawn and what can be pointed at is marked, before the
+//!   tooltip, which doesn't move. A bar's blocks are no effect: the Body tab
+//!   draws as many as `App::drive_bar` says.
 //! - **Time** is real time, which the frame loop hands the app (§6.6):
 //!   [`age`] says how far into an effect a frame is, and [`eased`] how far
 //!   that's got, fast and then slowing. A loop works out its own phase, in
 //!   whole milliseconds, as the water does.
 //! - **It thins out at 4× and up** ([`thins_out`]): fewer deaths and
-//!   hatchings at once, and shorter.
+//!   hatchings at once, and shorter, and the bars jump.
 //! - **Colours** are the theme's `motion` section's. A fade blends exact
 //!   colours, so a named one is blended as Campbell draws it
 //!   ([`campbell::exact`]), and a tile with no background of its own takes
-//!   the theme's dark.
+//!   the theme's dark. On the panels, what an effect leaves as it was keeps
+//!   its own colour, named or the terminal's, so tachyonfx never sees the
+//!   terminal's own colour, which it would take for white or black.
 //! - **The same on every computer:** only colour effects that depend on
 //!   nothing but their age, eased by polynomials (`QuadOut`) and blended in
 //!   RGB, and no `sin`, `cos`, `powf` or `exp`.
 //!
-//! Still to come (#306): the tab sweep, the pop-ups' fades and the drives'
-//! easing bars, played on the panels; and the trail and the pan, on the map.
+//! Still to come (#306): the trail and the pan, on the map.
 
 use std::collections::{BTreeMap, VecDeque};
 use std::time::Duration;
 
-use ratatui::buffer::Buffer;
+use ratatui::buffer::{Buffer, Cell};
 use ratatui::layout::{Position, Rect};
 use ratatui::style::Color;
 use tachyonfx::{ColorSpace, Effect, EffectTimer, Interpolation, fx};
 use terra_sim::{EntityId, EventKind, Pos, World};
 
-use crate::app::App;
-use crate::campbell::{self, FOREGROUND};
+use crate::app::{App, Screen, Tab};
+use crate::campbell::{self, FOREGROUND, Rgb};
 use crate::clock::Speed;
+use crate::inspector;
 use crate::policy::{Panel, Subject};
 use crate::space::{Pattern, Place};
 use crate::spots::Spots;
@@ -74,6 +82,20 @@ const SHADES: u8 = 6;
 
 /// The steps a hatching's sparks start on, in milliseconds.
 const SPARK_STEP_MS: u64 = 50;
+
+/// How long a tab opened takes to sweep in (design §6.9), at every speed.
+const TAB_SWEEP: Duration = Duration::from_millis(250);
+
+/// How many columns the edge of a tab sweeping in takes to go from its
+/// shade to all of it.
+const SWEEP_EDGE: u16 = 6;
+
+/// How long a pop-up takes to fade in, and what was under one to fade
+/// back as it closes (design §6.9), at every speed.
+const POP_UP: Duration = Duration::from_millis(150);
+
+/// How long a drive's bar takes to ease to its new value (design §6.9).
+const BAR: Duration = Duration::from_millis(400);
 
 /// Whether motion thins out at `speed` (design §6.9): at 4× and up, which
 /// takes in Lab's faster speeds.
@@ -134,6 +156,62 @@ pub(crate) struct Motion {
     seen: BTreeMap<EntityId, Seen>,
     /// The deaths and hatchings playing, oldest first.
     moments: VecDeque<Moment>,
+    /// The tab sweeping in, if one is.
+    sweep: Option<Sweep>,
+    /// What filled the screen besides the map when the app last moved its
+    /// clock on, which a pop-up opening or closing changes.
+    screen: Screen,
+    /// When what's up now opened, while it fades in.
+    opened: Option<Duration>,
+    /// Where the pop-ups that just closed were drawn, and when they closed,
+    /// while what was under them fades back.
+    closed: Option<(Vec<Rect>, Duration)>,
+    /// The selected sprite's drives' bars, while it's in the world.
+    bars: Option<Bars>,
+}
+
+/// The selected sprite's drives' bars on the Body tab, by the drive's name,
+/// as they ease to the levels last taken in (design §6.9).
+#[derive(Debug, Clone)]
+struct Bars {
+    sprite: EntityId,
+    drives: BTreeMap<String, Bar>,
+}
+
+/// A drive's bar easing from `from` blocks filled to `to`, from when it
+/// began.
+#[derive(Debug, Clone, Copy)]
+struct Bar {
+    from: u8,
+    to: u8,
+    began: Duration,
+}
+
+impl Bar {
+    /// A bar still at `blocks`, from `now`.
+    fn at(blocks: u8, now: Duration) -> Bar {
+        Bar {
+            from: blocks,
+            to: blocks,
+            began: now,
+        }
+    }
+
+    /// How many blocks it fills at `now`: a whole block at a time, quick at
+    /// first and slowing (design §6.9).
+    fn shown(&self, now: Duration) -> u8 {
+        let way = f32::from(self.to) - f32::from(self.from);
+        let moved = (way * eased(age(self.began, now), BAR)).round();
+        (f32::from(self.from) + moved) as u8
+    }
+}
+
+/// A tab opened, sweeping in from one side of the inspector, from when it
+/// began.
+#[derive(Debug, Clone, Copy)]
+struct Sweep {
+    from_left: bool,
+    began: Duration,
 }
 
 /// How a sprite or an egg on the map was drawn, for a death or a hatching
@@ -181,6 +259,11 @@ impl Motion {
             on: true,
             seen: BTreeMap::new(),
             moments: VecDeque::new(),
+            sweep: None,
+            screen: Screen::Normal,
+            opened: None,
+            closed: None,
+            bars: None,
         }
     }
 
@@ -196,6 +279,24 @@ impl Motion {
         if !on {
             self.seen.clear();
             self.moments.clear();
+            self.sweep = None;
+            self.opened = None;
+            self.closed = None;
+            self.bars = None;
+        }
+    }
+
+    /// Starts tab `to` sweeping in at `now`, opened from `from` while the
+    /// inspector shows (design §6.9): from the left when it's right of the
+    /// old one, and from the right when it's left of it. Reopening the tab
+    /// already open sweeps nothing.
+    pub(crate) fn opened_tab(&mut self, from: Tab, to: Tab, now: Duration) {
+        let place = |tab: Tab| Tab::ALL.iter().position(|&one| one == tab);
+        if self.on && from != to {
+            self.sweep = Some(Sweep {
+                from_left: place(to) > place(from),
+                began: now,
+            });
         }
     }
 
@@ -260,6 +361,114 @@ impl Motion {
     pub(crate) fn forget_finished(&mut self, now: Duration) {
         self.moments
             .retain(|moment| age(moment.began, now) < moment.lasts);
+        self.sweep = self.sweeping(now);
+        self.opened = self.opening(now);
+        if self.closing(now).is_none() {
+            self.closed = None;
+        }
+    }
+
+    /// Notes what fills the screen besides the map just now, `screen`, at
+    /// `now`. Whatever opens fades in, and what was under the pop-ups the
+    /// last frame drew that close, which `drawn` gives, fades back (design
+    /// §6.9). Only a change does, so turning motion on fades nothing.
+    pub(crate) fn saw(&mut self, screen: Screen, drawn: impl FnOnce() -> Vec<Rect>, now: Duration) {
+        if screen == self.screen {
+            return;
+        }
+        self.screen = screen;
+        if self.on {
+            self.opened = Some(now);
+            self.closed = Some((drawn(), now));
+        }
+    }
+
+    /// Notes the blocks the selected sprite's drives' bars fill, by the
+    /// drive's name, after the ticks just taken in at `now` and `speed`:
+    /// `sprite`, with its ID, or none if no sprite in the world is
+    /// selected. A bar whose level changed eases to it from where it's
+    /// drawn, but at 4× and up, where it jumps, and a sprite seen for the
+    /// first time shows its levels at once (design §6.9).
+    pub(crate) fn note_bars(
+        &mut self,
+        sprite: Option<(EntityId, Vec<(String, u8)>)>,
+        now: Duration,
+        speed: Speed,
+    ) {
+        let Some((id, drives)) = sprite.filter(|_| self.on) else {
+            self.bars = None;
+            return;
+        };
+        let eases = !thins_out(speed);
+        match &mut self.bars {
+            Some(bars) if bars.sprite == id => {
+                for (name, to) in drives {
+                    let bar = bars.drives.entry(name).or_insert(Bar::at(to, now));
+                    if bar.to != to {
+                        let from = if eases { bar.shown(now) } else { to };
+                        *bar = Bar {
+                            from,
+                            to,
+                            began: now,
+                        };
+                    }
+                }
+            }
+            _ => {
+                let drives = drives
+                    .into_iter()
+                    .map(|(name, blocks)| (name, Bar::at(blocks, now)))
+                    .collect();
+                self.bars = Some(Bars { sprite: id, drives });
+            }
+        }
+    }
+
+    /// Forgets the bars, as another sprite is selected, whose show their
+    /// levels at once.
+    pub(crate) fn forget_bars(&mut self) {
+        self.bars = None;
+    }
+
+    /// How many blocks drive `drive`'s bar fills on sprite `id`'s Body tab
+    /// at `now` and `speed`, its level `live` blocks: easing to it, if it's
+    /// the level last taken in, and otherwise at it.
+    pub(crate) fn bar(
+        &self,
+        id: EntityId,
+        drive: &str,
+        live: u8,
+        now: Duration,
+        speed: Speed,
+    ) -> u8 {
+        if !self.on || thins_out(speed) {
+            return live;
+        }
+        self.bars
+            .as_ref()
+            .filter(|bars| bars.sprite == id)
+            .and_then(|bars| bars.drives.get(drive))
+            .filter(|bar| bar.to == live)
+            .map_or(live, |bar| bar.shown(now))
+    }
+
+    /// When what's up opened, while it fades in at `now`.
+    fn opening(&self, now: Duration) -> Option<Duration> {
+        self.opened.filter(|&began| age(began, now) < POP_UP)
+    }
+
+    /// Where the pop-ups that just closed were drawn, and when, while what
+    /// was under them fades back at `now`.
+    fn closing(&self, now: Duration) -> Option<(&[Rect], Duration)> {
+        self.closed
+            .as_ref()
+            .filter(|(_, began)| age(*began, now) < POP_UP)
+            .map(|(drawn, began)| (drawn.as_slice(), *began))
+    }
+
+    /// The tab sweeping in at `now`, if one is.
+    fn sweeping(&self, now: Duration) -> Option<Sweep> {
+        self.sweep.filter(|sweep| age(sweep.began, now) < TAB_SWEEP)
     }
 
     /// The deaths and hatchings playing at `now`, oldest first: the newest
@@ -349,11 +558,97 @@ pub(crate) fn play_on_map(buf: &mut Buffer, inner: Rect, app: &App, world: &Worl
     }
 }
 
-/// Plays the panels' motion over the finished screen, `screen`, once what
-/// can be pointed at among `spots` is marked, before the tooltip, which
-/// doesn't move (design §6.9). Nothing plays there yet: the tab sweep, the
-/// pop-ups' fades and the easing bars are to come (#306).
-pub(crate) fn play_on_panels(_buf: &mut Buffer, _screen: Rect, _app: &App, _spots: &Spots) {}
+/// Plays the panels' motion over the finished screen once what can be
+/// pointed at among `spots` is marked, before the tooltip, which doesn't
+/// move (design §6.9): the tab sweeping in, where the inspector is drawn
+/// just now, under any pop-up; then what was under a pop-up that closed
+/// fading back, but where a pop-up is drawn now; and a pop-up that opened
+/// fading in, but under the debug overlay, which doesn't fade.
+pub(crate) fn play_on_panels(buf: &mut Buffer, app: &App, spots: &Spots) {
+    if !app.motion() {
+        return;
+    }
+    let (kept, now) = (app.motion_kept(), app.running_for());
+    let dark = campbell::rgb(app.theme.motion().dark).unwrap_or(campbell::BACKGROUND);
+    let [r, g, b] = dark;
+    let dark_colour = Color::Rgb(r, g, b);
+    let under_a_pop_up = |cell: Position| spots.under_a_pop_up(cell);
+    if let (Some(sweep), Some(inspector)) = (kept.sweeping(now), app.inspector_area()) {
+        // Out of the panel's shade, or the dark where it has none.
+        let faded = app
+            .theme
+            .panels()
+            .map_or(dark_colour, |panels| panels.shade);
+        let direction = if sweep.from_left {
+            tachyonfx::Motion::LeftToRight
+        } else {
+            tachyonfx::Motion::RightToLeft
+        };
+        let effect = fx::sweep_in(direction, SWEEP_EDGE, 0, faded, timer(TAB_SWEEP));
+        let age = age(sweep.began, now);
+        let body = inspector::tab_area(inspector);
+        play_over(effect, age, buf, body, dark, under_a_pop_up);
+    }
+    let fade = || fx::fade_from(dark_colour, dark_colour, timer(POP_UP));
+    if let Some((drawn, began)) = kept.closing(now) {
+        for &area in drawn {
+            play_over(fade(), age(began, now), buf, area, dark, under_a_pop_up);
+        }
+    }
+    if let Some(began) = kept.opening(now) {
+        for area in spots.fading() {
+            let over_it = |cell: Position| !spots.fades_at(cell);
+            play_over(fade(), age(began, now), buf, area, dark, over_it);
+        }
+    }
+}
+
+/// Plays `effect` over `area` of `buf`, `age` into it, but on the cells
+/// `kept` keeps as they are (design §6.9). It blends exact colours in RGB:
+/// a named one as Campbell draws it, the terminal's own text colour as
+/// Campbell's and its own background as `dark`. What the effect leaves as
+/// it was keeps the colour it had, named or the terminal's own, so a fade
+/// that's played out, or a cell it doesn't reach, is drawn as before.
+fn play_over(
+    effect: Effect,
+    age: Duration,
+    buf: &mut Buffer,
+    area: Rect,
+    dark: Rgb,
+    kept: impl Fn(Position) -> bool,
+) {
+    let area = area.intersection(buf.area);
+    let exact = |cell: &Cell| {
+        (
+            campbell::exact(cell.fg, FOREGROUND),
+            campbell::exact(cell.bg, dark),
+        )
+    };
+    let drawn: Vec<(Position, Cell)> = area
+        .positions()
+        .map(|cell| (cell, buf[cell].clone()))
+        .collect();
+    for (cell, was) in &drawn {
+        let (fg, bg) = exact(was);
+        buf[*cell].set_fg(fg).set_bg(bg);
+    }
+    let mut effect = effect.with_area(area).with_color_space(ColorSpace::Rgb);
+    effect.process(millis(age), buf, area);
+    for (cell, was) in drawn {
+        if kept(cell) {
+            buf[cell] = was;
+            continue;
+        }
+        let (fg, bg) = exact(&was);
+        let now = &mut buf[cell];
+        if now.fg == fg {
+            now.fg = was.fg;
+        }
+        if now.bg == bg {
+            now.bg = was.bg;
+        }
+    }
+}
 
 /// The map view that motion plays over: where its tiles are drawn,
 /// `inner`, the app and world drawn there, the theme's colours for motion,

@@ -873,6 +873,11 @@ impl App {
         }
         let now = self.running_for;
         self.motion.forget_finished(now);
+        // A pop-up opening or closing, against the frame last drawn (design
+        // §6.9).
+        let spots = &self.spots;
+        self.motion
+            .saw(self.screen, || spots.borrow().fading().collect(), now);
         self.emotes.retain(|_, &mut (_, at)| now - at < EMOTE_FOR);
         self.resting
             .retain(|_, rest| rest.until().is_none_or(|until| now < until));

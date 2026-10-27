@@ -6,24 +6,28 @@
 
 mod common;
 use common::{
-    SCORCHED, SCREEN, WorldBuilder, app_on, apply, at, ball_world, died, field, frame, lone_line,
-    pack_changing, pointer_on, render, scratch_folder, sprite_on,
+    SCORCHED, SCREEN, WorldBuilder, app_on, apply, at, ball_world, cell_of_text, died, field,
+    frame, frame_on, lone_line, pack_changing, pointer_on, render, scratch_folder, select,
+    sized_app, sprite_on,
 };
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::Duration;
 
 use ratatui::buffer::Buffer;
-use ratatui::layout::{Position, Rect};
+use ratatui::layout::{Position, Rect, Size};
 use ratatui::style::Color;
+use ratatui::{Terminal, backend::TestBackend};
 use terra_sim::{DeathCause, EntityId, Event, EventKind, Pos, Terrain, World};
-use terra_tui::app::{App, ColourMode, Ticks};
+use terra_tui::app::{App, ColourMode, Screen, Tab, Ticks};
 use terra_tui::args::{Args, USAGE};
 use terra_tui::campbell::{self, FOREGROUND};
 use terra_tui::clock::Speed;
 use terra_tui::input::Action;
 use terra_tui::policy::{InfoPolicy, Panel, Subject};
+use terra_tui::start;
 use terra_tui::theme::{self, MotionLook, Theme};
+use terra_tui::title::Title;
 use terra_tui::ui;
 
 #[test]
@@ -552,9 +556,17 @@ fn a_young_sprite_dying_in_play_leaves_its_own_ghost() {
 
 /// Two apps on `world`, alike but for motion, on as in `moving` and off.
 fn twins(world: &World) -> (App, App) {
-    let mut off = app_on(world);
+    twins_in(world, Theme::cp437(), SCREEN)
+}
+
+/// Two apps on `world` in `theme` on a screen of `size`, alike but for
+/// motion, every sprite in its own colour.
+fn twins_in(world: &World, theme: Theme, size: Size) -> (App, App) {
+    let [mut on, mut off] = [0, 1].map(|_| sized_app(world, theme.clone(), size));
+    on.set_motion(true);
+    plain(&mut on, world);
     plain(&mut off, world);
-    (moving(world), off)
+    (on, off)
 }
 
 /// Runs `world` until an egg hatches, both apps taking in each tick: the
@@ -693,4 +705,668 @@ fn the_same_app_drawn_twice_draws_the_same_screen() {
     let mut app = moving(&world);
     app.animate(ms(700));
     assert_eq!(render(&app, &world), render(&app, &world));
+    // A tab sweeping in, a pop-up fading in over it and a bar easing.
+    let (before, after) = (hungry(&[(at(3, 2), 0.2)]), hungry(&[(at(3, 2), 0.8)]));
+    let mut app = watching(&before);
+    take_in(&mut app, &after);
+    apply(&mut app, &after, Action::NextTab);
+    apply(&mut app, &after, Action::PreviousTab);
+    apply(&mut app, &after, Action::OpenThemes);
+    app.animate(ms(60));
+    let screen = render(&app, &after);
+    assert_eq!(render(&app, &after), screen);
+}
+
+// A tab opened (design §6.9).
+
+/// Where the open tab's lines are drawn in `app`'s inspector just now:
+/// below its title row, and right of the column down its left.
+fn tab_body(app: &App) -> Rect {
+    let area = app.inspector_area().expect("the inspector shows");
+    Rect::new(area.x + 1, area.y + 1, area.width - 1, area.height - 1)
+}
+
+/// The default theme's panel shade.
+fn shade() -> Color {
+    Theme::cp437()
+        .panels()
+        .expect("the default theme has shades")
+        .shade
+}
+
+/// Both twins do `action`.
+fn both(on: &mut App, off: &mut App, world: &World, action: Action) {
+    apply(on, world, action);
+    apply(off, world, action);
+}
+
+/// A frame of each twin on a screen of `size`, `step` on.
+fn frames_on(
+    on: &mut App,
+    off: &mut App,
+    world: &World,
+    step: Duration,
+    size: Size,
+) -> (Buffer, Buffer) {
+    (
+        frame_on(on, world, step, size),
+        frame_on(off, world, step, size),
+    )
+}
+
+/// A frame of each twin on a 100×30 screen, `step` on.
+fn frames(on: &mut App, off: &mut App, world: &World, step: Duration) -> (Buffer, Buffer) {
+    frames_on(on, off, world, step, SCREEN)
+}
+
+/// A field with one sprite on it.
+fn one_on_a_field() -> World {
+    field(&[], &[at(3, 2)])
+}
+
+/// Twins in `theme` on a screen of `size` that have selected the sprite on
+/// `world`, which opens its Body tab, and let it sweep in.
+fn selected_in(world: &World, theme: Theme, size: Size) -> (App, App) {
+    let (mut on, mut off) = twins_in(world, theme, size);
+    both(&mut on, &mut off, world, Action::SelectNext);
+    frames_on(&mut on, &mut off, world, ms(1000), size);
+    assert_eq!(on.tab(), Tab::Body);
+    (on, off)
+}
+
+/// Twins on a 100×30 screen, as `selected_in`.
+fn selected(world: &World) -> (App, App) {
+    selected_in(world, Theme::cp437(), SCREEN)
+}
+
+/// Whether screen cell `cell` hides what's drawn there in `faded`, as a
+/// tab still to sweep in does.
+fn hidden_in(screen: &Buffer, cell: Position, faded: Color) -> bool {
+    (screen[cell].fg, screen[cell].bg) == (faded, faded)
+}
+
+/// Asserts that `shown` differs from `plain` only within `area`.
+fn differs_only_within(shown: &Buffer, plain: &Buffer, area: Rect) {
+    for cell in shown.area.positions().filter(|&cell| !area.contains(cell)) {
+        assert_eq!(shown[cell], plain[cell], "{cell:?}, outside {area:?}");
+    }
+}
+
+/// Which side the tab the twins just opened sweeps in from, a tenth of a
+/// second in: `Some(true)` from the left, its left column shown as it is
+/// and its right still hidden in `faded`, `Some(false)` from the right, and
+/// `None` if neither.
+fn swept_from_left(on: &mut App, off: &mut App, world: &World, faded: Color) -> Option<bool> {
+    let (shown, plain) = frames(on, off, world, ms(100));
+    let body = tab_body(on);
+    let column = |x: u16| -> (bool, bool) {
+        let cells: Vec<Position> = (body.top()..body.bottom())
+            .map(|y| Position::new(x, y))
+            .collect();
+        (
+            cells.iter().all(|&cell| shown[cell] == plain[cell]),
+            cells.iter().all(|&cell| hidden_in(&shown, cell, faded)),
+        )
+    };
+    match (column(body.left()), column(body.right() - 1)) {
+        ((true, _), (_, true)) => Some(true),
+        ((_, true), (true, _)) => Some(false),
+        _ => None,
+    }
+}
+
+#[test]
+fn a_tab_opened_sweeps_in_out_of_the_panel_s_shade() {
+    let world = one_on_a_field();
+    let (mut on, mut off) = selected(&world);
+    both(&mut on, &mut off, &world, Action::NextTab);
+    let body = tab_body(&on);
+    let (start, plain) = frames(&mut on, &mut off, &world, Duration::ZERO);
+    // Nothing of it shows yet, and its characters are as they are: only
+    // colours change.
+    let shade = shade();
+    for cell in body.positions() {
+        assert!(hidden_in(&start, cell, shade), "{cell:?}");
+        assert_eq!(start[cell].symbol(), plain[cell].symbol());
+    }
+    differs_only_within(&start, &plain, body);
+    // A quarter of a second, and it's all in.
+    let (nearly, plain) = frames(&mut on, &mut off, &world, ms(200));
+    assert_ne!(nearly, plain);
+    differs_only_within(&nearly, &plain, body);
+    let (end, plain) = frames(&mut on, &mut off, &world, ms(50));
+    assert_eq!(end, plain);
+}
+
+#[test]
+fn a_tab_sweeps_in_from_the_left_when_it_s_right_of_the_old_one_and_from_the_right_when_left() {
+    let world = one_on_a_field();
+    // By where the tabs are, not the key: `[` from Body wraps round to
+    // World, on Body's right, and `]` from World to Body, on its left.
+    for (keys, from_left) in [
+        (&[Action::NextTab][..], true),
+        (&[Action::PreviousTab], true),
+        (&[Action::NextTab, Action::PreviousTab], false),
+        (&[Action::PreviousTab, Action::NextTab], false),
+    ] {
+        let (mut on, mut off) = selected(&world);
+        for (n, &key) in keys.iter().enumerate() {
+            if n > 0 {
+                frames(&mut on, &mut off, &world, ms(1000));
+            }
+            both(&mut on, &mut off, &world, key);
+        }
+        frames(&mut on, &mut off, &world, Duration::ZERO);
+        let side = swept_from_left(&mut on, &mut off, &world, shade());
+        assert_eq!(side, Some(from_left), "{keys:?}");
+    }
+}
+
+#[test]
+fn a_tab_sweeps_in_for_a_quarter_of_a_second_at_every_speed() {
+    let world = one_on_a_field();
+    for faster in [false, true] {
+        let (mut on, mut off) = selected(&world);
+        if faster {
+            at_4x(&mut on);
+            at_4x(&mut off);
+        } else {
+            on.clock.slower();
+            off.clock.slower();
+        }
+        both(&mut on, &mut off, &world, Action::NextTab);
+        let (nearly, plain) = frames(&mut on, &mut off, &world, ms(200));
+        assert_ne!(nearly, plain, "4x: {faster}");
+        let (end, plain) = frames(&mut on, &mut off, &world, ms(50));
+        assert_eq!(end, plain, "4x: {faster}");
+    }
+}
+
+#[test]
+fn no_tab_sweeps_in_a_new_app_after_a_load_or_on_the_tab_already_open() {
+    let world = one_on_a_field();
+    // A new app opens on the World tab.
+    let (mut on, mut off) = twins(&world);
+    let (shown, plain) = frames(&mut on, &mut off, &world, Duration::ZERO);
+    assert_eq!(shown, plain, "a new app");
+    // A click on the tab already open takes it back to its top, at once.
+    let (mut on, mut off) = selected(&world);
+    let body = tab_body(&on);
+    let name = cell_of_text(&on, &world, SCREEN, " Body ");
+    assert_eq!(name.y, body.y - 1, "in the inspector's title row");
+    let on_it = Action::left_click(Position::new(name.x + 2, name.y));
+    both(&mut on, &mut off, &world, on_it);
+    let (shown, plain) = frames(&mut on, &mut off, &world, Duration::ZERO);
+    assert_eq!(shown, plain, "the tab already open");
+    // A load keeps the tab open as it was.
+    for (n, app) in [&mut on, &mut off].into_iter().enumerate() {
+        app.set_save_folder(scratch_folder(&format!("tab-after-load-{n}")));
+        apply(app, &world, Action::Quicksave);
+        apply(app, &world, Action::Quickload);
+        app.take_loaded().expect("the quicksave loaded");
+        assert_eq!(app.tab(), Tab::Body);
+    }
+    let (shown, plain) = frames(&mut on, &mut off, &world, Duration::ZERO);
+    assert_eq!(shown, plain, "a load");
+}
+
+#[test]
+fn with_motion_off_a_tab_opens_at_once() {
+    let world = one_on_a_field();
+    let (mut on, mut off) = selected(&world);
+    both(&mut on, &mut off, &world, Action::NextTab);
+    on.set_motion(false);
+    let (shown, plain) = frames(&mut on, &mut off, &world, Duration::ZERO);
+    assert_eq!(shown, plain);
+}
+
+#[test]
+fn a_tab_sweeps_in_over_the_inspector_filling_the_screen() {
+    // Drawn twice a frame, beside the map and then over it all, it sweeps
+    // in once, where it's seen (design §6.1).
+    let world = one_on_a_field();
+    let (mut on, mut off) = selected(&world);
+    both(&mut on, &mut off, &world, Action::Inspector);
+    assert!(on.full_screen());
+    both(&mut on, &mut off, &world, Action::NextTab);
+    let body = tab_body(&on);
+    assert_eq!(body.width, 99, "every column");
+    let (start, plain) = frames(&mut on, &mut off, &world, Duration::ZERO);
+    let shade = shade();
+    for cell in body.positions() {
+        assert!(hidden_in(&start, cell, shade), "{cell:?}");
+    }
+    differs_only_within(&start, &plain, body);
+    let side = swept_from_left(&mut on, &mut off, &world, shade);
+    assert_eq!(side, Some(true));
+    let (end, plain) = frames(&mut on, &mut off, &world, ms(150));
+    assert_eq!(end, plain);
+}
+
+#[test]
+fn in_a_theme_without_shades_a_tab_sweeps_in_out_of_motion_s_dark() {
+    // The panel's background is the terminal's own, which the dark stands
+    // for, and stays its own: never black or white, as tachyonfx would
+    // draw it.
+    let world = one_on_a_field();
+    let (mut on, mut off) = selected_in(&world, Theme::ascii(), SCREEN);
+    let dark = Theme::ascii().motion().dark;
+    both(&mut on, &mut off, &world, Action::NextTab);
+    let body = tab_body(&on);
+    let (start, plain) = frames(&mut on, &mut off, &world, Duration::ZERO);
+    for cell in body.positions() {
+        assert_eq!((start[cell].fg, start[cell].bg), (dark, Color::Reset));
+    }
+    differs_only_within(&start, &plain, body);
+    for step in [40, 40, 40, 40, 40] {
+        let (shown, plain) = frames(&mut on, &mut off, &world, ms(step));
+        for cell in body.positions() {
+            assert_eq!(shown[cell].bg, Color::Reset, "{cell:?}");
+            if plain[cell].fg == Color::Reset {
+                assert_ne!(shown[cell].fg, Color::White, "{cell:?}");
+            }
+        }
+    }
+    let (end, plain) = frames(&mut on, &mut off, &world, ms(50));
+    assert_eq!(end, plain);
+}
+
+#[test]
+fn a_tab_opened_while_the_inspector_is_hidden_doesn_t_sweep_in_when_it_opens() {
+    // Under 100 columns the inspector hides until `i` opens it over the
+    // map (design §6.1, #305).
+    let world = one_on_a_field();
+    let narrow = Size::new(80, 30);
+    let (mut on, mut off) = selected_in(&world, Theme::cp437(), narrow);
+    assert!(on.inspector_area().is_none(), "hidden");
+    both(&mut on, &mut off, &world, Action::NextTab);
+    assert_eq!(on.tab(), Tab::Brain);
+    both(&mut on, &mut off, &world, Action::Inspector);
+    let (shown, plain) = frames_on(&mut on, &mut off, &world, Duration::ZERO, narrow);
+    assert_eq!(shown, plain);
+    // Open there, a tab sweeps in, under the debug overlay, which is drawn
+    // over it there.
+    both(&mut on, &mut off, &world, Action::DebugOverlay);
+    both(&mut on, &mut off, &world, Action::NextTab);
+    let (shown, plain) = frames_on(&mut on, &mut off, &world, Duration::ZERO, narrow);
+    let body = tab_body(&on);
+    let debug = box_titled(&plain, " Debug ");
+    assert!(debug.intersects(body), "{debug:?} over {body:?}");
+    let shade = shade();
+    for cell in body.positions() {
+        if debug.contains(cell) {
+            assert_eq!(shown[cell], plain[cell], "{cell:?}");
+        } else {
+            assert!(hidden_in(&shown, cell, shade), "{cell:?}");
+        }
+    }
+    differs_only_within(&shown, &plain, body);
+}
+
+/// The box drawn on `screen` with `title` at the left of its top edge, as
+/// `┌─ Debug ──┐`.
+fn box_titled(screen: &Buffer, title: &str) -> Rect {
+    let rows = common::lines(screen);
+    let (y, x) = rows
+        .iter()
+        .enumerate()
+        .find_map(|(y, row)| row.find(title).map(|x| (y, row[..x].chars().count())))
+        .unwrap_or_else(|| panic!("{title:?} isn't on screen:\n{}", rows.join("\n")));
+    let (left, top) = (x as u16 - 2, y as u16);
+    assert_eq!(screen[(left, top)].symbol(), "┌", "{title:?}");
+    let right = (left..screen.area.right())
+        .find(|&x| screen[(x, top)].symbol() == "┐")
+        .expect("the box's top right corner");
+    let bottom = (top..screen.area.bottom())
+        .find(|&y| screen[(left, y)].symbol() == "└")
+        .expect("the box's bottom left corner");
+    Rect::new(left, top, right - left + 1, bottom - top + 1)
+}
+
+// Pop-ups (design §6.9).
+
+/// The default theme's dark, which a pop-up fades in from.
+fn dark() -> Color {
+    Theme::cp437().motion().dark
+}
+
+/// Asserts that every cell of `shown` that differs from `plain` is drawn
+/// in the dark, as all a pop-up shows is as it opens, and that some do.
+fn all_that_differs_is_dark(shown: &Buffer, plain: &Buffer) {
+    let differ: Vec<Position> = shown
+        .area
+        .positions()
+        .filter(|&cell| shown[cell] != plain[cell])
+        .collect();
+    assert!(differ.len() > 10, "{differ:?}");
+    let dark = dark();
+    for cell in differ {
+        assert_eq!(shown[cell].fg, dark, "{cell:?}");
+        assert_eq!(shown[cell].symbol(), plain[cell].symbol(), "{cell:?}");
+    }
+}
+
+#[test]
+fn a_pop_up_fades_in_out_of_the_dark() {
+    let world = one_on_a_field();
+    let (mut on, mut off) = selected(&world);
+    both(&mut on, &mut off, &world, Action::Help);
+    let help = on.overlay().expect("room for help");
+    let (start, plain) = frames(&mut on, &mut off, &world, Duration::ZERO);
+    let dark = dark();
+    for cell in help.positions() {
+        assert_eq!(start[cell].fg, dark, "{cell:?}");
+        // What has no background of its own keeps the terminal's.
+        assert_eq!(start[cell].bg, plain[cell].bg, "{cell:?}");
+    }
+    differs_only_within(&start, &plain, help);
+    // Fast and then slowing: well past half way at half time.
+    let (half, plain) = frames(&mut on, &mut off, &world, ms(75));
+    let corner = Position::new(help.x, help.y);
+    let Color::Rgb(red, ..) = half[corner].fg else {
+        panic!("{:?}", half[corner].fg)
+    };
+    assert!(red > (0x0C + 0xCC) / 2 && red < 0xCC, "{red:#x}");
+    differs_only_within(&half, &plain, help);
+    let (end, plain) = frames(&mut on, &mut off, &world, ms(75));
+    assert_eq!(end, plain);
+}
+
+#[test]
+fn what_was_under_a_pop_up_fades_back_from_the_dark_as_it_closes() {
+    let world = one_on_a_field();
+    let (mut on, mut off) = selected(&world);
+    both(&mut on, &mut off, &world, Action::Help);
+    let help = on.overlay().expect("room for help");
+    frames(&mut on, &mut off, &world, ms(1000));
+    both(&mut on, &mut off, &world, Action::Help);
+    let (start, plain) = frames(&mut on, &mut off, &world, Duration::ZERO);
+    // The map, the inspector and the event log, each from the dark.
+    let dark = dark();
+    for cell in help.positions() {
+        assert_eq!(start[cell].fg, dark, "{cell:?}");
+    }
+    let shaded = Position::new(70, 12);
+    assert_eq!(plain[shaded].bg, shade());
+    assert_eq!(start[shaded].bg, dark);
+    differs_only_within(&start, &plain, help);
+    let (end, plain) = frames(&mut on, &mut off, &world, ms(150));
+    assert_eq!(end, plain);
+}
+
+#[test]
+fn each_pop_up_fades_in_as_it_opens_and_out_as_it_closes() {
+    // The menus, help, the command palette, the sprite list, the
+    // population graph and the family tree (design §6.1).
+    let world = one_on_a_field();
+    for opens in [
+        Action::OpenThemes,
+        Action::Help,
+        Action::Palette,
+        Action::SpriteList,
+        Action::Population,
+        Action::FamilyTree,
+    ] {
+        let (mut on, mut off) = selected(&world);
+        both(&mut on, &mut off, &world, opens);
+        let (start, plain) = frames(&mut on, &mut off, &world, Duration::ZERO);
+        all_that_differs_is_dark(&start, &plain);
+        let (end, plain) = frames(&mut on, &mut off, &world, ms(150));
+        assert_eq!(end, plain, "{opens:?}");
+        both(&mut on, &mut off, &world, Action::Back);
+        let (start, plain) = frames(&mut on, &mut off, &world, Duration::ZERO);
+        all_that_differs_is_dark(&start, &plain);
+        let (end, plain) = frames(&mut on, &mut off, &world, ms(150));
+        assert_eq!(end, plain, "{opens:?}");
+    }
+}
+
+#[test]
+fn tooltips_and_the_debug_overlay_don_t_fade() {
+    let world = one_on_a_field();
+    let (mut on, mut off) = selected(&world);
+    both(&mut on, &mut off, &world, Action::DebugOverlay);
+    let (shown, plain) = frames(&mut on, &mut off, &world, Duration::ZERO);
+    assert_eq!(shown, plain, "the debug overlay opened");
+    let debug = box_titled(&plain, " Debug ");
+    // Help, opened under it, fades in, and it stays as it is.
+    both(&mut on, &mut off, &world, Action::Help);
+    let help = on.overlay().expect("room for help");
+    assert!(help.intersects(debug));
+    let (shown, plain) = frames(&mut on, &mut off, &world, Duration::ZERO);
+    all_that_differs_is_dark(&shown, &plain);
+    for cell in debug.positions() {
+        assert_eq!(shown[cell], plain[cell], "{cell:?}");
+    }
+    // What was under help fades back as it closes, but not where the
+    // debug overlay is still drawn.
+    frames(&mut on, &mut off, &world, ms(1000));
+    both(&mut on, &mut off, &world, Action::Help);
+    let (shown, plain) = frames(&mut on, &mut off, &world, Duration::ZERO);
+    all_that_differs_is_dark(&shown, &plain);
+    for cell in debug.positions() {
+        assert_eq!(shown[cell], plain[cell], "{cell:?}");
+    }
+    frames(&mut on, &mut off, &world, ms(1000));
+    both(&mut on, &mut off, &world, Action::DebugOverlay);
+    let (shown, plain) = frames(&mut on, &mut off, &world, Duration::ZERO);
+    assert_eq!(shown, plain, "the debug overlay closed");
+    // A tooltip, by a drive's name on the Body tab.
+    let name = cell_of_text(&on, &world, SCREEN, "hunger");
+    both(&mut on, &mut off, &world, Action::Point(name));
+    let (shown, plain) = frames(&mut on, &mut off, &world, Duration::ZERO);
+    let text = common::lines(&plain).join("\n");
+    assert!(text.contains("─ hunger ─"), "a tooltip:\n{text}");
+    assert_eq!(shown, plain, "a tooltip");
+}
+
+#[test]
+fn a_pop_up_opened_from_another_fades_in_over_it() {
+    // The palette's `?` opens help in its place: help fades in, and none of
+    // what was under the palette shows to fade back.
+    let world = one_on_a_field();
+    let (mut on, mut off) = selected(&world);
+    both(&mut on, &mut off, &world, Action::Palette);
+    frames(&mut on, &mut off, &world, ms(1000));
+    type_in_both(&mut on, &mut off, &world, "help");
+    frames(&mut on, &mut off, &world, ms(1000));
+    both(&mut on, &mut off, &world, Action::Enter);
+    assert_eq!(on.screen(), Screen::Help);
+    let help = on.overlay().expect("room for help");
+    let (start, plain) = frames(&mut on, &mut off, &world, Duration::ZERO);
+    let dark = dark();
+    for cell in help.positions() {
+        assert_eq!(start[cell].fg, dark, "{cell:?}");
+    }
+    differs_only_within(&start, &plain, help);
+}
+
+/// Both twins type `text` into what's open.
+fn type_in_both(on: &mut App, off: &mut App, world: &World, text: &str) {
+    common::type_in(on, world, text);
+    common::type_in(off, world, text);
+}
+
+#[test]
+fn with_motion_off_pop_ups_open_and_close_at_once() {
+    let world = one_on_a_field();
+    let (mut on, mut off) = selected(&world);
+    on.set_motion(false);
+    both(&mut on, &mut off, &world, Action::Help);
+    let (shown, plain) = frames(&mut on, &mut off, &world, Duration::ZERO);
+    assert_eq!(shown, plain, "opened");
+    both(&mut on, &mut off, &world, Action::Help);
+    let (shown, plain) = frames(&mut on, &mut off, &world, Duration::ZERO);
+    assert_eq!(shown, plain, "closed");
+    // Nor does a pop-up open as motion is turned on fade in late.
+    both(&mut on, &mut off, &world, Action::Help);
+    frames(&mut on, &mut off, &world, Duration::ZERO);
+    on.set_motion(true);
+    let (shown, plain) = frames(&mut on, &mut off, &world, Duration::ZERO);
+    assert_eq!(shown, plain, "turned on");
+}
+
+#[test]
+fn the_title_screen_s_help_is_drawn_whole_at_once() {
+    // Its app never animates (design §6.9), so nothing there may wait on
+    // motion.
+    let world = start::title_world(&Args::default(), 3, (100, 30)).expect("a world");
+    let mut title = Title::new(world, Theme::cp437(), 12345, Size::new(100, 30));
+    title.animate(ms(10_000));
+    let draw = |title: &Title| {
+        let mut terminal = Terminal::new(TestBackend::new(100, 30)).expect("a terminal");
+        terminal
+            .draw(|frame| terra_tui::title::render(frame, title))
+            .expect("drawn");
+        terminal.backend().buffer().clone()
+    };
+    title.apply(Action::Pick(3));
+    let shown = draw(&title);
+    let at = common::lines(&shown)
+        .iter()
+        .enumerate()
+        .find_map(|(y, row)| {
+            row.find("EMOTES")
+                .map(|x| Position::new(row[..x].chars().count() as u16, y as u16))
+        })
+        .expect("help's EMOTES heading");
+    let look = Theme::cp437().text().heading;
+    assert_eq!(Some(shown[at].fg), look.fg);
+    title.animate(ms(1000));
+    assert_eq!(draw(&title), shown);
+}
+
+// A drive's bar (design §6.9).
+
+/// The genes of a sprite whose hunger starts at `hunger`.
+fn hunger_at(hunger: f32) -> String {
+    format!(r#"(format: 1, genes: [InitialConcentration(chem: "hunger", value: {hunger})])"#)
+}
+
+/// A field with a sprite on each of `tiles`, each hungry as `hunger` says.
+fn hungry(sprites: &[(Pos, f32)]) -> World {
+    let genes: Vec<(Pos, String)> = sprites
+        .iter()
+        .map(|&(tile, hunger)| (tile, hunger_at(hunger)))
+        .collect();
+    let genes: Vec<(Pos, &str)> = genes
+        .iter()
+        .map(|(tile, genes)| (*tile, genes.as_str()))
+        .collect();
+    WorldBuilder::grass(10, 6).genes(&genes).build()
+}
+
+/// The hunger bar on the Body tab on `screen`: how many of its blocks are
+/// filled, and the level it says beside it.
+fn hunger_bar(screen: &Buffer) -> (usize, String) {
+    let rows = common::lines(screen);
+    let (y, x) = rows
+        .iter()
+        .enumerate()
+        .find_map(|(y, row)| {
+            let at = row.find(" hunger ")?;
+            Some((y as u16, row[..at].chars().count() as u16 + 1))
+        })
+        .unwrap_or_else(|| panic!("no hunger bar:\n{}", rows.join("\n")));
+    let bar: String = (x + 12..x + 22).map(|x| screen[(x, y)].symbol()).collect();
+    let filled = bar.chars().filter(|&c| c == '█').count();
+    assert_eq!(
+        bar.chars().filter(|&c| c == '░').count(),
+        10 - filled,
+        "{bar}"
+    );
+    let said: String = (x + 22..screen.area.right())
+        .map(|x| screen[(x, y)].symbol())
+        .collect();
+    (filled, said.trim().to_string())
+}
+
+/// An app with motion on that has selected the one sprite on `world`, let
+/// its tab sweep in, and taken in a tick of it.
+fn watching(world: &World) -> App {
+    let mut app = moving(world);
+    apply(&mut app, world, Action::SelectNext);
+    frame(&mut app, world, ms(1000));
+    app.record(&[], world);
+    app
+}
+
+/// Takes in a frame's ticks that leave the world as `world` is, as the game
+/// does.
+fn take_in(app: &mut App, world: &World) {
+    let mut ticks = Ticks::default();
+    ticks.note(Vec::new(), world);
+    app.take_in(ticks, world);
+}
+
+#[test]
+fn a_drive_s_bar_eases_to_its_new_value_a_block_at_a_time() {
+    let (before, after) = (hungry(&[(at(3, 2), 0.2)]), hungry(&[(at(3, 2), 0.8)]));
+    let mut app = watching(&before);
+    let shown = hunger_bar(&frame(&mut app, &before, Duration::ZERO));
+    assert_eq!(shown, (2, ".20".to_string()));
+    take_in(&mut app, &after);
+    // The level beside it is true at once; only the bar eases.
+    let start = hunger_bar(&frame(&mut app, &after, Duration::ZERO));
+    assert_eq!(start, (2, ".80".to_string()));
+    let mut filled = vec![start.0];
+    for _ in 0..8 {
+        let (blocks, said) = hunger_bar(&frame(&mut app, &after, ms(50)));
+        assert_eq!(said, ".80");
+        filled.push(blocks);
+    }
+    // Whole blocks, never back, and there in 0.4 s.
+    assert!(filled.windows(2).all(|two| two[0] <= two[1]), "{filled:?}");
+    assert_eq!(filled[8], 8, "{filled:?}");
+    assert!(filled[2] > 2 && filled[2] < 8, "{filled:?}");
+    // Quick at first and slowing: most of the way in the first half.
+    assert!(filled[4] - 2 > 8 - filled[4], "{filled:?}");
+}
+
+#[test]
+fn a_bar_eases_on_from_where_it_s_got_to() {
+    // A new level before the last is reached eases from the bar as it's
+    // drawn, without jumping.
+    let worlds = [0.2, 0.8, 0.5].map(|hunger| hungry(&[(at(3, 2), hunger)]));
+    let mut app = watching(&worlds[0]);
+    take_in(&mut app, &worlds[1]);
+    let (part, _) = hunger_bar(&frame(&mut app, &worlds[1], ms(100)));
+    assert!(part > 2 && part < 8, "{part}");
+    take_in(&mut app, &worlds[2]);
+    let (then, said) = hunger_bar(&frame(&mut app, &worlds[2], Duration::ZERO));
+    assert_eq!((then, said.as_str()), (part, ".50"));
+    let (end, _) = hunger_bar(&frame(&mut app, &worlds[2], ms(400)));
+    assert_eq!(end, 5);
+}
+
+#[test]
+fn a_bar_snaps_on_first_sight_on_a_new_selection_with_motion_off_and_at_4x() {
+    let (before, after) = (hungry(&[(at(3, 2), 0.2)]), hungry(&[(at(3, 2), 0.8)]));
+    // First seen at .8: drawn full at once, not filling from empty.
+    let mut app = watching(&after);
+    let (blocks, _) = hunger_bar(&frame(&mut app, &after, Duration::ZERO));
+    assert_eq!(blocks, 8, "first sight");
+    // Another sprite selected shows its own at once.
+    let two = hungry(&[(at(3, 2), 0.2), (at(6, 2), 0.8)]);
+    let mut app = watching(&two);
+    select(&mut app, &two, sprite_on(&two, at(3, 2)));
+    app.record(&[], &two);
+    let (blocks, _) = hunger_bar(&frame(&mut app, &two, ms(1000)));
+    assert_eq!(blocks, 2);
+    select(&mut app, &two, sprite_on(&two, at(6, 2)));
+    app.record(&[], &two);
+    let (blocks, _) = hunger_bar(&frame(&mut app, &two, Duration::ZERO));
+    assert_eq!(blocks, 8, "a new selection");
+    // With motion off, and at 4×, it jumps.
+    for faster in [false, true] {
+        let mut app = watching(&before);
+        if faster {
+            at_4x(&mut app);
+        } else {
+            app.set_motion(false);
+        }
+        take_in(&mut app, &after);
+        let (blocks, _) = hunger_bar(&frame(&mut app, &after, Duration::ZERO));
+        assert_eq!(blocks, 8, "4x: {faster}");
+    }
 }

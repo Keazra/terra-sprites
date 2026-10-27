@@ -47,6 +47,7 @@ impl App {
     pub fn record(&mut self, events: &[Event], world: &World) {
         self.take_in_tick(events, world);
         self.note_looks(world);
+        self.note_bars(world);
     }
 
     /// Takes in one tick's `events`, as `record` says, but for noting how
@@ -343,6 +344,7 @@ impl App {
             }
         }
         self.note_looks(world);
+        self.note_bars(world);
     }
 
     /// The Cursor's touch on sprite `id`, on `tick`: its emote, and a line

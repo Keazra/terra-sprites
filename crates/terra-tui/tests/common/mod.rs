@@ -299,8 +299,13 @@ pub fn render_on(app: &App, world: &World, size: Size) -> Buffer {
 /// `step`, as the frame loop moves it, and then the screen drawn, so what
 /// moves in real time is drawn where it has got to (design §6.9).
 pub fn frame(app: &mut App, world: &World, step: Duration) -> Buffer {
+    frame_on(app, world, step, SCREEN)
+}
+
+/// One frame of the game, as `frame`, on a screen of `size`.
+pub fn frame_on(app: &mut App, world: &World, step: Duration, size: Size) -> Buffer {
     app.animate(step);
-    render(app, world)
+    render_on(app, world, size)
 }
 
 /// Row `y` of `screen` as text, without the spaces at its end.

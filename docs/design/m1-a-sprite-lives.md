@@ -1769,7 +1769,7 @@ N ═ M
 
 - **`App`** holds the UI state: where the Cursor is, cursor mode (and each mode's reserve), Follow (v21 as the lock), viewport, selection, screen state (Normal / Menu / Prompt / Help / Sprite list), colour mode, emote and feedback timers, from #328 the levels the sparklines draw (§6.1), from #306 the motion it's playing and when each effect began (§6.9), and the active `InfoPolicy`.
 - **Input:** a keybinding table maps keys to UI `Action`s. Each `Action` either changes `App` or produces a `Command`.
-- **Rendering** is a pure function, `render(frame, &App, &World)`. Its one product besides the frame is the frame's spots (§6.1, #304), which it hands the app to keep until the next frame, for what the pointer is over and what a click lands on. Motion keeps it pure (§6.9): each frame builds every effect afresh and plays it to its age, so the same app drawn twice gives the same picture.
+- **Rendering** is a pure function, `render(frame, &App, &World)`. Its one product besides the frame is the frame's spots (§6.1, #304), which it hands the app to keep until the next frame, for what the pointer is over and what a click lands on, and where a pop-up that closes was drawn, for what was under it to fade back (§6.9). Motion keeps it pure (§6.9): each frame builds every effect afresh and plays it to its age, so the same app drawn twice gives the same picture.
 - **Panic hook:** it restores the terminal; the replay is written as the panic carries on (v35, §2.9).
 
 
@@ -1784,10 +1784,10 @@ N ═ M
 |---|---|---|---|
 | A death | The tile's background flashes and fades back. The sprite's glyph stays on its tile as a ghost, fading from its colour to ash grey, unless something else is drawn there by then. | 1.2 s | 0.6 s |
 | A hatching | Sparks: the egg's tile and the eight round it light up at scattered moments and fade back, but where the young is drawn, which warms instead. The young starts in the egg's colour and warms to its own over the first half, as if the shell fell away, which reads differently from a death's flash and grey (M3's breaking eggs). | 1 s | 0.5 s |
-| A tab opened | The new tab sweeps in from the side it's on, out of the panel's shade. | 0.25 s | the same |
-| A pop-up | Fades in out of the dark as it opens, and what was under it fades back as it closes. Tooltips and the debug overlay don't fade. | 0.15 s | the same |
+| A tab opened | The new tab sweeps in out of the panel's shade, or the dark in a theme without shades: from the left when it's right of the old tab, and from the right when it's left of it. Not as the game starts or a world loads, nor for the tab already open, nor while the inspector is hidden. | 0.25 s | the same |
+| A pop-up | Fades in out of the dark as it opens, and what was under it fades back as it closes: the menus, help, the command palette, the sprite list, the population graph and the family tree. Tooltips and the debug overlay don't fade, nor does the inspector, opened over the map or filling the screen. | 0.15 s | the same |
 | Water | Shallow and deep water each drift slowly between two shades, in waves across the lake, in seven fixed shades a quarter of a second apart. Not under a sprite, an object or a mark, nor on the Cursor's tile or the attended one, which have looks of their own. | a 4 s cycle | the same |
-| A drive's bar | On the Body tab, eases to its new value a block at a time rather than jumping. | 0.4 s | jumps |
+| A drive's bar | On the Body tab, eases to its new value a block at a time rather than jumping, while the level beside it is true at once. A sprite just selected shows its bars as they are. | 0.4 s | jumps |
 | The pan | When the view centres on a sprite more than 2 tiles away (`Tab`, the sprite list, the family tree, a click on a log line, Track), it pans there, quickly at first and then slowing. Scrolling, loading, square tiles and a new screen size don't pan. | 0.3 s | jumps |
 | The trail | The tiles the selected sprite has just left keep a tint that fades, at most 8 of them. | 1.5 s a tile | 0.75 s a tile |
 

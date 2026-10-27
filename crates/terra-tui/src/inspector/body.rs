@@ -69,7 +69,8 @@ pub(super) fn body_tab(sprite: &SpriteView, app: &App, world: &World) -> Vec<Tab
             Some(colour) => Style::default().fg(colour),
             None => Style::default(),
         };
-        let [full, empty] = bar_parts(drive.level);
+        // Easing to its level while motion is on (design §6.9).
+        let [full, empty] = bar_parts(app.drive_bar(sprite.id(), drive.name, drive.level));
         let mut spans = vec![
             Span::raw(format!(" {:<12}", display_name(drive.name))),
             Span::styled(full, filled),
@@ -353,11 +354,17 @@ fn led_line(sprite: &SpriteView, detail: bool, world: &World) -> Option<String> 
     })
 }
 
-/// A level as a bar ten cells long, filled to the nearest tenth: its filled
-/// part and its empty part.
-pub(super) fn bar_parts(level: f32) -> [String; 2] {
+/// How many of the ten blocks of a level's bar are filled: to the nearest
+/// tenth.
+pub(crate) fn blocks(level: f32) -> u8 {
     // `as` makes a NaN 0.
-    let filled = ((level * 10.0).round() as usize).min(10);
+    ((level * 10.0).round() as u8).min(10)
+}
+
+/// A bar ten cells long with `filled` of them filled: its filled part and
+/// its empty part.
+pub(super) fn bar_parts(filled: u8) -> [String; 2] {
+    let filled = usize::from(filled.min(10));
     ["█".repeat(filled), "░".repeat(10 - filled)]
 }
 

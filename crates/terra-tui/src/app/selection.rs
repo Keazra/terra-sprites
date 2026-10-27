@@ -43,12 +43,17 @@ impl App {
         if another {
             self.observed.clear();
             self.open_lessons.clear();
+            self.motion.forget_bars();
         }
         self.selection = Some(selection);
     }
 
-    /// Opens `tab`, from the top.
+    /// Opens `tab`, from the top. While the inspector shows, a tab other
+    /// than the one open sweeps in (design §6.9).
     pub(super) fn open(&mut self, tab: Tab) {
+        if self.inspector_area().is_some() {
+            self.motion.opened_tab(self.tab, tab, self.running_for);
+        }
         self.tab = tab;
         self.tab_scroll = 0;
     }

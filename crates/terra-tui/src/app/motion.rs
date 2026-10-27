@@ -1,12 +1,16 @@
 //! Motion's switch, and what the app keeps for it (design §6.9): the looks
 //! of the sprites and eggs on the map after each tick it takes in, and the
-//! deaths and hatchings those ticks set off.
+//! deaths and hatchings those ticks set off; and the levels of the selected
+//! sprite's drives, which its bars ease to. The tab sweeping in starts as
+//! a tab opens (`open`), and a pop-up's fades as the app's clock moves on
+//! (`animate`).
 
 use std::time::Duration;
 
-use terra_sim::{EventKind, World};
+use terra_sim::{ChemicalKind, EntityId, EventKind, World};
 
-use super::App;
+use super::{App, Selection};
+use crate::inspector;
 use crate::motion::{self, Motion};
 
 impl App {
@@ -48,5 +52,37 @@ impl App {
             let seen = motion::seen(self, world);
             self.motion.note(seen);
         }
+    }
+
+    /// Notes the levels of the selected sprite's drives, after the ticks
+    /// just taken in, for their bars on the Body tab to ease to (design
+    /// §6.9).
+    pub(super) fn note_bars(&mut self, world: &World) {
+        if !self.motion.on() {
+            return;
+        }
+        let sprite = match self.selection {
+            Some(Selection::Living(id)) => world.sprite(id),
+            _ => None,
+        };
+        let drives = sprite.map(|sprite| {
+            let drives = sprite
+                .chemicals()
+                .filter(|chemical| chemical.kind == ChemicalKind::Drive)
+                .map(|drive| (drive.name.to_string(), inspector::blocks(drive.level)))
+                .collect();
+            (sprite.id(), drives)
+        });
+        self.motion
+            .note_bars(drives, self.running_for, self.clock.speed());
+    }
+
+    /// How many blocks drive `drive`'s bar fills on sprite `id`'s Body tab
+    /// just now, its level `level`: easing to its level while motion is on
+    /// (design §6.9).
+    pub(crate) fn drive_bar(&self, id: EntityId, drive: &str, level: f32) -> u8 {
+        let live = inspector::blocks(level);
+        self.motion
+            .bar(id, drive, live, self.running_for, self.clock.speed())
     }
 }

@@ -76,14 +76,17 @@ impl Spot {
 }
 
 /// The spots of one frame, in the order they were drawn, each with whether
-/// it's marked in the theme's spot style.
+/// it's marked in the theme's spot style; and the pop-ups' boxes, each with
+/// whether it fades in and out (design §6.9).
 #[derive(Debug, Default)]
-pub(crate) struct Spots(Vec<(Rect, Spot, bool)>);
+pub(crate) struct Spots(Vec<(Rect, Spot, bool)>, Vec<(Rect, bool)>);
 
 impl Spots {
     /// Notes that `spot` is drawn over `area`, marked in the theme's spot
-    /// style if it's of a kind drawn in it (design §6.2).
+    /// style if it's of a kind drawn in it (design §6.2). A pop-up's box is
+    /// noted with `note_pop_up`.
     pub(crate) fn note(&mut self, area: Rect, spot: Spot) {
+        debug_assert_ne!(spot, Spot::PopUp, "a pop-up is noted with note_pop_up");
         self.noted(area, spot, true);
     }
 
@@ -97,6 +100,16 @@ impl Spots {
     fn noted(&mut self, area: Rect, spot: Spot, marked: bool) {
         if !area.is_empty() {
             self.0.push((area, spot, marked));
+        }
+    }
+
+    /// Notes a pop-up's box over `area`, over whatever is drawn beneath it,
+    /// which `fades` in as it opens and out as it closes, as all but the
+    /// debug overlay do (design §6.9).
+    pub(crate) fn note_pop_up(&mut self, area: Rect, fades: bool) {
+        if !area.is_empty() {
+            self.noted(area, Spot::PopUp, false);
+            self.1.push((area, fades));
         }
     }
 
@@ -133,10 +146,31 @@ impl Spots {
     /// Where each of the pop-ups is drawn, which no tooltip covers (design
     /// §6.1).
     pub(crate) fn pop_ups(&self) -> impl Iterator<Item = Rect> + '_ {
-        self.0
+        self.1.iter().map(|&(area, _)| area)
+    }
+
+    /// Where each of the pop-ups that fade in and out is drawn (design
+    /// §6.9).
+    pub(crate) fn fading(&self) -> impl Iterator<Item = Rect> + '_ {
+        self.1
             .iter()
-            .filter(|(_, spot, _)| *spot == Spot::PopUp)
-            .map(|(area, ..)| *area)
+            .filter(|&&(_, fades)| fades)
+            .map(|&(area, _)| area)
+    }
+
+    /// Whether a pop-up is drawn over screen cell `cell`.
+    pub(crate) fn under_a_pop_up(&self, cell: Position) -> bool {
+        self.pop_ups().any(|area| area.contains(cell))
+    }
+
+    /// Whether the pop-up drawn last over screen cell `cell`, if any, is
+    /// one that fades.
+    pub(crate) fn fades_at(&self, cell: Position) -> bool {
+        self.1
+            .iter()
+            .rev()
+            .find(|(area, _)| area.contains(cell))
+            .is_some_and(|&(_, fades)| fades)
     }
 }
 
@@ -148,7 +182,7 @@ mod tests {
     fn a_spot_drawn_later_comes_before_what_is_under_it() {
         let mut spots = Spots::default();
         spots.note(Rect::new(0, 0, 10, 1), Spot::Filters);
-        spots.note(Rect::new(4, 0, 3, 3), Spot::PopUp);
+        spots.note_pop_up(Rect::new(4, 0, 3, 3), true);
         assert_eq!(spots.at(Position::new(1, 0)), Some(&Spot::Filters));
         assert_eq!(spots.at(Position::new(5, 0)), Some(&Spot::PopUp));
         assert_eq!(spots.at(Position::new(5, 2)), Some(&Spot::PopUp));
@@ -160,7 +194,7 @@ mod tests {
         let mut spots = Spots::default();
         spots.note(Rect::new(0, 0, 4, 1), Spot::Gene(2));
         spots.note(Rect::new(1, 1, 2, 1), Spot::Gene(2));
-        spots.note(Rect::new(3, 0, 2, 2), Spot::PopUp);
+        spots.note_pop_up(Rect::new(3, 0, 2, 2), true);
         let cells: Vec<Position> = spots.cells_of(&Spot::Gene(2)).collect();
         assert_eq!(
             cells,
@@ -173,11 +207,26 @@ mod tests {
         let mut spots = Spots::default();
         spots.note(Rect::new(0, 0, 4, 1), Spot::Gene(2));
         spots.note_unmarked(Rect::new(0, 1, 4, 1), Spot::Gene(3));
-        spots.note(Rect::new(0, 2, 4, 1), Spot::PopUp);
+        spots.note_pop_up(Rect::new(0, 2, 4, 1), true);
         let marked: Vec<&Spot> = spots.marked().collect();
         assert_eq!(marked, [&Spot::Gene(2)]);
         assert_eq!(spots.at(Position::new(1, 1)), Some(&Spot::Gene(3)));
         assert_eq!(spots.pop_ups().collect::<Vec<_>>(), [Rect::new(0, 2, 4, 1)]);
+    }
+
+    #[test]
+    fn of_the_pop_ups_all_but_the_debug_overlay_fade() {
+        // Design §6.9: the debug overlay is drawn over whatever's open.
+        let mut spots = Spots::default();
+        spots.note_pop_up(Rect::new(0, 0, 6, 4), true);
+        spots.note_pop_up(Rect::new(4, 0, 4, 2), false);
+        assert_eq!(spots.pop_ups().count(), 2);
+        assert_eq!(spots.fading().collect::<Vec<_>>(), [Rect::new(0, 0, 6, 4)]);
+        assert!(spots.fades_at(Position::new(1, 1)));
+        assert!(!spots.fades_at(Position::new(5, 1)), "under the overlay");
+        assert!(!spots.fades_at(Position::new(9, 9)), "under no pop-up");
+        assert!(spots.under_a_pop_up(Position::new(5, 1)));
+        assert!(!spots.under_a_pop_up(Position::new(9, 9)));
     }
 
     #[test]

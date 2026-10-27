@@ -6,7 +6,7 @@ use terra_sim::{
 };
 
 use super::actions::{action_line, logged_line};
-use super::body::bar_parts;
+use super::body::{bar_parts, blocks};
 use super::brain::{concept_name, scored};
 use super::*;
 use crate::text::Words;
@@ -821,10 +821,11 @@ fn a_wrapped_line_has_the_room_the_number_leaves_on_the_first() {
 // screen if one ever did.
 #[test]
 fn a_drive_bar_is_ten_cells_whatever_the_level() {
-    assert_eq!(bar_parts(0.42).concat(), "████░░░░░░");
-    assert_eq!(bar_parts(1.05).concat(), "██████████");
-    assert_eq!(bar_parts(-0.3).concat(), "░░░░░░░░░░");
-    assert_eq!(bar_parts(f32::NAN).concat(), "░░░░░░░░░░");
+    assert_eq!(bar_parts(blocks(0.42)).concat(), "████░░░░░░");
+    assert_eq!(bar_parts(blocks(1.05)).concat(), "██████████");
+    assert_eq!(bar_parts(blocks(-0.3)).concat(), "░░░░░░░░░░");
+    assert_eq!(bar_parts(blocks(f32::NAN)).concat(), "░░░░░░░░░░");
+    assert_eq!(bar_parts(12).concat(), "██████████");
 }
 
 /// A gene of every kind, the words lit on its line, which a tooltip
