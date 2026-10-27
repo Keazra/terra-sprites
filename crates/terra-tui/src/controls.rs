@@ -796,7 +796,7 @@ pub fn context(app: &App, world: &World) -> Context {
         Screen::Naming => Context::Naming,
         Screen::SaveNaming => Context::SaveNaming,
         Screen::QuitPrompt => Context::Quitting,
-        Screen::Inspector => Context::Inspector,
+        _ if app.full_screen() => Context::Inspector,
         _ if app.aiming() => match app.grip(world) {
             Some(Grip::Leads(_)) => Context::Shoving,
             _ => Context::Throwing,

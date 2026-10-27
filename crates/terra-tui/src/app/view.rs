@@ -8,7 +8,7 @@ use std::time::Duration;
 use ratatui::layout::{Position, Rect};
 use terra_sim::{Pos, World};
 
-use super::{App, Areas, Origin, Screen, Selection};
+use super::{App, Areas, Origin, Selection};
 use crate::input::Action;
 use crate::space::Place;
 use crate::spots::Spot;
@@ -182,10 +182,17 @@ impl App {
     /// beside the map view, or over it while it's open there (design §6.1,
     /// #305).
     pub fn inspector_area(&self) -> Option<Rect> {
-        match self.screen {
-            Screen::Inspector => self.overlay,
-            _ => self.inspector.shown(),
+        if self.full_screen {
+            self.overlay
+        } else {
+            self.inspector.shown()
         }
+    }
+
+    /// Whether the inspector fills the screen (`i`, design §6.1, #305),
+    /// under whatever's opened from it.
+    pub fn full_screen(&self) -> bool {
+        self.full_screen
     }
 
     /// Whether the inspector is open over the map view, where it pops
@@ -212,13 +219,9 @@ impl App {
     /// on the map (design §6.1, #305): filling the screen, it hides all of
     /// it, and open over the map view, where it's on either.
     fn hidden_by_inspector(&self, cell: Position, pointed: Position) -> bool {
-        match self.screen {
-            Screen::Inspector => true,
-            _ => {
-                self.inspector_open()
-                    && (self.on_the_inspector(cell) || self.on_the_inspector(pointed))
-            }
-        }
+        self.full_screen
+            || self.inspector_open()
+                && (self.on_the_inspector(cell) || self.on_the_inspector(pointed))
     }
 
     /// Whether `tile` is drawn under the inspector, open over the map view
@@ -251,7 +254,7 @@ impl App {
             self.open_inspector(true);
         } else {
             self.end_aim();
-            self.screen = Screen::Inspector;
+            self.full_screen = true;
         }
     }
 

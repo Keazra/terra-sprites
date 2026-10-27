@@ -10,9 +10,11 @@ use common::screen::inspector_on;
 use common::*;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Size};
+use ratatui::style::Color;
 use terra_sim::{Pos, World};
-use terra_tui::app::{App, CursorMode, Screen, Selection, Tab};
+use terra_tui::app::{App, CursorMode, MAP_HIDDEN, Screen, Selection, Tab};
 use terra_tui::input::{Action, Button};
+use terra_tui::saves::{self, QUICKSAVE};
 use terra_tui::theme::Theme;
 use terra_tui::ui;
 
@@ -165,7 +167,7 @@ fn filling_the_screen_the_inspector_hides_the_map_and_the_event_log_from_the_poi
     let mut app = sized_app(&world, Theme::cp437(), size);
     let cell = on_the_last_row(&mut app, &world, size, at(60, 40));
     apply(&mut app, &world, Action::Inspector);
-    assert_eq!(app.screen(), Screen::Inspector);
+    assert!(app.full_screen());
     apply(
         &mut app,
         &world,
@@ -289,7 +291,7 @@ fn under_30_rows_the_event_log_goes_and_with_too_few_for_the_inspector_the_map_i
     let mut app = sized_app(&world, Theme::cp437(), size);
     apply(&mut app, &world, Action::Inspector);
     assert_eq!(app.refusal(), Some("No room for the inspector"));
-    assert_eq!(app.screen(), Screen::Normal);
+    assert!(!app.full_screen());
     assert_eq!(app.help_page_here().label(), "World", "still the map's");
 }
 
@@ -324,7 +326,7 @@ fn i_fills_the_screen_with_the_open_tab_in_columns_and_i_or_esc_takes_it_back() 
     select(&mut app, &world, id);
     open(&mut app, &world, Tab::Genome);
     apply(&mut app, &world, Action::Inspector);
-    assert_eq!(app.screen(), Screen::Inspector);
+    assert!(app.full_screen());
     let screen = render_on(&app, &world, size);
     assert!(row(&screen, 1).contains("Genome"), "its title row");
     // Three columns of 45, two apart, read down each and on to the next.
@@ -351,10 +353,11 @@ fn i_fills_the_screen_with_the_open_tab_in_columns_and_i_or_esc_takes_it_back() 
     assert_eq!(app.help_page_here().label(), "Inspector");
 
     apply(&mut app, &world, Action::Inspector);
-    assert_eq!(app.screen(), Screen::Normal, "i again takes it back");
+    assert!(!app.full_screen(), "i again takes it back");
     apply(&mut app, &world, Action::Inspector);
     apply(&mut app, &world, Action::Back);
-    assert_eq!(app.screen(), Screen::Normal, "and so does Esc");
+    assert!(!app.full_screen(), "and so does Esc");
+    assert_eq!(app.screen(), Screen::Normal, "and doesn't ask to quit");
 }
 
 #[test]
@@ -363,16 +366,123 @@ fn filling_the_screen_the_inspector_takes_its_own_keys_and_time_s_but_not_the_ma
     let mut app = sized_app(&world, Theme::cp437(), Size::new(100, 30));
     select(&mut app, &world, sprite_on(&world, at(5, 5)));
     apply(&mut app, &world, Action::Inspector);
-    let viewport = app.viewport();
-    apply(&mut app, &world, Action::Mode(CursorMode::Grab));
-    apply(&mut app, &world, Action::Scroll { dx: 3, dy: 0 });
+    let (viewport, colours) = (app.viewport(), app.colour_mode());
+    for action in [
+        Action::Mode(CursorMode::Grab),
+        Action::Scroll { dx: 3, dy: 0 },
+        Action::Zoom,
+        Action::Track,
+        Action::CycleColours,
+        Action::CycleEventFilter,
+    ] {
+        apply(&mut app, &world, action);
+        assert_eq!(app.refusal(), Some(MAP_HIDDEN), "{action:?} says why");
+    }
     assert_eq!(app.mode(), CursorMode::Select);
     assert_eq!(app.viewport(), viewport);
+    assert_eq!(app.tile_width(), 1);
+    assert!(!app.tracking());
+    assert_eq!(app.colour_mode(), colours);
     apply(&mut app, &world, Action::NextTab);
     assert_eq!(app.tab(), Tab::Brain);
     apply(&mut app, &world, Action::TogglePause);
     assert!(app.clock.is_paused());
-    assert_eq!(app.screen(), Screen::Inspector);
+    assert!(app.full_screen());
+}
+
+#[test]
+fn filling_the_screen_the_rest_of_the_keys_work_and_what_they_open_goes_back_to_it() {
+    let world = field_world();
+    let size = Size::new(100, 30);
+    let mut app = sized_app(&world, Theme::cp437(), size);
+    let (genomes, saves) = (scratch_folder("full-genome"), scratch_folder("full-save"));
+    app.set_genome_folder(genomes.clone());
+    app.set_save_folder(saves.clone());
+    select(&mut app, &world, sprite_on(&world, at(5, 5)));
+    open(&mut app, &world, Tab::Genome);
+    apply(&mut app, &world, Action::Inspector);
+
+    // `g` saves the genome it shows, and `F5` the world.
+    apply(&mut app, &world, Action::ExportGenome);
+    let notice = app.notice().expect("it says where");
+    assert!(notice.starts_with("Saved Sprite #"), "{notice}");
+    assert_eq!(std::fs::read_dir(&genomes).unwrap().count(), 1);
+    apply(&mut app, &world, Action::Quicksave);
+    assert_eq!(app.notice(), Some("Saved as quicksave"));
+
+    // What a key opens is drawn over it, and goes back to it on closing.
+    for (opens, open) in [
+        (Action::Rename, Screen::Naming),
+        (Action::SaveAs, Screen::SaveNaming),
+        (Action::SpriteList, Screen::SpriteList),
+        (Action::Population, Screen::Population),
+        (Action::FamilyTree, Screen::FamilyTree),
+        (Action::Palette, Screen::Palette),
+        (Action::OpenSaves, Screen::LoadMenu),
+        (Action::Help, Screen::Help),
+    ] {
+        apply(&mut app, &world, opens);
+        assert_eq!(app.screen(), open, "{opens:?}");
+        assert!(app.full_screen(), "{opens:?}: still beneath it");
+        let screen = render_on(&app, &world, size);
+        assert!(!shows_grass(&screen), "{opens:?}: no map beside it");
+        apply(&mut app, &world, Action::Back);
+        assert_eq!(app.screen(), Screen::Normal, "{opens:?} closes");
+        assert!(app.full_screen(), "{opens:?}: back to the inspector");
+        let screen = render_on(&app, &world, size);
+        assert!(
+            row(&screen, 1).contains("Genome"),
+            "{opens:?}: its title row"
+        );
+    }
+}
+
+/// Whether `screen` shows any of the map's grass, which CP437 draws as a
+/// green `.`.
+fn shows_grass(screen: &Buffer) -> bool {
+    screen
+        .content
+        .iter()
+        .any(|cell| cell.symbol() == "." && cell.fg == Color::Green)
+}
+
+#[test]
+fn a_load_keeps_square_tiles_and_the_inspector_open_over_the_map_and_the_view_as_saved() {
+    let world = field_world();
+    let size = Size::new(80, 24);
+    let mut app = sized_app(&world, Theme::cp437(), size);
+    let folder = scratch_folder("zoomed-load");
+    app.set_save_folder(folder.clone());
+    apply(&mut app, &world, Action::Zoom);
+    apply(&mut app, &world, Action::Inspector);
+    assert!(app.inspector_open());
+    apply(&mut app, &world, Action::Scroll { dx: 21, dy: 7 });
+    let (viewport, inspector) = (app.viewport(), app.inspector_area().expect("open"));
+    apply(&mut app, &world, Action::Quicksave);
+    let saved = std::fs::read(saves::path_for(&folder, QUICKSAVE)).expect("the quicksave");
+    let middle = World::load(&saved)
+        .expect("it loads")
+        .view()
+        .expect("its view");
+    // Its middle is the middle of the tiles beside the inspector.
+    let cell = app.cell_of(middle).expect("in view");
+    let tiles = ui::areas(size).tiles;
+    assert!(cell.x < inspector.x, "{cell:?} {inspector:?}");
+    assert!(
+        (inspector.x - tiles.x).abs_diff(2 * (cell.x - tiles.x)) <= 3,
+        "{cell:?} {inspector:?}"
+    );
+
+    // Loaded from the full screen, it goes back to the map.
+    apply(&mut app, &world, Action::Inspector);
+    assert!(app.full_screen());
+    apply(&mut app, &world, Action::Quickload);
+    let loaded = app.take_loaded().expect("the quicksave loaded");
+    assert_eq!(loaded.view(), Some(middle));
+    assert_eq!(app.tile_width(), 2, "still square tiles");
+    assert!(app.inspector_open(), "still open over the map");
+    assert!(!app.full_screen(), "the map, to see the world loaded");
+    assert_eq!(app.viewport(), viewport, "the view as it was saved");
 }
 
 #[test]
@@ -380,9 +490,9 @@ fn on_a_narrow_screen_i_opens_the_inspector_over_the_map_then_fills_the_screen()
     let world = field_world();
     let mut app = sized_app(&world, Theme::cp437(), Size::new(80, 24));
     apply(&mut app, &world, Action::Inspector);
-    assert!(app.inspector_open() && app.screen() == Screen::Normal);
+    assert!(app.inspector_open() && !app.full_screen());
     apply(&mut app, &world, Action::Inspector);
-    assert_eq!(app.screen(), Screen::Inspector);
+    assert!(app.full_screen());
     apply(&mut app, &world, Action::Back);
     assert!(app.inspector_open(), "back to it open over the map");
     apply(&mut app, &world, Action::Back);
@@ -581,5 +691,5 @@ fn a_click_on_a_button_other_than_the_left_does_nothing_while_the_inspector_fill
         },
     );
     assert_eq!(app.selection(), before);
-    assert_eq!(app.screen(), Screen::Inspector);
+    assert!(app.full_screen());
 }

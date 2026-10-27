@@ -285,6 +285,8 @@ impl App {
         fresh.event_filter = self.event_filter;
         fresh.list_sort = self.list_sort;
         fresh.tab = self.tab;
+        // Open over the map or shut, as it was, but never filling the
+        // screen, so the world loaded is in view (design §6.1, #305).
         fresh.inspector = self.inspector;
         fresh.zoom = self.zoom;
         fresh.running_for = self.running_for;

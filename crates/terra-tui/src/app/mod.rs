@@ -97,9 +97,6 @@ pub enum Screen {
     FamilyTree,
     /// The command palette is open (#303).
     Palette,
-    /// The inspector fills the screen, between the top bar and the status
-    /// line (`i`, design §6.1, #305).
-    Inspector,
 }
 
 listed_enum! {
@@ -610,6 +607,10 @@ pub struct App {
     /// The spots of the frame last drawn (design §6.1), which drawing replaces each
     /// frame: what the pointer is over, and what a click lands on.
     spots: RefCell<Spots>,
+    /// Whether the inspector fills the screen, between the top bar and the
+    /// status line (`i`, design §6.1, #305), under whatever's opened from
+    /// it, which goes back to it when it closes.
+    full_screen: bool,
 }
 
 /// A replay as the screen follows it (design §2.7).
@@ -643,6 +644,10 @@ impl ReplayStops {
 /// What the status line says when the player tries to change a replay.
 pub const REPLAY_REFUSAL: &str =
     "It's a replay: only time, the view and the inspector work, until Ctrl+R takes it over";
+
+/// What the status line says to a key of the map's while the inspector
+/// fills the screen (design §6.1, #305).
+pub const MAP_HIDDEN: &str = "The inspector fills the screen: i or Esc shows the map";
 
 /// How often the world saves itself while time runs (design §6.7).
 pub const AUTOSAVE_EVERY: Duration = Duration::from_secs(10 * 60);
@@ -826,6 +831,7 @@ impl App {
             palette: None,
             on_inspector: false,
             spots: RefCell::default(),
+            full_screen: false,
         };
         app.centre_on(cursor);
         app
@@ -948,15 +954,21 @@ impl App {
             Screen::SpriteList => return self.apply_in_list(action, world),
             Screen::Population => return self.apply_in_graph(action, world),
             Screen::FamilyTree => return self.apply_in_tree(action, world),
-            // Filling the screen, the inspector takes the inspector's keys,
-            // time's and the pointer's, and `i` or `Esc` takes it back
-            // (design §6.1, #305).
-            Screen::Inspector if matches!(action, Action::Inspector | Action::Back) => {
-                self.screen = Screen::Normal;
-                return Flow::Continue;
-            }
-            Screen::Inspector if !works_full_screen(&action) => return Flow::Continue,
-            Screen::Normal | Screen::QuitPrompt | Screen::Inspector => {}
+            // Filling the screen, the inspector takes every key but the
+            // map's, which say so, and `i` or `Esc` takes it back (design
+            // §6.1, #305).
+            Screen::Normal if self.full_screen => match action {
+                Action::Inspector | Action::Back => {
+                    self.full_screen = false;
+                    return Flow::Continue;
+                }
+                _ if the_maps(&action) => {
+                    self.refuse(MAP_HIDDEN.into());
+                    return Flow::Continue;
+                }
+                _ => {}
+            },
+            Screen::Normal | Screen::QuitPrompt => {}
         }
         if self.screen == Screen::QuitPrompt {
             match action {
@@ -1232,32 +1244,23 @@ pub(crate) fn spoken_duration(time: Duration) -> String {
     }
 }
 
-/// Whether `action` works while the inspector fills the screen (design
-/// §6.1, #305): its tabs, scrolling and memory headings, the pointer over
-/// it, time, choosing a sprite, the detail view and help. The rest are the
-/// map's, which is hidden.
-fn works_full_screen(action: &Action) -> bool {
+/// Whether `action` is a key of the map's, or of the event log's, which
+/// do nothing while the inspector fills the screen and hides them (design
+/// §6.1, #305): scrolling and tracking the view, its sprite colours, square
+/// tiles and the log's filter, and the Cursor's keys. The pointer's go on
+/// as ever, and point at nothing there.
+fn the_maps(action: &Action) -> bool {
     matches!(
         action,
-        Action::TogglePause
-            | Action::StepOnce
-            | Action::Faster { .. }
-            | Action::Slower { .. }
-            | Action::Point(_)
-            | Action::Click {
-                button: Button::Left,
-                ..
-            }
-            | Action::Release { .. }
-            | Action::Wheel { .. }
-            | Action::Enter
-            | Action::NextTab
-            | Action::PreviousTab
-            | Action::ScrollTab { .. }
-            | Action::SelectNext
-            | Action::SelectPrevious
-            | Action::ToggleDetail
-            | Action::Help
+        Action::Scroll { .. }
+            | Action::Track
+            | Action::CycleColours
+            | Action::Zoom
+            | Action::CycleEventFilter
+            | Action::Mode(_)
+            | Action::Press { .. }
+            | Action::Follow { at: None }
+            | Action::ToggleVisible
     )
 }
 

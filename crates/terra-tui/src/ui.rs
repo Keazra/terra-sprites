@@ -114,9 +114,16 @@ pub fn render_with(frame: &mut Frame, app: &App, world: &World, parts: Parts) {
     if let (Some(inspector), Some(event_log), None) = (inspector, event_log, app.theme.panels()) {
         frame.buffer_mut()[(inspector.x, event_log.y)].set_symbol("┴");
     }
+    // The inspector, filling the screen (design §6.1, #305), under
+    // whatever's opened from it. It hides all that's beneath it, so only
+    // its own spots take the pointer there.
+    let overlay = app.overlay();
+    if let Some(full_screen) = overlay.filter(|_| app.full_screen()) {
+        spots = Spots::default();
+        render_inspector(frame.buffer_mut(), full_screen, app, world, &mut spots);
+    }
     // A pop-up takes the pointer before what's under it (design §6.1).
     let mut pop_ups = vec![render_menu(frame.buffer_mut(), area, app, world)];
-    let overlay = app.overlay();
     match app.screen() {
         Screen::Help => {
             if let Some(area) = overlay {
@@ -140,14 +147,6 @@ pub fn render_with(frame: &mut Frame, app: &App, world: &World, parts: Parts) {
         Screen::FamilyTree => {
             render_family_tree(frame.buffer_mut(), app, world);
             pop_ups.push(overlay);
-        }
-        // The inspector, filling the screen (design §6.1, #305). It hides
-        // all that's beneath it, so only its own spots take the pointer.
-        Screen::Inspector => {
-            if let Some(area) = overlay {
-                spots = Spots::default();
-                render_inspector(frame.buffer_mut(), area, app, world, &mut spots);
-            }
         }
         _ => {}
     }
