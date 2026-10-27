@@ -1,0 +1,108 @@
+// The colour-blind palette (design §6.2, #307): exact colours from Okabe and
+// Ito's set for colour-blind readers, orange #e69f00, sky blue #56b4e9,
+// bluish green #009e73, yellow #f0e442, blue #0072b2, vermillion #d55e00 and
+// reddish purple #cc79a7, with greys and white, and some lightened towards
+// white or darkened towards black where a thing needs one of its own or is
+// too dark on black. The drives, the lineage, a gain against a loss and the
+// graph's stages are told apart by a reader who can't tell red from green,
+// and nothing pairs red against green. The panels sit on the default
+// palette's shades. As a palette only its colours, bold and reverse video
+// are taken; its glyphs are the CP437 set's, so the file reads as a whole
+// theme too.
+(
+    tiles: {
+        terrain(grass):         (glyph: '.', fg: "#009e73"), // bluish green
+        terrain(dirt):          (glyph: ',', fg: "#ad7700"), // orange, darkened
+        terrain(sand):          (glyph: ':', fg: "#f6ef8e"), // yellow, lightened
+        terrain(shallow_water): (glyph: '~', fg: "#56b4e9"), // sky blue
+        terrain(deep_water):    (glyph: '≈', fg: "#0072b2"), // blue
+        terrain(rock):          (glyph: '#', fg: "#b4b4b4"),
+        sprite:                 (glyph: '☺', fg: "#ffffff"),
+        selected_sprite:        (glyph: '☻', fg: "#ffffff", reversed: true),
+        young_sprite:           (glyph: 'ö', fg: "#ffffff"),
+        selected_young_sprite:  (glyph: 'ö', fg: "#ffffff", reversed: true),
+        decision_marker:        (glyph: 'X', fg: "#ffffff"),
+        emote(hurt):            (glyph: '!', fg: "#d55e00"), // vermillion
+        emote(pleased):         (glyph: '♥', fg: "#e0afca"), // reddish purple, lightened
+        emote(shocked):         (glyph: '‼', fg: "#f0e442"), // yellow
+        emote(failed):          (glyph: '?', fg: "#f6ef8e"),
+        emote(resting):         (glyph: 'z', fg: "#56b4e9"),
+        emote(dancing):         (glyph: '♫', fg: "#e0afca"),
+        emote(calling):         (glyph: '♪', fg: "#e0afca"),
+    },
+    // Each apart from the others, and from the sprite's own white, for a
+    // reader who can't tell red from green.
+    drives: {
+        "hunger":      "#f0e442", // yellow
+        "thirst":      "#56b4e9", // sky blue
+        "pain":        "#d55e00", // vermillion
+        "tiredness":   "#2687be", // blue, lightened
+        "boredom":     "#767676",
+        "loneliness":  "#cc79a7", // reddish purple
+        "crowdedness": "#e69f00", // orange
+        "arousal":     "#e0afca", // reddish purple, lightened
+        "anxiety":     "#bbe1f6", // sky blue, lightened
+    },
+    objects: {
+        "berry_bush": {
+            "seedling": (glyph: '\'', fg: "#009e73"),
+            "default":  (glyph: '♣', fg: "#009e73"),
+            // Orange, not red, against the bare bush's bluish green.
+            "fruiting": (glyph: '♣', fg: "#e69f00", bold: true),
+        },
+        "berry":     { "default": (glyph: '•', fg: "#d55e00") },
+        "thornbush": { "default": (glyph: '♠', fg: "#cc79a7") },
+        "ball":      { "default": (glyph: '○', fg: "#ffffff") },
+        "egg":       { "default": (glyph: 'o', fg: "#f6ef8e") },
+    },
+    attention_marker: "#5a5a5a",
+    cursor: (
+        arrows: (up: '↑', down: '↓', left: '←', right: '→'),
+        followed_arrows: (up: '▲', down: '▼', left: '◄', right: '►'),
+        visible_frame: (up: '═', down: '═', left: '║', right: '║'),
+        status_marks: (
+            idle: '·', sent: '+', applied: '☼', rejected: '?',
+            grab: '↑', empty: '░', release: '↓',
+        ),
+        mode_marks: {
+            select: (glyph: '♦', fg: "#ffffff"),
+            train:  (glyph: '±', fg: "#e0afca"),
+            grab:   (glyph: '∩', fg: "#f0e442"),
+        },
+        leash: (glyph: '·', fg: "#f0e442"),
+        aim: (path: (glyph: '·', fg: "#f0e442"), end: (glyph: '°', fg: "#f0e442")),
+    ),
+    space: (
+        glass: {
+            horizontal:   (glyph: '═', fg: "#9ad2f2"), // sky blue, lightened
+            vertical:     (glyph: '║', fg: "#9ad2f2"),
+            top_left:     (glyph: '╔', fg: "#9ad2f2"),
+            top_right:    (glyph: '╗', fg: "#9ad2f2"),
+            bottom_left:  (glyph: '╚', fg: "#9ad2f2"),
+            bottom_right: (glyph: '╝', fg: "#9ad2f2"),
+        },
+        stars: {
+            far:     (glyph: '·', fg: "#767676"),
+            near:    (glyph: '∙', fg: "#b4b4b4"),
+            nearest: (glyph: '*', fg: "#ffffff"),
+        },
+    ),
+    population: (
+        stages: (young: "#009e73", adult: "#56b4e9", old: "#b4b4b4", egg: "#f0e442"),
+        full: '█',
+        half: '▄',
+        limit: (glyph: '·', fg: "#767676"),
+    ),
+    lineage: (elders: "#56b4e9", siblings: "#e69f00", young: "#cc79a7", others: "#767676"),
+    // A gain sky blue and a loss vermillion, rather than green and red.
+    text: (
+        heading:  (fg: "#9ad2f2", bold: true),
+        muted:    (fg: "#767676"),
+        good:     (fg: "#56b4e9"),
+        bad:      (fg: "#d55e00"),
+        key:      (bold: true),
+        selected: (reversed: true),
+        spot:     (fg: "#80b9d9"), // blue, lightened: a soft blue
+    ),
+    panels: (shade: "#181a22", title: "#282c3a"),
+)

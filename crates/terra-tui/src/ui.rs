@@ -23,7 +23,7 @@ use crate::policy::{Panel, Subject};
 use crate::space::{self, Place};
 use crate::spots::{Spot, Spots};
 use crate::text::{display_name, terrain_name, thousands};
-use crate::theme::{Glyph, PanelLook, SemanticTile, TextLook};
+use crate::theme::{self, Glyph, PanelLook, SemanticTile, TextLook};
 use crate::tooltip;
 
 /// The narrowest terminal that has room for the inspector beside the map
@@ -82,6 +82,15 @@ pub fn render(frame: &mut Frame, app: &App, world: &World) {
 /// room the rest leave (M2 design §11.4). The app is to be fitted to `areas_with` the
 /// same parts, so the Cursor and the marks land where it says.
 pub fn render_with(frame: &mut Frame, app: &App, world: &World, parts: Parts) {
+    draw_with(frame, app, world, parts);
+    // A palette with no colour draws none (design §6.2, #307).
+    if !app.theme.has_colour() {
+        theme::without_colour(frame.buffer_mut());
+    }
+}
+
+/// Draws the frame `render_with` draws, in the theme's colours.
+fn draw_with(frame: &mut Frame, app: &App, world: &World, parts: Parts) {
     let area = frame.area();
     if too_small(area.as_size()) {
         app.keep_spots(Spots::default());
@@ -174,7 +183,7 @@ pub fn render_with(frame: &mut Frame, app: &App, world: &World, parts: Parts) {
     // move (design §6.9); and the pop-ups as they're drawn, for one that
     // closes to fade out from.
     motion::play_on_panels(frame.buffer_mut(), app, &spots);
-    if app.motion() {
+    if motion::colours_play(app) {
         spots.keep_fading(frame.buffer_mut());
     }
     let between_bars = Rect::new(
@@ -409,6 +418,9 @@ pub fn map_view_alone_areas(screen: Size) -> Areas {
 pub fn render_map_view_alone(frame: &mut Frame, app: &App, world: &World) {
     let area = frame.area();
     draw_tiles(frame.buffer_mut(), area, app, world);
+    if !app.theme.has_colour() {
+        theme::without_colour(frame.buffer_mut());
+    }
 }
 
 /// Draws what the map view shows in `inner`: the tiles in view, the glass
@@ -473,7 +485,7 @@ fn draw_tiles(buf: &mut Buffer, inner: Rect, app: &App, world: &World) {
             } else if destination == Some(pos) {
                 app.theme.glyph(SemanticTile::DecisionMarker)
             } else if let Some(item) = items.at(pos) {
-                if app.motion() {
+                if motion::colours_play(app) {
                     lying.push(Lying {
                         cell: Position::new(x, y),
                         id: item.id,
@@ -503,7 +515,7 @@ fn draw_tiles(buf: &mut Buffer, inner: Rect, app: &App, world: &World) {
             } else {
                 glyph.symbol
             };
-            if on_terrain && app.motion() {
+            if on_terrain && motion::colours_play(app) {
                 bare.push(Bare {
                     cell: Position::new(x, y),
                     tile: pos,
@@ -517,8 +529,12 @@ fn draw_tiles(buf: &mut Buffer, inner: Rect, app: &App, world: &World) {
             if glyph.reversed || cursor == Some(pos) {
                 style = style.add_modifier(Modifier::REVERSED);
             }
-            if attended == Some(pos) {
+            // A palette with no colour can't show the marker's background,
+            // so it marks the tile bold (design §6.2, #307).
+            if attended == Some(pos) && app.theme.has_colour() {
                 style = style.bg(app.theme.attention_marker());
+            } else if attended == Some(pos) {
+                style = style.add_modifier(Modifier::BOLD);
             }
             buf[(x, y)].set_char(symbol).set_style(style);
         }

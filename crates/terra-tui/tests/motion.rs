@@ -27,7 +27,7 @@ use terra_tui::clock::Speed;
 use terra_tui::input::Action;
 use terra_tui::policy::{InfoPolicy, Panel, Subject};
 use terra_tui::start;
-use terra_tui::theme::{self, MotionLook, Theme};
+use terra_tui::theme::{self, ColourPalette, GlyphSet, MotionLook, Theme};
 use terra_tui::title::Title;
 use terra_tui::ui;
 
@@ -86,6 +86,17 @@ fn ascii_and(section: &str) -> String {
 }
 
 const ASCII_THEME: &str = include_str!("../../../themes/ascii.ron");
+
+/// The ascii theme's file with `panels` in place of its panels' shades, the
+/// default palette's: none, for a theme without shades, or a line of its own.
+fn ascii_with_panels(panels: &str) -> String {
+    let shades = "    panels: (shade: \"#181a22\", title: \"#282c3a\"),\n";
+    assert!(
+        ASCII_THEME.contains(shades),
+        "the ascii theme has the shades"
+    );
+    ASCII_THEME.replacen(shades, panels, 1)
+}
 
 #[test]
 fn the_default_theme_gives_motion_its_exact_colours_and_ascii_takes_them() {
@@ -1108,8 +1119,10 @@ fn in_a_theme_without_shades_a_tab_sweeps_in_out_of_motion_s_dark() {
     // for, and stays its own: never black or white, as tachyonfx would
     // draw it.
     let world = one_on_a_field();
-    let (mut on, mut off) = selected_in(&world, Theme::ascii(), SCREEN);
-    let dark = Theme::ascii().motion().dark;
+    let theme = Theme::from_ron(&ascii_with_panels(""), &common::pack()).expect("loads");
+    assert_eq!(theme.panels(), None);
+    let dark = theme.motion().dark;
+    let (mut on, mut off) = selected_in(&world, theme, SCREEN);
     both(&mut on, &mut off, &world, Action::NextTab);
     let body = tab_body(&on);
     let (start, plain) = frames(&mut on, &mut off, &world, Duration::ZERO);
@@ -1136,7 +1149,7 @@ fn a_tab_sweeps_in_out_of_a_shade_the_theme_names_as_campbell_draws_it() {
     // it, so a tab still to sweep in never shows the terminal's own grey,
     // nor tachyonfx's.
     let theme = Theme::from_ron(
-        &ascii_and("    panels: (shade: dark_gray, title: gray),"),
+        &ascii_with_panels("    panels: (shade: dark_gray, title: gray),\n"),
         &common::pack(),
     )
     .expect("loads");
@@ -2258,4 +2271,50 @@ fn tab_to_a_sprite_the_pan_is_passing_pans_on_to_it() {
     assert!(drawn_at(&screen, "☺").is_some(), "#2 is drawn");
     apply(&mut app, &world, Action::SelectNext);
     assert_eq!(app.viewport().x, 33);
+}
+
+// Mono (design §6.2, §6.9, #307).
+
+/// The CP437 glyphs in the mono palette, which has no colour.
+fn mono() -> Theme {
+    Theme::built_in(GlyphSet::Cp437, ColourPalette::Mono)
+}
+
+#[test]
+fn in_mono_motion_s_colours_don_t_play() {
+    // Design §6.9: no death's flash or ghost, no tab sweeping in and no
+    // pop-up fading, which would leave a closed one's characters a moment:
+    // mono draws them as with motion off.
+    let (mut app, ids, after) = before_and_after(&[at(3, 2)]);
+    app.theme = mono();
+    app.record(&deaths(&ids), &after);
+    let screen = frame(&mut app, &after, Duration::ZERO);
+    assert_eq!(screen[cell(&app, at(3, 2))].symbol(), ".", "no ghost");
+    let world = one_on_a_field();
+    let (mut on, mut off) = selected_in(&world, mono(), SCREEN);
+    for action in [Action::NextTab, Action::Help, Action::Help, Action::Palette] {
+        both(&mut on, &mut off, &world, action);
+        for step in [0, 37, 38, 75, 200] {
+            let (shown, plain) = frames(&mut on, &mut off, &world, ms(step));
+            assert_eq!(shown, plain, "{action:?}, {step} ms on");
+        }
+    }
+}
+
+#[test]
+fn in_mono_the_pan_and_the_bars_still_move() {
+    // Design §6.9: they move no colour.
+    let world = wide();
+    let (mut on, mut off) = twins_in(&world, mono(), SCREEN);
+    both(&mut on, &mut off, &world, Action::SelectNext);
+    let (shown, plain) = frames(&mut on, &mut off, &world, Duration::ZERO);
+    assert!(!same_map_view(&shown, &plain), "it starts where it was");
+    let (before, after) = (hungry(&[(at(3, 2), 0.2)]), hungry(&[(at(3, 2), 0.8)]));
+    let mut app = watching(&before);
+    app.theme = mono();
+    take_in(&mut app, &after);
+    let start = hunger_bar(&frame(&mut app, &after, Duration::ZERO));
+    assert_eq!(start, (2, ".80".to_string()), "eases from where it was");
+    let end = hunger_bar(&frame(&mut app, &after, ms(400)));
+    assert_eq!(end, (8, ".80".to_string()));
 }

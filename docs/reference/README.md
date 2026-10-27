@@ -19,7 +19,7 @@ Much of Terra Sprites is data rather than code: what the ground is like, what pl
 | `data/genomes/starter.ron`, and genome files | A sprite's genes | [genomes](genomes.md) |
 | `data/presets/default.ron`, and preset files | A world's size and what's in it | [world config and presets](presets.md) |
 | `scenarios/*.ron` | Headless test worlds for the lab runner | [lab scenarios](lab-scenarios.md) |
-| `themes/*.ron`, and theme files | How the map is drawn: glyphs and colours | [themes](themes.md) |
+| `themes/*.ron`, and theme files | How the game is drawn: its glyph set, the characters, and its palette, the colours | [themes](themes.md) |
 
 The game also writes files of its own, which aren't for editing: [saves and replays](saves.md) explains what a save keeps, where saves go, and what happens when one won't load, then how replays are recorded, played back with `--replay`, taken over with `Ctrl+R`, and what it means when one parts from its recording.
 

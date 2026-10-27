@@ -1,0 +1,111 @@
+// The high-contrast palette (design §6.2, #307): bright exact colours, the
+// same in every terminal, each at least 7:1 against the black Windows
+// Terminal draws on (#0c0c0c), WCAG's ratio for the clearest text. Minor
+// text is light grey rather than dark, headings and keys are bold, the
+// attention marker is brighter, and lines run between the panels, since it
+// has no shades. As a palette only its colours, bold and reverse video are
+// taken; its glyphs are the CP437 set's, so the file reads as a whole theme
+// too.
+(
+    tiles: {
+        terrain(grass):         (glyph: '.', fg: "#5fd75f"),
+        terrain(dirt):          (glyph: ',', fg: "#d7af5f"),
+        terrain(sand):          (glyph: ':', fg: "#ffff87"),
+        terrain(shallow_water): (glyph: '~', fg: "#5fffff"),
+        terrain(deep_water):    (glyph: '≈', fg: "#87afff"),
+        terrain(rock):          (glyph: '#', fg: "#c0c0c0"),
+        sprite:                 (glyph: '☺', fg: "#ffffff"),
+        selected_sprite:        (glyph: '☻', fg: "#ffffff", reversed: true),
+        young_sprite:           (glyph: 'ö', fg: "#ffffff"),
+        selected_young_sprite:  (glyph: 'ö', fg: "#ffffff", reversed: true),
+        decision_marker:        (glyph: 'X', fg: "#ffffff"),
+        emote(hurt):            (glyph: '!', fg: "#ff8787"),
+        emote(pleased):         (glyph: '♥', fg: "#ff87ff"),
+        emote(shocked):         (glyph: '‼', fg: "#ffff5f"),
+        emote(failed):          (glyph: '?', fg: "#ffffaf"),
+        emote(resting):         (glyph: 'z', fg: "#87afff"),
+        emote(dancing):         (glyph: '♫', fg: "#ff87ff"),
+        emote(calling):         (glyph: '♪', fg: "#ff87ff"),
+    },
+    drives: {
+        "hunger":      "#ffff5f",
+        "thirst":      "#5fffff",
+        "pain":        "#ff8787",
+        "tiredness":   "#87afff",
+        "boredom":     "#b2b2b2",
+        "loneliness":  "#d787ff",
+        "crowdedness": "#ffaf87",
+        "arousal":     "#ff87ff",
+        "anxiety":     "#87ff87",
+    },
+    objects: {
+        "berry_bush": {
+            "seedling": (glyph: '\'', fg: "#5fd75f"),
+            "default":  (glyph: '♣', fg: "#5fd75f"),
+            "fruiting": (glyph: '♣', fg: "#ff8787", bold: true),
+        },
+        "berry":     { "default": (glyph: '•', fg: "#ff8787") },
+        "thornbush": { "default": (glyph: '♠', fg: "#ff87ff") },
+        "ball":      { "default": (glyph: '○', fg: "#ffffff") },
+        "egg":       { "default": (glyph: 'o', fg: "#ffffaf") },
+    },
+    // Brighter than the default's dark grey, so the tile stands out more.
+    attention_marker: "#8a8a8a",
+    cursor: (
+        arrows: (up: '↑', down: '↓', left: '←', right: '→'),
+        followed_arrows: (up: '▲', down: '▼', left: '◄', right: '►'),
+        visible_frame: (up: '═', down: '═', left: '║', right: '║'),
+        status_marks: (
+            idle: '·', sent: '+', applied: '☼', rejected: '?',
+            grab: '↑', empty: '░', release: '↓',
+        ),
+        mode_marks: {
+            select: (glyph: '♦', fg: "#ffffff"),
+            train:  (glyph: '±', fg: "#ff87ff"),
+            grab:   (glyph: '∩', fg: "#ffff5f"),
+        },
+        leash: (glyph: '·', fg: "#ffff5f"),
+        aim: (path: (glyph: '·', fg: "#ffff5f"), end: (glyph: '°', fg: "#ffff5f")),
+    ),
+    space: (
+        glass: {
+            horizontal:   (glyph: '═', fg: "#87ffff"),
+            vertical:     (glyph: '║', fg: "#87ffff"),
+            top_left:     (glyph: '╔', fg: "#87ffff"),
+            top_right:    (glyph: '╗', fg: "#87ffff"),
+            bottom_left:  (glyph: '╚', fg: "#87ffff"),
+            bottom_right: (glyph: '╝', fg: "#87ffff"),
+        },
+        stars: {
+            far:     (glyph: '·', fg: "#9e9e9e"),
+            near:    (glyph: '∙', fg: "#c6c6c6"),
+            nearest: (glyph: '*', fg: "#ffffff"),
+        },
+    ),
+    population: (
+        stages: (young: "#87ff87", adult: "#5fffff", old: "#c6c6c6", egg: "#ffffaf"),
+        full: '█',
+        half: '▄',
+        limit: (glyph: '·', fg: "#b2b2b2"),
+    ),
+    lineage: (elders: "#87afff", siblings: "#ff8787", young: "#ff87ff", others: "#a8a8a8"),
+    // Every role has a colour of its own, so the text is the same in every
+    // terminal: a key in white, and what's chosen white in reverse video.
+    text: (
+        heading:  (fg: "#5fffff", bold: true),
+        muted:    (fg: "#bcbcbc"),
+        good:     (fg: "#87ff87"),
+        bad:      (fg: "#ff8787"),
+        key:      (fg: "#ffffff", bold: true),
+        selected: (fg: "#ffffff", reversed: true),
+        spot:     (fg: "#afd7ff"),
+    ),
+    // No `panels`: lines run between the panels and the map. The ghost
+    // fades to a light grey; the water drifts from its own colour to a
+    // third of the way to white.
+    motion: (
+        flash: "#ffffff",
+        ash: "#a8a8a8",
+        spark: "#ffffaf",
+    ),
+)

@@ -85,7 +85,12 @@ fn main() -> ExitCode {
         Next::World(opening) => opening.session.world().data(),
         Next::Title { world, .. } => world.data(),
     };
-    let theme = match start::theme(&args, data) {
+    // The flags win, then `NO_COLOR` (design §6.2, #307). Any value but
+    // nothing counts, even one that isn't Unicode.
+    let no_color = std::env::var_os("NO_COLOR").map(|value| value.to_string_lossy().into_owned());
+    let glyphs = start::glyph_set(&args, None);
+    let palette = start::palette(&args, None, no_color.as_deref());
+    let theme = match start::theme(&glyphs, &palette, data) {
         Ok(theme) => theme,
         Err(err) => return fail(err),
     };

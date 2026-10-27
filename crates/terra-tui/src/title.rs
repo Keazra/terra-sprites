@@ -20,7 +20,7 @@ use crate::input::Action;
 use crate::listed::listed_enum;
 use crate::saves::{self, SaveFile};
 use crate::start::Preset;
-use crate::theme::{Glyph, SemanticTile, Theme};
+use crate::theme::{self, Glyph, SemanticTile, Theme};
 use crate::ui;
 
 /// When the Cursor's light has arrived and starts to spread (M2 design
@@ -648,6 +648,16 @@ fn ago(elapsed: Duration) -> String {
 
 /// Draws the title screen.
 pub fn render(frame: &mut Frame, title: &Title) {
+    draw(frame, title);
+    // A palette with no colour draws none, the title's own greys included
+    // (design §6.2, #307).
+    if !title.theme.has_colour() {
+        theme::without_colour(frame.buffer_mut());
+    }
+}
+
+/// Draws the title screen in its theme's colours and its own greys.
+fn draw(frame: &mut Frame, title: &Title) {
     let area = frame.area();
     let buf = frame.buffer_mut();
     if too_small(area.as_size()) {

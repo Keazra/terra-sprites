@@ -26,7 +26,7 @@ use terra_sim::{
 };
 use terra_tui::app::{App, CursorMode, Flow, Selection, Tab};
 use terra_tui::input::{Action, Button};
-use terra_tui::theme::Theme;
+use terra_tui::theme::{ColourPalette, GlyphSet, Theme};
 use terra_tui::ui;
 
 /// A world on a drawn map, using the ascii legend.
@@ -1477,9 +1477,11 @@ fn the_map_view_alone_fills_the_frame_with_tiles_and_nothing_else() {
 /// its app fitted to them.
 fn render_parts(world: &World, parts: ui::Parts) -> Vec<String> {
     let screen = Size::new(100, 30);
+    // A palette without shades draws lines between the parts (design
+    // §6.1).
     let mut app = App::new(
         world.map(),
-        Theme::ascii(),
+        Theme::built_in(GlyphSet::Ascii, ColourPalette::HighContrast),
         7,
         ui::areas_with(screen, parts),
     );

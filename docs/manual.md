@@ -126,12 +126,14 @@ The same key in capitals or lower case does the same thing.
 | `--preset <file>` | Use a world config from a RON file, such as a copy of [`data/presets/default.ron`](../data/presets/default.ron), or [`data/presets/gentle.ron`](../data/presets/gentle.ron), the watery world of earlier versions |
 | `--data <dir>` | Use the data pack files in a folder, such as a changed copy of [`data/objects.ron`](../data/objects.ron), in place of the built-in ones; any file the folder lacks stays built in. A `presets/default.ron` in the folder is the default preset |
 | `--replay <file>` | Play a replay back, such as `last_session.replay`, which every session writes to the game's folder (the help screen shows where). Time, the view and the inspector work, but nothing can change the world until you take it over with `Ctrl+R`. It pauses at the end, and if the replay ever drifts from what was recorded, it pauses and says between which ticks. See [replays](reference/saves.md#replays) |
-| `--ascii` | Draw the map in plain ASCII instead of CP437 |
-| `--theme <file>` | Start with a theme of your own, such as an edited copy of [`themes/cp437.ron`](../themes/cp437.ron), rather than picking it with `Ctrl+T` each time |
+| `--ascii` | Draw the map in plain ASCII instead of CP437: the ASCII glyph set, in whichever colours. With `--theme`, your theme's colours in ASCII |
+| `--theme <file>` | Start with a theme of your own, such as an edited copy of [`themes/cp437.ron`](../themes/cp437.ron), rather than picking it with `Ctrl+T` each time. The built-in palettes are theme files too: [`themes/high_contrast.ron`](../themes/high_contrast.ron) draws in high contrast, and [`themes/colour_blind.ron`](../themes/colour_blind.ron) in colours for players who can't tell red from green; see [themes](reference/themes.md#glyph-sets-and-palettes) |
 | `--no-motion` | Draw the screen without [motion](#motion): no flash where a sprite dies, no egg cracking or sparks where one hatches, no trail, the water still, tabs and pop-ups shown at once, a drive's bar jumping to its new level, and the view jumping to a sprite or egg rather than panning. For a slow terminal, or if you'd rather not have it |
 | `--fast-forward <hours>` | Run a Lab world with no screen for that many hours of play at 1×, then save it; see [fast-forward](#fast-forward) |
 | `--save <name>` | With `--fast-forward`, the name to save under |
 | `--version` | Print the game's version and the commit it was built from, and stop |
+
+The game starts in mono, with no colour at all, only bold and reverse video, when `NO_COLOR` is set in the environment to anything but nothing, as [no-color.org](https://no-color.org) asks, unless `--theme` gives it colours.
 
 ## Motion
 
@@ -195,6 +197,8 @@ cargo run --release -p terra-tui --example render -- world --seed 7 --from 714 -
 ```
 
 The file's ending picks the format: `.gif`, `.svg` or `.mp4`. A GIF or an SVG needs nothing else; an MP4 needs [ffmpeg](https://ffmpeg.org/download.html) on the PATH, and the renderer says so if it isn't. The world runs to `--from` unseen, then is drawn frame by frame to `--to`, at `--speed` (`1x`, `4x`, or `max` for 100 ticks a second; past 4× needs `--lab`), each frame showing for `--frame` milliseconds (100 by default). An SVG for a README is best kept under 2 MB, and the renderer says when one isn't: a busy world at a high speed runs past it in a few seconds.
+
+`--ascii` and `--theme <file>` draw it as in the game, and `--colours <name>` in one of the built-in palettes, `default`, `high-contrast`, `colour-blind` or `mono`, over the theme's own; it never reads `NO_COLOR`, so a clip comes out the same anywhere.
 
 `--replay <file>` plays a replay back instead of a seed's world, from where its recording starts unless `--from` says. That's how to show the Cursor at work: play the scene in the game, then render its `last_session.replay`.
 

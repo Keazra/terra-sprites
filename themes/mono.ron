@@ -1,0 +1,80 @@
+// The mono palette (design §6.2, #307): no colour at all, only bold and
+// reverse video, and lines between the panels, since it has no shades.
+// `colour: false` has the game draw every colour on the screen in the
+// terminal's own, its own greys too, so the colours a theme file must name
+// below are never seen: they're all white. What colour tells in the other
+// palettes is read here from the signs, arrows and capitals, which stay;
+// from bold, for headings, keys, what a tooltip can explain, a fruiting
+// bush and the tile the selected sprite attends to; and from reverse video,
+// for what's chosen and the selected sprite. Motion's colours don't play,
+// though the pan and the bars still move (§6.9). As a palette only its
+// colours, bold and reverse video are taken; its glyphs are the CP437
+// set's, so the file reads as a whole theme too. `NO_COLOR` starts the game
+// in it, unless the player has picked a palette.
+(
+    colour: false,
+    tiles: {
+        terrain(grass):         (glyph: '.', fg: white),
+        terrain(dirt):          (glyph: ',', fg: white),
+        terrain(sand):          (glyph: ':', fg: white),
+        terrain(shallow_water): (glyph: '~', fg: white),
+        terrain(deep_water):    (glyph: '≈', fg: white),
+        terrain(rock):          (glyph: '#', fg: white),
+        sprite:                 (glyph: '☺', fg: white),
+        selected_sprite:        (glyph: '☻', fg: white, reversed: true),
+        young_sprite:           (glyph: 'ö', fg: white),
+        selected_young_sprite:  (glyph: 'ö', fg: white, reversed: true),
+        decision_marker:        (glyph: 'X', fg: white),
+        emote(hurt):            (glyph: '!', fg: white),
+        emote(pleased):         (glyph: '♥', fg: white),
+        emote(shocked):         (glyph: '‼', fg: white),
+        emote(failed):          (glyph: '?', fg: white),
+        emote(resting):         (glyph: 'z', fg: white),
+        emote(dancing):         (glyph: '♫', fg: white),
+        emote(calling):         (glyph: '♪', fg: white),
+    },
+    // No drive colours a sprite: the inspector says which drive is
+    // strongest.
+    drives: {},
+    objects: {
+        "berry_bush": {
+            "seedling": (glyph: '\'', fg: white),
+            "default":  (glyph: '♣', fg: white),
+            "fruiting": (glyph: '♣', fg: white, bold: true),
+        },
+        "berry":     { "default": (glyph: '•', fg: white) },
+        "thornbush": { "default": (glyph: '♠', fg: white) },
+        "ball":      { "default": (glyph: '○', fg: white) },
+        "egg":       { "default": (glyph: 'o', fg: white) },
+    },
+    // A background, which mono can't show: the attended tile is drawn bold
+    // instead.
+    attention_marker: white,
+    cursor: (
+        arrows: (up: '↑', down: '↓', left: '←', right: '→'),
+        followed_arrows: (up: '▲', down: '▼', left: '◄', right: '►'),
+        visible_frame: (up: '═', down: '═', left: '║', right: '║'),
+        status_marks: (
+            idle: '·', sent: '+', applied: '☼', rejected: '?',
+            grab: '↑', empty: '░', release: '↓',
+        ),
+        mode_marks: {
+            select: (glyph: '♦', fg: white),
+            train:  (glyph: '±', fg: white),
+            grab:   (glyph: '∩', fg: white),
+        },
+        leash: (glyph: '·', fg: white),
+        aim: (path: (glyph: '·', fg: white), end: (glyph: '°', fg: white)),
+    ),
+    // Every role but muted, good and bad, which the signs carry, by bold or
+    // reverse video alone.
+    text: (
+        heading:  (bold: true),
+        muted:    (),
+        good:     (),
+        bad:      (),
+        key:      (bold: true),
+        selected: (reversed: true),
+        spot:     (bold: true),
+    ),
+)

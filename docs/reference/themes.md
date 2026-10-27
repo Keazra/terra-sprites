@@ -1,6 +1,6 @@
 # Themes
 
-A **theme** says how the map is drawn: the character and colour of each kind of ground, each plant and toy, sprites, their emotes, the Cursor, the glass round the map and the stars in space past it (design §6.2, M2 design §11), the colours and blocks of the population graph (M2 design §14), and the lineage colours (§17). It also colours the screen's text by its job, shades the panels beside and under the map, or leaves them to lines (design §6.1, §6.2), and gives motion its colours (design §6.9). The game has two built in, `themes/cp437.ron` (the default) and `themes/ascii.ron` (`--ascii`). To draw it your own way, copy one, edit it, and put it in the `themes` folder of the game's folder (design §6.7). The help screen (`?`) shows where the game's folder is:
+A **theme** says how the map is drawn: the character and colour of each kind of ground, each plant and toy, sprites, their emotes, the Cursor, the glass round the map and the stars in space past it (design §6.2, M2 design §11), the colours and blocks of the population graph (M2 design §14), and the lineage colours (§17). It also colours the screen's text by its job, shades the panels beside and under the map, or leaves them to lines (design §6.1, §6.2), and gives motion its colours (design §6.9). A theme is two parts, chosen apart: a **glyph set**, its characters, and a **palette**, the rest (below). The game's own are theme files in [`themes/`](../../themes), [`cp437.ron`](../../themes/cp437.ron) the default. To draw it your own way, copy one, edit it, and put it in the `themes` folder of the game's folder (design §6.7). The help screen (`?`) shows where the game's folder is:
 
 | System | The themes folder |
 |---|---|
@@ -16,19 +16,41 @@ The game doesn't remember the theme you picked once it's closed. To start in one
 cargo run --release -- --theme my-theme.ron --seed 7
 ```
 
-`--theme` and `--ascii` can't be used together, since both pick a theme. A theme only changes how things look: it isn't part of the world, so it never changes what happens, and a save or replay plays out the same in any theme. The characters of frames and text are the same in every theme: a theme sets only their colours.
+`--ascii` picks only the glyph set, so it goes with `--theme`: `--ascii --theme my-theme.ron` draws your theme's palette in plain ASCII. A theme only changes how things look: it isn't part of the world, so it never changes what happens, and a save or replay plays out the same in any theme. The characters of frames and text are the same in every theme: a theme sets only their colours.
+
+## Glyph sets and palettes
+
+A theme is two parts, chosen apart (design §6.2): a **glyph set**, every character it draws with, and a **palette**, everything else. So the map can be drawn in ASCII with high contrast, or with your own glyphs in mono, without a theme file for each pair.
+
+| Part | What it gives |
+|---|---|
+| Glyph set | Each `glyph:` character in `tiles`, `objects` and `cursor`; the Cursor's `arrows`, `followed_arrows`, `visible_frame` and `status_marks`; `space`'s glass and stars; and `population`'s `full` and `half` characters and its `limit`'s. |
+| Palette | Every glyph's `fg`, `bold` and `reversed`; `drives`; `attention_marker`; `population`'s `stages` and its `limit`'s colour; `lineage`; `text`; `panels`; `motion`; and `colour`. |
+
+Every theme file is whole, and picked as both, as `Ctrl+T` and `--theme` do, it draws as written. Taken as a glyph set, only its characters are used; taken as a palette, everything but them. An object type or state that one part leaves out falls back in that part, as under [`objects`](#objects) below. The game has these built in:
+
+| Built in | File | What it is |
+|---|---|---|
+| CP437 glyph set | [`cp437.ron`](../../themes/cp437.ron) | The default glyphs: `☺ ♣ ♠ • ≈` and the rest of CP437 (design §6.2). It's the default palette's file too. |
+| ASCII glyph set | [`ascii.ron`](../../themes/ascii.ron) | Plain ASCII, for a terminal or font that can't draw CP437, picked with `--ascii`. Frames and text stay CP437. Its colours are the default palette's, shades too, so the file read whole draws as `--ascii` does. |
+| Default palette | [`cp437.ron`](../../themes/cp437.ron) | Named colours on the map and the text, which follow the terminal's own scheme, and exact ones only where no name fits. The panels sit on shades. |
+| High contrast | [`high_contrast.ron`](../../themes/high_contrast.ron) | Bright exact colours, the same in every terminal, each at 7:1 or more against Windows Terminal's black: minor text light grey rather than dark, headings and keys bold, a brighter attention marker, and lines between the panels in place of shades. |
+| Colour-blind | [`colour_blind.ron`](../../themes/colour_blind.ron) | Exact colours from Okabe and Ito's set for colour-blind readers, so the drives, the lineage, a gain against a loss and the graph's stages are told apart without red against green. |
+| Mono | [`mono.ron`](../../themes/mono.ron) | No colour at all ([`colour: false`](#colour), below), only bold and reverse video, and lines between the panels. What colour tells in the others is read from the signs, arrows and capitals, which stay. `NO_COLOR` set to anything but nothing starts the game in it, as [no-color.org](https://no-color.org) asks, unless `--theme` gives a palette. |
+
+Each palette's file draws the CP437 glyphs, so it loads as a whole theme too: `--theme themes/high_contrast.ron` starts the game in high contrast, and `--ascii --theme themes/mono.ron` in mono and ASCII. Copied into your themes folder, they're on the `Ctrl+T` menu as well.
 
 ## The rules
 
 - **Every character must be in CP437,** the character set of the old PC screen, so any CP437 font or tileset can draw the game (design §6.2). That includes `☺ ♣ ♠ • ○ ≈ ▲ ║ ░` and plain ASCII; it doesn't include, say, `λ`, `€` or emoji. A character outside it is refused, naming the character and what it was for.
-- **Colours** are the 16 terminal colours, by name: `black`, `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `gray`, `dark_gray`, `light_red`, `light_green`, `light_yellow`, `light_blue`, `light_magenta`, `light_cyan`, `white`. How each looks is up to the terminal's own palette. Terminals have no brown, so the built-in themes draw dirt in `yellow`.
-- **A colour can also be exact,** written `"#rrggbb"` in double quotes, such as `"#181a22"`. A named colour follows the player's terminal colours and an exact one doesn't, so the default theme uses exact colours only where no name fits: the panels' shades, since even `dark_gray` is far too bright for a background (`#767676` in Windows Terminal), and motion's colours. On a terminal that doesn't say it shows exact colours, such as macOS's Terminal, the game draws each as the nearest of the 256 colours nearly every terminal shows (design §6.2). A colour that's neither a name nor `"#rrggbb"` is refused, naming it.
-- **Give each kind of thing its own character,** and use colour for its state, as the built-in themes do: then a player who can't tell colours apart can still tell a bush from a thornbush. The game doesn't enforce this.
+- **Colours** are the 16 terminal colours, by name: `black`, `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `gray`, `dark_gray`, `light_red`, `light_green`, `light_yellow`, `light_blue`, `light_magenta`, `light_cyan`, `white`. How each looks is up to the terminal's own colours. Terminals have no brown, so the default palette draws dirt in `yellow`.
+- **A colour can also be exact,** written `"#rrggbb"` in double quotes, such as `"#181a22"`. A named colour follows the player's terminal colours and an exact one doesn't, so the default palette uses exact colours only where no name fits: the panels' shades, since even `dark_gray` is far too bright for a background (`#767676` in Windows Terminal), and motion's colours. High contrast and colour-blind use exact colours throughout, to look the same in every terminal. On a terminal that doesn't say it shows exact colours, such as macOS's Terminal, the game draws each as the nearest of the 256 colours nearly every terminal shows (design §6.2). A colour that's neither a name nor `"#rrggbb"` is refused, naming it.
+- **Give each kind of thing its own character,** and use colour for its state, as the built-in glyph sets do: then a player who can't tell colours apart can still tell a bush from a thornbush. The game doesn't enforce this.
 - **A theme that's wrong is refused,** with a message saying what's wrong. Picked from the menu, the status line says so, such as "Couldn't use theme my-theme: it has no glyph for terrain(rock)", and the map keeps the theme it had. Given with `--theme`, the game doesn't start, and says the same.
 
 ## Fields
 
-A theme is one record with eleven fields. The first five are needed; `space`, `population`, `lineage`, `text`, `panels` and `motion` may be left out.
+A theme is one record with twelve fields. The first five are needed; `colour`, `space`, `population`, `lineage`, `text`, `panels` and `motion` may be left out.
 
 | Field | Meaning |
 |---|---|
@@ -43,6 +65,7 @@ A theme is one record with eleven fields. The first five are needed; `space`, `p
 | `text` | The screen's text, styled by its job (below). Optional, as `space` is. |
 | `panels` | The shades the inspector and the event log sit on (below). Optional: a theme without them draws lines between the panels instead. |
 | `motion` | Motion's colours (below). Optional, as `space` is. |
+| `colour` | `false` for a palette with no colour at all, as mono's (below). Optional: `true` if it's left out. |
 
 A **glyph** is `(glyph: '♣', fg: green)`, with two optional flags: `bold: true`, and `reversed: true`, which swaps the colour and the background. Characters go in single quotes; a quote itself is `'\''`.
 
@@ -131,7 +154,7 @@ A zero, `+.00`, is neither good nor bad, and a chemical's change on the Chem tab
 
 ### `panels`
 
-`panels` is a record of two colours: `shade`, what the inspector and the event log sit on, and `title`, what their title rows sit on (the inspector's tabs, the log's "Events" and its filters). Both are needed. The default theme's are `"#181a22"` and `"#282c3a"`, a shade and two lighter than black. While motion is on, a tab opened sweeps in out of `shade` (design §6.9). A theme without `panels`, such as the ASCII one, draws a line instead: `│` between the map and the inspector, and a `─` rule over the log with its title and filters in it (design §6.1).
+`panels` is a record of two colours: `shade`, what the inspector and the event log sit on, and `title`, what their title rows sit on (the inspector's tabs, the log's "Events" and its filters). Both are needed. The default theme's are `"#181a22"` and `"#282c3a"`, a shade and two lighter than black. While motion is on, a tab opened sweeps in out of `shade` (design §6.9). The shades are the palette's, so ASCII glyphs in the default palette sit on them. A theme without `panels`, such as high contrast and mono, draws a line instead: `│` between the map and the inspector, and a `─` rule over the log with its title and filters in it (design §6.1).
 
 ### `motion`
 
@@ -148,6 +171,10 @@ Motion is the small effects drawn over the screen as things happen, such as a de
 | `deep_water` | Deep water's two shades. | `("#0037da", "#2f62f2")` |
 
 With motion off, water is drawn in its `tiles` colour, as before.
+
+### `colour`
+
+`colour: false` draws the whole screen in the terminal's own colours, with nothing but bold and reverse video, as the mono palette does: every colour the theme names, and every one the game draws itself, such as the title screen's greys, gives way to the terminal's. The theme still names its colours, since the fields above need them, but they're never seen: mono's are all `white`. The tile the selected sprite attends to, which `attention_marker` would give a background, is drawn bold, and motion's colours don't play, though the view still pans and a drive's bar still eases (design §6.9).
 
 ## Working example
 

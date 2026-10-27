@@ -127,6 +127,14 @@ const PAN: Duration = Duration::from_millis(300);
 /// and still jump rather than pan (design §6.9).
 const PAN_PAST: i32 = 2;
 
+/// Whether motion's colours play over the screen (design §6.9): while
+/// motion is on, in a palette with colour. Mono has none, so its deaths,
+/// hatchings, cracks, water, trail, tab sweeps and pop-up fades don't play,
+/// though the pan and the bars, which move no colour, still do (§6.2, #307).
+pub(crate) fn colours_play(app: &App) -> bool {
+    app.motion() && app.theme.has_colour()
+}
+
 /// Whether motion thins out at `speed` (design §6.9): at 4× and up, which
 /// takes in Lab's faster speeds.
 pub(crate) fn thins_out(speed: Speed) -> bool {
@@ -753,7 +761,7 @@ pub(crate) fn play_on_map(
     world: &World,
     (bare, lying): (&[Bare], &[Lying]),
 ) {
-    if !app.motion() {
+    if !colours_play(app) {
         return;
     }
     let on = OnMap {
@@ -801,7 +809,7 @@ pub(crate) fn play_on_map(
 /// there, but where a pop-up is drawn now; and a pop-up that opened fading
 /// in, but under the debug overlay, which doesn't fade.
 pub(crate) fn play_on_panels(buf: &mut Buffer, app: &App, spots: &Spots) {
-    if !app.motion() {
+    if !colours_play(app) {
         return;
     }
     let (kept, now) = (app.motion_kept(), app.running_for());

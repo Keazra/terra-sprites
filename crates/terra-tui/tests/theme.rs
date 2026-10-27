@@ -8,7 +8,7 @@ use terra_sim::Terrain;
 use terra_tui::app::{CursorMode, StatusMark};
 use terra_tui::cp437;
 use terra_tui::space::{Depth, Pane};
-use terra_tui::theme::{self, SemanticTile, Theme};
+use terra_tui::theme::{self, ColourPalette, SemanticTile, Theme};
 
 #[test]
 fn the_themes_draw_terrain_as_the_design_table_says() {
@@ -758,17 +758,22 @@ fn a_theme_styles_the_text_it_leaves_out_as_the_default_theme_does() {
 }
 
 #[test]
-fn the_default_theme_shades_its_panels_and_the_ascii_one_draws_lines() {
+fn the_default_palette_shades_its_panels_and_high_contrast_and_mono_draw_lines() {
     // Design §6.1, #302: no named colour is close enough to black for a
-    // shade, so they're exact.
+    // shade, so they're exact. They go with the palette (#307), so the
+    // ASCII glyphs sit on them too.
     let panels = Theme::cp437().panels().expect("shaded");
     assert_eq!(panels.shade, Color::Rgb(0x18, 0x1a, 0x22));
     assert_eq!(panels.title, Color::Rgb(0x28, 0x2c, 0x3a));
-    assert_eq!(Theme::ascii().panels(), None);
-    // A theme of the player's own may shade them.
+    assert_eq!(Theme::ascii().panels(), Some(panels));
+    for palette in [ColourPalette::HighContrast, ColourPalette::Mono] {
+        assert_eq!(palette.source().panels(), None, "{}", palette.name());
+    }
+    // A theme of the player's own may shade them its own way, or leave
+    // them out.
     let shaded = ascii_with(
-        "    text: (",
-        "    panels: (shade: black, title: \"#303030\"),\n    text: (",
+        "panels: (shade: \"#181a22\", title: \"#282c3a\")",
+        "panels: (shade: black, title: \"#303030\")",
     );
     let theme = Theme::from_ron(&shaded, &pack()).expect("loads");
     let panels = theme.panels().expect("shaded");
@@ -776,6 +781,29 @@ fn the_default_theme_shades_its_panels_and_the_ascii_one_draws_lines() {
         (panels.shade, panels.title),
         (Color::Black, Color::Rgb(0x30, 0x30, 0x30))
     );
+    let lined = ascii_with(
+        "    panels: (shade: \"#181a22\", title: \"#282c3a\"),\n",
+        "",
+    );
+    let theme = Theme::from_ron(&lined, &pack()).expect("loads");
+    assert_eq!(theme.panels(), None);
+}
+
+#[test]
+fn a_theme_file_may_say_its_palette_has_no_colour() {
+    // Design §6.2, #307: as mono does; a theme that doesn't say has colour.
+    let pack = pack();
+    assert!(
+        Theme::from_ron(ASCII_THEME, &pack)
+            .expect("loads")
+            .has_colour()
+    );
+    let colourless = ascii_with("(\n    tiles: {", "(\n    colour: false,\n    tiles: {");
+    let theme = Theme::from_ron(&colourless, &pack).expect("loads");
+    assert!(!theme.has_colour());
+    let wrong = ascii_with("(\n    tiles: {", "(\n    colour: none,\n    tiles: {");
+    let error = Theme::from_ron(&wrong, &pack).expect_err("refused");
+    assert!(error.contains("bool"), "{error}");
 }
 
 #[test]

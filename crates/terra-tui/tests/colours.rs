@@ -15,7 +15,7 @@ use ratatui::style::{Color, Modifier};
 use terra_sim::{DeathCause, EntityId};
 use terra_tui::app::Tab;
 use terra_tui::input::Action;
-use terra_tui::theme::{TextLook, Theme};
+use terra_tui::theme::{ColourPalette, GlyphSet, TextLook, Theme};
 
 /// Where `text` first starts on `screen` from row `from` down.
 fn find_from(screen: &Buffer, text: &str, from: u16) -> Position {
@@ -83,9 +83,11 @@ fn the_default_theme_shades_the_inspector_and_the_log_and_not_the_map() {
 }
 
 #[test]
-fn the_ascii_theme_draws_a_line_beside_the_inspector_and_over_the_log() {
+fn a_palette_without_shades_draws_a_line_beside_the_inspector_and_over_the_log() {
+    // Design §6.1, §6.2: as high contrast and mono do (#307).
     let world = garden(pack());
-    let app = app_for(&world, Theme::ascii(), 100, 30);
+    let theme = Theme::built_in(GlyphSet::Ascii, ColourPalette::HighContrast);
+    let app = app_for(&world, theme, 100, 30);
     let screen = render(&app, &world, 100, 30);
     for y in 1..25 {
         assert_eq!(screen[(54, y)].symbol(), "│", "row {y}");

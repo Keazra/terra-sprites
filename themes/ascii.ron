@@ -1,7 +1,9 @@
-// The `--ascii` theme (design §6.2): the cp437 theme's meanings in plain ASCII
-// glyphs. It changes only what themes cover (the map's tiles and the cursor);
-// the text stays the same. It has no panel shades, so a line runs between the
-// panels and the map.
+// The ASCII glyph set (design §6.2, #307), which `--ascii` picks: the cp437
+// theme's meanings in plain ASCII glyphs. It changes only the characters a
+// theme holds (the map's, the Cursor's, the emotes', the glass's, the stars'
+// and the graph's blocks); the frames and the text stay CP437. As a glyph set
+// only its characters are taken. Its colours are the default palette's, so
+// the file, given as a whole theme, draws as `--ascii` does.
 (
     tiles: {
         terrain(grass):         (glyph: '.', fg: green),
@@ -127,4 +129,7 @@
         // the 256 colours, so it's the same where exact ones aren't shown.
         spot:     (fg: "#87afd7"),
     ),
+    // The panels beside and under the map sit on the default palette's
+    // shades (design §6.1): they go with the palette, not the glyph set.
+    panels: (shade: "#181a22", title: "#282c3a"),
 )

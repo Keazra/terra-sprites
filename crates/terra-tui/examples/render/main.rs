@@ -20,9 +20,10 @@ use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use terra_sim::Playback;
+use terra_sim::{DataPack, Playback};
 use terra_tui::args::Args;
 use terra_tui::start;
+use terra_tui::theme::{Pick, Theme};
 
 use clip::{Clip, Framing, Source};
 use glyphs::{Fonts, Glyphs};
@@ -68,7 +69,7 @@ fn render(options: &Options) -> Result<(), String> {
             let seed = options.world.seed.unwrap_or_default();
             let size = (framing.screen.width, framing.screen.height);
             let world = start::title_world(&options.world, seed, size)?;
-            let theme = start::theme(&options.world, world.data())?;
+            let theme = theme(options, world.data())?;
             clip::title_clip(world, theme, seed, *seconds, framing)
         }
         Scene::World(scene) | Scene::Samples(scene) => world_clip(options, scene, framing)?,
@@ -154,8 +155,20 @@ fn sample_path(out: &Path, name: &str) -> PathBuf {
 /// A world's clip, from the seed or the replay `options` give.
 fn world_clip(options: &Options, scene: &WorldScene, framing: &Framing) -> Result<Clip, String> {
     let source = source(&options.world)?;
-    let theme = start::theme(&options.world, source.world().data())?;
+    let theme = theme(options, source.world().data())?;
     clip::world_clip(source, theme, scene, framing)
+}
+
+/// The theme the flags ask for (design §6.2, #307): the glyph set and the
+/// palette the game would start with, with `--colours`'s palette over
+/// `--theme`'s. The renderer reads neither the settings nor `NO_COLOR`, so
+/// a clip comes out the same on every computer.
+fn theme(options: &Options, data: &DataPack) -> Result<Theme, String> {
+    let glyphs = start::glyph_set(&options.world, None);
+    let palette = options
+        .colours
+        .map_or_else(|| start::palette(&options.world, None, None), Pick::BuiltIn);
+    start::theme(&glyphs, &palette, data)
 }
 
 /// The world the flags ask for: the replay's, or a new one from the seed.
@@ -216,12 +229,14 @@ mod tests {
     use std::time::Duration;
 
     use ratatui::layout::Size;
+    use terra_sim::DataPack;
     use terra_tui::args::Args;
     use terra_tui::start;
-    use terra_tui::theme::Theme;
+    use terra_tui::theme::{ColourPalette, GlyphSet, Theme};
     use terra_tui::ui;
 
     use crate::clip::{self, Framing, View};
+    use crate::options::Options;
     use crate::test_util::glyphs;
     use crate::{gif_file, svg_file};
 
@@ -255,6 +270,36 @@ mod tests {
             "{} and {} bytes",
             gif.len(),
             svg.len()
+        );
+    }
+
+    #[test]
+    fn a_clip_draws_the_glyphs_and_the_palette_the_flags_pick() {
+        // Design §6.2 (#307): `--colours` picks the palette over `--theme`'s,
+        // whose file then gives only the glyphs. The renderer reads neither
+        // the settings nor `NO_COLOR`, so a clip is the same anywhere.
+        let data = DataPack::builtin().unwrap();
+        let theme = |line: &str| {
+            let options = Options::parse(line.split_whitespace().map(String::from)).unwrap();
+            super::theme(&options, &data).unwrap()
+        };
+        assert_eq!(theme("world -o a.gif"), Theme::cp437());
+        assert_eq!(
+            theme("world --colours mono -o a.gif"),
+            Theme::built_in(GlyphSet::Cp437, ColourPalette::Mono)
+        );
+        assert_eq!(
+            theme("title --ascii --colours high-contrast -o a.gif"),
+            Theme::built_in(GlyphSet::Ascii, ColourPalette::HighContrast)
+        );
+        // The repository's own ASCII file, read and not written.
+        assert_eq!(
+            theme("world --theme ../../themes/ascii.ron --colours colour-blind -o a.gif"),
+            Theme::built_in(GlyphSet::Ascii, ColourPalette::ColourBlind)
+        );
+        assert_eq!(
+            theme("world --theme ../../themes/ascii.ron -o a.gif"),
+            Theme::ascii()
         );
     }
 

@@ -1,6 +1,7 @@
 //! What the game starts with, from the command line's flags (design §6.7):
-//! the new world and the theme. `main.rs` asks; the answers are here, so
-//! they can be tested.
+//! the new world and the theme, its glyph set and palette. `main.rs` asks,
+//! and reads what the answers need from the environment; the answers are
+//! here, so they can be tested.
 
 use std::path::{Path, PathBuf};
 
@@ -9,7 +10,7 @@ use terra_sim::{DataError, DataPack, Mode, World, WorldConfig};
 use crate::args::Args;
 use crate::files;
 use crate::saves;
-use crate::theme::Theme;
+use crate::theme::{ColourPalette, GlyphSet, Pick, Theme};
 
 /// A new world, as the flags ask: from `seed`, with `--preset`, or the data
 /// folder's default preset, or the built-in one; and the data pack
@@ -174,18 +175,68 @@ fn config(args: &Args) -> Result<(WorldConfig, DataPack), String> {
     Ok((config, data))
 }
 
-/// The theme the flags ask for: `--ascii`, `--theme <file>` or the CP437
-/// one. A theme names object types and drives, so it's checked against
-/// `data` (design v34 §6.7).
-pub fn theme(args: &Args, data: &DataPack) -> Result<Theme, String> {
-    match &args.theme {
-        None if args.ascii => Ok(Theme::ascii()),
-        None => Ok(Theme::cp437()),
-        Some(path) => std::fs::read_to_string(path)
-            .map_err(|err| err.to_string())
-            .and_then(|text| Theme::from_ron(&text, data))
-            .map_err(|err| format!("can't use theme {}: {err}", path.display())),
+/// The glyph set the game starts with (design §6.2, §6.7, #307):
+/// `--ascii`'s, or `--theme`'s file's, which last only for the run; else
+/// the one the player saved; else CP437.
+pub fn glyph_set(args: &Args, saved: Option<Pick<GlyphSet>>) -> Pick<GlyphSet> {
+    if args.ascii {
+        Pick::BuiltIn(GlyphSet::Ascii)
+    } else if let Some(path) = &args.theme {
+        Pick::File(path.clone())
+    } else {
+        saved.unwrap_or(Pick::BuiltIn(GlyphSet::Cp437))
     }
+}
+
+/// The palette the game starts with (design §6.2, §6.7, #307): `--theme`'s
+/// file's, which lasts only for the run; else the one the player saved;
+/// else mono, where `NO_COLOR`'s value, `no_color`, is set to anything but
+/// nothing, as no-color.org asks; else the default. `main.rs` reads
+/// `NO_COLOR` and passes it in.
+pub fn palette(
+    args: &Args,
+    saved: Option<Pick<ColourPalette>>,
+    no_color: Option<&str>,
+) -> Pick<ColourPalette> {
+    if let Some(path) = &args.theme {
+        Pick::File(path.clone())
+    } else if let Some(saved) = saved {
+        saved
+    } else if no_color.is_some_and(|value| !value.is_empty()) {
+        Pick::BuiltIn(ColourPalette::Mono)
+    } else {
+        Pick::BuiltIn(ColourPalette::Default)
+    }
+}
+
+/// The theme a glyph set and a palette make (design §6.2, #307), reading
+/// the theme files they name, once each. A theme names object types and
+/// drives, so it's checked against `data` (design v34 §6.7).
+pub fn theme(
+    glyphs: &Pick<GlyphSet>,
+    palette: &Pick<ColourPalette>,
+    data: &DataPack,
+) -> Result<Theme, String> {
+    let glyph_theme = match glyphs {
+        Pick::BuiltIn(set) => set.source(),
+        Pick::File(path) => theme_file(path, data)?,
+    };
+    let palette_theme = match palette {
+        Pick::BuiltIn(palette) => palette.source(),
+        Pick::File(path) if matches!(glyphs, Pick::File(same) if same == path) => {
+            glyph_theme.clone()
+        }
+        Pick::File(path) => theme_file(path, data)?,
+    };
+    Ok(Theme::compose(&glyph_theme, &palette_theme))
+}
+
+/// The theme in the file at `path`, checked against `data`.
+fn theme_file(path: &Path, data: &DataPack) -> Result<Theme, String> {
+    std::fs::read_to_string(path)
+        .map_err(|err| err.to_string())
+        .and_then(|text| Theme::from_ron(&text, data))
+        .map_err(|err| format!("can't use theme {}: {err}", path.display()))
 }
 
 /// What's wrong with a data pack, naming the file.
