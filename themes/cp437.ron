@@ -4,7 +4,8 @@
 // black, red, green, yellow, blue, magenta, cyan, gray, dark_gray, light_red,
 // light_green, light_yellow, light_blue, light_magenta, light_cyan, white;
 // or an exact colour, "#rrggbb". A name follows the player's terminal colours,
-// so this theme uses exact ones only where no name fits: the panels' shades.
+// so this theme uses exact ones only where no name fits: the panels' shades,
+// and the soft blue of what a tooltip can explain.
 (
     tiles: {
         terrain(grass):         (glyph: '.', fg: green),
@@ -155,7 +156,9 @@
         bad:      (fg: light_red),
         key:      (bold: true),
         selected: (reversed: true),
-        spot:     (fg: light_blue),
+        // A soft blue, quieter than the terminal's light blue, and one of
+        // the 256 colours, so it's the same where exact ones aren't shown.
+        spot:     (fg: "#87afd7"),
     ),
     // The panels beside and under the map (design §6.1): the inspector and
     // the event log sit on `shade`, a little lighter than the terminal's

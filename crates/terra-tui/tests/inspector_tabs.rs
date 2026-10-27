@@ -1299,7 +1299,8 @@ fn the_genome_tab_groups_genes_as_plain_lines_and_marks_those_with_no_effect() {
     // An expressed gene's name is in the spot colour, since a tooltip says
     // what it does, and its numbers are plain (#304).
     let expressed = row_of("ate → hunger -.5") as u16;
-    assert_eq!(screen[(x, expressed)].fg, Color::LightBlue);
+    let spot = Theme::cp437().text().spot.fg.expect("a colour");
+    assert_eq!(screen[(x, expressed)].fg, spot);
     let number = x + "ate → hunger ".chars().count() as u16;
     assert_eq!(screen[(number, expressed)].fg, Color::Reset);
 }
