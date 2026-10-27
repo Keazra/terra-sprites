@@ -141,7 +141,7 @@ Motion is the small effects drawn over the screen as things happen, such as a de
 |---|---|---|
 | `flash` | What a dying sprite's tile flashes before it fades back. | `"#d0d0d0"` |
 | `ash` | The grey a dead sprite's ghost fades to. | `"#5c5c5c"` |
-| `spark` | The sparks round an egg that hatches. | `"#ffe9a0"` |
+| `spark` | The sparks round an egg that hatches, and what the tile of one about to hatch glows towards. | `"#ffe9a0"` |
 | `trail` | The tint on the tiles the selected sprite has just left. | `"#2b3047"` |
 | `dark` | What a pop-up fades in from, and out to as it closes, and what was under it fades back from; what a tab opened sweeps in from in a theme without `panels`; and the background a fade takes on a tile that has none of its own. | `"#0c0c0c"` |
 | `shallow_water` | The two shades shallow water drifts between while motion is on, as `("#3a96dd", "#62b4f0")`. | `("#3a96dd", "#62b4f0")` |

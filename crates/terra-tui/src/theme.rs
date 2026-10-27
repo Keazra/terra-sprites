@@ -230,7 +230,8 @@ pub struct MotionLook {
     pub flash: Color,
     /// The grey a death's ghost fades to.
     pub ash: Color,
-    /// What a hatching's sparks light the glyphs round the egg with.
+    /// What a hatching's sparks light the glyphs round the egg with, and
+    /// what the tile of an egg about to hatch glows towards.
     pub spark: Color,
     /// The tint the trail leaves on the tiles the selected sprite has just
     /// left.

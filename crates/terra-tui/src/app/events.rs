@@ -47,6 +47,7 @@ impl App {
     pub fn record(&mut self, events: &[Event], world: &World) {
         self.take_in_tick(events, world);
         self.note_looks(world);
+        self.note_cracks(world);
         self.note_bars(world);
         self.note_trail(world);
     }
@@ -345,6 +346,7 @@ impl App {
             }
         }
         self.note_looks(world);
+        self.note_cracks(world);
         self.note_bars(world);
         self.note_trail(world);
     }

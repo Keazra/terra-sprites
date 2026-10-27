@@ -732,6 +732,99 @@ fn a_hatched_young_warms_from_the_egg_s_colour_to_its_own() {
     assert_eq!(half[first].fg, plain[first].fg);
 }
 
+/// Runs `world` until an egg lying on the map, with no sprite on it, will
+/// hatch on the next tick, both apps taking in each tick: the egg's ID and
+/// its tile.
+fn until_about_to_hatch(world: &mut World, on: &mut App, off: &mut App) -> (EntityId, Pos) {
+    for _ in 0..400 {
+        let events = world.step();
+        on.record(&events, world);
+        off.record(&events, world);
+        let due = world.eggs().find_map(|egg| {
+            let tile = egg.pos()?;
+            (egg.hatches() == world.tick() && world.sprite_at(tile).is_none())
+                .then_some((egg.id(), tile))
+        });
+        if let Some(due) = due {
+            return due;
+        }
+    }
+    panic!("no egg came due");
+}
+
+/// The glow of an egg about to hatch on a tile with no background of its
+/// own, in the default theme: four tenths of the way from the dark to the
+/// sparks' colour.
+const GLOW: Color = Color::Rgb(0x6D, 0x64, 0x47);
+
+#[test]
+fn an_egg_about_to_hatch_cracks_and_glows_until_the_young_appears() {
+    // Design §6.9, #306: the screen can tell an egg will hatch on the next
+    // tick, so from the frame that sees it, its tile glows, quickly at
+    // first, and holds so, while paused too, until the young appears;
+    // then the glow fades as the young warms.
+    let mut world = lone_line(0);
+    let (mut on, mut off) = twins(&world);
+    let (egg, tile) = until_about_to_hatch(&mut world, &mut on, &mut off);
+    let first = cell(&on, tile);
+    let start = frame(&mut on, &world, Duration::ZERO);
+    let plain = frame(&mut off, &world, Duration::ZERO);
+    let (symbol, fg) = (plain[first].symbol(), plain[first].fg);
+    assert!(!near(start[first].bg, GLOW), "{:?}", start[first]);
+    let cracking = frame(&mut on, &world, ms(100));
+    assert!(!near(cracking[first].bg, GLOW), "{:?}", cracking[first]);
+    assert_ne!(cracking[first].bg, start[first].bg, "on its way");
+    let cracked = frame(&mut on, &world, ms(200));
+    assert!(near(cracked[first].bg, GLOW), "{:?}", cracked[first]);
+    // Colour only: the egg's glyph is as it is.
+    for screen in [&start, &cracking, &cracked] {
+        assert_eq!((screen[first].symbol(), screen[first].fg), (symbol, fg));
+    }
+    let held = frame(&mut on, &world, ms(5000));
+    assert_eq!(held[first], cracked[first], "held while no tick comes");
+    // It hatches: the young warms from the egg's colour, and the glow
+    // fades with it.
+    let events = world.step();
+    on.record(&events, &world);
+    off.record(&events, &world);
+    assert!(
+        events
+            .iter()
+            .any(|event| matches!(event.kind, EventKind::Hatched { id, .. } if id == egg)),
+        "{events:?}"
+    );
+    let young = cell(&on, world.sprite(egg).expect("hatched").pos());
+    let start = frame(&mut on, &world, Duration::ZERO);
+    assert!(near(start[young].bg, GLOW), "{:?}", start[young]);
+    let warm = frame(&mut on, &world, ms(500));
+    let plain = frame(&mut off, &world, ms(500));
+    assert_eq!(warm[young].bg, plain[young].bg);
+}
+
+#[test]
+fn no_egg_cracks_at_4x_or_when_the_policy_says_no() {
+    // Design §6.9: motion thins out at 4× and up, and a hatching's asks
+    // `Emotes` first, as the crack before it does.
+    for faster in [true, false] {
+        let mut world = lone_line(0);
+        let (mut on, mut off) = twins(&world);
+        if faster {
+            at_4x(&mut on);
+            at_4x(&mut off);
+        } else {
+            on.set_policy(NoEmotes);
+            off.set_policy(NoEmotes);
+        }
+        let (_, tile) = until_about_to_hatch(&mut world, &mut on, &mut off);
+        let first = cell(&on, tile);
+        for step in [0, 300, 1000] {
+            let shown = frame(&mut on, &world, ms(step));
+            let plain = frame(&mut off, &world, ms(step));
+            assert_eq!(shown[first], plain[first], "4x: {faster}, {step} ms");
+        }
+    }
+}
+
 #[test]
 fn a_hatching_asks_the_policy_first() {
     let mut world = lone_line(0);

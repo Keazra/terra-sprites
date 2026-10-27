@@ -1,16 +1,17 @@
 //! Motion's switch, and what the app keeps for it (design §6.9): the looks
-//! of the sprites and eggs on the map after each tick it takes in, and the
-//! deaths and hatchings those ticks set off; the levels of the selected
-//! sprite's drives, which its bars ease to; and the tile it's on, for its
-//! trail. The tab sweeping in starts as a tab opens (`open`), and a
-//! pop-up's fades as the app's clock moves on (`animate`).
+//! of the sprites and eggs on the map after each tick it takes in, the
+//! deaths and hatchings those ticks set off, and the eggs about to hatch,
+//! which crack; the levels of the selected sprite's drives, which its bars
+//! ease to; and the tile it's on, for its trail. The tab sweeping in starts
+//! as a tab opens (`open`), and a pop-up's fades as the app's clock moves
+//! on (`animate`).
 
 use std::time::Duration;
 
 use terra_sim::{ChemicalKind, EntityId, EventKind, World};
 
 use super::{App, Selection};
-use crate::inspector;
+use crate::inspector::{self, Hatching};
 use crate::motion::{self, Motion};
 
 impl App {
@@ -52,6 +53,27 @@ impl App {
             let seen = motion::seen(self, world);
             self.motion.note(seen);
         }
+    }
+
+    /// Notes the eggs on the map about to hatch on the next tick, after the
+    /// ticks just taken in, for each to crack (design §6.9). The screen can
+    /// tell: an egg hatches on the tick its stages end, unless the Cursor
+    /// holds it or a sprite stands on it then, and sprites move after.
+    pub(super) fn note_cracks(&mut self, world: &World) {
+        if !self.motion.on() {
+            return;
+        }
+        let due: Vec<EntityId> = world
+            .eggs()
+            .filter(|egg| {
+                egg.pos()
+                    .is_some_and(|tile| world.sprite_at(tile).is_none())
+                    && matches!(inspector::hatching(egg, world), Hatching::In(1))
+            })
+            .map(|egg| egg.id())
+            .collect();
+        self.motion
+            .note_cracks(&due, self.running_for, self.clock.speed());
     }
 
     /// Notes the levels of the selected sprite's drives, after the ticks
