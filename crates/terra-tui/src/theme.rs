@@ -12,6 +12,7 @@ use serde::Deserialize;
 use terra_sim::{DataPack, Terrain};
 
 use crate::app::{CursorMode, StatusMark};
+use crate::campbell;
 use crate::family_tree::Lineage;
 use crate::graph::Band;
 use crate::space::{Depth, Pane};
@@ -587,12 +588,24 @@ impl Theme {
             .unwrap_or_default()
             .look(builtin.text.unwrap_or_default())
             .expect("the built-in cp437 theme styles every text role");
-        // And any of motion's colours (design §6.9).
-        let motion = file
-            .motion
-            .unwrap_or_default()
+        // And any of motion's colours (design §6.9), but water's: where the
+        // theme draws water in a colour of its own, it drifts from that.
+        let theirs = file.motion.unwrap_or_default();
+        let gives = [theirs.shallow_water.is_some(), theirs.deep_water.is_some()];
+        let mut motion = theirs
             .look(builtin.motion.unwrap_or_default())
             .expect("the built-in cp437 theme has every one of motion's colours");
+        let default_tiles = glyphs(builtin.tiles);
+        for (gives, (terrain, shades)) in gives.into_iter().zip([
+            (Terrain::ShallowWater, &mut motion.shallow_water),
+            (Terrain::DeepWater, &mut motion.deep_water),
+        ]) {
+            let tile = SemanticTile::Terrain(terrain);
+            let own = tiles[&tile].fg;
+            if !gives && own != default_tiles[&tile].fg {
+                *shades = water_shades(own);
+            }
+        }
         let theme = Theme {
             tiles,
             objects,
@@ -802,7 +815,8 @@ struct ThemeFile {
     #[serde(default, deserialize_with = "implicit_some")]
     panels: Option<PanelsFile>,
     /// Motion's colours (design §6.9). A theme without them, or without
-    /// some of them, draws the default theme's.
+    /// some of them, draws the default theme's, but for water it draws in
+    /// a colour of its own.
     #[serde(default, deserialize_with = "implicit_some")]
     motion: Option<MotionFile>,
 }
@@ -1021,6 +1035,19 @@ impl MotionFile {
             deep_water: pair(self.deep_water.or(default.deep_water)?),
         })
     }
+}
+
+/// The two shades water drawn in `colour` drifts between while motion is
+/// on, where a theme draws it in a colour of its own and gives no shades
+/// for it (design §6.9): the colour as Campbell draws it, and a third of
+/// the way from there to white.
+fn water_shades(colour: Color) -> [Color; 2] {
+    let [r, g, b] = campbell::rgb(colour).unwrap_or(campbell::FOREGROUND);
+    let lighter = |c: u8| c + (u8::MAX - c) / 3;
+    [
+        Color::Rgb(r, g, b),
+        Color::Rgb(lighter(r), lighter(g), lighter(b)),
+    ]
 }
 
 /// A theme file's `cursor` section.

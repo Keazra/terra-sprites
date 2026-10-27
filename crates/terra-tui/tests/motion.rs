@@ -302,6 +302,58 @@ fn water_shimmers_only_where_bare_water_shows() {
 }
 
 #[test]
+fn water_a_theme_draws_in_its_own_colour_drifts_from_that_colour() {
+    // Design §6.9: where a theme recolours water and its `motion` section
+    // gives no shades for it, water drifts from its own colour, as Campbell
+    // draws it, a third of the way to white; water in the default theme's
+    // colour keeps the default theme's shades.
+    let text = ASCII_THEME.replace(
+        "terrain(deep_water):    (glyph: '=', fg: blue)",
+        "terrain(deep_water):    (glyph: '=', fg: light_blue)",
+    );
+    assert_ne!(text, ASCII_THEME, "deep water recoloured");
+    let theme = Theme::from_ron(&text, &common::pack()).expect("loads");
+    let (light_blue, lighter) = (Color::Rgb(0x3b, 0x78, 0xff), Color::Rgb(0x7c, 0xa5, 0xff));
+    assert_eq!(theme.motion().deep_water, [light_blue, lighter]);
+    let default = Theme::cp437().motion();
+    assert_eq!(theme.motion().shallow_water, default.shallow_water);
+    // Apart in 256 colours too (design §6.2).
+    let mut buffer = Buffer::empty(Rect::new(0, 0, 2, 1));
+    buffer[(0, 0)].set_fg(light_blue);
+    buffer[(1, 0)].set_fg(lighter);
+    theme::in_256_colours(&mut buffer);
+    assert_ne!(buffer[(0, 0)].fg, buffer[(1, 0)].fg);
+    // A theme that gives shades keeps them.
+    let given = Theme::from_ron(
+        &text.replacen(
+            "(\n",
+            "(\n    motion: (deep_water: (\"#102030\", \"#203040\")),\n",
+            1,
+        ),
+        &common::pack(),
+    );
+    let given = given.expect("loads");
+    assert_eq!(
+        given.motion().deep_water,
+        [Color::Rgb(0x10, 0x20, 0x30), Color::Rgb(0x20, 0x30, 0x40)]
+    );
+    // And the lake shimmers in it.
+    let world = lake().build();
+    let mut app = sized_app(&world, theme, SCREEN);
+    app.set_motion(true);
+    cursor_to(&mut app, &world, at(0, 0));
+    let mut shades = BTreeSet::new();
+    for step in [0, 1000, 1000] {
+        let screen = frame(&mut app, &world, ms(step));
+        for colour in colours_of(&app, &world, &screen, Terrain::DeepWater) {
+            shades.insert(format!("{colour:?}"));
+        }
+    }
+    assert!(shades.contains(&format!("{light_blue:?}")), "{shades:?}");
+    assert!(shades.contains(&format!("{lighter:?}")), "{shades:?}");
+}
+
+#[test]
 fn with_motion_off_water_keeps_its_named_colours() {
     let world = lake().build();
     let mut app = app_on(&world);
