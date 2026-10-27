@@ -18,6 +18,7 @@ use crate::app::{CursorMode, StatusMark};
 use crate::campbell;
 use crate::family_tree::Lineage;
 use crate::graph::Band;
+use crate::listed::listed_enum;
 use crate::space::{Depth, Pane};
 
 /// What the map view draws for a tile, named by meaning rather than by character.
@@ -274,28 +275,25 @@ const COLOUR_BLIND: &str = include_str!("../../../themes/colour_blind.ron");
 /// The mono palette's file.
 const MONO: &str = include_str!("../../../themes/mono.ron");
 
-/// A glyph set built into the game (design §6.2, #307): the characters a
-/// theme draws with.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum GlyphSet {
-    /// CP437's, the default.
-    Cp437,
-    /// Plain ASCII's, as `--ascii` asks.
-    Ascii,
+listed_enum! {
+    /// A glyph set built into the game (design §6.2, #307): the characters a
+    /// theme draws with.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+    pub enum GlyphSet {
+        /// CP437's, the default.
+        Cp437 => "CP437",
+        /// Plain ASCII's, as `--ascii` asks.
+        Ascii => "ASCII",
+    }
+
+    /// Every glyph set built in, in the order the game offers them.
+    pub const ALL;
+
+    /// Its name, as the game shows it (design §6.7).
+    pub fn name(self) -> &'static str;
 }
 
 impl GlyphSet {
-    /// Every glyph set built in, in the order the game offers them.
-    pub const ALL: [GlyphSet; 2] = [GlyphSet::Cp437, GlyphSet::Ascii];
-
-    /// Its name, as the game shows it (design §6.7).
-    pub fn name(self) -> &'static str {
-        match self {
-            GlyphSet::Cp437 => "CP437",
-            GlyphSet::Ascii => "ASCII",
-        }
-    }
-
     /// The built-in theme its characters are taken from.
     pub fn source(self) -> Theme {
         match self {
@@ -305,42 +303,32 @@ impl GlyphSet {
     }
 }
 
-/// A palette built into the game (design §6.2, #307): the colours, bold
-/// and reverse video a theme draws its glyphs in, and the rest of a theme
-/// but its characters. Not the command palette, `:`'s box.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum ColourPalette {
-    /// The default theme's colours.
-    Default,
-    /// Bright exact colours, each at 7:1 or more against black, and lines
-    /// between the panels.
-    HighContrast,
-    /// Okabe and Ito's colours, for readers who can't tell red from green.
-    ColourBlind,
-    /// No colour at all, only bold and reverse video, where `NO_COLOR`
-    /// starts the game.
-    Mono,
+listed_enum! {
+    /// A palette built into the game (design §6.2, #307): the colours, bold
+    /// and reverse video a theme draws its glyphs in, and the rest of a theme
+    /// but its characters. Not the command palette, `:`'s box.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+    pub enum ColourPalette {
+        /// The default theme's colours.
+        Default => "default",
+        /// Bright exact colours, each at 7:1 or more against black, and lines
+        /// between the panels.
+        HighContrast => "high contrast",
+        /// Okabe and Ito's colours, for readers who can't tell red from green.
+        ColourBlind => "colour-blind",
+        /// No colour at all, only bold and reverse video, where `NO_COLOR`
+        /// starts the game.
+        Mono => "mono",
+    }
+
+    /// Every palette built in, in the order the game offers them.
+    pub const ALL;
+
+    /// Its name, as the game shows it (design §6.7).
+    pub fn name(self) -> &'static str;
 }
 
 impl ColourPalette {
-    /// Every palette built in, in the order the game offers them.
-    pub const ALL: [ColourPalette; 4] = [
-        ColourPalette::Default,
-        ColourPalette::HighContrast,
-        ColourPalette::ColourBlind,
-        ColourPalette::Mono,
-    ];
-
-    /// Its name, as the game shows it (design §6.7).
-    pub fn name(self) -> &'static str {
-        match self {
-            ColourPalette::Default => "default",
-            ColourPalette::HighContrast => "high contrast",
-            ColourPalette::ColourBlind => "colour-blind",
-            ColourPalette::Mono => "mono",
-        }
-    }
-
     /// The built-in theme it's taken from. Each draws the CP437 glyph set,
     /// so its file reads as a whole theme too.
     pub fn source(self) -> Theme {
