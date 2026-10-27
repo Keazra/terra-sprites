@@ -38,6 +38,10 @@ const MOST_TICKS_AT_ONCE: u32 = 5;
 const BOX_WIDTH: u16 = 56;
 /// The most saves the list of saves shows at once; it scrolls for more.
 const LOAD_ROWS: usize = 12;
+/// The smallest screen the title screen draws on: its tallest box, New
+/// world's, its status line and a margin round them (M2 design §8.2,
+/// #305). The game itself draws on less.
+pub const MIN_SIZE: Size = Size::new(BOX_WIDTH + 4, NEW_WORLD_FRAME_ROWS + PRESET_ROWS as u16 + 4);
 /// The list of saves' rows besides the saves: its border.
 const LOAD_FRAME_ROWS: u16 = 2;
 /// The most presets the New world box shows at once; it scrolls for more.
@@ -294,7 +298,7 @@ impl Title {
         let (columns, rows) = clear_of_boxes(&self.world, size);
         let hidden = !columns.contains(&self.light.x) || !rows.contains(&self.light.y);
         // Under "Terminal too small" there's no Cursor drawn to hide.
-        if hidden && !ui::too_small(size) {
+        if hidden && !too_small(size) {
             self.light = light_for(&self.world, size);
         }
     }
@@ -307,7 +311,7 @@ impl Title {
         // A terminal too small, as last told, shows only that it is, so,
         // as a world's does, it takes no clicks or turns of the wheel:
         // they'd land on a menu that isn't drawn (M2 design §8.2).
-        if ui::too_small(self.size) && action.is_pointer() {
+        if too_small(self.size) && action.is_pointer() {
             return TitleFlow::Stay;
         }
         if !self.scene_over() {
@@ -581,14 +585,19 @@ fn clear_of_boxes(world: &World, screen: Size) -> (Range<u16>, Range<u16>) {
     )
 }
 
+/// Whether a screen of `size` is too small for the title screen.
+fn too_small(size: Size) -> bool {
+    ui::smaller_than(size, MIN_SIZE)
+}
+
 /// A box `width` wide, or as wide as the screen, and `height` tall in the
 /// middle of a screen of `screen`, above its status line. The screen is
-/// taken to be at least `ui::MIN_SIZE`, as nothing smaller draws the boxes.
+/// taken to be at least `MIN_SIZE`, as nothing smaller draws the boxes.
 fn centred_box(screen: Size, width: u16, height: u16) -> Rect {
-    let width = width.min(screen.width.max(ui::MIN_SIZE.width));
-    let screen_height = screen.height.max(ui::MIN_SIZE.height);
+    let width = width.min(screen.width.max(MIN_SIZE.width));
+    let screen_height = screen.height.max(MIN_SIZE.height);
     Rect::new(
-        screen.width.max(ui::MIN_SIZE.width).saturating_sub(width) / 2,
+        screen.width.max(MIN_SIZE.width).saturating_sub(width) / 2,
         screen_height.saturating_sub(1).saturating_sub(height) / 2,
         width,
         height,
@@ -641,10 +650,10 @@ fn ago(elapsed: Duration) -> String {
 pub fn render(frame: &mut Frame, title: &Title) {
     let area = frame.area();
     let buf = frame.buffer_mut();
-    if ui::too_small(area.as_size()) {
+    if too_small(area.as_size()) {
         let quitting = title.screen == Screen::QuitPrompt;
         let question = quitting.then(|| QUIT_PROMPT.to_string());
-        return ui::render_too_small_with(buf, area, question.into_iter().collect());
+        return ui::render_too_small_with(buf, area, MIN_SIZE, question.into_iter().collect());
     }
     draw_world(buf, area, title);
     if !title.scene_over() {

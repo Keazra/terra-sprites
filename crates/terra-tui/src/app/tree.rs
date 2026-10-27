@@ -38,8 +38,8 @@ impl App {
             // where it is on the map under the tree, as the population
             // graph's does (M2 design §14.2).
             Action::Point(cell) => {
-                if let Some(spot) = self.tree_card_at(cell, world) {
-                    self.tree_choice = Some(spot);
+                if let Some(seat) = self.tree_card_at(cell, world) {
+                    self.tree_choice = Some(seat);
                 }
             }
             Action::Click {
@@ -47,8 +47,8 @@ impl App {
                 button: Button::Left,
                 ..
             } => {
-                if let Some(spot) = self.tree_card_at(at, world) {
-                    self.tree_choice = Some(spot);
+                if let Some(seat) = self.tree_card_at(at, world) {
+                    self.tree_choice = Some(seat);
                     self.walk_tree(world);
                 }
             }
@@ -90,7 +90,7 @@ impl App {
     }
 
     /// The card on the family tree `at` is over, if any.
-    fn tree_card_at(&self, at: Position, world: &World) -> Option<family_tree::Spot> {
+    fn tree_card_at(&self, at: Position, world: &World) -> Option<family_tree::Seat> {
         let inner = self.overlay?.inner(Margin::new(1, 1));
         if !inner.contains(at) {
             return None;

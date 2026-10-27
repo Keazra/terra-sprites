@@ -720,10 +720,11 @@ fn the_top_bar_shows_the_population_after_the_seed() {
 }
 
 #[test]
-fn below_100_by_30_the_screen_says_the_terminal_is_too_small() {
+fn below_20_by_5_the_screen_says_the_terminal_is_too_small() {
     // Design §6.1: it replaces every panel, and nothing can be clicked.
+    // Above it, the panels step down (#305), in `small_screens.rs`.
     let world = big_world();
-    for (width, height) in [(99, 30), (100, 29), (80, 24)] {
+    for (width, height) in [(19, 5), (20, 4), (18, 3)] {
         let areas = ui::areas(Size::new(width, height));
         assert!(areas.tiles.is_empty() && areas.inspector.is_none());
         let app = app_for(&world, Theme::cp437(), 100, 30);
@@ -737,8 +738,8 @@ fn below_100_by_30_the_screen_says_the_terminal_is_too_small() {
             .map(|line| line.trim())
             .filter(|line| !line.is_empty())
             .collect();
-        let size = format!("needs 100x30, this is {width}x{height}");
-        assert_eq!(text, ["Terminal too small", size.as_str()]);
+        let said = format!("Terminal too small needs 20x5, this is {width}x{height}");
+        assert_eq!(text.join(" "), said, "on as many lines as it needs");
     }
     assert_eq!(
         ui::areas(Size::new(100, 30)).tiles.width,
@@ -751,7 +752,7 @@ fn below_100_by_30_the_screen_says_the_terminal_is_too_small() {
 fn while_the_terminal_is_too_small_the_game_runs_on_and_esc_still_asks_to_quit() {
     // Design v29 §6.1: shrinking the window doesn't pause it.
     let mut world = big_world();
-    let small = Size::new(80, 24);
+    let small = Size::new(60, 4);
     let mut app = sized_app(&world, Theme::cp437(), small);
     let before = world.tick();
     let mut ran = 0;

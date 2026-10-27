@@ -186,6 +186,10 @@ pub struct TextLook {
     pub key: Style,
     /// What's chosen, such as the open tab.
     pub selected: Style,
+    /// What a tooltip can explain, such as a drive's name or a gene's, and
+    /// the name of a log line's sprite (design §6.1, #304). The spot under
+    /// the pointer is drawn in it in reverse video.
+    pub spot: Style,
 }
 
 impl TextLook {
@@ -865,6 +869,8 @@ struct TextFile {
     key: Option<StyleEntry>,
     #[serde(default, deserialize_with = "implicit_some")]
     selected: Option<StyleEntry>,
+    #[serde(default, deserialize_with = "implicit_some")]
+    spot: Option<StyleEntry>,
 }
 
 impl TextFile {
@@ -881,6 +887,7 @@ impl TextFile {
             bad: style(self.bad, default.bad)?,
             key: style(self.key, default.key)?,
             selected: style(self.selected, default.selected)?,
+            spot: style(self.spot, default.spot)?,
         })
     }
 }

@@ -113,6 +113,11 @@ impl Heading {
 pub enum Context {
     /// The map and the panels, with nothing open over them.
     World,
+    /// The map, on a screen where the inspector pops over it, while it's
+    /// shut (design §6.1, #305).
+    InspectorShut,
+    /// The inspector, filling the screen (design §6.1, #305).
+    Inspector,
     /// Aiming a throw (design v25 §6.5).
     Throwing,
     /// Aiming a shove.
@@ -275,6 +280,14 @@ pub const DETAIL: Control = control(
     "exact detail",
     &[Heading::View],
     "numbers",
+);
+// M2 design §11.7, #305.
+pub const ZOOM: Control = control(
+    "o",
+    &[presses("o", "square tiles", Action::Zoom)],
+    "square tiles",
+    &[Heading::View],
+    "zoom two cells wide bigger",
 );
 pub const HELP: Control = control(
     "?",
@@ -472,6 +485,13 @@ pub const PREVIOUS_SPRITE: Control = control(
     &[Heading::Sprites],
     "select",
 );
+pub const LOG_CLICK: Control = control(
+    "click log",
+    &[],
+    "select its sprite",
+    &[Heading::Sprites],
+    "event line",
+);
 pub const SPRITE_LIST: Control = control(
     "l",
     &[presses("l", "sprite list", Action::SpriteList)],
@@ -526,6 +546,15 @@ pub const TABS: Control = control(
     &[Heading::Inspector],
     "body brain chem genome world",
 );
+// Design §6.1, #305.
+pub const INSPECTOR: Control = control(
+    "i",
+    &[presses("i", "inspector bigger", Action::Inspector)],
+    "open, or full screen",
+    &[Heading::Inspector],
+    "show pop-over whole screen expand",
+)
+.saying(Says::Word("inspector"));
 pub const TAB_SCROLL: Control = control(
     "PgUp PgDn",
     &[
@@ -567,6 +596,13 @@ pub const MEMORY_ENTER: Control = control(
     "the same, where it points",
     &[Heading::Pointer],
     "brain heading lesson learned",
+);
+pub const POINT: Control = control(
+    "point",
+    &[],
+    "a highlighted name says what it is, or lights up its sprite",
+    &[Heading::Pointer],
+    "hover tooltip explain drive chemical gene filter name log light",
 );
 
 // The debug overlay (design §6.1, #311).
@@ -669,6 +705,7 @@ pub const CONTROLS: &[Control] = &[
     COLOURS,
     EVENT_FILTER,
     DETAIL,
+    ZOOM,
     HELP,
     PALETTE,
     BACK,
@@ -690,6 +727,7 @@ pub const CONTROLS: &[Control] = &[
     AIM,
     NEXT_SPRITE,
     PREVIOUS_SPRITE,
+    LOG_CLICK,
     SPRITE_LIST,
     LIST_THEN_FILTER,
     POPULATION,
@@ -698,10 +736,12 @@ pub const CONTROLS: &[Control] = &[
     EXPORT_GENOME,
     TABS,
     TAB_SCROLL,
+    INSPECTOR,
     TAB_CLICK,
     TAB_WHEEL,
     MEMORY,
     MEMORY_ENTER,
+    POINT,
     DEBUG,
     FILTER,
     CHOOSE,
@@ -720,6 +760,8 @@ pub const CONTROLS: &[Control] = &[
 pub fn hints(context: Context) -> &'static [Control] {
     match context {
         Context::World => &[MODES, SCROLL, PAUSE, STEP, SPEED, BACK],
+        Context::InspectorShut => &[MODES, INSPECTOR, SCROLL, PAUSE, STEP, SPEED, BACK],
+        Context::Inspector => &[TABS, TAB_SCROLL, PAUSE, SPEED, CLOSE],
         Context::Throwing => &[THROW, CANCEL],
         Context::Shoving => &[SHOVE, CANCEL],
         Context::Placing => &[PLACE, PUT_AWAY],
@@ -754,11 +796,13 @@ pub fn context(app: &App, world: &World) -> Context {
         Screen::Naming => Context::Naming,
         Screen::SaveNaming => Context::SaveNaming,
         Screen::QuitPrompt => Context::Quitting,
+        _ if app.full_screen() => Context::Inspector,
         _ if app.aiming() => match app.grip(world) {
             Some(Grip::Leads(_)) => Context::Shoving,
             _ => Context::Throwing,
         },
         _ if app.placing().is_some() && app.mode() == CursorMode::Grab => Context::Placing,
+        _ if app.inspector_shut() => Context::InspectorShut,
         _ => Context::World,
     }
 }
@@ -822,16 +866,17 @@ fn meets(need: Need, app: &App, world: &World) -> bool {
 }
 
 /// Whether `key` works: in a replay, nothing that would change the world
-/// does (design §2.7), so its hint is greyed.
+/// does (design §2.7), and while the inspector fills the screen, none of
+/// the map's keys do (design §6.1, #305), so its hint is greyed.
 fn key_works(key: &Key, app: &App) -> bool {
-    !app.replaying()
-        || key
-            .action
-            .is_none_or(|action| !crate::app::changes_the_world(&action, false))
+    key.action.is_none_or(|action| {
+        !(app.replaying() && crate::app::changes_the_world(&action, false))
+            && !(app.full_screen() && crate::app::needs_the_map(&action))
+    })
 }
 
 /// Whether the palette can press `key` just now: it has an action, and
-/// a replay wouldn't refuse it.
+/// neither a replay nor the inspector filling the screen would refuse it.
 pub fn pressable(key: &Key, app: &App) -> bool {
     key.action.is_some() && key_works(key, app)
 }

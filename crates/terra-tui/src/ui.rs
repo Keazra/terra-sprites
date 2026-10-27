@@ -12,19 +12,27 @@ use ratatui::{
 use terra_sim::{EntityId, Grip, LifeStage, Mode, Pos, Progress, SpriteView, World};
 
 use crate::app::{
-    App, Areas, ColourMode, ItemLook, PlaceItem, Screen, Selection, ShownItems, item_look,
-    spoken_duration, strongest_drive,
+    App, Areas, ColourMode, ItemLook, PlaceItem, Screen, Selection, ShownItems, in_the_world,
+    item_look, spoken_duration, strongest_drive,
 };
 use crate::controls::{self, Context, Control, Hint, PaletteRow, Says};
 use crate::family_tree::{self, Lineage};
-use crate::inspector::{self, INSPECTOR_WIDTH, NOTHING_SELECTED, first_shown};
+use crate::inspector::{self, INSPECTOR_WIDTH, NOTHING_SELECTED, TabColumns, first_shown};
 use crate::policy::{Panel, Subject};
 use crate::space::{self, Place};
+use crate::spots::{Spot, Spots};
 use crate::text::{display_name, terrain_name, thousands};
 use crate::theme::{Glyph, PanelLook, SemanticTile, TextLook};
+use crate::tooltip;
 
-/// The narrowest terminal that has room for the inspector beside the map view.
+/// The narrowest terminal that has room for the inspector beside the map
+/// view. On a narrower one it pops over the map view's right side, while
+/// it's open (design §6.1, #305).
 const MIN_WIDTH_FOR_INSPECTOR: u16 = 100;
+/// The fewest rows the inspector is drawn in, its title row included: on a
+/// screen with less room for it, the map view is drawn alone with the top
+/// bar and the status line (design §6.1, #305).
+const MIN_INSPECTOR_ROWS: u16 = 8;
 /// The event log's height, in rows, its title row included: three events
 /// (design §6.1).
 const EVENT_LOG_HEIGHT: u16 = 4;
@@ -75,8 +83,11 @@ pub fn render(frame: &mut Frame, app: &App, world: &World) {
 pub fn render_with(frame: &mut Frame, app: &App, world: &World, parts: Parts) {
     let area = frame.area();
     if too_small(area.as_size()) {
+        app.keep_spots(Spots::default());
         return render_too_small(frame.buffer_mut(), area, app, world);
     }
+    // What each part is, where it's drawn, noted as it's drawn (design §6.1).
+    let mut spots = Spots::default();
     let [top_bar, _, status] = Layout::vertical([
         Constraint::Length(parts.top_rows()),
         Constraint::Min(0),
@@ -87,40 +98,89 @@ pub fn render_with(frame: &mut Frame, app: &App, world: &World, parts: Parts) {
         frame.render_widget(top_bar_line(app, world, top_bar.width), top_bar);
     }
     draw_tiles(frame.buffer_mut(), map_view_area(area, parts), app, world);
-    let inspector = inspector_area(area, parts);
+    // Beside the map view, or over its right side while it's open there
+    // (design §6.1, #305), as the app has it, so it's drawn where clicks
+    // find it.
+    let inspector = inspector_area(area, parts).filter(|_| !app.inspector_shut());
     if let Some(inspector) = inspector {
-        render_inspector(frame.buffer_mut(), inspector, app, world);
+        render_inspector(frame.buffer_mut(), inspector, app, world, &mut spots);
     }
     let event_log = event_log_area(area, parts);
     if let Some(event_log) = event_log {
-        render_event_log(frame.buffer_mut(), event_log, app, world);
+        render_event_log(frame.buffer_mut(), event_log, app, world, &mut spots);
     }
     // Where the inspector's line meets the event log's, in a theme without
     // shades (design §6.1).
     if let (Some(inspector), Some(event_log), None) = (inspector, event_log, app.theme.panels()) {
         frame.buffer_mut()[(inspector.x, event_log.y)].set_symbol("┴");
     }
-    render_menu(frame.buffer_mut(), area, app, world);
+    // The inspector, filling the screen (design §6.1, #305), under
+    // whatever's opened from it. It hides all that's beneath it, so only
+    // its own spots take the pointer there.
+    let overlay = app.overlay();
+    if let Some(full_screen) = overlay.filter(|_| app.full_screen()) {
+        spots = Spots::default();
+        render_inspector(frame.buffer_mut(), full_screen, app, world, &mut spots);
+    }
+    // A pop-up takes the pointer before what's under it (design §6.1).
+    let mut pop_ups = vec![render_menu(frame.buffer_mut(), area, app, world)];
     match app.screen() {
         Screen::Help => {
-            if let Some(area) = app.overlay() {
+            if let Some(area) = overlay {
                 draw_help(frame.buffer_mut(), area, app, world);
+                pop_ups.push(overlay);
             }
         }
-        Screen::Palette => render_palette(frame.buffer_mut(), map_view_area(area, parts), app),
-        Screen::SpriteList => render_sprite_list(frame.buffer_mut(), app, world),
-        Screen::Population => render_population(frame.buffer_mut(), app, world),
-        Screen::FamilyTree => render_family_tree(frame.buffer_mut(), app, world),
+        Screen::Palette => pop_ups.push(render_palette(
+            frame.buffer_mut(),
+            map_view_area(area, parts),
+            app,
+        )),
+        Screen::SpriteList => {
+            render_sprite_list(frame.buffer_mut(), app, world);
+            pop_ups.push(overlay);
+        }
+        Screen::Population => {
+            render_population(frame.buffer_mut(), app, world);
+            pop_ups.push(overlay);
+        }
+        Screen::FamilyTree => {
+            render_family_tree(frame.buffer_mut(), app, world);
+            pop_ups.push(overlay);
+        }
         _ => {}
     }
     // Over whatever's open, so it's in a screenshot of any of them (design
     // §6.1).
     if app.debug_overlay() {
-        render_debug_overlay(frame.buffer_mut(), map_view_area(area, parts), app);
+        pop_ups.push(render_debug_overlay(
+            frame.buffer_mut(),
+            map_view_area(area, parts),
+            app,
+        ));
     }
+    for pop_up in pop_ups.into_iter().flatten() {
+        spots.note(pop_up, Spot::PopUp);
+    }
+    // What can be pointed at, what is, and a tooltip saying what it is,
+    // between the bars (design §6.1, #304).
+    tooltip::mark_spots(frame.buffer_mut(), app, &spots);
+    tooltip::light_up_spot(frame.buffer_mut(), app, &spots);
+    if let Some(Spot::LogLine(id)) = tooltip::pointer(app).and_then(|cell| spots.at(cell)) {
+        light_up(frame.buffer_mut(), app, world, *id, &spots);
+    }
+    let between_bars = Rect::new(
+        area.x,
+        area.y + parts.top_rows(),
+        area.width,
+        area.height
+            .saturating_sub(parts.top_rows() + parts.bottom_rows()),
+    );
+    tooltip::draw(frame.buffer_mut(), between_bars, app, world, &spots);
     if parts.status_line {
         frame.render_widget(status_line(app, world, status.width), status);
     }
+    app.keep_spots(spots);
 }
 
 /// What the status line asks when `Esc` would leave a world (M2 design
@@ -147,13 +207,20 @@ fn yes_or_no(question: &str, look: TextLook) -> Line<'static> {
     ])
 }
 
-/// The smallest screen the game draws on (design §6.1).
-pub const MIN_SIZE: Size = Size::new(100, 30);
+/// The smallest screen the game draws on: what the map alone needs, with
+/// the top bar and the status line round a few rows of it (design §6.1,
+/// #305).
+pub const MIN_SIZE: Size = Size::new(20, 5);
 
-/// Whether a screen of `screen` cells is too small for the game, or for
-/// the title screen (M2 design §8.2).
+/// Whether a screen of `screen` cells is too small for the game.
 pub(crate) fn too_small(screen: Size) -> bool {
-    screen.width < MIN_SIZE.width || screen.height < MIN_SIZE.height
+    smaller_than(screen, MIN_SIZE)
+}
+
+/// Whether a screen of `screen` cells is too small for what `needs` a
+/// screen that size: the game, or the title screen (M2 design §8.2).
+pub(crate) fn smaller_than(screen: Size, needs: Size) -> bool {
+    screen.width < needs.width || screen.height < needs.height
 }
 
 /// Says the terminal is too small, and how big it needs to be, in the
@@ -167,19 +234,27 @@ fn render_too_small(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
     if let Some(question) = app.load_question() {
         questions.push(question);
     }
-    render_too_small_with(buf, area, questions);
+    render_too_small_with(buf, area, MIN_SIZE, questions);
 }
 
-/// Says the terminal is too small, as the game does, with any question
-/// waiting under it: the title screen's too (M2 design §8.2).
-pub(crate) fn render_too_small_with(buf: &mut Buffer, area: Rect, questions: Vec<String>) {
-    let mut lines = vec![
-        "Terminal too small".to_string(),
-        format!(
-            "needs {}x{}, this is {}x{}",
-            MIN_SIZE.width, MIN_SIZE.height, area.width, area.height
-        ),
-    ];
+/// Says the terminal is too small, and that it `needs` more, as the game
+/// does, with any question waiting under it: the title screen's too (M2
+/// design §8.2).
+pub(crate) fn render_too_small_with(
+    buf: &mut Buffer,
+    area: Rect,
+    needs: Size,
+    questions: Vec<String>,
+) {
+    let needs = format!("needs {}x{},", needs.width, needs.height);
+    let this = format!("this is {}x{}", area.width, area.height);
+    let mut lines = vec!["Terminal too small".to_string()];
+    // On two lines if it's too narrow for one (design §6.1, #305).
+    if needs.len() + this.len() < usize::from(area.width) {
+        lines.push(format!("{needs} {this}"));
+    } else {
+        lines.extend([needs, this]);
+    }
     lines.extend(questions);
     let top = area.y + area.height.saturating_sub(lines.len() as u16) / 2;
     for (row, line) in (top..area.bottom()).zip(lines) {
@@ -205,6 +280,7 @@ pub fn areas_with(screen: Size, parts: Parts) -> Areas {
         return Areas {
             tiles: Rect::default(),
             inspector: None,
+            pops_over: false,
             event_log: None,
             overlay: None,
         };
@@ -212,19 +288,29 @@ pub fn areas_with(screen: Size, parts: Parts) -> Areas {
     Areas {
         tiles: map_view_area(screen.into(), parts),
         inspector: inspector_area(screen.into(), parts),
+        pops_over: pops_over(screen.into()),
         event_log: event_log_area(screen.into(), parts),
         overlay: Some(overlay_area(screen.into(), parts)),
     }
 }
 
+/// Whether the inspector pops over the map view's right side on a screen
+/// `screen`, shown only while it's open, rather than beside it (design
+/// §6.1, #305).
+fn pops_over(screen: Rect) -> bool {
+    screen.width < MIN_WIDTH_FOR_INSPECTOR
+}
+
 /// The map view: below the top bar if it's drawn, at the left, leaving room
-/// for the inspector and the event log when they're drawn and there is some,
-/// and out to the screen's edges, with no frame (design §6.1). A small map
-/// is drawn in the middle of it, with space round it (M2 design §11.1).
+/// for the inspector beside it and the event log when they're drawn and
+/// there is some, and out to the screen's edges, with no frame (design
+/// §6.1). An inspector that pops over it leaves it the whole width (#305).
+/// A small map is drawn in the middle of it, with space round it (M2 design
+/// §11.1).
 fn map_view_area(screen: Rect, parts: Parts) -> Rect {
     let width = match inspector_area(screen, parts) {
-        Some(inspector) => inspector.x - screen.x,
-        None => screen.width,
+        Some(inspector) if !pops_over(screen) => inspector.x - screen.x,
+        _ => screen.width,
     };
     let height = panels_height(screen, parts);
     Rect::new(
@@ -250,16 +336,19 @@ fn panels_height(screen: Rect, parts: Parts) -> u16 {
 }
 
 /// The inspector, its title row and the column down its left included, if
-/// it's drawn: at the right, below the top bar if that's drawn, on a
-/// terminal wide enough for it.
+/// it's drawn: at the right, below the top bar if that's drawn, down to the
+/// event log or the status line, on a terminal with room for it. Beside the
+/// map view, or on one under 100 columns over its right side (design §6.1,
+/// #305).
 fn inspector_area(screen: Rect, parts: Parts) -> Option<Rect> {
-    let room = screen.width >= MIN_WIDTH_FOR_INSPECTOR && screen.height > 2;
+    let rows = panels_height(screen, parts);
+    let room = screen.width >= INSPECTOR_WIDTH && rows >= MIN_INSPECTOR_ROWS;
     (parts.inspector && room).then(|| {
         Rect::new(
             screen.right() - INSPECTOR_WIDTH,
             screen.y + parts.top_rows(),
             INSPECTOR_WIDTH,
-            panels_height(screen, parts),
+            rows,
         )
     })
 }
@@ -299,6 +388,7 @@ pub fn map_view_alone_areas(screen: Size) -> Areas {
     Areas {
         tiles: Rect::from((Position::ORIGIN, screen)),
         inspector: None,
+        pops_over: false,
         event_log: None,
         overlay: None,
     }
@@ -330,14 +420,24 @@ fn draw_tiles(buf: &mut Buffer, inner: Rect, app: &App, world: &World) {
     // Out of reach in space, the Cursor isn't drawn (M2 design §11.4).
     let cursor = app.shown_cursor();
     let lineage = lineage_on_map(app, world);
+    let width = app.tile_width();
     for y in inner.top()..inner.bottom() {
         for x in inner.left()..inner.right() {
+            // Which of its tile's cells this is: the second while tiles are
+            // two cells wide (M2 design §11.7).
+            let second = (x - inner.x) % width == 1;
             let pos = match app.place_from(inner.as_position(), Position::new(x, y)) {
                 Place::Tile(pos) => pos,
                 Place::Glass(pane) => {
                     let glass = app.theme.glass(pane);
+                    let column = app.column_from(inner.as_position(), Position::new(x, y));
+                    // Two cells wide, the glass down the sides keeps to the
+                    // map's side of its tile, so it meets the map.
+                    let outer = if column < 0 { !second } else { second };
+                    let side = width > 1 && outer && !(0..i32::from(map.width())).contains(&column);
+                    let symbol = if side { ' ' } else { glass.symbol };
                     buf[(x, y)]
-                        .set_char(glass.symbol)
+                        .set_char(symbol)
                         .set_style(Style::default().fg(glass.fg));
                     continue;
                 }
@@ -373,6 +473,19 @@ fn draw_tiles(buf: &mut Buffer, inner: Rect, app: &App, world: &World) {
             } else {
                 app.theme.glyph(SemanticTile::Terrain(map.terrain(pos)))
             };
+            // Terrain repeats in a tile's second cell; a sprite, an object
+            // or a mark leaves it blank, its style kept. What else goes
+            // there, such as what a sprite holds, is M3's to settle (M2
+            // design §11.7).
+            let on_terrain = world.sprite_at(pos).is_none()
+                && thrown.is_none_or(|(from, _)| from != pos)
+                && destination != Some(pos)
+                && items.at(pos).is_none();
+            let symbol = if second && !on_terrain {
+                ' '
+            } else {
+                glyph.symbol
+            };
             // A sprite takes the colour mode's colour, unless it's emoting
             // (design §6.3).
             let fg = match world.sprite_at(pos) {
@@ -391,7 +504,7 @@ fn draw_tiles(buf: &mut Buffer, inner: Rect, app: &App, world: &World) {
             if attended == Some(pos) {
                 style = style.bg(app.theme.attention_marker());
             }
-            buf[(x, y)].set_char(glyph.symbol).set_style(style);
+            buf[(x, y)].set_char(symbol).set_style(style);
         }
     }
     draw_stars(buf, inner, app);
@@ -406,9 +519,12 @@ fn draw_tiles(buf: &mut Buffer, inner: Rect, app: &App, world: &World) {
 /// Draws the stars on space, far ones first, so a nearer star hides a
 /// farther one, and never over the map or its glass (M2 design §11.3).
 fn draw_stars(buf: &mut Buffer, inner: Rect, app: &App) {
-    for (depth, at) in space::stars(inner.as_size(), app.viewport(), app.drift()) {
-        let cell = Position::new(inner.x + at.x, inner.y + at.y);
-        if app.place_from(inner.as_position(), cell) == Place::Space {
+    // In tiles, so they follow the zoom: each in its tile's first cell.
+    let width = app.tile_width();
+    let view = Size::new(inner.width.div_ceil(width), inner.height);
+    for (depth, at) in space::stars(view, app.viewport(), app.drift()) {
+        let cell = Position::new(inner.x + at.x * width, inner.y + at.y);
+        if inner.contains(cell) && app.place_from(inner.as_position(), cell) == Place::Space {
             let star = app.theme.star(depth);
             buf[cell]
                 .set_char(star.symbol)
@@ -511,6 +627,15 @@ fn marked(app: &App) -> Option<EntityId> {
 /// → ☺ ←      Y, N: the status marks
 /// N ↑ M
 /// ```
+///
+/// Round a tile two cells wide, its arrows above and below come in twos,
+/// one over each cell, as does a frame of light's (M2 design §11.7):
+///
+/// ```text
+/// M ↓↓ Y
+/// → ☺  ←
+/// N ↑↑ M
+/// ```
 fn draw_cursor(buf: &mut Buffer, app: &App, world: &World) {
     let Some(centre) = app.shown_cursor().and_then(|cursor| app.cell_of(cursor)) else {
         return;
@@ -529,17 +654,19 @@ fn draw_cursor(buf: &mut Buffer, app: &App, world: &World) {
             .unwrap_or_else(|| held_glyph(app, world))
     });
     let mark = app.theme.mode_mark(app.mode());
+    // Round its tile, two cells wide while zoomed, with an arrow over and
+    // under each (M2 design §11.7).
+    let right = app.tile_width() as i16;
+    let above_and_below = (0..right).flat_map(|dx| [(dx, -1, arrows.down), (dx, 1, arrows.up)]);
     let pieces = [
         (-1, -1, mark.symbol),
-        (0, -1, arrows.down),
-        (1, -1, y),
+        (right, -1, y),
         (-1, 0, arrows.right),
-        (1, 0, arrows.left),
+        (right, 0, arrows.left),
         (-1, 1, n),
-        (0, 1, arrows.up),
-        (1, 1, mark.symbol),
+        (right, 1, mark.symbol),
     ];
-    for (dx, dy, glyph) in pieces {
+    for (dx, dy, glyph) in pieces.into_iter().chain(above_and_below) {
         let x = centre.x.checked_add_signed(dx);
         let y = centre.y.checked_add_signed(dy);
         if let Some(cell) = x.zip(y).map(|(x, y)| Position::new(x, y))
@@ -582,7 +709,7 @@ fn draw_aim_end(buf: &mut Buffer, app: &App, world: &World) {
     let mark = app.theme.aim_end();
     let clear = empty(world, &app.shown_items(world), end) && end != app.cursor();
     if let Some(cell) = app.cell_of(end).filter(|_| clear) {
-        put(buf, cell, mark.symbol, mark.fg);
+        put_on_tile(buf, app, cell, mark.symbol, mark.fg);
     }
 }
 
@@ -594,7 +721,7 @@ fn draw_dots(buf: &mut Buffer, app: &App, world: &World, tiles: &[Pos], dot: Gly
         let by_the_cursor = tile.x.abs_diff(cursor.x) <= 1 && tile.y.abs_diff(cursor.y) <= 1;
         let clear = empty(world, &items, tile) && !by_the_cursor;
         if let Some(cell) = app.cell_of(tile).filter(|_| clear) {
-            put(buf, cell, dot.symbol, dot.fg);
+            put_on_tile(buf, app, cell, dot.symbol, dot.fg);
         }
     }
 }
@@ -604,6 +731,19 @@ fn put(buf: &mut Buffer, cell: Position, symbol: char, fg: Color) {
     buf[(cell.x, cell.y)]
         .set_char(symbol)
         .set_style(Style::default().fg(fg));
+}
+
+/// Draws `symbol` on the tile whose first screen cell is `cell`, in `fg`,
+/// a mark leaving the rest of a tile two cells wide blank (M2 design
+/// §11.7).
+fn put_on_tile(buf: &mut Buffer, app: &App, cell: Position, symbol: char, fg: Color) {
+    put(buf, cell, symbol, fg);
+    for x in 1..app.tile_width() {
+        let rest = Position::new(cell.x + x, cell.y);
+        if app.tile_at(rest).is_some() {
+            put(buf, rest, ' ', fg);
+        }
+    }
 }
 
 /// Whether `tile` holds no sprite and, as the map shows them, no item.
@@ -643,13 +783,13 @@ fn line_between(from: Pos, to: Pos) -> Vec<Pos> {
 /// Draws the open menu, if any (design v28 §6.5): over the map, from its top-left
 /// tile, its items numbered and the highlighted one in the theme's style for
 /// what's chosen (design §6.2), inside a border; as far as the screen goes.
-fn render_menu(buf: &mut Buffer, screen: Rect, app: &App, world: &World) {
+fn render_menu(buf: &mut Buffer, screen: Rect, app: &App, world: &World) -> Option<Rect> {
     let (Some(menu), Some(title)) = (app.menu_area(world), app.menu_title()) else {
-        return;
+        return None;
     };
     let area = menu.intersection(screen);
     if area.width < 3 || area.height < 3 {
-        return;
+        return None;
     }
     blank(buf, area);
     draw_border(buf, area, title);
@@ -679,6 +819,7 @@ fn render_menu(buf: &mut Buffer, screen: Rect, app: &App, world: &World) {
         };
         buf.set_stringn(area.x + 1, y, line, room, style);
     }
+    Some(area)
 }
 
 /// How far into the help's top edge its title starts, past the corner and
@@ -733,8 +874,8 @@ const PALETTE_ROWS: usize = 10;
 /// (#303): what's typed, then each key it found with what it does and
 /// its heading, the key at the right in the theme's key style, or muted
 /// where the palette can't press it, and the highlighted row in its style
-/// for what's chosen.
-fn render_palette(buf: &mut Buffer, map_view: Rect, app: &App) {
+/// for what's chosen. Gives the box, if it's drawn.
+fn render_palette(buf: &mut Buffer, map_view: Rect, app: &App) -> Option<Rect> {
     let look = app.theme.text();
     let rows = app.palette_rows();
     let width = PALETTE_WIDTH.min(map_view.width);
@@ -742,7 +883,7 @@ fn render_palette(buf: &mut Buffer, map_view: Rect, app: &App) {
     let x = map_view.x + (map_view.width - width) / 2;
     let area = Rect::new(x, map_view.y + 1, width, height).intersection(map_view);
     if area.width < 12 || area.height < 4 {
-        return;
+        return None;
     }
     let inner = clear_box(buf, area, " Commands ", controls::CLOSE.corner(), look);
     let typed = app.palette_text().unwrap_or_default();
@@ -755,7 +896,7 @@ fn render_palette(buf: &mut Buffer, map_view: Rect, app: &App) {
     if rows.is_empty() {
         let none = Line::styled(" Nothing found", look.muted);
         buf.set_line(inner.x, inner.y + 1, &none, inner.width);
-        return;
+        return Some(area);
     }
     // The highlight stays in view.
     let choice = app.palette_choice();
@@ -787,6 +928,7 @@ fn render_palette(buf: &mut Buffer, map_view: Rect, app: &App) {
         }
         buf.set_line(inner.x, inner.y + 1 + y as u16, &line, inner.width);
     }
+    Some(area)
 }
 
 /// Draws the sprite list over everything between the top bar and the
@@ -875,8 +1017,9 @@ fn render_family_tree(buf: &mut Buffer, app: &App, world: &World) {
 }
 
 /// Draws the debug overlay (`F3`, design §6.1, #311) in the map view's
-/// top-right corner, `map_view`, as far as the map view goes.
-fn render_debug_overlay(buf: &mut Buffer, map_view: Rect, app: &App) {
+/// top-right corner, `map_view`, as far as the map view goes. Gives the
+/// box, if it's drawn.
+fn render_debug_overlay(buf: &mut Buffer, map_view: Rect, app: &App) -> Option<Rect> {
     let lines = app.debug_lines();
     let width = crate::debug_overlay::WIDTH;
     let height = lines.len() as u16 + 2;
@@ -888,7 +1031,7 @@ fn render_debug_overlay(buf: &mut Buffer, map_view: Rect, app: &App) {
     );
     let area = corner.intersection(map_view);
     if area.width < 3 || area.height < 3 {
-        return;
+        return None;
     }
     let inside = clear_box(buf, area, " Debug ", ("F3", ""), app.theme.text());
     for (row, line) in (inside.y..inside.bottom()).zip(lines) {
@@ -900,6 +1043,7 @@ fn render_debug_overlay(buf: &mut Buffer, map_view: Rect, app: &App) {
             Style::default(),
         );
     }
+    Some(area)
 }
 
 /// Draws `lines` down `inner` from its top, as many as fit, each cut to its
@@ -913,7 +1057,7 @@ fn draw_lines(buf: &mut Buffer, inner: Rect, lines: &[Line]) {
 /// Blanks every cell of `area`, colours and all, so nothing drawn beneath
 /// an overlay shows through it: a coloured background, such as the
 /// Cursor's or a graph's, or reverse video.
-fn blank(buf: &mut Buffer, area: Rect) {
+pub(crate) fn blank(buf: &mut Buffer, area: Rect) {
     for y in area.top()..area.bottom() {
         for x in area.left()..area.right() {
             buf[(x, y)].reset();
@@ -997,7 +1141,7 @@ fn sprite_tile(stage: LifeStage, selected: bool) -> SemanticTile {
 }
 
 /// Draws a single-lined box around `area` with `title` in its top edge.
-fn draw_border(buf: &mut Buffer, area: Rect, title: &str) {
+pub(crate) fn draw_border(buf: &mut Buffer, area: Rect, title: &str) {
     let (left, right) = (area.left(), area.right() - 1);
     let (top, bottom) = (area.top(), area.bottom() - 1);
     for x in left + 1..right {
@@ -1035,11 +1179,9 @@ fn top_bar_line(app: &App, world: &World, width: u16) -> Line<'static> {
         format!("► {}{lab}", clock.speed().label())
     };
     // The population is a count the policy may hide (design §6.4).
-    let population = if app.can_view(Panel::Counts, Subject::World) {
-        format!(" │ sprites {}", world.sprites().count())
-    } else {
-        String::new()
-    };
+    let population = app
+        .can_view(Panel::Counts, Subject::World)
+        .then(|| format!("sprites {}", world.sprites().count()));
     // When the world was last saved or loaded (design §6.1, §6.7); in a
     // replay, how playback stands instead (design §2.7).
     let saved = match app.saved_ago() {
@@ -1052,18 +1194,36 @@ fn top_bar_line(app: &App, world: &World, width: u16) -> Line<'static> {
         Some(ago) if ago.as_secs() < 60 => format!("saved {}s ago", ago.as_secs() / 10 * 10),
         Some(ago) => format!("saved {} ago", spoken_duration(ago)),
     };
-    let text = format!(
-        " Terra Sprites │ tick {} │ {time} │ seed {}{population} │ {saved}",
-        thousands(world.tick()),
-        app.seed,
-    );
+    // Each piece, and how soon it goes when the bar is short of room for
+    // `? help`: the seed first, then the game's name, when it was saved and
+    // how many sprites there are, so the time and the help's key stay
+    // (design §6.1, #305).
+    let mut pieces: Vec<(Option<u8>, String)> = vec![
+        (Some(1), "Terra Sprites".to_string()),
+        (None, format!("tick {}", thousands(world.tick()))),
+        (None, time),
+        (Some(0), format!("seed {}", app.seed)),
+    ];
+    pieces.extend(population.map(|count| (Some(3), count)));
+    pieces.push((Some(2), saved));
+    let joined = |pieces: &[(Option<u8>, String)]| {
+        let shown: Vec<&str> = pieces.iter().map(|(_, piece)| piece.as_str()).collect();
+        format!(" {}", shown.join(" │ "))
+    };
+    let help = help_hint(app, world);
+    let wide = |hint: &Vec<Span>| hint.iter().map(Span::width).sum::<usize>();
+    for soonest in 0..4 {
+        if joined(&pieces).chars().count() + wide(&help.plain) < usize::from(width) {
+            break;
+        }
+        pieces.retain(|&(goes, _)| goes != Some(soonest));
+    }
+    let text = joined(&pieces);
     // `? help`, naming the page `?` would open, `? help (Inspector)`, or
     // without it if the bar's short of room (#303). At least a space comes
     // between it and the rest, so it never runs into them.
     let room = usize::from(width).saturating_sub(text.chars().count());
     let mut spans = vec![Span::raw(text)];
-    let help = help_hint(app, world);
-    let wide = |hint: &Vec<Span>| hint.iter().map(Span::width).sum::<usize>();
     if let Some(hint) = [help.named, help.plain]
         .into_iter()
         .find(|hint| wide(hint) < room)
@@ -1221,6 +1381,7 @@ fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
     } else {
         String::new()
     };
+    let width = usize::from(width);
     let tile = format!("{under} {mode}{followed}{grip}{placing}");
     // Its parts' dots minor (design §6.2).
     let tile_line = |tile: &str| inspector::dotted(tile, Style::default(), look.muted);
@@ -1228,7 +1389,6 @@ fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
     // click did nothing, for a while, or else the key hints that fit (design
     // v22 §6.1). The reason matters more than the end of the tile's part,
     // which is cut short to make room for it.
-    let width = usize::from(width);
     if let Some(why) = app.refusal().or(app.notice()) {
         let room = width.saturating_sub(why.chars().count() + 3);
         let tile: String = tile.chars().take(room).collect();
@@ -1252,6 +1412,27 @@ fn status_line(app: &App, world: &World, width: u16) -> Line<'static> {
     line.spans.extend(hint_spans(&hints, look));
     line.spans.push(Span::raw(" "));
     line
+}
+
+/// Lights up sprite or egg `id` on the map, in `buf`, as a selected one is
+/// drawn, in reverse video, all of its tile, while the pointer is on a line
+/// of the event log about it (design §6.1, M2 design §11.7): but where
+/// what the frame drew over the map hides it, a pop-up, among its `spots`,
+/// or the inspector open over the map view (#305).
+fn light_up(buf: &mut Buffer, app: &App, world: &World, id: EntityId, spots: &Spots) {
+    let Some(first) = in_the_world(world, id)
+        .flatten()
+        .and_then(|pos| app.cell_of(pos))
+    else {
+        return;
+    };
+    for x in 0..app.tile_width() {
+        let cell = Position::new(first.x + x, first.y);
+        let shown = app.tile_at(cell).is_some() && !app.on_the_inspector(cell);
+        if shown && spots.at(cell).is_none() {
+            buf[cell].modifier.insert(Modifier::REVERSED);
+        }
+    }
 }
 
 /// A prompt that takes the status line over, with the hints for `context`
@@ -1321,7 +1502,10 @@ fn item_label(item: &ItemLook) -> String {
 /// sprite and the tabs, and the open tab below it. In a theme with shades,
 /// it sits on them with no lines; in one without, a line runs down its left,
 /// between it and the map view.
-fn render_inspector(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
+fn render_inspector(buf: &mut Buffer, area: Rect, app: &App, world: &World, spots: &mut Spots) {
+    // Over the map view, or filling the screen, nothing beneath shows
+    // through past a short line (design §6.1, #305).
+    blank(buf, area);
     match app.theme.panels() {
         Some(panels) => shade(buf, area, panels),
         None => {
@@ -1332,12 +1516,31 @@ fn render_inspector(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
     }
     let title = inspector::title(app);
     buf.set_line(area.x + 1, area.y, &title, area.width.saturating_sub(1));
-    let inner = inspector::tab_area(area);
-    let lines = inspector::lines(app, world);
-    let first = first_shown(app.tab_scroll(), lines.len(), usize::from(inner.height));
-    let shown = lines.iter().skip(first);
-    for (row, line) in (inner.y..inner.bottom()).zip(shown) {
-        buf.set_line(inner.x, row, line, inner.width);
+    // Each tab where its name is, so a click there opens it (design §6.1).
+    for (tab, columns) in inspector::tab_places(app.tab()) {
+        let start = area.x + 1 + columns.start as u16;
+        let place = Rect::new(start, area.y, columns.len() as u16, 1).intersection(area);
+        spots.note(place, Spot::Tab(tab));
+    }
+    // In columns, where there's room for more than one (design §6.1, #305),
+    // each line's spots where it's drawn.
+    let columns = TabColumns::of(area);
+    let lines = inspector::shown(app, world);
+    let first = first_shown(app.tab_scroll(), lines.len(), columns.at_once());
+    for (shown, line) in lines.into_iter().skip(first).enumerate() {
+        let Some(row) = columns.place(shown) else {
+            break;
+        };
+        buf.set_line(row.x, row.y, &line.line, row.width);
+        for (cells, spot) in line.spots {
+            let place = Rect::new(row.x + cells.start, row.y, cells.len() as u16, 1);
+            let place = place.intersection(row);
+            if line.minor {
+                spots.note_unmarked(place, spot);
+            } else {
+                spots.note(place, spot);
+            }
+        }
     }
 }
 
@@ -1353,7 +1556,7 @@ fn shade(buf: &mut Buffer, area: Rect, panels: PanelLook) {
 /// Draws the event log (design §6.1): a title row, with the filters at its
 /// right, and the latest events below it, newest first. In a theme with
 /// shades, it sits on them; in one without, its title row is a line.
-fn render_event_log(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
+fn render_event_log(buf: &mut Buffer, area: Rect, app: &App, world: &World, spots: &mut Spots) {
     match app.theme.panels() {
         Some(panels) => shade(buf, area, panels),
         None => {
@@ -1369,6 +1572,7 @@ fn render_event_log(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
     let labels = app.event_filter().labels();
     if let Some(at) = top_right(area, labels.chars().count() as u16) {
         buf.set_stringn(at.x, at.y, labels, usize::from(at.width), Style::default());
+        spots.note(at, Spot::Filters);
     }
     let inner = Rect::new(
         area.x,
@@ -1378,17 +1582,16 @@ fn render_event_log(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
     );
     let lines = app.event_log().filter_map(|(event, count)| {
         // The policy may hide what an event is about (design §6.4).
-        let subject = inspector::event_sprites(event)
-            .first()
-            .map_or(Subject::World, |&id| Subject::Sprite(id));
+        let about = inspector::event_sprites(event).first().copied();
+        let subject = about.map_or(Subject::World, Subject::Sprite);
         if !app.can_view(Panel::EventLog, subject) {
             return None;
         }
         let text = inspector::event_line(event, &app.words(world))?;
-        Some((event.tick, text, count))
+        Some((event.tick, text, count, about))
     });
     let muted = app.theme.text().muted;
-    for (row, (tick, text, count)) in (inner.y..inner.bottom()).zip(lines) {
+    for (row, (tick, text, count, about)) in (inner.y..inner.bottom()).zip(lines) {
         let times = if count > 1 {
             // An x: CP437 has no × (design §6.2).
             format!(" x{count}")
@@ -1396,10 +1599,22 @@ fn render_event_log(buf: &mut Buffer, area: Rect, app: &App, world: &World) {
             String::new()
         };
         // The tick is minor beside what happened (design §6.2).
-        let line = Line::from(vec![
-            Span::styled(format!(" {:>7}", thousands(tick)), muted),
-            Span::raw(format!("  {text}{times}")),
-        ]);
+        let tick = format!(" {:>7}", thousands(tick));
+        let happened = format!("  {text}{times}");
+        // The name of the sprite it's about, while it's in the world, which
+        // pointing at lights up on the map and a click selects (design
+        // §6.1, #304); the whole of what happened if it isn't named.
+        if let Some(id) = about.filter(|&id| in_the_world(world, id).is_some()) {
+            let label = app.names().label(id);
+            let (start, width) = match happened.find(&label) {
+                Some(at) => (happened[..at].chars().count(), label.chars().count()),
+                None => (2, text.chars().count()),
+            };
+            let x = inner.x + (tick.chars().count() + start) as u16;
+            let place = Rect::new(x, row, width as u16, 1);
+            spots.note(place.intersection(inner), Spot::LogLine(id));
+        }
+        let line = Line::from(vec![Span::styled(tick, muted), Span::raw(happened)]);
         buf.set_line(inner.x, row, &line, inner.width);
     }
 }

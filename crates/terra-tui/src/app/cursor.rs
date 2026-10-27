@@ -316,9 +316,14 @@ impl App {
     }
 
     /// The tile the Cursor is drawn on, unless it's out of reach past the
-    /// wall, where it isn't drawn at all (M2 design §11.4).
+    /// wall, where it isn't drawn at all (M2 design §11.4), or hidden
+    /// under the inspector open over the map view, where it follows the
+    /// pointer (design §6.1, #305). `Q`, `E` and `F` reach it only here.
     pub fn shown_cursor(&self) -> Option<Pos> {
-        (!self.out_of_reach()).then_some(self.cursor)
+        let hidden = self.followed().is_none()
+            && self.aim.is_none()
+            && self.under_the_inspector(self.cursor);
+        (!self.out_of_reach() && !hidden).then_some(self.cursor)
     }
 
     /// What a click with `button` on `tile` does, in the cursor mode (design

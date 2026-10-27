@@ -36,6 +36,14 @@ fn a_label_too_long_for_the_title_is_shortened_before_the_tabs_are() {
     assert_eq!(fit(None), " ".repeat(15));
 }
 
+/// The tab written at `column` of the title row with `open` open.
+fn tab_at(open: Tab, column: usize) -> Option<Tab> {
+    tab_places(open)
+        .into_iter()
+        .find(|(_, place)| place.contains(&column))
+        .map(|(tab, _)| tab)
+}
+
 #[test]
 fn a_tab_is_found_in_the_columns_the_title_row_writes_it_in() {
     // The tabs fill the row's last 30 columns, from column 15: with Body
@@ -817,4 +825,151 @@ fn a_drive_bar_is_ten_cells_whatever_the_level() {
     assert_eq!(bar_parts(1.05).concat(), "██████████");
     assert_eq!(bar_parts(-0.3).concat(), "░░░░░░░░░░");
     assert_eq!(bar_parts(f32::NAN).concat(), "░░░░░░░░░░");
+}
+
+/// A gene of every kind, the words lit on its line, which a tooltip
+/// explains, and what its tooltip says it does (#304).
+fn genes_of_every_kind() -> Vec<(terra_sim::GeneView<'static>, &'static str, &'static str)> {
+    use terra_sim::{EmitterMode, GeneView, Trait, Whom};
+    let emitter = |mode, invert, threshold, gain| GeneView::Emitter {
+        locus: "injury",
+        mode,
+        invert,
+        threshold,
+        gain,
+        chem: "pain",
+    };
+    vec![
+        (
+            emitter(EmitterMode::Level, true, 0.3, 0.004),
+            "low injury → pain",
+            "An emitter: pain rises while injury is below .7",
+        ),
+        (
+            emitter(EmitterMode::Level, false, 0.6, -0.1),
+            "injury → pain",
+            "An emitter: pain falls while injury is above .6",
+        ),
+        (
+            emitter(EmitterMode::Level, false, 0.0, 0.3),
+            "injury → pain",
+            "An emitter: injury raises pain",
+        ),
+        (
+            emitter(EmitterMode::Rise, false, 0.0, 10.0),
+            "injury rises → pain",
+            "An emitter: pain rises as injury rises",
+        ),
+        (
+            emitter(EmitterMode::Fall, false, 0.1, -1.0),
+            "injury falls → pain",
+            "An emitter: pain falls as injury falls, once past .1",
+        ),
+        (
+            GeneView::HalfLife {
+                chem: "hunger",
+                ticks: 2_000,
+            },
+            "hunger halves",
+            "A half-life: hunger fades by itself, by half every 2,000 ticks",
+        ),
+        (
+            GeneView::Reaction {
+                reactants: vec![("hunger", 1), ("food", 1)],
+                products: vec![("food", 1)],
+                rate: 0.1,
+            },
+            "hunger + food → food",
+            "A reaction: each tick, hunger + food turns into food",
+        ),
+        (
+            GeneView::Receptor {
+                chem: "h0",
+                threshold: 0.0,
+                gain: -2.0,
+                target: "curiosity_mod",
+            },
+            "h0 → curiosity mod",
+            "A receptor: h0 lowers its curiosity mod",
+        ),
+        (
+            GeneView::InitialConcentration {
+                chem: "h4",
+                value: 0.5,
+            },
+            "h4 starts at",
+            "A starting level: h4 starts at .5 when it hatches",
+        ),
+        (
+            GeneView::BrainParam {
+                param: "tau_base",
+                value: 0.1,
+            },
+            "tau base",
+            "A brain setting: its tau base is .1, one of the numbers its brain works by",
+        ),
+        (
+            GeneView::Instinct {
+                inputs: vec![("thirst", false), ("target_adjacent", true)],
+                verb: Verb::Drink,
+                weight: 0.5,
+            },
+            "thirst & not target adjacent → drink",
+            "An instinct: thirst & not target adjacent leans it towards drink",
+        ),
+        (
+            GeneView::AttentionInstinct {
+                input: "arousal",
+                category: "sprite",
+                whom: Whom::Kin,
+                weight: -1.0,
+            },
+            "arousal → attends to its kin (sprite)",
+            "An attention instinct: arousal draws its eye away from its kin (sprite)",
+        ),
+        (
+            GeneView::Trait {
+                which: Trait::GrowsUp,
+                value: 4_500.0,
+            },
+            "grows up",
+            "A trait: grows up is the age it grows up at",
+        ),
+        (
+            GeneView::Unknown {
+                type_id: 40,
+                version: 1,
+                bytes: 3,
+            },
+            "type 40, version 1, 3 bytes",
+            "A gene this version of the game can't read",
+        ),
+    ]
+}
+
+#[test]
+fn a_gene_says_what_it_does_in_a_sentence_of_its_kind() {
+    for (gene, _, words) in genes_of_every_kind() {
+        assert_eq!(gene_about(&gene), words, "{gene:?}");
+    }
+}
+
+#[test]
+fn every_kind_of_gene_has_the_words_of_its_line_but_its_numbers_as_its_spot() {
+    // #304: what's lit on the Genome tab, and what a tooltip explains, one
+    // spot over the name's words and what's between them.
+    for (gene, lit, _) in genes_of_every_kind() {
+        let name = genome::name_on_its_line(&gene);
+        let lines = wrapped(&genome::gene_text(&gene), 1, Style::new(), Style::new());
+        let mut spotted = Vec::new();
+        for row in genome::name_spotted(lines, &name, 7, false) {
+            let drawn: Vec<char> = row.line.to_string().chars().collect();
+            for (columns, spot) in row.spots {
+                assert_eq!(spot, Spot::Gene(7), "{gene:?}");
+                let columns = usize::from(columns.start)..usize::from(columns.end);
+                spotted.push(drawn[columns].iter().collect::<String>());
+            }
+        }
+        assert_eq!(spotted, [lit], "{gene:?}");
+    }
 }

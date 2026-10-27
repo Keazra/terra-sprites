@@ -81,7 +81,7 @@ Download the zip for your computer from this page's Assets, below: Windows, Mac 
 
     cargo install --git https://github.com/Keazra/terra-sprites --tag v0.2.0 --locked terra-tui
 
-Either way, you need a terminal of at least 100×30 (on Windows, Windows Terminal).
+Either way, it's best in a terminal of 100×30 or more (on Windows, Windows Terminal).
 
 ## Uninstall
 

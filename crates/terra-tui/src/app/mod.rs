@@ -6,6 +6,7 @@
 //! for a while, the menus, the sprite list, the population graph, the
 //! family tree, naming, saves and replays.
 
+use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::path::PathBuf;
 use std::time::Duration;
@@ -27,6 +28,7 @@ use crate::listed::listed_enum;
 use crate::policy::{InfoPolicy, Omniscient, Panel, Subject};
 use crate::saves::{QUICKSAVE, SaveFile};
 use crate::space::Place;
+use crate::spots::{Spot, Spots};
 use crate::sprite_list::SortBy;
 use crate::text::{Names, Words};
 use crate::theme::{Emote, Theme};
@@ -42,12 +44,16 @@ mod population;
 mod replay;
 mod saving;
 mod selection;
+mod spots;
 mod status;
 mod tree;
 mod view;
 
+use view::InspectorRoom;
+
 pub(crate) use cursor::{ItemLook, ShownItems, item_look};
 pub(crate) use help::finds;
+pub(crate) use spots::in_the_world;
 
 /// Whether the game carries on after an action.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -334,8 +340,11 @@ pub struct Areas {
     /// what's past its wall.
     pub tiles: Rect,
     /// The inspector, its title row included, if the screen has room for
-    /// it.
+    /// it: where it's drawn while it's shown.
     pub inspector: Option<Rect>,
+    /// Whether the inspector pops over the map view's right side, shown
+    /// only while it's open, rather than beside it (design §6.1, #305).
+    pub pops_over: bool,
     /// The event log, its title row included, if the screen has room for
     /// it.
     pub event_log: Option<Rect>,
@@ -425,9 +434,12 @@ pub struct App {
     /// The map view's screen cells, where it draws the map and what's past
     /// its wall.
     tile_area: Rect,
-    /// The inspector, its title row included, if the screen has room for
-    /// it.
-    inspector: Option<Rect>,
+    /// Where the inspector goes as the screen is laid out, and whether it's
+    /// open where it pops over the map view (design §6.1, #305).
+    inspector: InspectorRoom,
+    /// Whether each tile is drawn two cells wide, so tiles are square
+    /// (`o`, M2 design §11.7, #305). Not part of the world.
+    zoom: bool,
     /// The screen cell under the mouse pointer, while it's over the map
     /// view.
     pointer: Option<Position>,
@@ -451,6 +463,9 @@ pub struct App {
     /// The last screen cell the pointer was on, including the inspector,
     /// so Enter can open the lesson under it.
     mouse: Option<Position>,
+    /// Whether a key has been pressed since the pointer last moved, which
+    /// puts its tooltip away until it moves again (design §6.1, #304).
+    keyed: bool,
     /// Whether the detail view is on (design §6.1).
     detail: bool,
     /// Real time the app has been running, for the Decision marker's flashing.
@@ -548,7 +563,7 @@ pub struct App {
     graph_pick: Option<u64>,
     /// The card the family tree's arrows are on, if not the one in the
     /// middle (M2 design §17.3).
-    tree_choice: Option<family_tree::Spot>,
+    tree_choice: Option<family_tree::Seat>,
     /// How far along the family tree's rows that scroll are.
     tree_scroll: family_tree::Scroll,
     /// The game's folder for its files (design §6.7), which the help
@@ -589,6 +604,13 @@ pub struct App {
     /// Whether the player last pointed at the inspector or used its keys,
     /// rather than the map's, so help opens at the inspector's page (#303).
     on_inspector: bool,
+    /// The spots of the frame last drawn (design §6.1), which drawing replaces each
+    /// frame: what the pointer is over, and what a click lands on.
+    spots: RefCell<Spots>,
+    /// Whether the inspector fills the screen, between the top bar and the
+    /// status line (`i`, design §6.1, #305), under whatever's opened from
+    /// it, which goes back to it when it closes.
+    full_screen: bool,
 }
 
 /// A replay as the screen follows it (design §2.7).
@@ -622,6 +644,10 @@ impl ReplayStops {
 /// What the status line says when the player tries to change a replay.
 pub const REPLAY_REFUSAL: &str =
     "It's a replay: only time, the view and the inspector work, until Ctrl+R takes it over";
+
+/// What the status line says to a key of the map's while the inspector
+/// fills the screen (design §6.1, #305).
+pub const MAP_HIDDEN: &str = "The inspector fills the screen: i or Esc shows the map";
 
 /// How often the world saves itself while time runs (design §6.7).
 pub const AUTOSAVE_EVERY: Duration = Duration::from_secs(10 * 60);
@@ -738,7 +764,8 @@ impl App {
             viewport: Origin { x: 0, y: 0 },
             map_size: Size::new(map.width(), map.height()),
             tile_area: areas.tiles,
-            inspector: areas.inspector,
+            inspector: InspectorRoom::of(&areas, InspectorRoom::Nowhere),
+            zoom: false,
             pointer: None,
             pointer_past_wall: false,
             drift: Duration::ZERO,
@@ -749,6 +776,7 @@ impl App {
             tab_scroll: 0,
             open_lessons: BTreeSet::new(),
             mouse: None,
+            keyed: false,
             detail: false,
             running_for: Duration::ZERO,
             emotes: BTreeMap::new(),
@@ -802,6 +830,8 @@ impl App {
             help: help::HelpView::default(),
             palette: None,
             on_inspector: false,
+            spots: RefCell::default(),
+            full_screen: false,
         };
         app.centre_on(cursor);
         app
@@ -890,6 +920,16 @@ impl App {
 
     /// Carries out an action on `world`, and says whether the game carries on.
     pub fn apply(&mut self, action: Action, world: &World) -> Flow {
+        // Where the pointer is, whatever's open, and whether a key has put
+        // its tooltip away since (design §6.1, #304).
+        match action.pointer_cell() {
+            Some(cell) => {
+                self.mouse = Some(cell);
+                self.keyed = false;
+            }
+            None if !action.is_pointer() => self.keyed = true,
+            None => {}
+        }
         // `F3` shows or hides the debug overlay over whatever's open, and
         // does nothing else: it answers no prompt and never touches the
         // world (design §6.1, #311).
@@ -914,6 +954,20 @@ impl App {
             Screen::SpriteList => return self.apply_in_list(action, world),
             Screen::Population => return self.apply_in_graph(action, world),
             Screen::FamilyTree => return self.apply_in_tree(action, world),
+            // Filling the screen, the inspector takes every key but the
+            // map's, which say so, and `i` or `Esc` takes it back (design
+            // §6.1, #305).
+            Screen::Normal if self.full_screen => match action {
+                Action::Inspector | Action::Back => {
+                    self.full_screen = false;
+                    return Flow::Continue;
+                }
+                _ if needs_the_map(&action) => {
+                    self.refuse(MAP_HIDDEN.into());
+                    return Flow::Continue;
+                }
+                _ => {}
+            },
             Screen::Normal | Screen::QuitPrompt => {}
         }
         if self.screen == Screen::QuitPrompt {
@@ -957,39 +1011,23 @@ impl App {
                 self.tracking = false;
                 self.scroll(dx, dy);
             }
+            // On a pop-up's box, the pointer points at nothing on the map
+            // beneath it, so no click or turn of the wheel lands there
+            // (`pointed_xy`, design §6.1).
             Action::Point(cell) => self.point(cell),
-            // A click on the event log's filters goes to the next (design
-            // §6.1).
+            // A left click on a spot that takes one, where the last frame
+            // drew it, such as a tab or a line of the log (design §6.1).
             Action::Click {
                 at,
                 button: Button::Left,
                 ..
-            } if self.filter_label().is_some_and(|label| label.contains(at)) => {
-                self.next_filter();
-            }
-            // A click on an inspector tab opens it (design §6.1).
-            Action::Click {
-                at,
-                button: Button::Left,
-                ..
-            } if self.tab_at(at).is_some() => {
-                if let Some(tab) = self.tab_at(at) {
-                    self.open(tab);
-                }
-            }
+            } if self.clicks_spot(at) => self.click_spot(at, world),
             Action::Click {
                 at,
                 button,
                 amplified,
             } => {
                 self.point(at);
-                // A click on a memory heading toggles it (design v40 §6.1).
-                // The map view's reach takes in the inspector's left column
-                // (#302), but the open tab starts a column in, so the same
-                // click is never also a tile.
-                if button == Button::Left {
-                    self.toggle_lesson(at, world);
-                }
                 match self.pointed_place(at) {
                     // A click lands where the Cursor is: not past the leash
                     // (design v23 §6.5).
@@ -1005,10 +1043,11 @@ impl App {
                     _ => {}
                 }
             }
-            Action::Press { button, amplified } if !self.out_of_reach() => {
-                self.act(self.cursor, button, amplified, world);
+            Action::Press { button, amplified } => {
+                if let Some(tile) = self.shown_cursor() {
+                    self.act(tile, button, amplified, world);
+                }
             }
-            Action::Press { .. } => {}
             // A middle click points, then acts where the Cursor is, as `F`
             // does (design v26 §6.5); past the wall, on no tile (M2 design
             // §11.4).
@@ -1048,20 +1087,26 @@ impl App {
             Action::NextTab => self.open(self.tab.along(1)),
             Action::PreviousTab => self.open(self.tab.along(-1)),
             Action::ScrollTab { pages } => {
-                let page = self.inspector_rows() as i32;
+                let page = self.lines_at_once() as i32;
                 self.scroll_tab(pages * page, world);
             }
             // The wheel scrolls the inspector's tab, and over the map cycles
             // the cursor modes (design v22 §6.5).
             Action::Wheel { at, notches } => {
                 self.point(at);
-                if self.inspector.is_some_and(|area| area.contains(at)) {
+                // A pop-up's box over the inspector, as the debug overlay
+                // is over its top while it's over the map view or fills
+                // the screen, takes the wheel there (design §6.1).
+                let on_a_pop_up = self.spot_at(at) == Some(Spot::PopUp);
+                if self.on_the_inspector(at) && !on_a_pop_up {
                     self.scroll_tab(notches * WHEEL_LINES, world);
                 } else if self.pointed_place(at).is_some() {
                     self.mode = self.mode.along(notches);
                 }
             }
             Action::ToggleDetail => self.detail = !self.detail,
+            Action::Inspector => self.bigger_inspector(),
+            Action::Zoom => self.toggle_zoom(),
             Action::Track => self.toggle_tracking(world),
             Action::CycleEventFilter => self.next_filter(),
             Action::Help => self.open_help(),
@@ -1095,6 +1140,9 @@ impl App {
             // first, in any mode (design v33 §6.5); then returns to Select;
             // from Select it asks to quit (design v21 §6.5).
             Action::Back if self.aim.is_some() => self.end_aim(),
+            // Then it closes the inspector open over the map (design §6.1,
+            // #305).
+            Action::Back if self.inspector_open() => self.open_inspector(false),
             Action::Back if self.placing.is_some() => self.placing = None,
             Action::Back if self.grip(world).is_some() => self.let_go(world),
             Action::Back if self.mode != CursorMode::Select => self.mode = CursorMode::Select,
@@ -1109,9 +1157,11 @@ impl App {
             | Action::FilterList
             | Action::DebugOverlay
             | Action::Quit => {}
+            // `Enter` opens or shuts the memory block under the pointer
+            // (design v40 §6.1).
             Action::Enter => {
-                if let Some(at) = self.mouse {
-                    self.toggle_lesson(at, world);
+                if let Some(Spot::Memory(which)) = self.pointed_spot() {
+                    self.toggle_lesson(which);
                 }
             }
         }
@@ -1146,7 +1196,7 @@ impl App {
     fn note_focus(&mut self, action: &Action) {
         match *action {
             Action::Point(at) | Action::Click { at, .. } | Action::Wheel { at, .. } => {
-                if self.inspector.is_some_and(|area| area.contains(at)) {
+                if self.on_the_inspector(at) {
                     self.on_inspector = true;
                 } else if self.tile_area.contains(at) {
                     self.on_inspector = false;
@@ -1196,6 +1246,26 @@ pub(crate) fn spoken_duration(time: Duration) -> String {
         (h, 0) => format!("{h}h"),
         (h, m) => format!("{h}h {m}m"),
     }
+}
+
+/// Whether `action` is a key of the map's, or of the event log's, which
+/// do nothing while the inspector fills the screen and hides them (design
+/// §6.1, #305): scrolling and tracking the view, its sprite colours, square
+/// tiles and the log's filter, and the Cursor's keys. The pointer's go on
+/// as ever, and point at nothing there.
+pub(crate) fn needs_the_map(action: &Action) -> bool {
+    matches!(
+        action,
+        Action::Scroll { .. }
+            | Action::Track
+            | Action::CycleColours
+            | Action::Zoom
+            | Action::CycleEventFilter
+            | Action::Mode(_)
+            | Action::Press { .. }
+            | Action::Follow { at: None }
+            | Action::ToggleVisible
+    )
 }
 
 /// Whether `action` would change the world, or lead to changing it, which a

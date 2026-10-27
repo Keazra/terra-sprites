@@ -4,61 +4,65 @@
 // Classes: Physical chemicals are changed only by physiology and object verbs;
 // Signal chemicals (drives, reward, punishment) and Hormones by the genome.
 // Only Physical chemicals may be the target of an object verb's `Inject`.
+//
+// `about` says what it is, as its tooltip shows it when the pointer is on
+// its name (#304): for a drive, what raises it and what lowers it in the
+// starter genes.
 [
-    (id: 1,  name: "energy",      class: Physical),
-    (id: 2,  name: "hydration",   class: Physical),
-    (id: 3,  name: "stamina",     class: Physical),
-    (id: 4,  name: "food",        class: Physical),
-    (id: 5,  name: "water",       class: Physical),
-    (id: 6,  name: "injury",      class: Physical),
+    (id: 1,  name: "energy",      class: Physical, about: "what it runs on: food in its gut turns into it, and living and walking use it up"),
+    (id: 2,  name: "hydration",   class: Physical, about: "the water in its body: drinking fills it, and it dries out over time"),
+    (id: 3,  name: "stamina",     class: Physical, about: "how fresh it is: walking tires it, and standing or resting brings it back"),
+    (id: 4,  name: "food",        class: Physical, about: "food in its gut, turning into energy"),
+    (id: 5,  name: "water",       class: Physical, about: "water in its gut, turning into hydration"),
+    (id: 6,  name: "injury",      class: Physical, about: "how hurt it is: thorns, blows, starving and thirst add to it, and it heals slowly"),
 
-    (id: 16, name: "hunger",      class: Signal),
-    (id: 17, name: "thirst",      class: Signal),
-    (id: 18, name: "pain",        class: Signal),
-    (id: 19, name: "tiredness",   class: Signal),
-    (id: 20, name: "boredom",     class: Signal),
-    (id: 21, name: "loneliness",  class: Signal),
-    (id: 22, name: "crowdedness", class: Signal),
-    (id: 23, name: "reward",      class: Signal),
-    (id: 24, name: "punishment",  class: Signal),
+    (id: 16, name: "hunger",      class: Signal, about: "rises as energy runs low, and eating brings it down at once"),
+    (id: 17, name: "thirst",      class: Signal, about: "rises as hydration runs low, and drinking brings it down at once"),
+    (id: 18, name: "pain",        class: Signal, about: "comes with each hurt, from a thorn or a blow, and fades within a few ticks"),
+    (id: 19, name: "tiredness",   class: Signal, about: "rises as stamina runs low, and resting brings it down"),
+    (id: 20, name: "boredom",     class: Signal, about: "creeps up all the time, faster standing about, and playing brings it down"),
+    (id: 21, name: "loneliness",  class: Signal, about: "rises with nobody near, and company or playing together brings it down"),
+    (id: 22, name: "crowdedness", class: Signal, about: "rises in a crowd, and falls soon after it leaves"),
+    (id: 23, name: "reward",      class: Signal, about: "a good feeling learning feeds on: it teaches that what it just did was good"),
+    (id: 24, name: "punishment",  class: Signal, about: "a bad feeling learning feeds on, from pain rising: it teaches it to shun what it did"),
     // The drive to breed (M2 design §10).
-    (id: 25, name: "arousal",     class: Signal),
+    (id: 25, name: "arousal",     class: Signal, about: "the drive to breed: rises while it's fertile, and laying or fathering an egg ends it"),
     // The drive to keep near family: an egg, the young, a parent or a
     // partner (M2 design §15.6).
-    (id: 26, name: "anxiety",     class: Signal),
+    (id: 26, name: "anxiety",     class: Signal, about: "rises while its egg, young, partner or parents are out of sight; finding them ends it"),
 
-    (id: 32, name: "h0",  class: Hormone),
-    (id: 33, name: "h1",  class: Hormone),
-    (id: 34, name: "h2",  class: Hormone),
-    (id: 35, name: "h3",  class: Hormone),
-    (id: 36, name: "h4",  class: Hormone),
-    (id: 37, name: "h5",  class: Hormone),
-    (id: 38, name: "h6",  class: Hormone),
-    (id: 39, name: "h7",  class: Hormone),
-    (id: 40, name: "h8",  class: Hormone),
-    (id: 41, name: "h9",  class: Hormone),
-    (id: 42, name: "h10", class: Hormone),
-    (id: 43, name: "h11", class: Hormone),
-    (id: 44, name: "h12", class: Hormone),
-    (id: 45, name: "h13", class: Hormone),
-    (id: 46, name: "h14", class: Hormone),
-    (id: 47, name: "h15", class: Hormone),
+    (id: 32, name: "h0",  class: Hormone, about: "a spare hormone: in the starter genes pain raises it, making it wary of new things"),
+    (id: 33, name: "h1",  class: Hormone, about: "a spare hormone: in the starter genes a dance leaves it, so a male waits to dance again"),
+    (id: 34, name: "h2",  class: Hormone, about: "a spare hormone: in the starter genes being danced for leaves it, so it dances back"),
+    (id: 35, name: "h3",  class: Hormone, about: "a spare hormone its genes may use for anything"),
+    (id: 36, name: "h4",  class: Hormone, about: "a spare hormone its genes may use for anything"),
+    (id: 37, name: "h5",  class: Hormone, about: "a spare hormone its genes may use for anything"),
+    (id: 38, name: "h6",  class: Hormone, about: "a spare hormone its genes may use for anything"),
+    (id: 39, name: "h7",  class: Hormone, about: "a spare hormone its genes may use for anything"),
+    (id: 40, name: "h8",  class: Hormone, about: "a spare hormone its genes may use for anything"),
+    (id: 41, name: "h9",  class: Hormone, about: "a spare hormone its genes may use for anything"),
+    (id: 42, name: "h10", class: Hormone, about: "a spare hormone its genes may use for anything"),
+    (id: 43, name: "h11", class: Hormone, about: "a spare hormone its genes may use for anything"),
+    (id: 44, name: "h12", class: Hormone, about: "a spare hormone its genes may use for anything"),
+    (id: 45, name: "h13", class: Hormone, about: "a spare hormone its genes may use for anything"),
+    (id: 46, name: "h14", class: Hormone, about: "a spare hormone its genes may use for anything"),
+    (id: 47, name: "h15", class: Hormone, about: "a spare hormone its genes may use for anything"),
 
     // The hormone that turns a male female, once it's above the level in
     // physiology's `breeding` (M2 design §10).
-    (id: 48, name: "feminiser",  class: Hormone),
+    (id: 48, name: "feminiser",  class: Hormone, about: "builds in a grown male that sees no female, and past a level turns him female"),
     // Longing builds while a sprite sees no male adult; in the starter
     // genome it's what leads a female to breed alone (M2 design §10).
-    (id: 49, name: "longing",    class: Hormone),
+    (id: 49, name: "longing",    class: Hormone, about: "builds in a female that sees and hears no male, and leads her to breed alone"),
     // Receptivity: a pair can mate only once the female's is at least
     // physiology's `breeding.receptive`; in the starter genome dances raise
     // it (M2 design §15.3).
-    (id: 50, name: "receptivity", class: Hormone),
+    (id: 50, name: "receptivity", class: Hormone, about: "rises when she's danced for and dances back, and she mates once it's high enough"),
     // Grief: in the starter genome losing a partner raises it, and it holds
     // arousal down (M2 design §15.4).
-    (id: 51, name: "grief",      class: Hormone),
+    (id: 51, name: "grief",      class: Hormone, about: "comes when its partner dies, and holds arousal down for a while"),
     // Fullness: in the starter genome everything in the gut raises it, and
     // it leans a sprite away from eating and drinking (M2 design §19.4). A
     // feeling but not a drive, so a fed sprite isn't coloured by it.
-    (id: 52, name: "fullness",   class: Hormone),
+    (id: 52, name: "fullness",   class: Hormone, about: "how full its gut feels, which leans it away from eating and drinking"),
 ]

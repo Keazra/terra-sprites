@@ -714,6 +714,16 @@ fn the_themes_style_text_by_its_job_as_the_design_table_says() {
     ];
     assert_eq!(text(&Theme::cp437()), styles);
     assert_eq!(text(&Theme::ascii()), styles);
+    // And what the pointer can be on, in a soft blue (#304), which is one
+    // of the 256 colours, so it looks the same where exact ones aren't
+    // shown.
+    let spot = Style::default().fg(Color::Rgb(0x87, 0xaf, 0xd7));
+    assert_eq!(Theme::cp437().text().spot, spot);
+    assert_eq!(Theme::ascii().text().spot, spot);
+    let mut screen = Buffer::empty(Rect::new(0, 0, 1, 1));
+    screen[(0, 0)].set_style(spot);
+    theme::in_256_colours(&mut screen);
+    assert_eq!(screen[(0, 0)].fg, Color::Indexed(110));
 }
 
 #[test]

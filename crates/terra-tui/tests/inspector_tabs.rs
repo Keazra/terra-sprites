@@ -613,6 +613,38 @@ fn the_brain_tab_opens_the_rest_of_a_things_lessons() {
 }
 
 #[test]
+fn enter_opens_the_lessons_where_the_pointer_went_while_the_graph_was_open() {
+    // The graph keeps the Cursor where it was, but where the pointer is,
+    // for Enter and the tooltips, follows it (#304).
+    let objects = [(at(3, 3), "berry")];
+    let (world, mut app) = one_sprite_among(EVERY_NEED_GENOME, &objects, &[], 2);
+    open(&mut app, &world, Tab::Brain);
+    let more = brain_cell(&app, &world, "and 3 more");
+    // Each action followed by a frame, as the game draws them, the view
+    // settling first.
+    let frame = |app: &mut App| {
+        app.fit(ui::areas(Size::new(100, 30)));
+        render(app, &world, 100, 30);
+    };
+    for action in [
+        Action::Point(Position::new(5, 5)),
+        Action::Population,
+        Action::Point(more),
+        Action::Back,
+    ] {
+        app.apply(action, &world);
+        frame(&mut app);
+    }
+    app.apply(Action::Enter, &world);
+    assert!(
+        brain_lines(&app, &world)
+            .iter()
+            .any(|row| row.contains("crowdedness")),
+        "Enter opens the thing under the pointer"
+    );
+}
+
+#[test]
 fn choosing_another_sprite_shuts_lessons_that_were_open() {
     let neighbor = "(format: 1, genes: [])";
     let (eater, bystander) = (at(2, 3), at(8, 1));
@@ -1264,8 +1296,13 @@ fn the_genome_tab_groups_genes_as_plain_lines_and_marks_those_with_no_effect() {
     );
     assert_eq!(screen[(x + 2, flagged + 1)].symbol(), "f");
     assert_eq!(screen[(x + 2, flagged + 1)].fg, Color::DarkGray);
+    // An expressed gene's name is in the spot colour, since a tooltip says
+    // what it does, and its numbers are plain (#304).
     let expressed = row_of("ate → hunger -.5") as u16;
-    assert_eq!(screen[(x, expressed)].fg, Color::Reset);
+    let spot = Theme::cp437().text().spot.fg.expect("a colour");
+    assert_eq!(screen[(x, expressed)].fg, spot);
+    let number = x + "ate → hunger ".chars().count() as u16;
+    assert_eq!(screen[(number, expressed)].fg, Color::Reset);
 }
 
 /// A genome whose Genome tab is 61 lines: the heading, then 60 emitters

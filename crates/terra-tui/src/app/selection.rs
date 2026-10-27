@@ -4,8 +4,7 @@
 
 use std::collections::BTreeSet;
 
-use ratatui::layout::{Position, Rect};
-use terra_sim::{EntityId, World};
+use terra_sim::{EntityId, Pos, World};
 
 use super::{App, Direction, Selection, Tab};
 use crate::inspector;
@@ -54,27 +53,16 @@ impl App {
         self.tab_scroll = 0;
     }
 
-    /// The tab whose name is drawn at `at` in the inspector's title row,
-    /// if any (design §6.1).
-    pub(super) fn tab_at(&self, at: Position) -> Option<Tab> {
-        let area = self.inspector?;
-        let column = at.x.checked_sub(area.x + 1)?;
-        if at.y != area.y {
-            return None;
-        }
-        inspector::tab_at(self.tab, usize::from(column))
-    }
-
-    /// The rows a tab has in the inspector: a page.
-    pub(super) fn inspector_rows(&self) -> usize {
-        self.inspector
-            .map_or(0, |area| usize::from(inspector::tab_area(area).height))
+    /// The lines a tab shows at once in the inspector: a page.
+    pub(super) fn lines_at_once(&self) -> usize {
+        self.inspector_area()
+            .map_or(0, |area| inspector::TabColumns::of(area).at_once())
     }
 
     /// Scrolls the open tab by `lines` from where it's shown, down being
     /// positive, stopping at the top and where its last line comes into view.
     pub(super) fn scroll_tab(&mut self, lines: i32, world: &World) {
-        let (length, rows) = (inspector::lines(self, world).len(), self.inspector_rows());
+        let (length, rows) = (inspector::lines(self, world).len(), self.lines_at_once());
         let from = inspector::first_shown(self.tab_scroll, length, rows);
         let furthest = inspector::first_shown(usize::MAX, length, rows);
         let scrolled = from as i64 + i64::from(lines);
@@ -98,16 +86,21 @@ impl App {
         let Some(&id) = chosen else {
             return;
         };
-        self.select(id);
         let pos = world.sprite(id).expect("a sprite just listed").pos();
-        if self.cell_of(pos).is_none() {
-            self.centre_on(pos);
-        }
+        self.select_in_view(id, Some(pos));
     }
 
-    /// The inspector, its title row included, if the screen has room for it.
-    pub(crate) fn inspector_bounds(&self) -> Option<Rect> {
-        self.inspector
+    /// Selects `id`, and centres the viewport on it, where it is at `pos`
+    /// if it's anywhere, only if it's out of sight (design §6.5): out of
+    /// view, or under the inspector open over the map view (design §6.1,
+    /// #305). As `Tab` does, and a click on a line of the event log about
+    /// it.
+    pub(super) fn select_in_view(&mut self, id: EntityId, pos: Option<Pos>) {
+        self.select(id);
+        let out_of_sight = |pos: Pos| self.cell_of(pos).is_none() || self.under_the_inspector(pos);
+        if let Some(pos) = pos.filter(|&pos| out_of_sight(pos)) {
+            self.centre_on(pos);
+        }
     }
 
     /// Which memory block is open on the Brain tab.
@@ -115,15 +108,11 @@ impl App {
         &self.open_lessons
     }
 
-    /// Opens or shuts the memory block under `at`, if that line opens one.
-    /// A click on a lesson line, or off the Brain tab, does nothing.
-    pub(super) fn toggle_lesson(&mut self, at: Position, world: &World) -> bool {
-        let Some(which) = inspector::lesson_at(self, world, at) else {
-            return false;
-        };
+    /// Opens or shuts memory block `which` on the Brain tab (design v40
+    /// §6.1).
+    pub(super) fn toggle_lesson(&mut self, which: inspector::MemoryOpen) {
         if !self.open_lessons.remove(&which) {
             self.open_lessons.insert(which);
         }
-        true
     }
 }

@@ -33,7 +33,7 @@ You can select a sprite and look inside it: its Brain tab shows what it's paying
 
 ## Getting started
 
-You need a terminal of at least 100×30 characters; 140×40 is better. On Windows, use Windows Terminal. The easiest way in is the ready-made game for Windows, Mac (Apple silicon) or Linux on the [v0.2.0 release's page](https://github.com/Keazra/terra-sprites/releases/tag/v0.2.0), with no Rust needed: the zip's `README.txt` says how to run it. Or, with [Rust](https://rustup.rs) 1.97.1 or newer (`rustup update stable`), install the game as a command, without downloading the code yourself:
+The game is best in a terminal of 100×30 characters or more, where everything fits beside the map; 140×40 is better. A smaller one still plays: under 100 columns the inspector hides until `i` opens it over the map, under 30 rows the event log goes, and on the smallest the map is drawn alone, down to 20×5. The title screen needs 60×20. On Windows, use Windows Terminal. The easiest way in is the ready-made game for Windows, Mac (Apple silicon) or Linux on the [v0.2.0 release's page](https://github.com/Keazra/terra-sprites/releases/tag/v0.2.0), with no Rust needed: the zip's `README.txt` says how to run it. Or, with [Rust](https://rustup.rs) 1.97.1 or newer (`rustup update stable`), install the game as a command, without downloading the code yourself:
 
 ```bash
 cargo install --git https://github.com/Keazra/terra-sprites --tag v0.2.0 --locked terra-tui
@@ -88,11 +88,12 @@ The same key in capitals or lower case does the same thing.
 | `.` | Step while paused: a second's worth of ticks at the current speed, one at 1× and slower, up to 20 at 16× and Max (hold to keep stepping) |
 | `+` / `-` | Faster / slower: each step doubles or halves the speed, from ⅛× up to 4× in a Story world, or on to 16× and then Max in a Lab world (the top bar says `lab` after the speed). The game starts at 1× (1.25 ticks per second, slow enough to watch sprites walk). Holding `+` stops at 1× and at 16×, and holding `-` at 1×; press again to go past |
 | `W` `A` `S` `D` or arrows | Scroll the map (hold Shift to scroll 5 tiles) |
-| Mouse | Point at a tile: the status line says what's there. Click a sprite to select it |
+| Mouse | Point at a tile: the status line says what's there. Click a sprite to select it, or its name in a line of the event log. Point at a highlighted name in the inspector, or at the event log's filters, soft blue in the built-in themes, and a tooltip says what it is; point at a sprite's name in a line of the event log and the sprite lights up on the map |
 | `T` | Track: the view follows the selected sprite; again to stop |
 | `b` | Sprite colours: what a sprite's colour shows: its strongest drive, nothing, or its lineage, which marks the selected sprite's parents and grandparents, brothers and sisters, and young and theirs each in a colour, and every other sprite dark gray. The status line says which |
 | `m` | Event log filter: all events, the selected sprite's, or only the major ones (deaths, lessons learned, refusals) |
 | `v` | Detail view: exactly what the selected sprite is doing |
+| `o` | Square tiles: each tile is drawn two cells wide, so the world looks its true shape rather than twice as tall, and half as much of it fits across. Again to go back. Best on a big window, 140×40 and up; it starts off each time you play |
 | `?` | Help: a page for each part of the game, with its keys and what its colours and marks mean. It opens at the page for what you're looking at: the sprite list's, the graph's or the family tree's over those, the inspector's when you last pointed at it or used its keys, and otherwise the world's, with every key, the colour legend and where the game keeps its files. `←` `→` or `Tab` turn the pages, or click a page's name; the top bar's `? help (World)` says which page it opens; type to search every page, such as `egg`; `Esc` clears the search, then closes it |
 | `:` | Command palette: type what you want to do, such as `tree` or `save`, and it lists what matches, each with its key; the arrows choose and `Enter` does it. A key it can't press for you, such as `hold E`, is shown grey, to teach it |
 | `F3` | Debug overlay, in the map's top-right corner, and again to hide it: how the game is running on your computer, for a screenshot when it feels slow or a held key misbehaves. Read over the last second: the ticks a second it ran against the speed asked for (or `paused`, or `at Max`), the simulation's time in a frame against its 25 ms budget, and the drawing's time in a frame, with the frames a second. Then whether your terminal reports key releases: `releases reported`, `no releases` (a held key is told from taps only by its repeats), or `kitty protocol`. It measures the game as you play it, drawing included, where the speed example (`cargo run --release -p terra-sim --example speed`) measures the simulation alone |
@@ -109,11 +110,12 @@ The same key in capitals or lower case does the same thing.
 | `g` | Save the selected sprite's genome to the genomes folder (the status line says where); the Place menu reads it back |
 | `[` / `]` | Previous / next inspector tab; or click a tab |
 | `PgUp` / `PgDn`, or the mouse wheel over the inspector | Scroll a long tab |
+| `i` | The inspector, bigger: on a window under 100 columns, where it's hidden, open it over the map's right side; otherwise the open tab fills the screen, in as many columns as fit, which suits the Brain and Genome tabs, and every key but the map's and the event log's works as usual (those say so on the status line). Again, `Esc`, or loading a world goes back |
 | `F5` / `F9` | Quicksave / quickload. Loading over a world that has run since it was last saved asks first (`y` to load), and a loaded world starts paused |
 | `Ctrl+S` / `Ctrl+O` | Save under a name you type / pick a save to load, newest first. The world also saves itself every 10 minutes of running time and when you quit, keeping the last 3 autosaves. See [saves](reference/saves.md) |
 | `Ctrl+T` | Pick a theme: how the map is drawn. It lists the two built-in themes, then your own from the `themes` folder of the game's folder; see [themes](reference/themes.md) |
 | `Ctrl+R` | In a replay, take it over: the world is yours from the tick it has reached, and the rest of the recording is dropped. Its next autosave writes a new `last_session.replay`, so copy a replay you want to keep first |
-| `Esc` | Each press does the first that applies: close a menu or overlay, cancel an aim, let go of what the Cursor holds or leads (a held item is put down where the Cursor is), go back to Select, and from Select ask to quit: `y` quits the game, `t` goes back to the title screen (both save first, as quitting does), and any other key keeps playing |
+| `Esc` | Each press does the first that applies: close a menu, an overlay or the full-screen inspector, cancel an aim, close the inspector open over the map, let go of what the Cursor holds or leads (a held item is put down where the Cursor is), go back to Select, and from Select ask to quit: `y` quits the game, `t` goes back to the title screen (both save first, as quitting does), and any other key keeps playing |
 | `Ctrl+C` | Quit at once |
 
 | Flag | Effect |

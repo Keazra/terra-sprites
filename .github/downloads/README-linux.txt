@@ -22,9 +22,10 @@ chmod +x makes it executable, in case what unzipped it didn't keep that.
 To run it from anywhere as terra-sprites, move it to a folder on your
 PATH, such as ~/.local/bin.
 
-The terminal needs to be at least 100 characters wide and 30 lines tall,
-and 140 by 40 is better. If the game says "Terminal too small", make the
-window bigger.
+The game is best in a terminal at least 100 characters wide and 30 lines
+tall, and 140 by 40 is better. A smaller one still plays, with less
+beside the map: press i to see the inspector. The title screen needs 60
+by 20; if the game says "Terminal too small", make the window bigger.
 
 
 Playing

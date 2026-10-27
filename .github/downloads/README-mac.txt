@@ -14,8 +14,8 @@ Running it
 1. Double-click the zip to unzip it, if Safari hasn't already.
 
 2. Open Terminal (in Applications, then Utilities), and make its window
-   bigger: double-click its title bar. The game needs at least 100
-   characters by 30 lines, and 140 by 40 is better.
+   bigger: double-click its title bar. The game is best at 100
+   characters by 30 lines or more, and 140 by 40 is better.
 
 3. Type cd and a space, drag this folder onto the Terminal window, and
    press Return. Then type this and press Return:

@@ -53,7 +53,7 @@ usage: render title [options] -o <file>
   --seconds <s>        how long the opening scene's clip is (default: the
                        scene and two seconds of the menu)
   --size <WxH>         the picture's size in screen cells (default 100x30,
-                       the smallest screen the game draws its panels on)
+                       the smallest screen with every panel)
   --map-view           the map view alone, with no border or panels, at
                        any size
   --hide <parts>       leave parts of the screen out, for the map view and
@@ -623,7 +623,7 @@ mod tests {
         };
         refused("title", "-o <file>");
         refused("title -o title.png", ".gif, .mp4 or .svg");
-        refused("world --size 54x48 -o a.gif", "--map-view");
+        refused("world --size 19x48 -o a.gif", "--map-view");
         refused(
             "title --map-view -o a.gif",
             "--map-view is for a world's clip",

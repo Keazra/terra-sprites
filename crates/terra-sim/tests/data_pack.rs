@@ -251,6 +251,30 @@ fn chemical_ids_and_names_are_unique() {
     assert_invalid("chemicals.ron", same_name, &["food"]);
 }
 
+#[test]
+fn a_chemical_says_what_it_is_beside_its_name_if_its_pack_says() {
+    let pack = DataPack::builtin().expect("the built-in pack loads");
+    assert_eq!(
+        pack.chemical_about("hunger"),
+        Some("rises as energy runs low, and eating brings it down at once")
+    );
+    // Every built-in chemical says (#304).
+    for line in builtin_source("chemicals.ron").lines() {
+        if let Some((_, rest)) = line.split_once("name: \"") {
+            let name = rest.split('"').next().expect("a quoted name");
+            assert!(pack.chemical_about(name).is_some(), "{name}");
+        }
+    }
+    // A pack that doesn't say still loads.
+    let quiet = builtin_source("chemicals.ron").replace(
+        r#"about: "rises as energy runs low, and eating brings it down at once""#,
+        r#"about: """#,
+    );
+    let quiet = loaded_with("chemicals.ron", &quiet).expect("loads");
+    assert_eq!(quiet.chemical_about("hunger"), None);
+    assert_eq!(quiet.chemical_about("no such chemical"), None);
+}
+
 /// Loads the built-in pack without `file`.
 fn builtin_without(file: &str) -> Result<DataPack, DataError> {
     let sources: Vec<(&str, &str)> = DataPack::builtin_sources()
@@ -1062,10 +1086,10 @@ fn a_starter_genome_with_a_flagged_unknown_or_unmatched_gene_does_not_load() {
 
 #[test]
 fn physiology_needs_its_physical_chemicals_and_body_sensors() {
-    let stamina = r#"(id: 3,  name: "stamina",     class: Physical)"#;
-    let vigour = r#"(id: 3,  name: "vigour",      class: Physical)"#;
+    let stamina = r#"(id: 3,  name: "stamina",     class: Physical,"#;
+    let vigour = r#"(id: 3,  name: "vigour",      class: Physical,"#;
     assert_invalid_changing("chemicals.ron", stamina, vigour, "stamina");
-    let signal = r#"(id: 3,  name: "stamina",     class: Signal)"#;
+    let signal = r#"(id: 3,  name: "stamina",     class: Signal,"#;
     assert_invalid_changing("chemicals.ron", stamina, signal, "stamina");
     let (resting, lazing) = (r#"name: "resting","#, r#"name: "lazing","#);
     assert_invalid_changing("loci.ron", resting, lazing, "resting");

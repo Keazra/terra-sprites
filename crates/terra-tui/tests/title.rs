@@ -298,7 +298,7 @@ fn a_resize_moves_the_cursor_only_when_it_would_hide_it() {
     let before = cursor_and_inside(&render(&title));
     for size in [
         Size::new(120, 30),
-        Size::new(80, 24),
+        Size::new(50, 16),
         Size::new(WIDTH, HEIGHT),
     ] {
         title.resize(size);
@@ -916,9 +916,25 @@ fn a_refusal_shows_on_the_status_line() {
 #[test]
 fn a_terminal_too_small_says_so() {
     let title = after_the_scene();
-    let shown = text(&render_at(&title, 80, 24));
+    // #305: the game itself steps down to 20×5, but the title screen's
+    // boxes need 60×20.
+    let shown = text(&render_at(&title, 50, 16));
     assert!(shown.contains("Terminal too small"), "{shown}");
-    assert!(shown.contains("needs 100x30, this is 80x24"), "{shown}");
+    assert!(shown.contains("needs 60x20, this is 50x16"), "{shown}");
+}
+
+#[test]
+fn the_title_screen_draws_its_menu_from_60_by_20() {
+    // #305: its boxes' room, more than the game's own smallest screen.
+    let mut title = title_on(60, 20);
+    title.animate(Duration::from_secs(10));
+    let shown = text(&render_at(&title, 60, 20));
+    assert!(
+        shown.contains("1 New world") && shown.contains("4 Quit"),
+        "{shown}"
+    );
+    let shown = text(&render_at(&title, 59, 20));
+    assert!(shown.contains("needs 60x20, this is 59x20"), "{shown}");
 }
 
 #[test]
@@ -926,9 +942,9 @@ fn a_terminal_too_small_takes_no_clicks_or_turns_of_the_wheel() {
     // M2 design §8.2: as a world's too-small screen takes none (design
     // §6.1), the menu hidden behind the message can't be picked from.
     let mut title = after_the_scene();
-    title.resize(Size::new(80, 24));
-    for y in 0..24 {
-        for x in 0..80 {
+    title.resize(Size::new(50, 16));
+    for y in 0..16 {
+        for x in 0..50 {
             let click = Action::left_click(Position::new(x, y));
             assert_eq!(title.apply(click), TitleFlow::Stay, "a click on {x},{y}");
         }
@@ -952,9 +968,9 @@ fn a_terminal_too_small_takes_no_clicks_or_turns_of_the_wheel() {
 fn esc_still_asks_to_quit_on_a_terminal_too_small() {
     // M2 design §8.2.
     let mut title = after_the_scene();
-    title.resize(Size::new(80, 24));
+    title.resize(Size::new(50, 16));
     assert_eq!(title.apply(Action::Back), TitleFlow::Stay);
-    let shown = text(&render_at(&title, 80, 24));
+    let shown = text(&render_at(&title, 50, 16));
     assert!(shown.contains("Terminal too small"), "{shown}");
     assert!(
         shown.contains("Quit? (y/n)"),

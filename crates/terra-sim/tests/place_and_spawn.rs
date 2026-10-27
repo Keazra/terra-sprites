@@ -306,8 +306,8 @@ fn spawning_is_refused_where_a_sprite_cant_stand() {
 fn a_genome_from_another_pack_that_doesnt_fit_this_world_is_refused() {
     // A pack with a chemical this world's lacks, and a genome that uses it.
     let chemicals = builtin_source("chemicals.ron").replace(
-        r#"    (id: 47, name: "h15", class: Hormone),"#,
-        "    (id: 47, name: \"h15\", class: Hormone),\n    (id: 60, name: \"zest\", class: Hormone),",
+        r#"(id: 47, name: "h15", class: Hormone, about: "a spare hormone its genes may use for anything"),"#,
+        "(id: 47, name: \"h15\", class: Hormone),\n    (id: 60, name: \"zest\", class: Hormone),",
     );
     let other = builtin_with("chemicals.ron", &chemicals);
     let text = builtin_source("genomes/starter.ron").replace(r#""h0""#, r#""zest""#);

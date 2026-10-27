@@ -67,7 +67,7 @@ impl App {
             Screen::SpriteList => HelpPage::SpriteList,
             Screen::Population => HelpPage::Graph,
             Screen::FamilyTree => HelpPage::Tree,
-            _ if self.on_inspector => HelpPage::Inspector,
+            _ if self.full_screen || self.on_inspector => HelpPage::Inspector,
             _ => HelpPage::World,
         }
     }

@@ -284,6 +284,11 @@ pub(crate) struct Chemical {
     pub(crate) id: ChemId,
     pub(crate) name: String,
     pub(crate) class: ChemicalClass,
+    /// What it is, in a sentence, which the screen shows when the pointer
+    /// is on it (design §6.1): for a drive, what raises it and what lowers it.
+    /// Empty if the pack doesn't say.
+    #[serde(default)]
+    pub(crate) about: String,
 }
 
 impl Chemical {

@@ -51,7 +51,7 @@ impl App {
             (origin + i32::from(view / 2)).clamp(0, i32::from(len) - 1) as u16
         };
         let middle = Pos {
-            x: nearest(self.viewport.x, area.width, map.width),
+            x: nearest(self.viewport.x, self.seen_columns(), map.width),
             y: nearest(self.viewport.y, area.height, map.height),
         };
         world.save_with_view(middle)
@@ -269,7 +269,8 @@ impl App {
         let (world, name) = self.loaded.take()?;
         let areas = Areas {
             tiles: self.tile_area,
-            inspector: self.inspector,
+            inspector: self.inspector.room(),
+            pops_over: self.inspector.pops_over(),
             event_log: self.event_log_area,
             overlay: self.overlay,
         };
@@ -284,6 +285,10 @@ impl App {
         fresh.event_filter = self.event_filter;
         fresh.list_sort = self.list_sort;
         fresh.tab = self.tab;
+        // Open over the map or shut, as it was, but never filling the
+        // screen, so the world loaded is in view (design §6.1, #305).
+        fresh.inspector = self.inspector;
+        fresh.zoom = self.zoom;
         fresh.running_for = self.running_for;
         fresh.data_folder = self.data_folder.take();
         fresh.genome_folder = self.genome_folder.take();

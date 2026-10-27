@@ -226,6 +226,7 @@ pub fn map_only(tiles: Rect) -> Areas {
     Areas {
         tiles,
         inspector: None,
+        pops_over: false,
         event_log: None,
         overlay: None,
     }
@@ -252,7 +253,8 @@ pub fn map_app(world: &World, tiles: Rect) -> App {
     App::new(world.map(), Theme::cp437(), world.seed(), map_only(tiles))
 }
 
-/// The smallest screen the game draws on (design §6.1).
+/// The smallest screen with every panel beside the map view (design
+/// §6.1).
 pub const SCREEN: Size = Size::new(100, 30);
 
 /// An app on `world` in the default theme, on a 100×30 screen.
@@ -304,6 +306,19 @@ pub fn status_line(app: &App, world: &World) -> String {
 /// end.
 pub fn lines(screen: &Buffer) -> Vec<String> {
     (0..screen.area.height).map(|y| row(screen, y)).collect()
+}
+
+/// The screen cell where `text` starts on the first row of a `size` screen
+/// that has it.
+pub fn cell_of_text(app: &App, world: &World, size: Size, text: &str) -> Position {
+    let screen = render_on(app, world, size);
+    for y in 0..size.height {
+        let row = row(&screen, y);
+        if let Some(x) = row.find(text) {
+            return Position::new(row[..x].chars().count() as u16, y);
+        }
+    }
+    panic!("{text:?} isn't on screen:\n{}", lines(&screen).join("\n"));
 }
 
 /// A key event of `kind` with no modifiers: a press, a repeat or a

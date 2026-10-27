@@ -265,7 +265,7 @@ A box in the middle of the screen, over the moving world, holds the title letter
 
 - **`Esc` asks "Quit? (y/n)",** as in a world; only `y` quits, and the pointer leaves the question waiting (#148). `Ctrl+C` quits at once.
 - **A world started or loaded from the title screen starts as one does from the flags:** a new world at 1×, a loaded one paused (M1 design §6.7). The session log starts afresh from it (M1 design §2.7). A save that can't be read, or a preset that isn't valid, is refused on the status line and the title screen stays.
-- A terminal under 100×30 shows "Terminal too small", as a world does (M1 design §6.1), and `Esc` still asks to quit under it. Like a world's, it takes no clicks, so the menu it hides can't be clicked, though its keys still work (#148).
+- A terminal under 60×20, the room its boxes need, shows "Terminal too small", as a world does under 20×5 (M1 design §6.1, #305; 100×30 for both until then), and `Esc` still asks to quit under it. Like a world's, it takes no clicks, so the menu it hides can't be clicked, though its keys still work (#148).
 - Everything drawn stays within CP437 (M1 design §6.2): a save's name with other characters shows them as `?`, as in a world's list (#148).
 
 ### 8.3 New world
@@ -571,8 +571,19 @@ Both built-in themes gain the glass's six glyphs and the stars' three depths, as
 - **UI tests** (ratatui's `TestBackend`): scrolling stops at the margin on every side; the glass runs all round the map, one tile out; the map view has no border (#302; single-lined before); stars appear only on space; stars stand still while paused and drift as far at 16× as at 4× in the same time; a small map is centred, and one as wide as the map view, or a tile narrower, scrolls to show its glass; with the pointer moved over space after the Cursor was on a sprite, the Cursor isn't drawn and a click, `Q` or `E` sends no command (`docs/agents/how-we-work.md`: test every input that reaches a rule); with Follow on, a click over space and `Q` still reach the followed sprite.
 - **The simulation is untouched:** its tests and golden files pass unchanged.
 - **Played** in Windows Terminal at 140×40 and at the smallest size the game allows.
+- **For square tiles (§11.7, #305):** the map view shows 47 by 34 tiles at 140×40 and 27 by 24 at 100×30; a tile's second cell repeats its terrain and is blank beside a sprite or an object; the glass meets the map on every side; a click on either cell of a tile lands on it; the Cursor frames its two cells, with an arrow, or a `═` of its frame of light, over and under each; turning it keeps the middle tile, and Track keeps up.
 
 The ship's own walls come later: its prow is iron, and walls between sectors are hull (#181). Until then, every wall of the terrarium faces space.
+
+### 11.7 Square tiles
+
+A terminal's cell is about twice as tall as it is wide, so a map drawn a cell a tile looks twice as tall as it is. `o` draws each tile two cells wide, so tiles are square and the world looks its true shape, and `o` again goes back (#305; Fauxpaw, UI lessons round 1, Q6, 2026-10-19). The status line says which: "Tiles two cells wide, so they're square", or "Tiles one cell wide".
+
+- **Off at the start of every run,** and kept as the player plays on, a world loaded or not. It's the screen's, like the theme, never the world's, its saves', its replays' or its state hash's. Remembering it between runs waits for Look 6's settings file (#307).
+- **A tile's second cell repeats its terrain; a sprite, an object or a mark on the map leaves it blank,** in the first cell's colours. What else goes there, such as what a sprite holds or whom it grips, is M3's to settle, with how holding and gripping show on the map (M3 design §6.7), so for now it's only blank.
+- **Half as many tiles fit across:** at 140×40 the map view shows 47 by 34 tiles where it showed 94 by 34, and at 100×30, 27 by 24 where it showed 54 by 24. It suits big screens.
+- **Everything on the map follows it,** in tiles rather than cells. Turning it keeps the tile in the middle of the view where it is. The margin past the wall (§11.1), scrolling, `Tab`'s centring and Track count tiles. The pointer points at the tile under it, on either of its cells, a cell down and right of it as ever (M1 design §6.5). The Cursor frames its two cells: an arrow over each and an arrow under each, or two `═` above and two below in its frame of light while sprites can see it, and its right-hand arrow and marks a cell further out. Aim lines, the leash and the decision marker sit in a tile's first cell, and the stars (§11.3) drift a tile at a time. The glass down the map's sides keeps to the cell beside the map, so it meets it, and the other cell is space.
+- **The terminal-wide parts don't change:** the panels, the overlays, the menus and the status line are drawn as before.
 
 ---
 

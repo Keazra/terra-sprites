@@ -4,14 +4,13 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use ratatui::layout::Position;
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use terra_sim::{Dir, EntityId, Explanation, Learned, Part, Pos, SpriteView, Thing, Verb, World};
 
 use super::actions::verb_name;
-use super::{CURSOR, WIDTH, counted, dotted, first_shown, shown};
-use crate::app::{App, Tab};
+use super::{CURSOR, WIDTH, counted, dotted};
+use crate::app::App;
 use crate::text::{BOUND, Words, display_name, level, signed_level, unbroken};
 use crate::theme::TextLook;
 
@@ -34,23 +33,6 @@ pub(crate) enum MemoryOpen {
     NewThings,
     /// One remembered sprite, nested under Sprites.
     Sprite(EntityId),
-}
-
-/// The memory block under screen cell `at`, if that line opens or shuts one.
-pub(crate) fn lesson_at(app: &App, world: &World, at: Position) -> Option<MemoryOpen> {
-    if app.tab() != Tab::Brain {
-        return None;
-    }
-    let inner = super::tab_area(app.inspector_bounds()?);
-    if at.y < inner.y || at.y >= inner.bottom() || at.x < inner.x || at.x >= inner.right() {
-        return None;
-    }
-    // The same rows the inspector draws, policy included, so a hidden tab
-    // has nothing to open.
-    let rows = shown(app, world);
-    let row = usize::from(at.y - inner.y);
-    let first = first_shown(app.tab_scroll(), rows.len(), usize::from(inner.height));
-    rows.get(first + row).and_then(|(_, open)| open.clone())
 }
 
 /// The Brain tab (design §5.9, §6.1): what the sprite attended to and

@@ -28,9 +28,11 @@ Running it
    blocks every program that isn't signed, there's no Run anyway, and
    this download can't run there yet.
 
-The window needs to be at least 100 characters wide and 30 lines tall,
-and 140 by 40 is better. If the game says "Terminal too small", make the
-window bigger or maximise it.
+The game is best in a window at least 100 characters wide and 30 lines
+tall, and 140 by 40 is better. A smaller one still plays, with less
+beside the map: press i to see the inspector. The title screen needs 60
+by 20; if the game says "Terminal too small", make the window bigger or
+maximise it.
 
 
 Playing

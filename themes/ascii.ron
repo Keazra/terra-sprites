@@ -123,5 +123,8 @@
         bad:      (fg: light_red),
         key:      (bold: true),
         selected: (reversed: true),
+        // A soft blue, quieter than the terminal's light blue, and one of
+        // the 256 colours, so it's the same where exact ones aren't shown.
+        spot:     (fg: "#87afd7"),
     ),
 )

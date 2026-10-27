@@ -717,6 +717,10 @@ _Avoid_: headless mode, turbo, skip ahead
 The panel that shows the map.
 _Avoid_: map (for the panel)
 
+**Square tiles**:
+Each tile drawn two cells wide, as `o` switches, so the world looks its true shape, since a terminal's cell is about twice as tall as it's wide (M2 design §11.7, #305). The code calls the switch `zoom`.
+_Avoid_: wide tiles, double width
+
 **Viewport**:
 The part of the map currently shown in the map view. It can go a quarter of the map view past the wall, where the glass and space show; a map small enough to fit with its glass sits in the middle of it, with space all round (Slice 31, #180).
 _Avoid_: camera
@@ -766,7 +770,7 @@ The two corners of the Cursor, top right and bottom left, that report on it: in 
 _Avoid_: indicators, lights, flash (on its own)
 
 **Inspector**:
-The side panel of tabs about the selected sprite (Body, Brain, Chem, Genome) or the world (World). With an egg selected, the sprite tabs show its card: when it hatches and its parents.
+The side panel of tabs about the selected sprite (Body, Brain, Chem, Genome) or the world (World). With an egg selected, the sprite tabs show its card: when it hatches and its parents. On a screen under 100 columns it pops over the map view's right side while it's open. Wherever there's room for it, `i` fills the screen with it, its lines in columns, once it's open (#305).
 _Avoid_: sidebar, details
 
 **Observed list**:
@@ -821,6 +825,14 @@ _Avoid_: shortcut bar, legend (the help's legends are of colours and emotes)
 The box `:` opens near the top of the map view: typing finds any control that works in the world by the starts of the words of what it does, each shown with its key, and `Enter` does the one chosen. Its name is what such a box is called elsewhere; what it finds are controls, not commands.
 _Avoid_: command line, console, search (that's the help's)
 
+**Spot** (#304):
+A part of the screen the pointer can be on that says what it is in a tooltip, lights something up, or takes a click: a name, such as a drive's or a gene's, which says what it is; the sprite's in a line of the event log, which lights it up on the map and takes a click; or an inspector tab's or a Brain tab memory heading, which takes a click and says nothing. The inspector, the event log and each pop-up note their spots as they're drawn, afresh each frame, and a pop-up's box is one too, which says nothing and takes the pointer before what's under it. A spot a tooltip can explain, or the name of a log line's sprite, is drawn in the theme's Spot colour, unless it keeps a look of its own until the pointer is on it, as a gene with no effect keeps its muted one.
+_Avoid_: hotspot, hit box
+
+**Tooltip** (#304):
+The box beside the pointer, below it and to its left, saying what the spot under it is: its name, what it is, and what a click or a key does with it. It's drawn afresh each frame, only on the world's own screen or over the inspector filling it, never over the pointer's cell or a pop-up, and takes nothing: it isn't a pop-up. A key press puts it away until the pointer moves, with what the pointer lights up.
+_Avoid_: hover box, pop-up (that's a menu or an overlay)
+
 **Sprite list**:
 The overlay `l` opens: every sprite, one to a row, with its age, life stage, strongest drive, generation and what it's doing, sorted by number, name, age or drive. `/` filters it to the rows with a column that has the words typed, from their start. Choosing one selects it and centres the viewport on it.
 _Avoid_: roster, census
@@ -849,7 +861,7 @@ A mapping from semantic tiles to glyphs and colours, and from each text role to 
 _Avoid_: skin
 
 **Text role** (#302):
-What a piece of the screen's text is for, which the theme styles: a heading, muted (minor) text, good (a gain, or a reward felt), bad (a loss, or a punishment felt), a key in a hint, or selected (what's chosen, such as the open tab). Colour never carries a meaning alone: the signs, arrows and capitals stay.
+What a piece of the screen's text is for, which the theme styles: a heading, muted (minor) text, good (a gain, or a reward felt), bad (a loss, or a punishment felt), a key in a hint, selected (what's chosen, such as the open tab), or a spot (what a tooltip can explain, and the name of a log line's sprite). Colour never carries a meaning alone: the signs, arrows and capitals stay.
 _Avoid_: colour scheme, highlight (for a role)
 
 **Panel shade** (#302):
