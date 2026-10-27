@@ -136,15 +136,18 @@ fn the_brain_tab_s_headings_gains_and_losses_have_their_colours() {
 
 #[test]
 fn the_body_tab_draws_each_drive_s_bar_in_its_colour_on_a_muted_track() {
-    let (world, app) = one_sprite(HUNGRY_GENOME, 0);
+    // Hunger .63, 19 thirds of a block: six blocks and a third.
+    let genome = r#"(format: 1, genes: [InitialConcentration(chem: "hunger", value: 0.63)])"#;
+    let (world, app) = one_sprite(genome, 0);
     let screen = render(&app, &world, 100, 30);
     let at = find_from(&screen, "hunger ", 2);
     let bar: Vec<&Cell> = (at.x + 12..at.x + 22).map(|x| &screen[(x, at.y)]).collect();
+    let drawn: String = bar.iter().map(|cell| cell.symbol()).collect();
+    assert_eq!(drawn, "██████▒░░░", "hunger .63");
+    // The block filled a third is filled, in the drive's colour too.
     let hunger = Theme::cp437().drive_colour("hunger").expect("a colour");
-    let (full, empty): (Vec<&&Cell>, Vec<&&Cell>) =
-        bar.iter().partition(|cell| cell.symbol() == "█");
-    assert_eq!((full.len(), empty.len()), (8, 2), "hunger .8");
-    assert!(full.iter().all(|cell| cell.fg == hunger));
+    let (filled, empty) = bar.split_at(7);
+    assert!(filled.iter().all(|cell| cell.fg == hunger));
     assert!(empty.iter().all(|cell| styled(cell, look().muted)));
     // The dots between a line's parts are minor too.
     let dot = find_from(&screen, " · ", 2);

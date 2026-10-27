@@ -6,7 +6,7 @@ use terra_sim::{
 };
 
 use super::actions::{action_line, logged_line};
-use super::body::{bar_parts, blocks};
+use super::body::{bar_parts, thirds};
 use super::brain::{concept_name, scored};
 use super::*;
 use crate::text::Words;
@@ -817,15 +817,26 @@ fn a_wrapped_line_has_the_room_the_number_leaves_on_the_first() {
     );
 }
 
+#[test]
+fn a_drive_bar_fills_to_the_nearest_third_of_a_block() {
+    // Design §6.1: .63 is 18.9 thirds, so 19: six blocks and a third.
+    assert_eq!(bar_parts(thirds(0.63)), ["██████▒", "░░░"]);
+    assert_eq!(bar_parts(thirds(0.55)), ["█████▓", "░░░░"]);
+    assert_eq!(bar_parts(thirds(0.6)), ["██████", "░░░░"]);
+    assert_eq!(bar_parts(thirds(0.01)), ["", "░░░░░░░░░░"]);
+    assert_eq!(bar_parts(thirds(0.02)), ["▒", "░░░░░░░░░"]);
+}
+
 // Levels never leave 0 to 1 (design §4.4), but a bar mustn't crash the
 // screen if one ever did.
 #[test]
 fn a_drive_bar_is_ten_cells_whatever_the_level() {
-    assert_eq!(bar_parts(blocks(0.42)).concat(), "████░░░░░░");
-    assert_eq!(bar_parts(blocks(1.05)).concat(), "██████████");
-    assert_eq!(bar_parts(blocks(-0.3)).concat(), "░░░░░░░░░░");
-    assert_eq!(bar_parts(blocks(f32::NAN)).concat(), "░░░░░░░░░░");
-    assert_eq!(bar_parts(12).concat(), "██████████");
+    assert_eq!(bar_parts(thirds(0.42)).concat(), "████▒░░░░░");
+    assert_eq!(bar_parts(thirds(1.05)).concat(), "██████████");
+    assert_eq!(bar_parts(thirds(-0.3)).concat(), "░░░░░░░░░░");
+    assert_eq!(bar_parts(thirds(f32::NAN)).concat(), "░░░░░░░░░░");
+    assert_eq!(bar_parts(40).concat(), "██████████");
+    assert_eq!(bar_parts(u8::MAX).concat(), "██████████");
 }
 
 /// A gene of every kind, the words lit on its line, which a tooltip

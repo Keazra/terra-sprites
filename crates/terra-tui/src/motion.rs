@@ -27,7 +27,7 @@
 //!   them, and `ui::render_with` calls [`play_on_panels`] once the panels
 //!   and pop-ups are drawn and what can be pointed at is marked, before the
 //!   tooltip, which doesn't move. A bar's blocks are no effect: the Body tab
-//!   draws as many as `App::drive_bar` says.
+//!   fills as many thirds of a block as `App::drive_bar` says.
 //! - **Time** is real time, which the frame loop hands the app (§6.6):
 //!   [`age`] says how far into an effect a frame is, and [`eased`] how far
 //!   that's got, fast and then slowing.
@@ -241,8 +241,8 @@ struct Bars {
     drives: BTreeMap<String, Bar>,
 }
 
-/// A drive's bar easing from `from` blocks filled to `to`, from when it
-/// began.
+/// A drive's bar easing from `from` thirds of a block filled to `to`, from
+/// when it began (design §6.1).
 #[derive(Debug, Clone, Copy)]
 struct Bar {
     from: u8,
@@ -251,17 +251,18 @@ struct Bar {
 }
 
 impl Bar {
-    /// A bar still at `blocks`, from `now`.
-    fn at(blocks: u8, now: Duration) -> Bar {
+    /// A bar still at `thirds`, from `now`.
+    fn at(thirds: u8, now: Duration) -> Bar {
         Bar {
-            from: blocks,
-            to: blocks,
+            from: thirds,
+            to: thirds,
             began: now,
         }
     }
 
-    /// How many blocks it fills at `now`: a whole block at a time, quick at
-    /// first and slowing (design §6.9).
+    /// How many thirds of a block it fills at `now`: a third at a time, so
+    /// a block fills `░` `▒` `▓` `█` as it goes, quick at first and slowing
+    /// (design §6.9).
     fn shown(&self, now: Duration) -> u8 {
         let way = f32::from(self.to) - f32::from(self.from);
         let moved = (way * eased(age(self.began, now), BAR)).round();
@@ -543,7 +544,7 @@ impl Motion {
         }
     }
 
-    /// Notes the blocks the selected sprite's drives' bars fill, by the
+    /// Notes the thirds the selected sprite's drives' bars fill, by the
     /// drive's name, after the ticks just taken in at `now` and `speed`:
     /// `sprite`, with its ID, or none if no sprite in the world is
     /// selected. A bar whose level changed eases to it from where it's
@@ -577,7 +578,7 @@ impl Motion {
             _ => {
                 let drives = drives
                     .into_iter()
-                    .map(|(name, blocks)| (name, Bar::at(blocks, now)))
+                    .map(|(name, thirds)| (name, Bar::at(thirds, now)))
                     .collect();
                 self.bars = Some(Bars { sprite: id, drives });
             }
@@ -694,9 +695,9 @@ impl Motion {
         ended
     }
 
-    /// How many blocks drive `drive`'s bar fills on sprite `id`'s Body tab
-    /// at `now` and `speed`, its level `live` blocks: easing to it, if it's
-    /// the level last taken in, and otherwise at it.
+    /// How many thirds of a block drive `drive`'s bar fills on sprite `id`'s
+    /// Body tab at `now` and `speed`, its level `live` thirds: easing to it,
+    /// if it's the level last taken in, and otherwise at it.
     pub(crate) fn bar(
         &self,
         id: EntityId,

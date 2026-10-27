@@ -63,13 +63,15 @@ pub(super) fn body_tab(sprite: &SpriteView, app: &App, world: &World) -> Vec<Tab
     lines.push(Line::default().into());
     let chemicals: Vec<ChemicalLevel> = sprite.chemicals().collect();
     for drive in chemicals.iter().filter(|c| c.kind == ChemicalKind::Drive) {
-        // The bar filled in the drive's colour, as the map draws a sprite
-        // it drives, and the rest of it minor (design §6.2).
+        // The bar filled in the drive's colour, a block filled in part too,
+        // as the map draws a sprite it drives, and the rest of it minor
+        // (design §6.2).
         let filled = match app.theme.drive_colour(drive.name) {
             Some(colour) => Style::default().fg(colour),
             None => Style::default(),
         };
-        // Easing to its level while motion is on (design §6.9).
+        // Easing to its level a third of a block at a time while motion is
+        // on (design §6.9).
         let [full, empty] = bar_parts(app.drive_bar(sprite.id(), drive.name, drive.level));
         let mut spans = vec![
             Span::raw(format!(" {:<12}", display_name(drive.name))),
@@ -354,18 +356,27 @@ fn led_line(sprite: &SpriteView, detail: bool, world: &World) -> Option<String> 
     })
 }
 
-/// How many of the ten blocks of a level's bar are filled: to the nearest
-/// tenth.
-pub(crate) fn blocks(level: f32) -> u8 {
+/// How many blocks a drive's bar is long (design §6.1).
+const BLOCKS: u8 = 10;
+
+/// How many thirds of a block a level's bar fills, of its ten blocks'
+/// thirty: to the nearest third (design §6.1).
+pub(crate) fn thirds(level: f32) -> u8 {
     // `as` makes a NaN 0.
-    ((level * 10.0).round() as u8).min(10)
+    ((level * f32::from(BLOCKS * 3)).round() as u8).min(BLOCKS * 3)
 }
 
-/// A bar ten cells long with `filled` of them filled: its filled part and
-/// its empty part.
-pub(super) fn bar_parts(filled: u8) -> [String; 2] {
-    let filled = usize::from(filled.min(10));
-    ["█".repeat(filled), "░".repeat(10 - filled)]
+/// A bar ten blocks long that fills `thirds` thirds of a block (design
+/// §6.1): its filled part, whole blocks `█` and then any block filled a
+/// third `▒` or two thirds `▓`, and its empty part, `░`. All four are CP437,
+/// in every glyph set (§6.2: text stays CP437).
+pub(super) fn bar_parts(thirds: u8) -> [String; 2] {
+    let thirds = thirds.min(BLOCKS * 3);
+    let (whole, part) = (thirds / 3, thirds % 3);
+    let mut filled = "█".repeat(usize::from(whole));
+    filled.push_str(["", "▒", "▓"][usize::from(part)]);
+    let empty = BLOCKS - whole - u8::from(part > 0);
+    [filled, "░".repeat(usize::from(empty))]
 }
 
 /// An arrow for which way a level went over the last tick, or nothing when

@@ -1495,9 +1495,9 @@ fn hungry(sprites: &[(Pos, f32)]) -> World {
     WorldBuilder::grass(10, 6).genes(&genes).build()
 }
 
-/// The hunger bar on the Body tab on `screen`: how many of its blocks are
-/// filled, and the level it says beside it.
-fn hunger_bar(screen: &Buffer) -> (usize, String) {
+/// The hunger bar on the Body tab on `screen`, its ten blocks, and the
+/// level it says beside it.
+fn hunger_line(screen: &Buffer) -> (String, String) {
     let rows = common::lines(screen);
     let (y, x) = rows
         .iter()
@@ -1508,16 +1508,33 @@ fn hunger_bar(screen: &Buffer) -> (usize, String) {
         })
         .unwrap_or_else(|| panic!("no hunger bar:\n{}", rows.join("\n")));
     let bar: String = (x + 12..x + 22).map(|x| screen[(x, y)].symbol()).collect();
-    let filled = bar.chars().filter(|&c| c == '█').count();
-    assert_eq!(
-        bar.chars().filter(|&c| c == '░').count(),
-        10 - filled,
-        "{bar}"
-    );
     let said: String = (x + 22..screen.area.right())
         .map(|x| screen[(x, y)].symbol())
         .collect();
-    (filled, said.trim().to_string())
+    (bar, said.trim().to_string())
+}
+
+/// The hunger bar on the Body tab on `screen`: how many thirds of a block
+/// it fills (design §6.1), and the level it says beside it.
+fn hunger_bar(screen: &Buffer) -> (usize, String) {
+    let (bar, said) = hunger_line(screen);
+    let thirds: Vec<usize> = bar
+        .chars()
+        .map(|block| match block {
+            '░' => 0,
+            '▒' => 1,
+            '▓' => 2,
+            '█' => 3,
+            _ => panic!("not a bar: {bar}"),
+        })
+        .collect();
+    // Full blocks, then at most one filled in part, then empty ones.
+    assert!(thirds.windows(2).all(|two| two[0] >= two[1]), "{bar}");
+    assert!(
+        thirds.iter().filter(|&&part| part % 3 != 0).count() <= 1,
+        "{bar}"
+    );
+    (thirds.iter().sum(), said)
 }
 
 /// An app with motion on that has selected the one sprite on `world`, let
@@ -1539,27 +1556,46 @@ fn take_in(app: &mut App, world: &World) {
 }
 
 #[test]
-fn a_drive_s_bar_eases_to_its_new_value_a_block_at_a_time() {
+fn a_drive_s_bar_eases_to_its_new_value() {
+    // Thirds of a block: .2 is 6 of them, .8 is 24.
     let (before, after) = (hungry(&[(at(3, 2), 0.2)]), hungry(&[(at(3, 2), 0.8)]));
     let mut app = watching(&before);
     let shown = hunger_bar(&frame(&mut app, &before, Duration::ZERO));
-    assert_eq!(shown, (2, ".20".to_string()));
+    assert_eq!(shown, (6, ".20".to_string()));
     take_in(&mut app, &after);
     // The level beside it is true at once; only the bar eases.
     let start = hunger_bar(&frame(&mut app, &after, Duration::ZERO));
-    assert_eq!(start, (2, ".80".to_string()));
+    assert_eq!(start, (6, ".80".to_string()));
     let mut filled = vec![start.0];
     for _ in 0..8 {
-        let (blocks, said) = hunger_bar(&frame(&mut app, &after, ms(50)));
+        let (thirds, said) = hunger_bar(&frame(&mut app, &after, ms(50)));
         assert_eq!(said, ".80");
-        filled.push(blocks);
+        filled.push(thirds);
     }
-    // Whole blocks, never back, and there in 0.4 s.
+    // Never back, and there in 0.4 s.
     assert!(filled.windows(2).all(|two| two[0] <= two[1]), "{filled:?}");
-    assert_eq!(filled[8], 8, "{filled:?}");
-    assert!(filled[2] > 2 && filled[2] < 8, "{filled:?}");
+    assert_eq!(filled[8], 24, "{filled:?}");
+    assert!(filled[2] > 6 && filled[2] < 24, "{filled:?}");
     // Quick at first and slowing: most of the way in the first half.
-    assert!(filled[4] - 2 > 8 - filled[4], "{filled:?}");
+    assert!(filled[4] - 6 > 24 - filled[4], "{filled:?}");
+}
+
+#[test]
+fn a_block_fills_a_third_at_a_time_as_its_bar_eases() {
+    // Design §6.1, §6.9: from .2 to .3, 6 thirds of a block to 9, the
+    // third block fills ░ ▒ ▓ █ rather than all at once.
+    let (before, after) = (hungry(&[(at(3, 2), 0.2)]), hungry(&[(at(3, 2), 0.3)]));
+    let mut app = watching(&before);
+    take_in(&mut app, &after);
+    let mut third: Vec<char> = Vec::new();
+    for step in [0, 50, 50, 50, 50, 50, 50, 50, 50] {
+        let (bar, _) = hunger_line(&frame(&mut app, &after, ms(step)));
+        let block = bar.chars().nth(2).expect("ten blocks");
+        if third.last() != Some(&block) {
+            third.push(block);
+        }
+    }
+    assert_eq!(third, ['░', '▒', '▓', '█']);
 }
 
 #[test]
@@ -1570,12 +1606,12 @@ fn a_bar_eases_on_from_where_it_s_got_to() {
     let mut app = watching(&worlds[0]);
     take_in(&mut app, &worlds[1]);
     let (part, _) = hunger_bar(&frame(&mut app, &worlds[1], ms(100)));
-    assert!(part > 2 && part < 8, "{part}");
+    assert!(part > 6 && part < 24, "{part}");
     take_in(&mut app, &worlds[2]);
     let (then, said) = hunger_bar(&frame(&mut app, &worlds[2], Duration::ZERO));
     assert_eq!((then, said.as_str()), (part, ".50"));
     let (end, _) = hunger_bar(&frame(&mut app, &worlds[2], ms(400)));
-    assert_eq!(end, 5);
+    assert_eq!(end, 15);
 }
 
 #[test]
@@ -1583,19 +1619,19 @@ fn a_bar_snaps_on_first_sight_on_a_new_selection_with_motion_off_and_at_4x() {
     let (before, after) = (hungry(&[(at(3, 2), 0.2)]), hungry(&[(at(3, 2), 0.8)]));
     // First seen at .8: drawn full at once, not filling from empty.
     let mut app = watching(&after);
-    let (blocks, _) = hunger_bar(&frame(&mut app, &after, Duration::ZERO));
-    assert_eq!(blocks, 8, "first sight");
+    let (thirds, _) = hunger_bar(&frame(&mut app, &after, Duration::ZERO));
+    assert_eq!(thirds, 24, "first sight");
     // Another sprite selected shows its own at once.
     let two = hungry(&[(at(3, 2), 0.2), (at(6, 2), 0.8)]);
     let mut app = watching(&two);
     select(&mut app, &two, sprite_on(&two, at(3, 2)));
     app.record(&[], &two);
-    let (blocks, _) = hunger_bar(&frame(&mut app, &two, ms(1000)));
-    assert_eq!(blocks, 2);
+    let (thirds, _) = hunger_bar(&frame(&mut app, &two, ms(1000)));
+    assert_eq!(thirds, 6);
     select(&mut app, &two, sprite_on(&two, at(6, 2)));
     app.record(&[], &two);
-    let (blocks, _) = hunger_bar(&frame(&mut app, &two, Duration::ZERO));
-    assert_eq!(blocks, 8, "a new selection");
+    let (thirds, _) = hunger_bar(&frame(&mut app, &two, Duration::ZERO));
+    assert_eq!(thirds, 24, "a new selection");
     // With motion off, and at 4×, it jumps.
     for faster in [false, true] {
         let mut app = watching(&before);
@@ -1605,8 +1641,8 @@ fn a_bar_snaps_on_first_sight_on_a_new_selection_with_motion_off_and_at_4x() {
             app.set_motion(false);
         }
         take_in(&mut app, &after);
-        let (blocks, _) = hunger_bar(&frame(&mut app, &after, Duration::ZERO));
-        assert_eq!(blocks, 8, "4x: {faster}");
+        let (thirds, _) = hunger_bar(&frame(&mut app, &after, Duration::ZERO));
+        assert_eq!(thirds, 24, "4x: {faster}");
     }
 }
 
@@ -2306,7 +2342,7 @@ fn in_mono_the_pan_and_the_bars_still_move() {
     app.theme = mono();
     take_in(&mut app, &after);
     let start = hunger_bar(&frame(&mut app, &after, Duration::ZERO));
-    assert_eq!(start, (2, ".80".to_string()), "eases from where it was");
+    assert_eq!(start, (6, ".80".to_string()), "eases from where it was");
     let end = hunger_bar(&frame(&mut app, &after, ms(400)));
-    assert_eq!(end, (8, ".80".to_string()));
+    assert_eq!(end, (24, ".80".to_string()));
 }

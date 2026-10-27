@@ -1226,7 +1226,7 @@ The species is dropped into a world it doesn't know and has to learn about it. I
 .,,,...~~~≈≈≈≈≈~~....♣.........########....♠..........│ Going to eat the berry bush · 3 tiles to go
 ..,,...~~~~≈≈≈~~..........☺.......#####.......♣.......│ age 3,410 · speed 7 · sense 10
 ...,....~~~~~~~.....•.........☺.....##....☺...........│ hunger     ███████░░░ .71 ▲
-.....,...................♣.............♠..............│ thirst     ██░░░░░░░░ .18
+.....,...................♣.............♠..............│ thirst     █▓░░░░░░░░ .18
 ....☺....○............................................│ pain       ░░░░░░░░░░ .00
 ..........................♣.......☺.............♠.....│ tiredness  ████░░░░░░ .39
 ...,,.....................................☺...........│ energy .42 · hydration .77 · injury .05
@@ -1294,7 +1294,7 @@ The species is dropped into a world it doesn't know and has to learn about it. I
 
 | Tab | Shows |
 |---|---|
-| **Body** | What the sprite is doing, in plain words (below); age and lifespan; speed and sense radius as expressed; a bar for each drive, with its level, an arrow for its change over the last tick (`▲` rising, `▼` falling, none when steady) and, from #328, its sparkline (below); the physical levels; the observed list (below). In M2 it gives the sex and parents after the traits (M2 design §10.7), and from Slice 25 where the sprite came from and its generation (M2 design §17.5) |
+| **Body** | What the sprite is doing, in plain words (below); age and lifespan; speed and sense radius as expressed; a bar for each drive, ten blocks long and filled to the nearest third of a block, each block `░`, `▒`, `▓` or `█` (#306: .63 is `██████▒░░░`), with its level, an arrow for its change over the last tick (`▲` rising, `▼` falling, none when steady) and, from #328, its sparkline (below); the physical levels; the observed list (below). In M2 it gives the sex and parents after the traits (M2 design §10.7), and from Slice 25 where the sprite came from and its generation (M2 design §17.5) |
 | **Brain** | What it attended to and decided, then its memory grouped under each thing (v40), then its places |
 | **Chem** | One list: each chemical on its own line with its level, its change per tick (`-.0002`, blank when it rounds to 0) and, from #328, its sparkline (below; none for reward and punishment), the physical chemicals, then a blank line and the signal chemicals. From slice 8 the reward line also shows `last_r` as "felt": `reward  .00  felt -.42`. The 16 hormones sit in a 4×4 grid of levels below, so all of it fits at 100×30. Reward and punishment are consumed every tick, so their levels always read 0 between ticks. |
 | **Genome** | Genes grouped under headings: traits first, on one line (`speed 7.21 · sense 9.87 · lifespan 61,204`), then half-lives, reactions, emitters, receptors, starting levels, brain settings (`tau base .2`), instincts (`thirst & not target adjacent → drink -.5`) and attention instincts (`hunger → attends to bush +.8`, naming the category as the gene does, v19), and unknown genes last, each group in genome order. Each gene is a plain line with 3 significant figures, so spawn variation shows: `low energy → hunger +.00428 past .515`, `hunger falls → reward +1.02 past .0198`, `hunger halves every 2,041 ticks`. A line too long for the tab wraps, indented. A flagged, unexpressed, unknown or unmatched (v19) gene is dimmed, with its reason on the line below (§4.3); an unmatched gene written by number shows as its number, as an unknown gene does. `g` exports to RON. |
@@ -1304,9 +1304,9 @@ The species is dropped into a world it doesn't know and has to learn about it. I
 
   ```
   │ hunger      █░░░░░░░░░ .09 ▲   ████▓░░░    │
-  │ thirst      █░░░░░░░░░ .07 ▲   ░░░░▒▒▒▒    │
-  │ pain        █░░░░░░░░░ .12 ▼   █████▓░░    │
-  │ tiredness   ░░░░░░░░░░ .05 ▲   ░░░░░░░░    │
+  │ thirst      ▓░░░░░░░░░ .07 ▲   ░░░░▒▒▒▒    │
+  │ pain        █▒░░░░░░░░ .12 ▼   █████▓░░    │
+  │ tiredness   ▓░░░░░░░░░ .05 ▲   ░░░░░░░░    │
   ```
 
   and on its Chem tab, the water in its gut being taken in, so hydration climbs, beside stamina easing by under .02, which stays one shade:
@@ -1569,7 +1569,7 @@ The species is dropped into a world it doesn't know and has to learn about it. I
   | Selected | What's chosen: the open tab, a menu's highlighted item, the sprite list's highlighted row | reverse video |
   | Spot | What a tooltip can explain (§6.1, #304): a drive's name on the Body tab, a chemical's on the Chem tab, a gene's name on the Genome tab and the event log's filters; and a sprite's name in a line of the log while it's in the world, which lights the sprite up on the map; but what's minor, which keeps its muted look until the pointer is on it. The one the pointer is on is drawn in it in reverse video | a soft blue, `#87afd7`, quieter than the terminal's light blue (Fauxpaw, 2026-10-27) |
 
-  A zero, `+.00`, is neither good nor bad, and a chemical's change on the Chem tab stays plain, since a rise is good for food and bad for hunger. A drive's bar on the Body tab is drawn in the colour the theme gives that drive, its empty part muted.
+  A zero, `+.00`, is neither good nor bad, and a chemical's change on the Chem tab stays plain, since a rise is good for food and bad for hunger. A drive's bar on the Body tab is drawn in the colour the theme gives that drive, a block filled in part too, and its empty part muted.
 - **Panels** (#302): a palette's `panels` section gives the shade the inspector and the event log sit on, and their title rows' shade: `#181a22` and `#282c3a` in the default palette. A palette without one, such as high contrast and mono, draws lines between the panels instead (§6.1), and so does one with no colour, whose shades couldn't be seen, even if it gives them (#307). The shades go with the palette, not the glyph set (#307), so ASCII glyphs in the default palette sit on shades, where the ASCII theme drew lines before.
 - **`--ascii` picks the ASCII glyph set for the run** (#307): the map's glyphs, the Cursor and the emotes. Frames and text stay CP437 in every glyph set. With `--theme`, it draws the file's palette in ASCII.
 
@@ -1803,13 +1803,13 @@ N ═ M
 | A hatching | Sparks: the egg's tile and the eight round it light up at scattered moments and fade back, but where the young is drawn, which warms instead. The young starts in the egg's colour and warms to its own over the first half, as if the shell fell away, and a cracked egg's glow fades from its tile as it does, which reads differently from a death's flash and grey (M3's breaking eggs). | 1 s | 0.5 s |
 | A tab opened | The new tab sweeps in out of the panel's shade, or the dark in a theme without shades: from the side it's on, from the right when it's right of the old tab, as `]` opens, and from the left when it's left of it. Not as the game starts or a world loads, nor for the tab already open, nor while the inspector is hidden. | 0.25 s | the same |
 | A pop-up | Fades in out of the dark as it opens. As it closes, it fades out to the dark as it was last drawn, over the first half, and what was under it fades back from there over the second, so its characters give way to theirs while all is dark: the menus, help, the command palette, the sprite list, the population graph and the family tree. Tooltips and the debug overlay don't fade, nor does the inspector, opened over the map or filling the screen. | 0.15 s | the same |
-| A drive's bar | On the Body tab, eases to its new value a block at a time rather than jumping, while the level beside it is true at once. A sprite just selected shows its bars as they are. | 0.4 s | jumps |
+| A drive's bar | On the Body tab, eases to its new value a third of a block at a time rather than jumping, so a block fills `░` `▒` `▓` `█` as it goes (§6.1), while the level beside it is true at once. A sprite just selected shows its bars as they are. | 0.4 s | jumps |
 | The pan | When the view centres on a sprite or an egg more than 2 tiles away (`Tab`, the sprite list, the family tree, a click on a log line, Track), it pans there, quickly at first and then slowing. Scrolling, loading, square tiles and a new screen size don't pan, nor does Track centring the view again for them. | 0.3 s | jumps |
 | The trail | The tiles the selected sprite has just left keep a tint that fades, at most 8 of them. | 1.5 s a tile | 0.75 s a tile |
 
 - **Only a few things move at once:** at most 4 deaths and hatchings play together, 2 at 4× and up, a new one taking the oldest one's place. Only those that could be drawn just now count, on the map view, not under the inspector open over it (§6.1), and shown by the policy (§6.4), so in a die-off one the player can't see never takes the place of one they can (#306). Every effect eases out, fast and then slowing, and nothing loops.
 - **It thins out at 4× and up,** which takes in Lab's faster speeds (M2 design §16.2), so a busy screen doesn't fizz: as the table says, deaths, hatchings and the trail are shorter and fewer, no egg cracks, and the bars and the view jump.
-- **Colour only in panels:** the tab's sweep and a pop-up's fade change no characters, and a bar easing steps through its own blocks. On the map, a death's ghost is the sprite's own glyph. Nothing is drawn outside the glyph set, so CP437 holds (§6.2).
+- **Colour only in panels:** the tab's sweep and a pop-up's fade change no characters, and a bar easing steps through its own blocks, `░` `▒` `▓` `█`, in every glyph set. On the map, a death's ghost is the sprite's own glyph. Nothing is drawn outside the glyph set, so CP437 holds (§6.2).
 - **Exact colours** (#302): a fade blends exact colours, and a colour the theme names blends from how Windows Terminal's default scheme, Campbell, draws it, the scheme the renderer draws in.
 - **The theme's `motion` section** gives motion's colours: a death's flash, the ash grey, the sparks, which an egg's crack glows towards, the trail's tint, and the dark a pop-up fades in from and out to, which a fade also takes as the background of a tile that has none of its own. A theme without one uses the default theme's. Like the panel shades (§6.2), a shade or two lighter than black, motion assumes the terminal's background is dark: a tile with no background of its own fades as if it were `dark`, Campbell's `#0c0c0c`, so on a light background a death's flash or a pop-up's fade passes through dark before the tile settles back.
 - **Motion that tells the player something asks first** (§6.4): a death's, a hatching's and an egg's crack ask `Emotes` about their sprite, and the trail asks `Markers` about the selected sprite.

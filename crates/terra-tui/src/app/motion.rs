@@ -104,7 +104,7 @@ impl App {
             let drives = sprite
                 .chemicals()
                 .filter(|chemical| chemical.kind == ChemicalKind::Drive)
-                .map(|drive| (drive.name.to_string(), inspector::blocks(drive.level)))
+                .map(|drive| (drive.name.to_string(), inspector::thirds(drive.level)))
                 .collect();
             (sprite.id(), drives)
         });
@@ -126,11 +126,11 @@ impl App {
             .note_trail(sprite, self.running_for, self.clock.speed());
     }
 
-    /// How many blocks drive `drive`'s bar fills on sprite `id`'s Body tab
-    /// just now, its level `level`: easing to its level while motion is on
-    /// (design §6.9).
+    /// How many thirds of a block drive `drive`'s bar fills on sprite
+    /// `id`'s Body tab just now, its level `level`: easing to its level a
+    /// third at a time while motion is on (design §6.1, §6.9).
     pub(crate) fn drive_bar(&self, id: EntityId, drive: &str, level: f32) -> u8 {
-        let live = inspector::blocks(level);
+        let live = inspector::thirds(level);
         self.motion
             .bar(id, drive, live, self.running_for, self.clock.speed())
     }
