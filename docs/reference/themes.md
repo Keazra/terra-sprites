@@ -1,6 +1,6 @@
 # Themes
 
-A **theme** says how the map is drawn: the character and colour of each kind of ground, each plant and toy, sprites, their emotes, the Cursor, the glass round the map and the stars in space past it (design §6.2, M2 design §11), the colours and blocks of the population graph (M2 design §14), and the lineage colours (§17). It also colours the screen's text by its job, shades the panels beside and under the map, or leaves them to lines (design §6.1, §6.2), and gives motion its colours (design §6.9). A theme is two parts, chosen apart: a **glyph set**, its characters, and a **palette**, the rest (below). The game's own are theme files in [`themes/`](../../themes), [`cp437.ron`](../../themes/cp437.ron) the default. To draw it your own way, copy one, edit it, and put it in the `themes` folder of the game's folder (design §6.7). The help screen (`?`) shows where the game's folder is:
+A **theme** says how the map is drawn: the character and colour of each kind of ground, each plant and toy, sprites, their emotes, the Cursor, the glass round the map and the stars in space past it (design §6.2, M2 design §11), the colours and blocks of the population graph (M2 design §14), and the lineage colours (§17). It also colours the screen's text by its job, shades the panels beside and under the map, or leaves them to lines (design §6.1, §6.2), and gives motion its colours and the look of a drive's bar's waves (design §6.9). A theme is two parts, chosen apart: a **glyph set**, its characters, and a **palette**, the rest (below). The game's own are theme files in [`themes/`](../../themes), [`cp437.ron`](../../themes/cp437.ron) the default. To draw it your own way, copy one, edit it, and put it in the `themes` folder of the game's folder (design §6.7). The help screen (`?`) shows where the game's folder is:
 
 | System | The themes folder |
 |---|---|
@@ -65,7 +65,7 @@ A theme is one record with fourteen fields. The first five are needed; `colour`,
 | `lineage` | The lineage colours (`b`) (below). Optional, as `space` is. |
 | `text` | The screen's text, styled by its job (below). Optional, as `space` is. |
 | `panels` | The shades the inspector and the event log sit on (below). Optional: a theme without them draws lines between the panels instead. |
-| `motion` | Motion's colours (below). Optional, as `space` is. |
+| `motion` | Motion's colours, and how a drive's bar shows its drive's pace (below). Optional, as `space` is. |
 | `colour` | `false` for a palette with no colour at all, as mono's (below). Optional: `true` if it's left out. |
 | `foreground` | A colour: what the game leaves in the terminal's own text colour is drawn in it, and every grey on the screen in its shades, as Game Kid's are (below). Optional: a theme without it leaves them to the terminal. |
 | `colour_modes` | `false` for a palette whose colours can't tell the drives or the lineage apart, as Game Kid's can't (below). Optional: `true` if it's left out. |
@@ -162,7 +162,7 @@ A zero, `+.00`, is neither good nor bad, and a chemical's change on the Chem tab
 
 ### `motion`
 
-Motion is the small effects drawn over the screen as things happen, such as a death's flash and a hatching's sparks (design §6.9); `--no-motion` turns it off. `motion` is a record of five fields, each of which may be left out and is then drawn as the default theme draws it. A field the game doesn't know is refused, naming it. A fade blends exact colours, so a named colour here blends from how Windows Terminal's default scheme, Campbell, draws it, whatever the player's terminal shows.
+Motion is the small effects drawn over the screen as things happen, such as a death's flash and a hatching's sparks (design §6.9); `--no-motion` turns it off. `motion` is a record of six fields, five colours and how a drive's bar shows its drive's pace, each of which may be left out and is then drawn as the default theme draws it. A field the game doesn't know is refused, naming it. A fade blends exact colours, so a named colour here blends from how Windows Terminal's default scheme, Campbell, draws it, whatever the player's terminal shows.
 
 | Field | Meaning | Default theme |
 |---|---|---|
@@ -171,10 +171,16 @@ Motion is the small effects drawn over the screen as things happen, such as a de
 | `spark` | The sparks round an egg that hatches, and what the tile of one about to hatch flashes towards. | `"#ffe9a0"` |
 | `trail` | The tint on the tiles the selected sprite has just left. | `"#2b3047"` |
 | `dark` | What a pop-up fades in from, and out to as it closes, and what was under it fades back from; what a tab opened sweeps in from in a theme without `panels`; and the background a fade takes on a tile that has none of its own. | `"#0c0c0c"` |
+| `bar` | How a drive's bar on the Body tab shows how fast its drive moves against how fast it usually rises (below): `crashing` or `ripple`, not in quotes. | `crashing` |
+
+`bar` chooses the waves on a drive's bar, which play while motion is on, below 4× and in a palette with colour, and are only colour: no block's character changes. A drive's usual rise is the average of its last hundred rises a tick since you selected the sprite, and its first rise is as usual for it. Either way, a falling drive shows a faint dark dip running slowly back down its bar, and a steady one nothing.
+
+- **`crashing`**, crashing waves: while the drive rises, a crest runs up the filled part to the bar's end, breaks there, the end block flaring, and its spray runs on into one to three empty blocks past the level and dies away, changing their colour but not their `░`, so the level never looks higher than it is. The faster the rise against its usual rise, the taller the crest, the more often it comes, the brighter the flare and the further the spray.
+- **`ripple`**, a running ripple: while the drive rises, a crest runs up the filled part and off the bar's end, taller and more often the faster, with no flare or spray. No built-in palette chooses it, and the settings screen doesn't offer it, so it's chosen only by a theme file of your own.
 
 ### `colour`
 
-`colour: false` draws the whole screen in the terminal's own colours, with nothing but bold and reverse video, as the mono palette does: every colour the theme names, and every one the game draws itself, such as the title screen's greys, gives way to the terminal's. The theme still names its colours, since the fields above need them, but they're never seen: mono's are all `white`. The tile the selected sprite attends to, which `attention_marker` would give a background, is underlined instead, which no glyph is, so it never reads as a fruiting bush's bold; and motion's colours don't play, though the view still pans and a drive's bar still eases (design §6.9).
+`colour: false` draws the whole screen in the terminal's own colours, with nothing but bold and reverse video, as the mono palette does: every colour the theme names, and every one the game draws itself, such as the title screen's greys, gives way to the terminal's. The theme still names its colours, since the fields above need them, but they're never seen: mono's are all `white`. The tile the selected sprite attends to, which `attention_marker` would give a background, is underlined instead, which no glyph is, so it never reads as a fruiting bush's bold; and motion's colours don't play, a drive's bar's waves among them, though the view still pans and a drive's bar still eases (design §6.9).
 
 ### `foreground`
 
@@ -257,8 +263,8 @@ A bright theme, for a terminal whose dark colours are hard to see: light colours
         muted:   (fg: gray),
     ),
     panels: (shade: "#1c1c1c", title: "#303030"),
-    motion: (flash: white),
+    motion: (flash: white, bar: ripple),
 )
 ```
 
-Save it as `bright.ron` in the themes folder and pick it as the Glyphs and the Colours on the settings screen (`Ctrl+T`). Boredom, crowdedness, arousal and anxiety are left out of `drives`, so a sprite bored, crowded, aroused or anxious above all else draws in white. `space` gives only the far stars, in gray rather than dark gray, so the glass and the nearer stars are drawn as the default theme draws them. `population` draws old sprites in white and the line of the world's limit in gray; the rest of the graph is drawn as in the default theme. `lineage` draws the sprites outside the lineage in gray, a little brighter than the default's dark gray. `text` makes headings light yellow and minor text gray, so they stand out more; gains, losses, keys and the open tab are styled as in the default theme. `panels` sets the shades in neutral greys. `motion` makes a death's flash white, and its other colours are the default theme's.
+Save it as `bright.ron` in the themes folder and pick it as the Glyphs and the Colours on the settings screen (`Ctrl+T`). Boredom, crowdedness, arousal and anxiety are left out of `drives`, so a sprite bored, crowded, aroused or anxious above all else draws in white. `space` gives only the far stars, in gray rather than dark gray, so the glass and the nearer stars are drawn as the default theme draws them. `population` draws old sprites in white and the line of the world's limit in gray; the rest of the graph is drawn as in the default theme. `lineage` draws the sprites outside the lineage in gray, a little brighter than the default's dark gray. `text` makes headings light yellow and minor text gray, so they stand out more; gains, losses, keys and the open tab are styled as in the default theme. `panels` sets the shades in neutral greys. `motion` makes a death's flash white and shows a drive's pace on its bar in a running ripple; its other colours are the default theme's.

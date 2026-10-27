@@ -30,7 +30,7 @@ mod tests;
 mod world;
 
 pub(crate) use actions::{done_to_line, observed_line};
-pub(crate) use body::{Hatching, doing_line, hatching, thirds};
+pub(crate) use body::{BLOCKS, Hatching, doing_line, hatching, thirds};
 use body::{body_tab, egg_card};
 pub(crate) use brain::MemoryOpen;
 use brain::brain_rows;

@@ -2,9 +2,9 @@
 //! of the sprites and eggs on the map after each tick it takes in, the
 //! deaths and hatchings those ticks set off, and the eggs about to hatch,
 //! which flash; the levels of the selected sprite's drives, which its bars
-//! ease to; and the tile it's on, for its trail. The tab sweeping in starts
-//! as a tab opens (`open`), and a pop-up's fades as the app's clock moves
-//! on (`animate`).
+//! ease to, and how much each changed, for their waves; and the tile it's
+//! on, for its trail. The tab sweeping in starts as a tab opens (`open`),
+//! and a pop-up's fades as the app's clock moves on (`animate`).
 
 use std::time::Duration;
 
@@ -12,7 +12,7 @@ use terra_sim::{ChemicalKind, EntityId, EventKind, Pos, World};
 
 use super::{App, Selection};
 use crate::inspector::{self, Hatching};
-use crate::motion::{self, Motion};
+use crate::motion::{self, DriveLevel, Motion};
 
 impl App {
     /// Whether motion is on (design §6.9): on unless the player turned it
@@ -94,10 +94,11 @@ impl App {
         self.motion.note_flashing(&due, self.running_for);
     }
 
-    /// Notes the levels of the selected sprite's drives, after the ticks
-    /// just taken in, for their bars on the Body tab to ease to (design
-    /// §6.9).
-    pub(super) fn note_bars(&mut self, world: &World) {
+    /// Notes the levels of the selected sprite's drives, after `ticks`
+    /// ticks just taken in, for their bars on the Body tab to ease to, and
+    /// how much each changed over the last of them, for their waves
+    /// (design §6.9).
+    pub(super) fn note_bars(&mut self, world: &World, ticks: usize) {
         if !self.motion.on() {
             return;
         }
@@ -109,12 +110,17 @@ impl App {
             let drives = sprite
                 .chemicals()
                 .filter(|chemical| chemical.kind == ChemicalKind::Drive)
-                .map(|drive| (drive.name.to_string(), inspector::thirds(drive.level)))
+                .map(|drive| DriveLevel {
+                    name: drive.name.to_string(),
+                    thirds: inspector::thirds(drive.level),
+                    change: drive.change,
+                })
                 .collect();
             (sprite.id(), drives)
         });
+        let at = (self.running_for, self.clock.speed());
         self.motion
-            .note_bars(drives, self.running_for, self.clock.speed());
+            .note_bars(drives, ticks, at, self.theme.motion().bar);
     }
 
     /// Notes the tile the selected sprite is on, after the ticks just taken

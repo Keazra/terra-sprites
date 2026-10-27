@@ -889,7 +889,7 @@ The characters a theme draws with: the map's, the Cursor's, the emotes', the gla
 _Avoid_: font, charset, tileset (that's the Tiles milestone's)
 
 **Palette** (#307):
-The rest of a theme: the colours, bold and reverse video of each glyph, the drives', the lineage's and the graph's colours, the text roles, the attention marker, the panel shades and motion's colours, and whether it has colour, a foreground for the terminal's own text colour, and colours that can show the colour modes. Five are built in: default, high contrast, colour-blind, mono, which has no colour at all and is where `NO_COLOR` starts the game, and Game Kid, greens on black like an old handheld's screen, which can't show the colour modes. The settings screen calls it **Colours**.
+The rest of a theme: the colours, bold and reverse video of each glyph, the drives', the lineage's and the graph's colours, the text roles, the attention marker, the panel shades, motion's colours and how a drive's bar shows its pace, and whether it has colour, a foreground for the terminal's own text colour, and colours that can show the colour modes. Five are built in: default, high contrast, colour-blind, mono, which has no colour at all and is where `NO_COLOR` starts the game, and Game Kid, greens on black like an old handheld's screen, which can't show the colour modes. The settings screen calls it **Colours**.
 _Avoid_: colour scheme, colour mode (that's which colours a sprite takes, `b`), command palette (that's `:`'s box)
 
 **Settings screen** (#307):
@@ -905,8 +905,12 @@ The background a palette may give the inspector and the event log, a little ligh
 _Avoid_: border, frame, box (pop-ups have boxes; the panels don't)
 
 **Motion** (#306):
-The small effects drawn over the finished screen in real time, not ticks: a death's flash and ghost, an egg flashing before it hatches and a hatching's sparks, a tab sweeping in, a pop-up fading, a drive's bar easing, the pan and the trail. One switch turns it all off; it thins out at 4× and up.
+The small effects drawn over the finished screen in real time, not ticks: a death's flash and ghost, an egg flashing before it hatches and a hatching's sparks, a tab sweeping in, a pop-up fading, a drive's bar easing and its waves, which show how fast the drive moves against its usual rise, the pan and the trail. One switch turns it all off; it thins out at 4× and up.
 _Avoid_: animation (the emotes' swapping is older, and not part of it)
+
+**Usual rise** (#306):
+How fast a drive of the selected sprite usually rises: the average of its last hundred rises a tick that the screen has taken in since the sprite was selected, its falls and steady ticks left out. A drive's bar's waves weigh each rise against it, crashing taller, more often and further the faster. The screen keeps it and never saves it.
+_Avoid_: normal rate, base rate
 
 ### The Cursor
 

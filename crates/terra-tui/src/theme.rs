@@ -1,6 +1,7 @@
 //! Themes map semantic tiles to glyphs and colours, and each text role to a
 //! style, may give the panels their shades (design §6.2), and give motion
-//! its colours (§6.9). They are UI assets and never affect the simulation.
+//! its colours and say how a drive's bar shows its drive's pace (§6.9).
+//! They are UI assets and never affect the simulation.
 //! A theme is a glyph set, its characters, and a palette, the rest, chosen
 //! apart (#307). Two glyph sets and five palettes are embedded in the
 //! binary, and `--theme <file>` loads one the player has edited (design v34
@@ -254,7 +255,8 @@ pub struct PanelLook {
 
 /// Motion's colours (design §6.9): exact ones in the default theme, since
 /// a fade blends them. A colour a theme names blends from how Campbell, the
-/// renderer's scheme, draws it.
+/// renderer's scheme, draws it. And how a drive's bar shows how fast its
+/// drive moves.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MotionLook {
     /// What a death's tile flashes to, fading back.
@@ -270,6 +272,21 @@ pub struct MotionLook {
     /// The dark a pop-up fades in from and out to, and the background a
     /// fade takes on a tile that has none of its own.
     pub dark: Color,
+    /// How a drive's bar shows how fast its drive moves.
+    pub bar: BarWaves,
+}
+
+/// How a drive's bar shows how fast its drive moves, while motion is on
+/// (design §6.9): waves that come taller, more often and further the
+/// faster it rises against its usual rise, and a quiet dip while it falls.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BarWaves {
+    /// Crashing waves: a crest runs up the bar to its end, breaks there in
+    /// a flare, and its spray runs on into the empty blocks past the level.
+    Crashing,
+    /// A running ripple: a crest runs up the bar and off its end.
+    Ripple,
 }
 
 /// The default theme's file: the CP437 glyph set and the default palette.
@@ -508,7 +525,7 @@ pub struct Theme {
     text: TextLook,
     /// The panels' shades, if it has them (design §6.1).
     panels: Option<PanelLook>,
-    /// Motion's colours (design §6.9).
+    /// Motion's colours, and the bars' waves (design §6.9).
     motion: MotionLook,
     /// Whether its palette has colour at all: mono's has none (design
     /// §6.2, #307).
@@ -542,7 +559,7 @@ impl Theme {
     /// character `glyphs` draws, each in the colour, bold and reverse video
     /// `palette` gives what it stands for, and `palette`'s drives, lineage,
     /// graph colours, text roles, attention marker, panel shades and
-    /// motion's colours. An object one of them has no glyph for falls back
+    /// motion's section. An object one of them has no glyph for falls back
     /// in that one, as [`Theme::object_glyph`] says.
     pub fn compose(glyphs: &Theme, palette: &Theme) -> Theme {
         let tiles = redrawn(&palette.tiles, |tile| glyphs.glyph(tile));
@@ -709,7 +726,8 @@ impl Theme {
         self.panels.filter(|_| self.colour)
     }
 
-    /// Motion's colours (design §6.9).
+    /// Motion's colours, and how a drive's bar shows its drive's pace
+    /// (design §6.9).
     pub fn motion(&self) -> MotionLook {
         self.motion
     }
@@ -857,12 +875,12 @@ impl Theme {
             .unwrap_or_default()
             .look(builtin.text.unwrap_or_default())
             .expect("the built-in cp437 theme styles every text role");
-        // And any of motion's colours (design §6.9).
+        // And any of motion's colours, and the bars' waves (design §6.9).
         let motion = file
             .motion
             .unwrap_or_default()
             .look(builtin.motion.unwrap_or_default())
-            .expect("the built-in cp437 theme has every one of motion's colours");
+            .expect("the built-in cp437 theme has all of motion's section");
         let theme = Theme {
             tiles,
             objects,
@@ -1099,8 +1117,9 @@ struct ThemeFile {
     /// lines between the panels, rather than the default theme's shades.
     #[serde(default, deserialize_with = "implicit_some")]
     panels: Option<PanelsFile>,
-    /// Motion's colours (design §6.9). A theme without them, or without
-    /// some of them, draws the default theme's.
+    /// Motion's colours, and how a drive's bar shows its drive's pace
+    /// (design §6.9). A theme without them, or without some of them, draws
+    /// the default theme's.
     #[serde(default, deserialize_with = "implicit_some")]
     motion: Option<MotionFile>,
     /// `false` for a palette with no colour at all, as mono is (design
@@ -1333,7 +1352,8 @@ struct PanelsFile {
     title: Colour,
 }
 
-/// A theme file's `motion` section: motion's colours (design §6.9).
+/// A theme file's `motion` section: motion's colours, and how a drive's
+/// bar shows how fast its drive moves (design §6.9).
 #[derive(Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct MotionFile {
@@ -1347,11 +1367,13 @@ struct MotionFile {
     trail: Option<Colour>,
     #[serde(default, deserialize_with = "implicit_some")]
     dark: Option<Colour>,
+    #[serde(default, deserialize_with = "implicit_some")]
+    bar: Option<BarWaves>,
 }
 
 impl MotionFile {
-    /// The colours this section gives, with `default`'s for any it leaves
-    /// out: `None` if both leave one out.
+    /// What this section gives, with `default`'s for any it leaves out:
+    /// `None` if both leave one out.
     fn look(self, default: MotionFile) -> Option<MotionLook> {
         Some(MotionLook {
             flash: self.flash.or(default.flash)?.into(),
@@ -1359,6 +1381,7 @@ impl MotionFile {
             spark: self.spark.or(default.spark)?.into(),
             trail: self.trail.or(default.trail)?.into(),
             dark: self.dark.or(default.dark)?.into(),
+            bar: self.bar.or(default.bar)?,
         })
     }
 }

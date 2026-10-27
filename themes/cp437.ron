@@ -180,5 +180,8 @@
         spark: "#ffe9a0",
         trail: "#2b3047",
         dark: "#0c0c0c",
+        // A drive's bar shows how fast it rises in crashing waves; `ripple`
+        // runs a plain ripple up it instead.
+        bar: crashing,
     ),
 )

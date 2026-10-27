@@ -48,7 +48,7 @@ impl App {
         self.take_in_tick(events, world);
         self.note_looks(world);
         self.note_flashing(world);
-        self.note_bars(world);
+        self.note_bars(world, 1);
         self.note_trail(world);
     }
 
@@ -335,6 +335,7 @@ impl App {
     /// starting again each tick a reward lasts. How sprites and eggs are
     /// drawn is noted once, after the last tick (§6.9).
     pub fn take_in(&mut self, ticks: Ticks, world: &World) {
+        let taken = ticks.0.len();
         // Tick by tick, so of two emotes in one frame the later tick's wins.
         for (events, pleased) in ticks.0 {
             self.take_in_tick(&events, world);
@@ -347,7 +348,7 @@ impl App {
         }
         self.note_looks(world);
         self.note_flashing(world);
-        self.note_bars(world);
+        self.note_bars(world, taken);
         self.note_trail(world);
     }
 

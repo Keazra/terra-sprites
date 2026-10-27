@@ -15,7 +15,7 @@ use common::{
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::Duration;
 
-use ratatui::buffer::Buffer;
+use ratatui::buffer::{Buffer, Cell};
 use ratatui::layout::{Position, Rect, Size};
 use ratatui::style::Color;
 use ratatui::{Terminal, backend::TestBackend};
@@ -27,7 +27,7 @@ use terra_tui::clock::Speed;
 use terra_tui::input::Action;
 use terra_tui::policy::{InfoPolicy, Panel, Subject};
 use terra_tui::start;
-use terra_tui::theme::{MotionLook, Theme};
+use terra_tui::theme::{BarWaves, MotionLook, Theme};
 use terra_tui::title::Title;
 use terra_tui::ui;
 
@@ -109,6 +109,7 @@ fn the_default_theme_gives_motion_its_exact_colours_and_ascii_takes_them() {
         spark: rgb(0xffe9a0),
         trail: rgb(0x2b3047),
         dark: rgb(0x0c0c0c),
+        bar: BarWaves::Crashing,
     };
     assert_eq!(Theme::cp437().motion(), expected);
     assert_eq!(Theme::ascii().motion(), expected);
@@ -1122,6 +1123,13 @@ fn the_same_app_drawn_twice_draws_the_same_screen() {
     apply(&mut app, &world, Action::SelectNext);
     app.animate(ms(120));
     assert_eq!(render(&app, &world), render(&app, &world));
+    // A drive's bar's crest running up it, and breaking.
+    let world = hunger_on_the_move(0.396, 0.004);
+    let mut app = watching(&world);
+    for step in [130, 520] {
+        app.animate(ms(step));
+        assert_eq!(render(&app, &world), render(&app, &world));
+    }
 }
 
 // A tab opened (design §6.9).
@@ -1766,9 +1774,9 @@ fn hungry(sprites: &[(Pos, f32)]) -> World {
     WorldBuilder::grass(10, 6).genes(&genes).build()
 }
 
-/// The hunger bar on the Body tab on `screen`, its ten blocks, and the
-/// level it says beside it.
-fn hunger_line(screen: &Buffer) -> (String, String) {
+/// Where the hunger bar on the Body tab on `screen` starts: its first
+/// block's screen cell.
+fn hunger_bar_at(screen: &Buffer) -> Position {
     let rows = common::lines(screen);
     let (y, x) = rows
         .iter()
@@ -1778,8 +1786,15 @@ fn hunger_line(screen: &Buffer) -> (String, String) {
             Some((y as u16, row[..at].chars().count() as u16 + 1))
         })
         .unwrap_or_else(|| panic!("no hunger bar:\n{}", rows.join("\n")));
-    let bar: String = (x + 12..x + 22).map(|x| screen[(x, y)].symbol()).collect();
-    let said: String = (x + 22..screen.area.right())
+    Position::new(x + 12, y)
+}
+
+/// The hunger bar on the Body tab on `screen`, its ten blocks, and the
+/// level it says beside it.
+fn hunger_line(screen: &Buffer) -> (String, String) {
+    let Position { x, y } = hunger_bar_at(screen);
+    let bar: String = (x..x + 10).map(|x| screen[(x, y)].symbol()).collect();
+    let said: String = (x + 10..screen.area.right())
         .map(|x| screen[(x, y)].symbol())
         .collect();
     (bar, said.trim().to_string())
@@ -1915,6 +1930,361 @@ fn a_bar_snaps_on_first_sight_on_a_new_selection_with_motion_off_and_at_4x() {
         let (thirds, _) = hunger_bar(&frame(&mut app, &after, Duration::ZERO));
         assert_eq!(thirds, 24, "4x: {faster}");
     }
+}
+
+// A drive's bar showing how fast it rises (design §6.9).
+
+/// The genes of a sprite whose hunger starts at `from` and changes by `by`
+/// each tick, whatever it does.
+fn hunger_moving(from: f32, by: f32) -> String {
+    format!(
+        r#"(format: 1, genes: [
+            InitialConcentration(chem: "hunger", value: {from}),
+            Emitter(locus: Locus("always"), mode: Level, gain: {by}, chem: "hunger"),
+        ])"#
+    )
+}
+
+/// A field with one sprite on it whose hunger starts at `from` and changes
+/// by `by` each tick, a tick on, so its hunger has moved once: the same
+/// sprite, by its ID, whatever the numbers.
+fn hunger_on_the_move(from: f32, by: f32) -> World {
+    let genes = hunger_moving(from, by);
+    let mut world = WorldBuilder::grass(10, 6)
+        .genes(&[(at(3, 2), genes.as_str())])
+        .build();
+    world.step();
+    world
+}
+
+/// The hunger bar's ten blocks on the Body tab on `screen`.
+fn hunger_blocks(screen: &Buffer) -> Vec<Cell> {
+    let Position { x, y } = hunger_bar_at(screen);
+    (x..x + 10).map(|x| screen[(x, y)].clone()).collect()
+}
+
+/// How lit a block's glyph is: how bright its colour is as Campbell draws
+/// it, a named one too.
+fn lit(block: &Cell) -> u32 {
+    brightness(campbell::exact(block.fg, FOREGROUND))
+}
+
+/// The block whose glyph is lit the most of the first `filled`: the crest.
+fn crest(blocks: &[Cell], filled: usize) -> usize {
+    let lit: Vec<u32> = blocks[..filled].iter().map(lit).collect();
+    let most = lit.iter().max().copied().unwrap_or(0);
+    lit.iter().position(|&one| one == most).unwrap_or(0)
+}
+
+#[test]
+fn a_rising_drive_s_crest_runs_up_its_bar_to_the_end() {
+    // Design §6.9: hunger at .4, 12 thirds of a block, four blocks full,
+    // and rising. A sprite first seen rising rises as usual for it, and
+    // the crest runs from before the bar's first block to its end, the
+    // fourth, in 0.52 s, one block every 0.13 s.
+    let world = hunger_on_the_move(0.396, 0.004);
+    let mut app = watching(&world);
+    let (bar, _) = hunger_line(&render(&app, &world));
+    assert_eq!(bar, "████░░░░░░");
+    let plain = lit(&hunger_blocks(&frame_with_motion_off(&world))[0]);
+    let mut crests = Vec::new();
+    for _ in 0..4 {
+        let blocks = hunger_blocks(&frame(&mut app, &world, ms(130)));
+        let at = crest(&blocks, 4);
+        assert!(lit(&blocks[at]) > plain, "{blocks:?}");
+        crests.push(at);
+    }
+    assert_eq!(crests, [0, 1, 2, 3]);
+}
+
+/// The glyphs of `blocks`.
+fn glyphs(blocks: &[Cell]) -> String {
+    blocks.iter().map(|block| block.symbol()).collect()
+}
+
+#[test]
+fn a_crest_breaks_at_the_bar_s_end_and_its_spray_runs_on_past_the_level() {
+    // Design §6.9: once the crest reaches the end, 0.52 s on, it breaks,
+    // the end block flaring at once and settling, and its spray tints the
+    // empty block past the level and dies away, over 0.695 s, its glyph
+    // still ░ so the level never looks higher. Rising as usual, the spray
+    // reaches one block; then all is still until the next wave.
+    let world = hunger_on_the_move(0.396, 0.004);
+    let mut app = watching(&world);
+    let plain = hunger_blocks(&frame_with_motion_off(&world));
+    let broke = hunger_blocks(&frame(&mut app, &world, ms(520)));
+    assert!(lit(&broke[3]) > lit(&plain[3]), "the end flares");
+    assert_ne!(broke[3].bg, plain[3].bg, "its background too");
+    let (mut flares, mut sprayed) = (vec![lit(&broke[3])], false);
+    for _ in 0..34 {
+        let blocks = hunger_blocks(&frame(&mut app, &world, ms(20)));
+        assert_eq!(glyphs(&blocks), "████░░░░░░");
+        flares.push(lit(&blocks[3]));
+        sprayed |= blocks[4].fg != plain[4].fg;
+        assert_eq!(blocks[4].bg, plain[4].bg, "the spray tints only the glyph");
+        assert_eq!(blocks[5..], plain[5..], "and reaches one block");
+    }
+    assert!(sprayed, "the spray runs past the level");
+    assert!(flares.windows(2).all(|two| two[0] >= two[1]), "{flares:?}");
+    let still = hunger_blocks(&frame(&mut app, &world, ms(20)));
+    assert_eq!(still, plain, "the break is over by 1.215 s");
+    assert_eq!(hunger_blocks(&frame(&mut app, &world, ms(600))), plain);
+}
+
+/// An app watching the one sprite of `hunger_on_the_move`, its hunger at
+/// .4 and rising as usual for it, .004 a tick, that takes in a tick of
+/// `then`, the same sprite, once its first wave has broken, 1.3 s on.
+fn rising_then(then: &World) -> App {
+    let usual = hunger_on_the_move(0.396, 0.004);
+    let mut app = watching(&usual);
+    for _ in 0..5 {
+        take_in(&mut app, &usual);
+    }
+    frame(&mut app, &usual, ms(1300));
+    take_in(&mut app, then);
+    app
+}
+
+/// What the waves on the hunger bar of the one sprite on `world`, four
+/// blocks full, did over `for_ms` milliseconds of `app`'s frames 10 ms
+/// apart: how lit the crest got on the first three blocks, how many empty
+/// blocks the spray reached, and how many crests set off up the bar.
+fn waves_over(app: &mut App, world: &World, for_ms: u64) -> (u32, usize, usize) {
+    let plain = hunger_blocks(&frame_with_motion_off(world));
+    let (mut tallest, mut reach, mut crests, mut was_lit) = (0, 0, 0, false);
+    for _ in 0..for_ms / 10 {
+        let blocks = hunger_blocks(&frame(app, world, ms(10)));
+        tallest = tallest.max(blocks[..3].iter().map(lit).max().unwrap_or(0));
+        let sprayed = (4..10).filter(|&i| blocks[i].fg != plain[i].fg);
+        reach = reach.max(sprayed.map(|i| i - 3).max().unwrap_or(0));
+        let lit_up = blocks[0] != plain[0];
+        crests += usize::from(lit_up && !was_lit);
+        was_lit = lit_up;
+    }
+    (tallest, reach, crests)
+}
+
+#[test]
+fn the_faster_a_drive_rises_against_its_usual_the_taller_and_more_often_its_waves() {
+    // Design §6.9: hunger rising .004 a tick, as usual for it, and then 2.5
+    // and 5 times as fast, at .4 each time. Its crest comes taller, its
+    // waves more often, every 1.925 s, 1.475 s and 0.8 s, and its spray
+    // reaches one, two and three empty blocks past the level.
+    let seen: Vec<(u32, usize, usize)> = [(0.396, 0.004), (0.39, 0.01), (0.38, 0.02)]
+        .into_iter()
+        .map(|(from, by)| {
+            let then = hunger_on_the_move(from, by);
+            waves_over(&mut rising_then(&then), &then, 4000)
+        })
+        .collect();
+    let tallest: Vec<u32> = seen.iter().map(|&(tallest, _, _)| tallest).collect();
+    assert!(tallest.windows(2).all(|two| two[0] < two[1]), "{seen:?}");
+    let reach: Vec<usize> = seen.iter().map(|&(_, reach, _)| reach).collect();
+    assert_eq!(reach, [1, 2, 3], "{seen:?}");
+    let crests: Vec<usize> = seen.iter().map(|&(_, _, crests)| crests).collect();
+    assert_eq!(crests, [2, 3, 5], "{seen:?}");
+}
+
+#[test]
+fn a_bar_s_waves_change_only_as_ticks_are_taken_in() {
+    // Design §6.9: a frame that takes in no tick, as most do at 1×, leaves
+    // them as they were, though the world's last tick says hunger rose
+    // five times as fast as usual; the next tick taken in shows it.
+    let usual = hunger_on_the_move(0.396, 0.004);
+    let gently = waves_over(&mut rising_then(&usual), &usual, 4000);
+    let then = hunger_on_the_move(0.38, 0.02);
+    let mut app = watching(&usual);
+    for _ in 0..5 {
+        take_in(&mut app, &usual);
+    }
+    frame(&mut app, &usual, ms(1300));
+    for _ in 0..5 {
+        app.take_in(Ticks::default(), &then);
+    }
+    assert_eq!(waves_over(&mut app, &then, 4000), gently);
+    take_in(&mut app, &then);
+    let (_, reach, _) = waves_over(&mut app, &then, 4000);
+    assert_eq!(reach, 3);
+}
+
+#[test]
+fn a_drive_rising_as_fast_as_it_usually_does_waves_gently_however_fast_that_is() {
+    // Design §6.9: the waves weigh a rise against the drive's own usual
+    // rise, the average of its latest, which a sprite selected starts
+    // afresh. Hunger rising .02 a tick from the first, at .4, waves as
+    // gently as hunger rising .004 does.
+    let watched = |from, by| {
+        let world = hunger_on_the_move(from, by);
+        let mut app = watching(&world);
+        for _ in 0..5 {
+            take_in(&mut app, &world);
+        }
+        waves_over(&mut app, &world, 4000)
+    };
+    let slow = watched(0.396, 0.004);
+    assert_eq!(slow.1, 1, "{slow:?}");
+    assert_eq!(watched(0.38, 0.02), slow);
+    // So does one selected after a sprite whose hunger rises five times
+    // slower.
+    let (slow_genes, fast_genes) = (hunger_moving(0.396, 0.004), hunger_moving(0.38, 0.02));
+    let mut world = WorldBuilder::grass(10, 6)
+        .genes(&[
+            (at(3, 2), slow_genes.as_str()),
+            (at(6, 2), fast_genes.as_str()),
+        ])
+        .build();
+    world.step();
+    let mut app = moving(&world);
+    for tile in [at(3, 2), at(6, 2)] {
+        select(&mut app, &world, sprite_on(&world, tile));
+        frame(&mut app, &world, ms(1000));
+        app.record(&[], &world);
+        for _ in 0..5 {
+            take_in(&mut app, &world);
+        }
+    }
+    assert_eq!(waves_over(&mut app, &world, 4000), slow);
+}
+
+#[test]
+fn a_falling_drive_s_bar_dips_slowly_back_down_and_a_steady_one_s_stays_still() {
+    // Design §6.9: hunger falling .004 a tick to .4, four blocks full. A
+    // faint dark dip runs from past the bar's end back down it in 1.1 s,
+    // one block every 0.22 s, dimming only the filled blocks' glyphs, and
+    // again 2.6 s after it began.
+    let world = hunger_on_the_move(0.404, -0.004);
+    let mut app = watching(&world);
+    let plain = hunger_blocks(&frame_with_motion_off(&world));
+    let mut dips = Vec::new();
+    for _ in 0..4 {
+        let blocks = hunger_blocks(&frame(&mut app, &world, ms(220)));
+        let shown: Vec<u32> = blocks[..4].iter().map(lit).collect();
+        let least = shown.iter().min().copied().unwrap_or(0);
+        assert!(least < lit(&plain[0]), "{blocks:?}");
+        dips.push(shown.iter().position(|&one| one == least).unwrap_or(0));
+        let backgrounds =
+            |blocks: &[Cell]| -> Vec<Color> { blocks.iter().map(|block| block.bg).collect() };
+        assert_eq!(backgrounds(&blocks), backgrounds(&plain), "only the glyphs");
+        assert_eq!(blocks[4..], plain[4..], "only the filled blocks");
+    }
+    assert_eq!(dips, [3, 2, 1, 0]);
+    assert_eq!(hunger_blocks(&frame(&mut app, &world, ms(240))), plain);
+    assert_eq!(hunger_blocks(&frame(&mut app, &world, ms(1400))), plain);
+    assert_ne!(
+        hunger_blocks(&frame(&mut app, &world, ms(400))),
+        plain,
+        "again"
+    );
+    // Hunger holding steady shows nothing.
+    let world = hunger_on_the_move(0.4, 0.0);
+    let mut app = watching(&world);
+    for _ in 0..30 {
+        assert_eq!(hunger_blocks(&frame(&mut app, &world, ms(100))), plain);
+    }
+}
+
+#[test]
+fn waves_play_only_on_the_bars_and_not_at_4x_nor_in_mono() {
+    // Design §6.9: they change nothing but a bar's blocks. At 4× and up,
+    // where the bars jump, and in mono, which has no colour, they don't
+    // play; Game Kid has colour, so they play there, in its greens.
+    let world = hunger_on_the_move(0.396, 0.004);
+    let (mut on, mut off) = selected(&world);
+    on.record(&[], &world);
+    off.record(&[], &world);
+    let (shown, plain) = frames(&mut on, &mut off, &world, ms(130));
+    let Position { x, y } = hunger_bar_at(&shown);
+    let bar = Rect::new(x, y, 10, 1);
+    assert_ne!(shown, plain, "a wave plays");
+    differs_only_within(&shown, &plain, bar);
+    // At 4×.
+    let plain = hunger_blocks(&plain);
+    let mut app = watching(&world);
+    at_4x(&mut app);
+    take_in(&mut app, &world);
+    for _ in 0..30 {
+        let blocks = hunger_blocks(&frame(&mut app, &world, ms(50)));
+        assert_eq!(blocks, plain, "4x");
+    }
+    // In mono and Game Kid.
+    for (theme, plays) in [(mono(), false), (common::game_kid(), true)] {
+        let mut off = watching(&world);
+        off.theme = theme.clone();
+        off.set_motion(false);
+        let plain = hunger_blocks(&render(&off, &world));
+        let mut app = moving(&world);
+        app.theme = theme;
+        apply(&mut app, &world, Action::SelectNext);
+        frame(&mut app, &world, ms(1000));
+        app.record(&[], &world);
+        let mut played = false;
+        for _ in 0..30 {
+            let blocks = hunger_blocks(&frame(&mut app, &world, ms(50)));
+            played |= blocks != plain;
+            for block in blocks.iter().filter(|_| plays) {
+                for colour in [block.fg, block.bg] {
+                    let Some(rgb) = campbell::rgb(colour) else {
+                        continue;
+                    };
+                    let dark = rgb.iter().all(|&channel| channel <= 25);
+                    assert!(dark || common::on_the_ramp(rgb), "{colour:?} in Game Kid");
+                }
+            }
+        }
+        assert_eq!(played, plays, "{}", if plays { "Game Kid" } else { "mono" });
+    }
+}
+
+#[test]
+fn a_theme_may_choose_the_running_ripple_for_a_drive_s_bar() {
+    // Design §6.9: `bar: ripple` in a theme's `motion` section. The
+    // default theme's is `crashing`, which a theme leaving it out takes,
+    // and a bar the game doesn't know is refused, naming it.
+    let pack = common::pack();
+    let ripple = Theme::from_ron(&ascii_and("    motion: (bar: ripple),"), &pack).expect("loads");
+    assert_eq!(ripple.motion().bar, BarWaves::Ripple);
+    assert_eq!(Theme::cp437().motion().bar, BarWaves::Crashing);
+    assert_eq!(Theme::ascii().motion().bar, BarWaves::Crashing);
+    let err =
+        Theme::from_ron(&ascii_and("    motion: (bar: splash),"), &pack).expect_err("refused");
+    assert!(err.contains("splash"), "{err}");
+    // Rising as usual, its crest runs up the bar and off its end in 0.52
+    // s, a block every 0.104 s, with no flare nor spray, and comes again
+    // 1.75 s after it set off.
+    let world = hunger_on_the_move(0.396, 0.004);
+    let mut off = watching(&world);
+    off.theme = ripple.clone();
+    off.set_motion(false);
+    let plain = hunger_blocks(&render(&off, &world));
+    let mut app = moving(&world);
+    app.theme = ripple;
+    apply(&mut app, &world, Action::SelectNext);
+    frame(&mut app, &world, ms(1000));
+    app.record(&[], &world);
+    let mut crests = Vec::new();
+    for _ in 0..4 {
+        let blocks = hunger_blocks(&frame(&mut app, &world, ms(104)));
+        assert_eq!(blocks[4..], plain[4..], "no spray");
+        crests.push(crest(&blocks, 4));
+    }
+    assert_eq!(crests, [0, 1, 2, 3]);
+    let gone = hunger_blocks(&frame(&mut app, &world, ms(104)));
+    assert_eq!(gone, plain, "off the end, it's gone");
+    for _ in 0..61 {
+        assert_eq!(hunger_blocks(&frame(&mut app, &world, ms(20))), plain);
+    }
+    assert_ne!(
+        hunger_blocks(&frame(&mut app, &world, ms(20))),
+        plain,
+        "again"
+    );
+}
+
+/// The Body tab of the one sprite on `world` drawn with motion off.
+fn frame_with_motion_off(world: &World) -> Buffer {
+    let mut app = watching(world);
+    app.set_motion(false);
+    render(&app, world)
 }
 
 // The trail (design §6.9).

@@ -11,8 +11,9 @@
 //!   which `App::open` starts; what filled the screen at the last frame,
 //!   which the app's clock compares with what does now to see a pop-up
 //!   open or close, and how the last frame drew the pop-ups that closed;
-//!   the selected sprite's drives' bars and the tiles it has left, its
-//!   trail, noted as ticks are taken in; and the pan under way. Each effect
+//!   the selected sprite's drives' bars, with each drive's latest rises and
+//!   the latest wave on its bar, and the tiles it has left, its trail,
+//!   noted as ticks are taken in; and the pan under way. Each effect
 //!   keeps when it began, in the app's `running_for`. Nothing is stepped as
 //!   it's drawn (§6.8).
 //! - **The pan** is no effect but where the map view is drawn from
@@ -27,15 +28,17 @@
 //!   [`play_on_map`] once the tiles are drawn and before the marks go over
 //!   them, and `ui::render_with` calls [`play_on_panels`] once the panels
 //!   and pop-ups are drawn and what can be pointed at is marked, before the
-//!   tooltip, which doesn't move. A bar's blocks are no effect: the Body tab
-//!   fills as many thirds of a block as `App::drive_bar` says.
+//!   tooltip, which doesn't move. A bar's blocks and its waves are no
+//!   effect: the Body tab fills as many thirds of a block as
+//!   `App::drive_bar` says, and colours them as [`bar_waves`] says.
 //! - **Time** is real time, which the frame loop hands the app (§6.6):
 //!   [`age`] says how far into an effect a frame is, and [`eased`] how far
 //!   that's got, fast and then slowing.
 //! - **It thins out at 4× and up** ([`thins_out`]): fewer deaths and
-//!   hatchings at once, and shorter, as the trail is, and the bars and the
-//!   view jump.
-//! - **Colours** are the theme's `motion` section's. A fade blends exact
+//!   hatchings at once, and shorter, as the trail is, the bars and the
+//!   view jump, and the bars' waves don't play.
+//! - **Colours** are the theme's `motion` section's, but for a bar's waves,
+//!   which glow from its drive's colour towards white. A fade blends exact
 //!   colours, so a named one is blended as Campbell draws it
 //!   ([`campbell::exact`]), and a tile with no background of its own takes
 //!   the theme's dark. The terminal's own text colour is blended as the
@@ -63,7 +66,8 @@ use crate::inspector;
 use crate::policy::{Panel, Subject};
 use crate::space::{Pattern, Place};
 use crate::spots::Spots;
-use crate::theme::MotionLook;
+use crate::text;
+use crate::theme::{BarWaves, MotionLook};
 use crate::ui;
 
 /// How long a death plays, and a hatching (design §6.9): half as long at
@@ -94,6 +98,9 @@ const FLASH_BRIGHTEST: f32 = 0.7;
 const MOST: usize = 4;
 const MOST_THINNED: usize = 2;
 
+/// How many blocks a drive's bar is long (design §6.1).
+const BLOCKS: usize = inspector::BLOCKS as usize;
+
 /// The steps a hatching's sparks start on, in milliseconds.
 const SPARK_STEP_MS: u64 = 50;
 
@@ -111,6 +118,30 @@ const POP_UP: Duration = Duration::from_millis(150);
 
 /// How long a drive's bar takes to ease to its new value (design §6.9).
 const BAR: Duration = Duration::from_millis(400);
+
+/// How much a drive's bar's waves show, from 0 to 1, by how many times its
+/// usual rise its drive rose over the tick last taken in (design §6.9): a
+/// little at its usual rise, more the faster, and all of it from five times
+/// its usual on, evenly between.
+const AMP_AT: [(f32, f32); 4] = [(0.0, 0.0), (1.0, 0.25), (2.5, 0.55), (5.0, 1.0)];
+
+/// How many of its latest rises a drive's usual rise is the average of
+/// (design §6.9): its last hundred, or as many as it has had since the
+/// sprite was selected.
+const USUAL_OF: usize = 100;
+
+/// How far each block of a breaking wave's spray past the bar's end shows
+/// of the first's (design §6.9): seven tenths of the last's each.
+const SPRAY_FADES: [f32; 3] = [1.0, 0.7, 0.49];
+
+/// How long a running ripple's crest takes to run up a drive's bar and off
+/// its end, in milliseconds (design §6.9).
+const RIPPLE_RUN: f32 = 520.0;
+
+/// How long a falling drive's dip takes to run back down its bar, and how
+/// long from one dip's start to the next's, in milliseconds (design §6.9).
+const DIP_RUN: f32 = 1100.0;
+const DIP_EVERY: f32 = 2600.0;
 
 /// How long each tile of the trail takes to fade (design §6.9): half as
 /// long at 4× and up.
@@ -331,21 +362,33 @@ struct Bars {
 }
 
 /// A drive's bar easing from `from` thirds of a block filled to `to`, from
-/// when it began (design §6.1).
-#[derive(Debug, Clone, Copy)]
+/// when it began (design §6.1), and its waves (§6.9).
+#[derive(Debug, Clone)]
 struct Bar {
     from: u8,
     to: u8,
     began: Duration,
+    waves: Waves,
+}
+
+/// A drive of the selected sprite as the ticks last taken in left it: its
+/// name, the thirds of a block its bar fills, and how much it changed over
+/// the last tick.
+#[derive(Debug, Clone)]
+pub(crate) struct DriveLevel {
+    pub(crate) name: String,
+    pub(crate) thirds: u8,
+    pub(crate) change: f32,
 }
 
 impl Bar {
-    /// A bar still at `thirds`, from `now`.
+    /// A bar still at `thirds`, from `now`, with no waves yet.
     fn at(thirds: u8, now: Duration) -> Bar {
         Bar {
             from: thirds,
             to: thirds,
             began: now,
+            waves: Waves::default(),
         }
     }
 
@@ -356,6 +399,282 @@ impl Bar {
         let way = f32::from(self.to) - f32::from(self.from);
         let moved = (way * eased(age(self.began, now), BAR)).round();
         (f32::from(self.from) + moved) as u8
+    }
+}
+
+/// A drive's bar's waves (design §6.9): its drive's latest rises, whose
+/// average is its usual rise, how it moved over the tick last taken in,
+/// and the latest wave to begin. Only ticks taken in change them, never a
+/// frame drawn (§6.8).
+#[derive(Debug, Clone, Default)]
+struct Waves {
+    /// At most `USUAL_OF`, oldest first.
+    rises: VecDeque<f32>,
+    /// None while its drive is steady.
+    pace: Option<Pace>,
+    latest: Option<Wave>,
+}
+
+/// How a drive moved over the tick last taken in (design §6.9).
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Pace {
+    /// Rising, and how much its waves show for how fast, from 0 to 1.
+    Rising(f32),
+    Falling,
+}
+
+/// A wave on a drive's bar, from when it began, as it goes at `pace`.
+#[derive(Debug, Clone, Copy)]
+struct Wave {
+    began: Duration,
+    pace: Pace,
+}
+
+impl Waves {
+    /// Takes in its drive's `change` over a tick taken in at `now`, as
+    /// `style` plays: it rose, if the Body tab's arrow says so, and by how
+    /// many times its usual rise, which the rise then joins; it fell; or
+    /// it held steady. The wave under way plays on as it was, and the next
+    /// begins once it has shown, at the new pace; at once, if that's
+    /// overdue. Where waves don't `play`, at 4× and up, none is under way
+    /// (design §6.9).
+    fn took_in(&mut self, change: f32, now: Duration, style: BarWaves, play: bool) {
+        let pace = self.pace_of(change);
+        self.latest = self.latest_by(now, style);
+        self.pace = pace;
+        let (Some(pace), true) = (pace, play) else {
+            self.latest = self.latest.filter(|_| play);
+            return;
+        };
+        let due = self
+            .latest
+            .is_none_or(|wave| wave.began + after(style, wave.pace, pace) <= now);
+        if due {
+            self.latest = Some(Wave { began: now, pace });
+        }
+    }
+
+    /// How its drive moved, by `change` over a tick: rising, and how fast
+    /// against its usual rise, which the rise then joins, or falling, or
+    /// steady, as the Body tab's arrow says (design §6.1). A sprite's
+    /// first rise is as usual for it.
+    fn pace_of(&mut self, change: f32) -> Option<Pace> {
+        text::change(change)?;
+        if change < 0.0 {
+            return Some(Pace::Falling);
+        }
+        let ratio = self.usual().map_or(1.0, |usual| change / usual);
+        if self.rises.len() >= USUAL_OF {
+            self.rises.pop_front();
+        }
+        self.rises.push_back(change);
+        Some(Pace::Rising(amp(ratio)))
+    }
+
+    /// Its drive's usual rise a tick: the average of its latest rises, if
+    /// it has risen since the sprite was selected.
+    fn usual(&self) -> Option<f32> {
+        let rises = self.rises.len();
+        (rises > 0).then(|| self.rises.iter().sum::<f32>() / rises as f32)
+    }
+
+    /// The latest wave to begin by `now`, as `style` plays: the one taken
+    /// in last, or one after it at the pace taken in last. None but the
+    /// one taken in last comes while its drive is steady.
+    fn latest_by(&self, now: Duration, style: BarWaves) -> Option<Wave> {
+        let wave = self.latest?;
+        let Some(pace) = self.pace else {
+            return Some(wave);
+        };
+        let (since, first) = (age(wave.began, now), after(style, wave.pace, pace));
+        if since < first {
+            return Some(wave);
+        }
+        let every = every(style, pace);
+        let more = (since - first).as_nanos() / every.as_nanos();
+        Some(Wave {
+            began: wave.began + first + every * u32::try_from(more).unwrap_or(u32::MAX),
+            pace,
+        })
+    }
+
+    /// The wave showing at `now`, as `style` plays, and how far into it.
+    fn showing(&self, now: Duration, style: BarWaves) -> Option<(Pace, Duration)> {
+        let wave = self.latest_by(now, style)?;
+        let into = age(wave.began, now);
+        (into < shows(style, wave.pace)).then_some((wave.pace, into))
+    }
+}
+
+/// How much a drive's bar's waves show for a rise `ratio` times its usual
+/// (design §6.9), from 0 to 1.
+fn amp(ratio: f32) -> f32 {
+    let Some(i) = AMP_AT.iter().position(|&(at, _)| ratio < at) else {
+        return 1.0;
+    };
+    let Some(below) = i.checked_sub(1) else {
+        return 0.0;
+    };
+    let ((x0, y0), (x1, y1)) = (AMP_AT[below], AMP_AT[i]);
+    y0 + (y1 - y0) * (ratio - x0) / (x1 - x0)
+}
+
+/// `ms` milliseconds, to the nearest microsecond.
+fn millis_of(ms: f32) -> Duration {
+    Duration::from_micros((ms * 1000.0).round() as u64)
+}
+
+/// How long a crest takes to run up a drive's bar rising at `amp`, and how
+/// long it then takes to break (design §6.9).
+fn crashing(amp: f32) -> (f32, f32) {
+    (560.0 - 160.0 * amp, 760.0 - 260.0 * amp)
+}
+
+/// How long from one wave's start to the next's, at `pace`, as `style`
+/// plays (design §6.9): the sooner the faster a drive rises.
+fn every(style: BarWaves, pace: Pace) -> Duration {
+    millis_of(match (style, pace) {
+        (_, Pace::Falling) => DIP_EVERY,
+        (BarWaves::Crashing, Pace::Rising(amp)) => 2300.0 - 1500.0 * amp,
+        (BarWaves::Ripple, Pace::Rising(amp)) => 2100.0 - 1400.0 * amp,
+    })
+}
+
+/// How long a wave at `pace` shows, as `style` plays (design §6.9): a dip's
+/// or a ripple's run, or a crest's run and its break, which the next cuts
+/// short if it comes sooner.
+fn shows(style: BarWaves, pace: Pace) -> Duration {
+    match (style, pace) {
+        (_, Pace::Falling) => millis_of(DIP_RUN),
+        (BarWaves::Crashing, Pace::Rising(amp)) => {
+            let (run, crash) = crashing(amp);
+            millis_of(run + crash).min(every(style, pace))
+        }
+        (BarWaves::Ripple, Pace::Rising(_)) => millis_of(RIPPLE_RUN),
+    }
+}
+
+/// How long after a wave at `was` began the next, at `pace`, begins: once
+/// it has shown, and no sooner than waves at `pace` come.
+fn after(style: BarWaves, was: Pace, pace: Pace) -> Duration {
+    shows(style, was).max(every(style, pace))
+}
+
+/// What a wave changes of a block of a drive's bar: its glyph's colour,
+/// its background, either or both (design §6.9). Never its glyph.
+pub(crate) type Tint = (Option<Color>, Option<Color>);
+
+/// The colours a drive's bar's waves are drawn from, exact ones: its
+/// drive's, the crest's glow, the spray's tint, its empty part's and what
+/// it sits on.
+#[derive(Debug, Clone, Copy)]
+struct BarColours {
+    drive: Color,
+    glow: Color,
+    tint: Color,
+    empty: Color,
+    shade: Color,
+}
+
+/// `way` of the way from `from` to `to`, from 0 to 1, blended in RGB.
+fn mix(from: Color, to: Color, way: f32) -> Color {
+    ColorSpace::Rgb.lerp(&from, &to, way)
+}
+
+/// What a wave at `pace`, `into` it, does to the blocks of a drive's bar
+/// that fills `thirds` of a block, as `style` plays (design §6.9).
+fn wave_tints(
+    (style, pace): (BarWaves, Pace),
+    into: Duration,
+    thirds: u8,
+    colours: BarColours,
+) -> [Tint; BLOCKS] {
+    let mut tints = [(None, None); BLOCKS];
+    // The bar's end: its last block filled in full or in part.
+    let Some(end) = usize::from(thirds)
+        .min(BLOCKS * 3)
+        .div_ceil(3)
+        .checked_sub(1)
+    else {
+        return tints;
+    };
+    let into = into.as_micros() as f32 / 1000.0;
+    let (drive, glow) = (colours.drive, colours.glow);
+    // A crest of `height` at `x`, a block and a bit wide, lighting the
+    // filled blocks under it towards the glow, and their backgrounds
+    // towards the drive's colour.
+    let crest = |tints: &mut [Tint; BLOCKS], x: f32, (height, amp): (f32, f32)| {
+        for (i, tint) in tints.iter_mut().enumerate().take(end + 1) {
+            let under = 1.0 - (i as f32 - x).abs() / 1.4;
+            if under > 0.0 {
+                *tint = (
+                    Some(mix(drive, glow, height * under)),
+                    Some(mix(colours.shade, drive, 0.42 * amp * under)),
+                );
+            }
+        }
+    };
+    match (style, pace) {
+        (BarWaves::Crashing, Pace::Rising(amp)) => {
+            let (run, crash) = crashing(amp);
+            let height = 0.3 + 0.7 * amp;
+            if into < run {
+                // Up the bar from before its first block to its end.
+                let x = -1.0 + into / run * (end + 1) as f32;
+                crest(&mut tints, x, (height, amp));
+            } else {
+                // It breaks at once, the end flaring and settling, and its
+                // spray runs on past the level, slowing, and dies away.
+                let broken = ((into - run) / crash).min(1.0);
+                let settled = Interpolation::QuadOut.alpha(broken);
+                let flare = 1.0 - settled;
+                tints[end] = (
+                    Some(mix(drive, glow, (height + 0.2).min(1.0) * flare)),
+                    Some(mix(colours.shade, drive, (0.35 + 0.35 * amp) * flare)),
+                );
+                let reach = spray_reach(amp);
+                let front = settled * (reach as f32 + 0.6);
+                for (j, fades) in SPRAY_FADES.iter().enumerate().take(reach) {
+                    let Some(tint) = tints.get_mut(end + 1 + j) else {
+                        break;
+                    };
+                    let at = (1.0 - ((j + 1) as f32 - front).abs() / 1.1).max(0.0);
+                    let spray = (0.35 + 0.6 * amp) * fades * at * (1.0 - broken * 0.6);
+                    if spray > 0.0 {
+                        tint.0 = Some(mix(colours.empty, colours.tint, spray));
+                    }
+                }
+            }
+        }
+        (BarWaves::Ripple, Pace::Rising(amp)) => {
+            // Up the bar from before its first block and off its end.
+            let x = into / RIPPLE_RUN * (end + 2) as f32 - 1.0;
+            crest(&mut tints, x, (0.3 + 0.7 * amp, amp));
+        }
+        (_, Pace::Falling) => {
+            // A faint dark dip from past the end back down the bar, slowly.
+            let x = (end + 1) as f32 - into / DIP_RUN * (end + 2) as f32;
+            for (i, tint) in tints.iter_mut().enumerate().take(end + 1) {
+                let under = 1.0 - (i as f32 - x).abs() / 1.6;
+                if under > 0.0 {
+                    tint.0 = Some(mix(drive, colours.shade, 0.5 * under));
+                }
+            }
+        }
+    }
+    tints
+}
+
+/// How many empty blocks past the level a breaking wave's spray reaches on
+/// a drive's bar rising at `amp` (design §6.9): one, two from half its
+/// most, and three from nine tenths.
+fn spray_reach(amp: f32) -> usize {
+    if amp >= 0.9 {
+        3
+    } else if amp >= 0.5 {
+        2
+    } else {
+        1
     }
 }
 
@@ -638,43 +957,49 @@ impl Motion {
         }
     }
 
-    /// Notes the thirds the selected sprite's drives' bars fill, by the
-    /// drive's name, after the ticks just taken in at `now` and `speed`:
+    /// Notes the selected sprite's drives' levels, after `ticks` ticks just
+    /// taken in at `now` and `speed`, as `style` plays its bars' waves:
     /// `sprite`, with its ID, or none if no sprite in the world is
     /// selected. A bar whose level changed eases to it from where it's
     /// drawn, but at 4× and up, where it jumps, and a sprite seen for the
-    /// first time shows its levels at once (design §6.9).
+    /// first time shows its levels at once. Each drive's change over the
+    /// last tick sets its bar's waves, as each tick taken in does, and as
+    /// a sprite's first sight does, which no tick has shown yet (design
+    /// §6.9).
     pub(crate) fn note_bars(
         &mut self,
-        sprite: Option<(EntityId, Vec<(String, u8)>)>,
-        now: Duration,
-        speed: Speed,
+        sprite: Option<(EntityId, Vec<DriveLevel>)>,
+        ticks: usize,
+        (now, speed): (Duration, Speed),
+        style: BarWaves,
     ) {
         let Some((id, drives)) = sprite.filter(|_| self.on) else {
             self.bars = None;
             return;
         };
         let eases = !thins_out(speed);
-        match &mut self.bars {
-            Some(bars) if bars.sprite == id => {
-                for (name, to) in drives {
-                    let bar = bars.drives.entry(name).or_insert(Bar::at(to, now));
-                    if bar.to != to {
-                        let from = if eases { bar.shown(now) } else { to };
-                        *bar = Bar {
-                            from,
-                            to,
-                            began: now,
-                        };
-                    }
-                }
+        let first_sight = self.bars.as_ref().is_none_or(|bars| bars.sprite != id);
+        let bars = match &mut self.bars {
+            Some(bars) if !first_sight => bars,
+            _ => self.bars.insert(Bars {
+                sprite: id,
+                drives: BTreeMap::new(),
+            }),
+        };
+        for DriveLevel {
+            name,
+            thirds: to,
+            change,
+        } in drives
+        {
+            let bar = bars.drives.entry(name).or_insert(Bar::at(to, now));
+            if bar.to != to {
+                bar.from = if eases { bar.shown(now) } else { to };
+                bar.to = to;
+                bar.began = now;
             }
-            _ => {
-                let drives = drives
-                    .into_iter()
-                    .map(|(name, thirds)| (name, Bar::at(thirds, now)))
-                    .collect();
-                self.bars = Some(Bars { sprite: id, drives });
+            if first_sight || ticks > 0 {
+                bar.waves.took_in(change, now, style, eases);
             }
         }
     }
@@ -811,6 +1136,25 @@ impl Motion {
             .map_or(live, |bar| bar.shown(now))
     }
 
+    /// The wave showing on drive `drive`'s bar on sprite `id`'s Body tab at
+    /// `now` and `speed`, as `style` plays, and how far into it: none at 4×
+    /// and up (design §6.9).
+    fn bar_wave(
+        &self,
+        (id, drive): (EntityId, &str),
+        (now, speed): (Duration, Speed),
+        style: BarWaves,
+    ) -> Option<(Pace, Duration)> {
+        if !self.on || thins_out(speed) {
+            return None;
+        }
+        self.bars
+            .as_ref()
+            .filter(|bars| bars.sprite == id)
+            .and_then(|bars| bars.drives.get(drive))
+            .and_then(|bar| bar.waves.showing(now, style))
+    }
+
     /// When what's up opened, while it fades in at `now`.
     fn opening(&self, now: Duration) -> Option<Duration> {
         self.opened.filter(|&began| age(began, now) < POP_UP)
@@ -901,6 +1245,45 @@ pub(crate) fn could_draw(app: &App, id: EntityId, tile: Pos) -> bool {
     app.cell_of(tile).is_some()
         && !app.under_the_inspector(tile)
         && app.can_view(Panel::Emotes, Subject::Sprite(id))
+}
+
+/// What drive `drive`'s bar's waves do to its blocks on sprite `id`'s Body
+/// tab just now, `thirds` of a block filled, its filled part drawn in
+/// `filled` and its empty part in `empty` (design §6.9): for each block,
+/// the colour its glyph and its background take, where a wave changes
+/// them. None while no wave shows, nor at 4× and up, nor in a palette with
+/// no colour, since waves are nothing but colour.
+pub(crate) fn bar_waves(
+    app: &App,
+    (id, drive): (EntityId, &str),
+    thirds: u8,
+    (filled, empty): (Color, Color),
+) -> Option<[Tint; BLOCKS]> {
+    if !colours_play(app) {
+        return None;
+    }
+    let look = app.theme.motion();
+    let at = (app.running_for(), app.clock.speed());
+    let (pace, into) = app.motion_kept().bar_wave((id, drive), at, look.bar)?;
+    // Exact colours to blend, the terminal's own as the palette draws its
+    // text and its dark, and the crest's glow and the spray's tint towards
+    // white, as Campbell draws it (§6.2).
+    let dark = campbell::rgb(look.dark).unwrap_or(campbell::BACKGROUND);
+    let text = own_text(app);
+    let drive_colour = campbell::exact(filled, text);
+    let white = campbell::exact(Color::White, text);
+    let shade = app
+        .theme
+        .panels()
+        .map_or(Color::Reset, |panels| panels.shade);
+    let colours = BarColours {
+        drive: drive_colour,
+        glow: mix(drive_colour, white, 0.55),
+        tint: mix(drive_colour, white, 0.2),
+        empty: campbell::exact(empty, text),
+        shade: campbell::exact(shade, dark),
+    };
+    Some(wave_tints((look.bar, pace), into, thirds, colours))
 }
 
 /// Plays the map's motion over the tiles `ui::draw_tiles` drew in `inner`,
@@ -1294,6 +1677,55 @@ mod tests {
             age(began, Duration::from_millis(450)),
             Duration::from_millis(150)
         );
+    }
+
+    /// Whether `a` and `b` are the same to a millionth.
+    fn about(a: f32, b: f32) -> bool {
+        (a - b).abs() < 1e-6
+    }
+
+    #[test]
+    fn a_rise_shows_more_of_its_waves_the_faster_it_is_against_its_usual() {
+        // Design §6.9: a quarter at its usual rise, .55 at 2.5 times it and
+        // all of it from 5 times, evenly between, and none at all for none.
+        for (ratio, expected) in [
+            (0.0, 0.0),
+            (0.5, 0.125),
+            (1.0, 0.25),
+            (1.75, 0.4),
+            (2.5, 0.55),
+            (3.75, 0.775),
+            (5.0, 1.0),
+            (12.0, 1.0),
+        ] {
+            assert!(about(amp(ratio), expected), "{ratio}: {}", amp(ratio));
+        }
+    }
+
+    #[test]
+    fn a_drive_s_usual_rise_is_the_average_of_its_last_hundred_rises() {
+        let rising = |pace: Option<Pace>| match pace {
+            Some(Pace::Rising(amp)) => amp,
+            _ => panic!("not rising: {pace:?}"),
+        };
+        let mut waves = Waves::default();
+        assert!(
+            about(rising(waves.pace_of(0.004)), 0.25),
+            "the first, as usual"
+        );
+        for _ in 0..99 {
+            waves.pace_of(0.004);
+        }
+        // Falling and steady ticks aren't rises.
+        assert_eq!(waves.pace_of(-0.01), Some(Pace::Falling));
+        assert_eq!(waves.pace_of(0.00004), None);
+        assert!(about(rising(waves.pace_of(0.02)), 1.0), "five times");
+        for _ in 0..98 {
+            waves.pace_of(0.02);
+        }
+        // One .004 left of the last hundred: .01984 a tick.
+        assert!(about(rising(waves.pace_of(0.02)), amp(0.02 / 0.01984)));
+        assert!(about(rising(waves.pace_of(0.02)), 0.25), "all .02 now");
     }
 
     #[test]

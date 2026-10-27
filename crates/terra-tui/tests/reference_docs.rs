@@ -12,7 +12,7 @@ use ratatui::style::{Color, Style};
 use terra_sim::DataPack;
 use terra_tui::settings::SavedSettings;
 use terra_tui::space::{Depth, Pane};
-use terra_tui::theme::{SemanticTile, Theme};
+use terra_tui::theme::{BarWaves, SemanticTile, Theme};
 
 #[test]
 fn the_theme_example_loads() {
@@ -37,6 +37,7 @@ fn the_theme_example_loads() {
     let (motion, default) = (theme.motion(), Theme::cp437().motion());
     assert_eq!(motion.flash, Color::White);
     assert_eq!(motion.ash, default.ash);
+    assert_eq!(motion.bar, BarWaves::Ripple);
 }
 
 #[test]
