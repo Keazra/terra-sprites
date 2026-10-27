@@ -156,6 +156,7 @@ fn main() -> ExitCode {
                 Next::World(opening) => {
                     let setup = Setup {
                         theme: theme.clone(),
+                        motion: !args.no_motion,
                         force_panic: args.force_panic,
                         session_log: session_log.as_deref(),
                     };
@@ -487,6 +488,9 @@ impl Progress {
 /// What the frame loop runs with, besides the terminal and the world.
 struct Setup<'a> {
     theme: Theme,
+    /// Whether motion starts on: `--no-motion` turns it off for every
+    /// world the game opens (design §6.9).
+    motion: bool,
     force_panic: bool,
     /// Where the session log goes, if anywhere (design §2.7).
     session_log: Option<&'a Path>,
@@ -512,6 +516,7 @@ fn run_world(
     let areas = ui::areas(terminal.size()?);
     let world = session.world();
     let mut app = App::new(world.map(), setup.theme.clone(), world.seed(), areas);
+    app.set_motion(setup.motion);
     // A save loaded on the title screen starts as a load in a world does
     // (M2 design §8.2).
     if let Some(name) = loaded {

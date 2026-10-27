@@ -192,6 +192,9 @@ pub fn world_clip(
     let world = session.world();
     let areas = framing.view.areas(framing.screen);
     let mut app = App::new(world.map(), theme, world.seed(), areas);
+    // Set up with motion off, so nothing setting it up starts motion that
+    // the first frame would show half played (design §6.9).
+    app.set_motion(false);
     if let (Some(name), Some(playback)) = (&replay, session.playback()) {
         app.start_replay(name, playback);
         // It starts paused, waiting for the player.
@@ -200,6 +203,7 @@ pub fn world_clip(
     set_pace(&mut app.clock, scene.pace, world.mode())?;
     set_view(&mut app, world, scene)?;
     settle(&mut app, framing.frame);
+    app.set_motion(scene.motion);
 
     let mut terminal = terminal(framing.screen);
     let mut clip = Clip::default();
@@ -500,6 +504,46 @@ mod tests {
         let last = row(&clip.frames.last().unwrap().screen, 0);
         assert!(first.contains("tick 5 "), "{first}");
         assert!(last.contains("tick 15 "), "{last}");
+    }
+
+    /// A 40×20 lake of shallow water.
+    fn lake() -> World {
+        let rows = vec!["~".repeat(40); 20];
+        let rows: Vec<&str> = rows.iter().map(String::as_str).collect();
+        let map = Map::from_ascii(&rows, &pack()).expect("valid drawing");
+        let scenario = Scenario {
+            map,
+            objects: &[],
+            sprites: &[],
+            scripted: &[],
+            newborns: &[],
+        };
+        World::from_scenario(scenario, pack(), 7).expect("valid scenario")
+    }
+
+    #[test]
+    fn a_world_s_clip_plays_motion_unless_told_not_to() {
+        // Design §6.9: the water drifts between its shades, in a clip as in
+        // the game, and with `--no-motion` it keeps its named colour, so
+        // its frames, all alike, are one.
+        let scene = scene(0, 2, Pace::Game(Speed::X1), Track::Nothing);
+        let framing = framing(Size::new(20, 10), true);
+        let clip = world_clip(live(lake()), Theme::cp437(), &scene, &framing).unwrap();
+        assert!(clip.frames.len() > 1, "{}", clip.frames.len());
+        assert!(matches!(
+            clip.frames[0].screen[(10, 5)].fg,
+            ratatui::style::Color::Rgb(..)
+        ));
+        let still = WorldScene {
+            motion: false,
+            ..scene
+        };
+        let clip = world_clip(live(lake()), Theme::cp437(), &still, &framing).unwrap();
+        assert_eq!(clip.frames.len(), 1);
+        assert_eq!(
+            clip.frames[0].screen[(10, 5)].fg,
+            ratatui::style::Color::Cyan
+        );
     }
 
     #[test]

@@ -4,7 +4,7 @@
 //! action. Each area's methods are in a module of its own: the Cursor,
 //! aiming, the map view, the selection, what each tick brings, what shows
 //! for a while, the menus, the sprite list, the population graph, the
-//! family tree, naming, saves and replays.
+//! family tree, naming, saves and replays, and motion.
 
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
@@ -25,6 +25,7 @@ use crate::family_tree;
 use crate::input::{Action, Button, KeyReports};
 use crate::inspector;
 use crate::listed::listed_enum;
+use crate::motion::Motion;
 use crate::policy::{InfoPolicy, Omniscient, Panel, Subject};
 use crate::saves::{QUICKSAVE, SaveFile};
 use crate::space::Place;
@@ -39,6 +40,7 @@ mod events;
 mod help;
 mod list;
 mod menus;
+mod motion;
 mod naming;
 mod population;
 mod replay;
@@ -611,6 +613,8 @@ pub struct App {
     /// status line (`i`, design §6.1, #305), under whatever's opened from
     /// it, which goes back to it when it closes.
     full_screen: bool,
+    /// The motion it's playing, and whether it's on (design §6.9).
+    motion: Motion,
 }
 
 /// A replay as the screen follows it (design §2.7).
@@ -832,6 +836,7 @@ impl App {
             on_inspector: false,
             spots: RefCell::default(),
             full_screen: false,
+            motion: Motion::new(),
         };
         app.centre_on(cursor);
         app
@@ -867,6 +872,7 @@ impl App {
             self.since_autosave += elapsed;
         }
         let now = self.running_for;
+        self.motion.forget_finished(now);
         self.emotes.retain(|_, &mut (_, at)| now - at < EMOTE_FOR);
         self.resting
             .retain(|_, rest| rest.until().is_none_or(|until| now < until));

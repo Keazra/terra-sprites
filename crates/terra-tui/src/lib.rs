@@ -3,6 +3,7 @@
 
 pub mod app;
 pub mod args;
+pub mod campbell;
 pub mod clock;
 pub mod controls;
 pub mod cp437;
@@ -15,6 +16,7 @@ mod help;
 pub mod input;
 mod inspector;
 mod listed;
+mod motion;
 pub mod policy;
 pub mod saves;
 pub mod session;

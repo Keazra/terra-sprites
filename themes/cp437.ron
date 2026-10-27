@@ -5,7 +5,7 @@
 // light_green, light_yellow, light_blue, light_magenta, light_cyan, white;
 // or an exact colour, "#rrggbb". A name follows the player's terminal colours,
 // so this theme uses exact ones only where no name fits: the panels' shades,
-// and the soft blue of what the pointer can be on.
+// the soft blue of what the pointer can be on, and motion's colours.
 (
     tiles: {
         terrain(grass):         (glyph: '.', fg: green),
@@ -167,4 +167,18 @@
     // without this section draws a line between the panels and the map
     // instead, as the ASCII theme does.
     panels: (shade: "#181a22", title: "#282c3a"),
+    // Motion's colours (design §6.9): a death's flash and the ash grey its
+    // ghost fades to, a hatching's sparks, the trail's tint, the dark a
+    // pop-up fades from, and the two shades each water drifts between.
+    // Exact, since a fade blends exact colours; what a theme leaves out of
+    // this section, it draws as the default theme does.
+    motion: (
+        flash: "#d0d0d0",
+        ash: "#5c5c5c",
+        spark: "#ffe9a0",
+        trail: "#2b3047",
+        dark: "#0c0c0c",
+        shallow_water: ("#3a96dd", "#62b4f0"),
+        deep_water: ("#0037da", "#2f62f2"),
+    ),
 )

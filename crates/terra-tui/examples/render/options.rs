@@ -66,6 +66,8 @@ usage: render title [options] -o <file>
   --cursor             show the Cursor, following the tracked sprite; by
                        default it's out of the picture
   --tab <name>         the inspector tab: body, brain, chem, genome or world
+  --no-motion          draw it without motion: the water still, and no
+                       flash where a sprite dies
   --ascii              draw with the ascii theme
   --theme <file>       draw with a theme of your own
   --font <file.ttf>    draw with this font instead of Cascadia Mono
@@ -123,12 +125,16 @@ pub struct WorldScene {
     pub cursor: bool,
     /// The inspector tab open, if not the one selecting a sprite opens.
     pub tab: Option<Tab>,
+    /// Whether motion plays, as it does in the game unless it's turned off
+    /// (design §6.9).
+    pub motion: bool,
 }
 
 impl WorldScene {
     /// A world's clip as the command line has it unless told otherwise:
     /// from where the world starts to the usual end, at 4×, tracking the
-    /// sprite `Tab` selects first, with no Cursor, on the tab that opens.
+    /// sprite `Tab` selects first, with no Cursor, on the tab that opens,
+    /// with motion.
     pub const USUAL: WorldScene = WorldScene {
         from: None,
         end: End::Usual,
@@ -136,6 +142,7 @@ impl WorldScene {
         track: Track::First,
         cursor: false,
         tab: None,
+        motion: true,
     };
 }
 
@@ -227,6 +234,7 @@ impl Options {
                     | "--tab"
                     | "--map-view"
                     | "--hide"
+                    | "--no-motion"
             ) {
                 for_a_world.push(flag.clone());
             }
@@ -248,6 +256,7 @@ impl Options {
                 "--track" => scene.track = track(&value()?)?,
                 "--cursor" => scene.cursor = true,
                 "--tab" => scene.tab = Some(tab(&value()?)?),
+                "--no-motion" => scene.motion = false,
                 "--ascii" => world.ascii = true,
                 "--theme" => world.theme = Some(value()?.into()),
                 "--font" => fonts.push(value()?.into()),
@@ -579,6 +588,19 @@ mod tests {
     }
 
     #[test]
+    fn a_world_clip_plays_motion_unless_told_not_to() {
+        // Design §6.9: on, as in the game, and `--no-motion` turns it off.
+        let motion = |line: &str| match parse(line).unwrap().scene {
+            Scene::World(scene) | Scene::Samples(scene) => scene.motion,
+            other => panic!("{other:?}"),
+        };
+        assert!(motion("world -o a.gif"));
+        assert!(!motion("world --no-motion -o a.gif"));
+        assert!(!motion("samples --no-motion -o a.gif"));
+        assert!(USAGE.contains("--no-motion"));
+    }
+
+    #[test]
     fn a_replay_starts_where_it_starts_unless_told() {
         let options = parse("world --replay last_session.replay -o a.gif").unwrap();
         let Scene::World(scene) = &options.scene else {
@@ -633,6 +655,10 @@ mod tests {
             "--replay is for a world's clip",
         );
         refused("title --from 5 -o a.gif", "--from is for a world's clip");
+        refused(
+            "title --no-motion -o a.gif",
+            "--no-motion is for a world's clip",
+        );
         refused(
             "title --preset a.ron -o a.gif",
             "--preset is for a world's clip",

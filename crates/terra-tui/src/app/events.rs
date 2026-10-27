@@ -40,9 +40,22 @@ impl App {
     /// An action the selected sprite finishes, or another's done to it, goes
     /// on the front of its observed list, or counts up the line there if it
     /// reads the same.
+    ///
+    /// While motion is on, a death or a hatching starts its motion, and the
+    /// screen then notes how each sprite and egg is drawn, for the next
+    /// (design §6.9).
     pub fn record(&mut self, events: &[Event], world: &World) {
+        self.take_in_tick(events, world);
+        self.note_looks(world);
+    }
+
+    /// Takes in one tick's `events`, as `record` says, but for noting how
+    /// sprites and eggs are drawn: of a frame's ticks, the screen notes that
+    /// once they're all taken in, since `world` is as the last left it.
+    fn take_in_tick(&mut self, events: &[Event], world: &World) {
         self.note_names(world);
         for event in events {
+            self.set_off(&event.kind);
             // The events carry the names, so the log names a sprite as it
             // was then: one named and killed in one tick is gone before
             // `note_names` sees it.
@@ -316,11 +329,12 @@ impl App {
     /// Takes in what a frame's ticks did: their events, as `record` does,
     /// and the Pleased emote on each sprite that felt a strong reward
     /// (design §6.3). One already showing Pleased carries on, rather than
-    /// starting again each tick a reward lasts.
+    /// starting again each tick a reward lasts. How sprites and eggs are
+    /// drawn is noted once, after the last tick (§6.9).
     pub fn take_in(&mut self, ticks: Ticks, world: &World) {
         // Tick by tick, so of two emotes in one frame the later tick's wins.
         for (events, pleased) in ticks.0 {
-            self.record(&events, world);
+            self.take_in_tick(&events, world);
             for id in pleased {
                 let showing = matches!(self.emotes.get(&id), Some(&(Emote::Pleased, at)) if self.shows(at, EMOTE_FOR));
                 if !showing {
@@ -328,6 +342,7 @@ impl App {
                 }
             }
         }
+        self.note_looks(world);
     }
 
     /// The Cursor's touch on sprite `id`, on `tick`: its emote, and a line

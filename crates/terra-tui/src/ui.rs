@@ -18,6 +18,7 @@ use crate::app::{
 use crate::controls::{self, Context, Control, Hint, PaletteRow, Says};
 use crate::family_tree::{self, Lineage};
 use crate::inspector::{self, INSPECTOR_WIDTH, NOTHING_SELECTED, TabColumns, first_shown};
+use crate::motion::{self, Bare};
 use crate::policy::{Panel, Subject};
 use crate::space::{self, Place};
 use crate::spots::{Spot, Spots};
@@ -169,6 +170,9 @@ pub fn render_with(frame: &mut Frame, app: &App, world: &World, parts: Parts) {
     if let Some(Spot::LogLine(id)) = tooltip::pointer(app).and_then(|cell| spots.at(cell)) {
         light_up(frame.buffer_mut(), app, world, *id, &spots);
     }
+    // Motion over the panels and pop-ups, under the tooltip, which doesn't
+    // move (design §6.9).
+    motion::play_on_panels(frame.buffer_mut(), area, app, &spots);
     let between_bars = Rect::new(
         area.x,
         area.y + parts.top_rows(),
@@ -421,6 +425,8 @@ fn draw_tiles(buf: &mut Buffer, inner: Rect, app: &App, world: &World) {
     let cursor = app.shown_cursor();
     let lineage = lineage_on_map(app, world);
     let width = app.tile_width();
+    // Where bare ground shows, for motion to play over (design §6.9).
+    let mut bare = Vec::new();
     for y in inner.top()..inner.bottom() {
         for x in inner.left()..inner.right() {
             // Which of its tile's cells this is: the second while tiles are
@@ -447,16 +453,16 @@ fn draw_tiles(buf: &mut Buffer, inner: Rect, app: &App, world: &World) {
                 }
             };
             // A sprite is drawn over any item on its tile.
+            // A sprite takes the colour mode's colour, unless it's emoting
+            // (design §6.3).
             let glyph = if let Some(sprite) = world.sprite_at(pos) {
                 let emote = app
                     .emote(sprite.id())
                     .filter(|_| app.can_view(Panel::Emotes, Subject::Sprite(sprite.id())));
-                let selected = app.selection() == Some(Selection::Living(sprite.id()));
-                let tile = match emote {
-                    Some(emote) => SemanticTile::Emote(emote),
-                    None => sprite_tile(sprite.life_stage(), selected),
-                };
-                app.theme.glyph(tile)
+                match emote {
+                    Some(emote) => app.theme.glyph(SemanticTile::Emote(emote)),
+                    None => sprite_look(app, &sprite, lineage.as_ref()),
+                }
             } else if let Some((_, look)) = thrown.filter(|&(from, _)| from == pos) {
                 app.theme.object_glyph(look.type_name, look.visual_state)
             } else if destination == Some(pos) {
@@ -486,15 +492,14 @@ fn draw_tiles(buf: &mut Buffer, inner: Rect, app: &App, world: &World) {
             } else {
                 glyph.symbol
             };
-            // A sprite takes the colour mode's colour, unless it's emoting
-            // (design §6.3).
-            let fg = match world.sprite_at(pos) {
-                Some(sprite) if !is_emote(app, &sprite) => {
-                    sprite_colour(app, &sprite, glyph.fg, lineage.as_ref())
-                }
-                _ => glyph.fg,
-            };
-            let mut style = Style::default().fg(fg);
+            if on_terrain && app.motion() {
+                bare.push(Bare {
+                    cell: Position::new(x, y),
+                    tile: pos,
+                    plain: cursor != Some(pos) && attended != Some(pos),
+                });
+            }
+            let mut style = Style::default().fg(glyph.fg);
             if glyph.bold {
                 style = style.add_modifier(Modifier::BOLD);
             }
@@ -507,6 +512,7 @@ fn draw_tiles(buf: &mut Buffer, inner: Rect, app: &App, world: &World) {
             buf[(x, y)].set_char(symbol).set_style(style);
         }
     }
+    motion::play_on_map(buf, inner, app, world, &bare);
     draw_stars(buf, inner, app);
     if app.flash_on() {
         draw_leash(buf, app, world);
@@ -534,7 +540,7 @@ fn draw_stars(buf: &mut Buffer, inner: Rect, app: &App) {
 }
 
 /// Whether `sprite` is drawn as an emote just now.
-fn is_emote(app: &App, sprite: &SpriteView) -> bool {
+pub(crate) fn is_emote(app: &App, sprite: &SpriteView) -> bool {
     let id = sprite.id();
     app.emote(id).is_some() && app.can_view(Panel::Emotes, Subject::Sprite(id))
 }
@@ -542,11 +548,11 @@ fn is_emote(app: &App, sprite: &SpriteView) -> bool {
 /// The selected sprite and those of its lineage the map marks, while it
 /// shows the lineage colours and a sprite is selected, living or dead (M2
 /// design §17.4).
-type Marked = (EntityId, BTreeMap<EntityId, Lineage>);
+pub(crate) type Marked = (EntityId, BTreeMap<EntityId, Lineage>);
 
 /// The lineage the map colours, if it does: not while the policy hides
 /// the selected sprite from the family tree.
-fn lineage_on_map(app: &App, world: &World) -> Option<Marked> {
+pub(crate) fn lineage_on_map(app: &App, world: &World) -> Option<Marked> {
     if app.colour_mode() != ColourMode::Lineage {
         return None;
     }
@@ -555,6 +561,19 @@ fn lineage_on_map(app: &App, world: &World) -> Option<Marked> {
         return None;
     }
     Some((id, family_tree::lineage(world, id)))
+}
+
+/// How `sprite` is drawn while it isn't emoting: its own glyph, the young
+/// small and the selected one in reverse video, in the colour mode's colour
+/// (design §6.3), `lineage` marking it. A death's ghost is drawn from it
+/// (§6.9).
+pub(crate) fn sprite_look(app: &App, sprite: &SpriteView, lineage: Option<&Marked>) -> Glyph {
+    let selected = app.selection() == Some(Selection::Living(sprite.id()));
+    let glyph = app.theme.glyph(sprite_tile(sprite.life_stage(), selected));
+    Glyph {
+        fg: sprite_colour(app, sprite, glyph.fg, lineage),
+        ..glyph
+    }
 }
 
 /// The colour `sprite` is drawn in, in the colour mode (design §6.3): its

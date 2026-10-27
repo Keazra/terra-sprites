@@ -32,4 +32,7 @@ fn the_theme_example_loads() {
     assert_eq!(text.good, Theme::cp437().text().good);
     let panels = theme.panels().expect("shaded");
     assert_eq!(panels.shade, Color::Rgb(0x1c, 0x1c, 0x1c));
+    let (motion, default) = (theme.motion(), Theme::cp437().motion());
+    assert_eq!(motion.flash, Color::White);
+    assert_eq!(motion.ash, default.ash);
 }

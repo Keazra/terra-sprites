@@ -1,7 +1,8 @@
 //! Themes map semantic tiles to glyphs and colours, and each text role to a
-//! style, and may give the panels their shades (design §6.2). They are UI
-//! assets and never affect the simulation. Two are embedded in the binary,
-//! and `--theme <file>` loads one the player has edited (design v34 §6.7).
+//! style, may give the panels their shades (design §6.2), and give motion
+//! its colours (§6.9). They are UI assets and never affect the simulation.
+//! Two are embedded in the binary, and `--theme <file>` loads one the
+//! player has edited (design v34 §6.7).
 
 use std::collections::BTreeMap;
 
@@ -219,6 +220,40 @@ pub struct PanelLook {
     pub title: Color,
 }
 
+/// Motion's colours (design §6.9): exact ones in the default theme, since
+/// a fade blends them. A colour a theme names blends from how Campbell, the
+/// renderer's scheme, draws it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MotionLook {
+    /// What a death's tile flashes to, fading back.
+    pub flash: Color,
+    /// The grey a death's ghost fades to.
+    pub ash: Color,
+    /// What a hatching's sparks light the glyphs round the egg with.
+    pub spark: Color,
+    /// The tint the trail leaves on the tiles the selected sprite has just
+    /// left.
+    pub trail: Color,
+    /// The dark a pop-up fades in from, and the background a fade takes on
+    /// a tile that has none of its own.
+    pub dark: Color,
+    /// The two shades shallow water drifts between.
+    pub shallow_water: [Color; 2],
+    /// The two shades deep water drifts between.
+    pub deep_water: [Color; 2],
+}
+
+impl MotionLook {
+    /// The two shades `terrain` drifts between, if it's water.
+    pub fn water(&self, terrain: Terrain) -> Option<[Color; 2]> {
+        match terrain {
+            Terrain::ShallowWater => Some(self.shallow_water),
+            Terrain::DeepWater => Some(self.deep_water),
+            _ => None,
+        }
+    }
+}
+
 /// The default theme's file.
 const CP437: &str = include_str!("../../../themes/cp437.ron");
 
@@ -316,6 +351,8 @@ pub struct Theme {
     text: TextLook,
     /// The panels' shades, if it has them (design §6.1).
     panels: Option<PanelLook>,
+    /// Motion's colours (design §6.9).
+    motion: MotionLook,
 }
 
 impl Theme {
@@ -439,6 +476,11 @@ impl Theme {
         self.panels
     }
 
+    /// Motion's colours (design §6.9).
+    pub fn motion(&self) -> MotionLook {
+        self.motion
+    }
+
     /// A theme from the text of a theme file, as `--theme <file>` loads it
     /// (design v34 §6.7), checked against the data pack it will draw.
     ///
@@ -545,6 +587,12 @@ impl Theme {
             .unwrap_or_default()
             .look(builtin.text.unwrap_or_default())
             .expect("the built-in cp437 theme styles every text role");
+        // And any of motion's colours (design §6.9).
+        let motion = file
+            .motion
+            .unwrap_or_default()
+            .look(builtin.motion.unwrap_or_default())
+            .expect("the built-in cp437 theme has every one of motion's colours");
         let theme = Theme {
             tiles,
             objects,
@@ -572,6 +620,7 @@ impl Theme {
                 shade: panels.shade.into(),
                 title: panels.title.into(),
             }),
+            motion,
         };
         if let Some((what, symbol)) = theme
             .symbols()
@@ -752,6 +801,10 @@ struct ThemeFile {
     /// lines between the panels, rather than the default theme's shades.
     #[serde(default, deserialize_with = "implicit_some")]
     panels: Option<PanelsFile>,
+    /// Motion's colours (design §6.9). A theme without them, or without
+    /// some of them, draws the default theme's.
+    #[serde(default, deserialize_with = "implicit_some")]
+    motion: Option<MotionFile>,
 }
 
 /// A section a theme file may leave out, written without `Some(…)` when
@@ -930,6 +983,44 @@ struct PanelsFile {
     shade: Colour,
     /// What their title rows sit on.
     title: Colour,
+}
+
+/// A theme file's `motion` section: motion's colours (design §6.9).
+#[derive(Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct MotionFile {
+    #[serde(default, deserialize_with = "implicit_some")]
+    flash: Option<Colour>,
+    #[serde(default, deserialize_with = "implicit_some")]
+    ash: Option<Colour>,
+    #[serde(default, deserialize_with = "implicit_some")]
+    spark: Option<Colour>,
+    #[serde(default, deserialize_with = "implicit_some")]
+    trail: Option<Colour>,
+    #[serde(default, deserialize_with = "implicit_some")]
+    dark: Option<Colour>,
+    /// Two shades, as `("#3a96dd", "#62b4f0")`.
+    #[serde(default, deserialize_with = "implicit_some")]
+    shallow_water: Option<(Colour, Colour)>,
+    #[serde(default, deserialize_with = "implicit_some")]
+    deep_water: Option<(Colour, Colour)>,
+}
+
+impl MotionFile {
+    /// The colours this section gives, with `default`'s for any it leaves
+    /// out: `None` if both leave one out.
+    fn look(self, default: MotionFile) -> Option<MotionLook> {
+        let pair = |(from, to): (Colour, Colour)| [from.into(), to.into()];
+        Some(MotionLook {
+            flash: self.flash.or(default.flash)?.into(),
+            ash: self.ash.or(default.ash)?.into(),
+            spark: self.spark.or(default.spark)?.into(),
+            trail: self.trail.or(default.trail)?.into(),
+            dark: self.dark.or(default.dark)?.into(),
+            shallow_water: pair(self.shallow_water.or(default.shallow_water)?),
+            deep_water: pair(self.deep_water.or(default.deep_water)?),
+        })
+    }
 }
 
 /// A theme file's `cursor` section.

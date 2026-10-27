@@ -264,7 +264,8 @@ impl App {
     /// now on. The app starts afresh on it, as for a new world, paused so
     /// the player can see where they are (design §6.7). What's the
     /// player's rather than the world's carries over: the speed, the theme,
-    /// the colours, the open tab and the folders.
+    /// the colours, the open tab, the folders and whether motion is on
+    /// (§6.9).
     pub fn take_loaded(&mut self) -> Option<World> {
         let (world, name) = self.loaded.take()?;
         let areas = Areas {
@@ -289,6 +290,7 @@ impl App {
         // screen, so the world loaded is in view (design §6.1, #305).
         fresh.inspector = self.inspector;
         fresh.zoom = self.zoom;
+        fresh.motion.switch(self.motion.on());
         fresh.running_for = self.running_for;
         fresh.data_folder = self.data_folder.take();
         fresh.genome_folder = self.genome_folder.take();

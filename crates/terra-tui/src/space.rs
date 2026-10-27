@@ -168,11 +168,12 @@ fn wrapped(at: f64, length: u16) -> u16 {
 const PATTERN: u64 = 180;
 
 /// The stars' pattern: SplitMix64, the same every time, and the front end's
-/// own, never the world's dice.
-struct Pattern(u64);
+/// own, never the world's dice. Motion scatters a hatching's sparks with it
+/// too (design §6.9).
+pub(crate) struct Pattern(pub(crate) u64);
 
 impl Pattern {
-    fn next(&mut self) -> u64 {
+    pub(crate) fn next(&mut self) -> u64 {
         self.0 = self.0.wrapping_add(0x9E37_79B9_7F4A_7C15);
         let mut z = self.0;
         z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);

@@ -79,7 +79,8 @@ fn event_log_text(buffer: &Buffer) -> String {
 /// design §11.1).
 fn cell(tile: Pos) -> Position {
     let map = Map::from_ascii(&[".........."; 5], &pack()).expect("valid drawing");
-    let app = App::new(&map, Theme::cp437(), 7, ui::areas(SCREEN));
+    let mut app = App::new(&map, Theme::cp437(), 7, ui::areas(SCREEN));
+    app.set_motion(false);
     app.cell_of(tile).expect("in view")
 }
 

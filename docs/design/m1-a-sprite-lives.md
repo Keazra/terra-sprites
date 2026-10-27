@@ -1783,10 +1783,10 @@ N ═ M
 | Motion | What the player sees | How long | At 4× and up |
 |---|---|---|---|
 | A death | The tile's background flashes and fades back. The sprite's glyph stays on its tile as a ghost, fading from its colour to ash grey, unless something else is drawn there by then. | 1.2 s | 0.6 s |
-| A hatching | Sparks: the egg's tile and the eight round it light up at scattered moments and fade back. The young starts in the egg's colour and warms to its own, as if the shell fell away, which reads differently from a death's flash and grey (M3's breaking eggs). | 1 s | 0.5 s |
+| A hatching | Sparks: the egg's tile and the eight round it light up at scattered moments and fade back, but where the young is drawn, which warms instead. The young starts in the egg's colour and warms to its own over the first half, as if the shell fell away, which reads differently from a death's flash and grey (M3's breaking eggs). | 1 s | 0.5 s |
 | A tab opened | The new tab sweeps in from the side it's on, out of the panel's shade. | 0.25 s | the same |
 | A pop-up | Fades in out of the dark as it opens, and what was under it fades back as it closes. Tooltips and the debug overlay don't fade. | 0.15 s | the same |
-| Water | Shallow and deep water each drift slowly between two shades, in waves across the lake. | a 4 s cycle | the same |
+| Water | Shallow and deep water each drift slowly between two shades, in waves across the lake, in seven fixed shades a quarter of a second apart. Not under a sprite, an object or a mark, nor on the Cursor's tile or the attended one, which have looks of their own. | a 4 s cycle | the same |
 | A drive's bar | On the Body tab, eases to its new value a block at a time rather than jumping. | 0.4 s | jumps |
 | The pan | When the view centres on a sprite more than 2 tiles away (`Tab`, the sprite list, the family tree, a click on a log line, Track), it pans there, quickly at first and then slowing. Scrolling, loading, square tiles and a new screen size don't pan. | 0.3 s | jumps |
 | The trail | The tiles the selected sprite has just left keep a tint that fades, at most 8 of them. | 1.5 s a tile | 0.75 s a tile |
@@ -1795,10 +1795,10 @@ N ═ M
 - **It thins out at 4× and up,** which takes in Lab's faster speeds (M2 design §16.2), so a busy screen doesn't fizz: as the table says, deaths, hatchings and the trail are shorter and fewer, and the bars and the view jump.
 - **Colour only in panels:** the tab's sweep and a pop-up's fade change no characters, and a bar easing steps through its own blocks. On the map, a death's ghost is the sprite's own glyph. Nothing is drawn outside the glyph set, so CP437 holds (§6.2).
 - **Exact colours** (#302): a fade blends exact colours, and a colour the theme names blends from how Windows Terminal's default scheme, Campbell, draws it, the scheme the renderer draws in. While motion is on, water is drawn in its exact shades.
-- **The theme's `motion` section** gives motion's colours: a death's flash, the ash grey, the sparks, the trail's tint, the dark a pop-up fades from, and each water's two shades. A theme without one uses the default theme's.
+- **The theme's `motion` section** gives motion's colours: a death's flash, the ash grey, the sparks, the trail's tint, the dark a pop-up fades from, which a fade also takes as the background of a tile that has none of its own, and each water's two shades. A theme without one uses the default theme's.
 - **Motion that tells the player something asks first** (§6.4): a death's and a hatching's ask `Emotes` about their sprite, and the trail asks `Markers` about the selected sprite.
 - **The pan moves only what's drawn.** The viewport jumps at once, as before, and the map view is drawn from wherever the pan has reached. The pointer is over the tile drawn beneath it, where a click lands, and the Cursor is moved to the tile under a still pointer only once the pan ends, so the world never hears of the tiles between (§6.5).
-- **Where a sprite died is remembered by the screen:** the world removes a dead sprite before it says it died, so after each tick it takes in, the screen notes where each sprite is and the glyph and colour it's drawn in.
+- **Where a sprite died is remembered by the screen:** the world removes a dead sprite before it says it died, so once it has taken in a frame's ticks, the screen notes where each sprite and egg is and the glyph and colour it's drawn in. It sees the world only as the frame's last tick left it, so a sprite born and dead within one frame's ticks, at Max say, has no death drawn.
 - **Not here:** the title screen (Look 9, #310), and the call ripple, which waits for calls drawn as waves in Slice 34 (#273, M3 design §8.5).
 
 ---

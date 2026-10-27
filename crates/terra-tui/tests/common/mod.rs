@@ -11,6 +11,7 @@
 pub mod screen;
 
 use std::path::PathBuf;
+use std::time::Duration;
 
 use ratatui::buffer::Buffer;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
@@ -248,9 +249,12 @@ pub fn grab_app(world: &World) -> App {
 }
 
 /// An app on `world` in the default theme, with only the map view, its
-/// tiles drawn on `tiles`.
+/// tiles drawn on `tiles`. Motion is off, so what it draws stays still
+/// (design §6.9): Look 5's own tests turn it on.
 pub fn map_app(world: &World, tiles: Rect) -> App {
-    App::new(world.map(), Theme::cp437(), world.seed(), map_only(tiles))
+    let mut app = App::new(world.map(), Theme::cp437(), world.seed(), map_only(tiles));
+    app.set_motion(false);
+    app
 }
 
 /// The smallest screen with every panel beside the map view (design
@@ -268,10 +272,12 @@ pub fn app_in(world: &World, theme: Theme) -> App {
 }
 
 /// An app on `world` in `theme`, with its panels laid out for a screen of
-/// `size`. Its help screen shows [`DATA_FOLDER`].
+/// `size`. Its help screen shows [`DATA_FOLDER`]. Motion is off, as in
+/// `map_app`.
 pub fn sized_app(world: &World, theme: Theme, size: Size) -> App {
     let mut app = App::new(world.map(), theme, world.seed(), ui::areas(size));
     app.set_data_folder(PathBuf::from(DATA_FOLDER));
+    app.set_motion(false);
     app
 }
 
@@ -287,6 +293,14 @@ pub fn render_on(app: &App, world: &World, size: Size) -> Buffer {
         .draw(|frame| ui::render(frame, app, world))
         .unwrap();
     terminal.backend().buffer().clone()
+}
+
+/// One frame of the game on a 100×30 screen: the app's clock moved on by
+/// `step`, as the frame loop moves it, and then the screen drawn, so what
+/// moves in real time is drawn where it has got to (design §6.9).
+pub fn frame(app: &mut App, world: &World, step: Duration) -> Buffer {
+    app.animate(step);
+    render(app, world)
 }
 
 /// Row `y` of `screen` as text, without the spaces at its end.
