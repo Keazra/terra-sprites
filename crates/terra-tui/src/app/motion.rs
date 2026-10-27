@@ -8,7 +8,7 @@
 
 use std::time::Duration;
 
-use terra_sim::{ChemicalKind, EntityId, EventKind, World};
+use terra_sim::{ChemicalKind, EntityId, EventKind, Pos, World};
 
 use super::{App, Selection};
 use crate::inspector::{self, Hatching};
@@ -38,10 +38,19 @@ impl App {
         self.running_for
     }
 
-    /// Starts the death or hatching `event` sets off, if it does.
+    /// Starts the death or hatching `event` sets off, if it does: only
+    /// those that could be drawn just now count towards how many play at
+    /// once (design §6.9).
     pub(super) fn set_off(&mut self, event: &EventKind) {
+        let drawn: Vec<(EntityId, Pos)> = self
+            .motion
+            .at_stake(event)
+            .into_iter()
+            .filter(|&(id, tile)| motion::could_draw(self, id, tile))
+            .collect();
+        let could_draw = |id, tile| drawn.contains(&(id, tile));
         self.motion
-            .took_in(event, self.running_for, self.clock.speed());
+            .took_in(event, self.running_for, self.clock.speed(), could_draw);
     }
 
     /// Notes how each sprite and egg on `world`'s map is drawn, after the

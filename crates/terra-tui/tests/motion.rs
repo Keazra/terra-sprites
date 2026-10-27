@@ -484,6 +484,58 @@ fn at_most_four_deaths_play_at_once_the_newest_taking_the_oldest_s_place() {
     assert_eq!(shown, tiles[3..]);
 }
 
+/// A policy that shows everything but the emotes of the sprites `hidden`.
+struct HidesEmotesOf(Vec<EntityId>);
+
+impl InfoPolicy for HidesEmotesOf {
+    fn can_view(&self, panel: Panel, subject: Subject) -> bool {
+        let hidden = matches!(subject, Subject::Sprite(id) if self.0.contains(&id));
+        !(panel == Panel::Emotes && hidden)
+    }
+}
+
+#[test]
+fn a_death_the_policy_hides_takes_no_place_from_one_the_player_sees() {
+    // Design §6.4, §6.9: only what can be drawn counts towards the four.
+    let tiles = [at(1, 1), at(3, 1), at(5, 1), at(7, 1), at(1, 4)];
+    let (mut app, ids, after) = before_and_after(&tiles);
+    app.set_policy(HidesEmotesOf(ids[1..].to_vec()));
+    app.record(&deaths(&ids), &after);
+    let screen = frame(&mut app, &after, Duration::ZERO);
+    assert!(flashing(&app, &screen, at(1, 1)));
+    // Two at 4× and up: the seen one first, then two hidden.
+    let (mut app, ids, after) = before_and_after(&tiles);
+    at_4x(&mut app);
+    app.set_policy(HidesEmotesOf(ids[1..].to_vec()));
+    app.record(&deaths(&ids[..3]), &after);
+    let screen = frame(&mut app, &after, Duration::ZERO);
+    assert!(flashing(&app, &screen, at(1, 1)));
+}
+
+#[test]
+fn a_death_off_the_map_view_takes_no_place_from_one_the_player_sees() {
+    // Design §6.9: the view starts from column 48 of a map 150 across, so
+    // the sprite on column 60 is in it and those in the west aren't.
+    let seen = at(60, 5);
+    let unseen = [at(1, 5), at(2, 5), at(3, 5), at(4, 5)];
+    let before = WorldBuilder::grass(150, 12)
+        .starters(&[&[seen][..], &unseen[..]].concat())
+        .build();
+    let after = WorldBuilder::grass(150, 12).build();
+    let mut app = moving(&before);
+    assert!(app.cell_of(seen).is_some());
+    assert!(unseen.iter().all(|&tile| app.cell_of(tile).is_none()));
+    app.record(&[], &before);
+    let ids: Vec<EntityId> = [&[seen][..], &unseen[..]]
+        .concat()
+        .iter()
+        .map(|&tile| sprite_on(&before, tile))
+        .collect();
+    app.record(&deaths(&ids), &after);
+    let screen = frame(&mut app, &after, Duration::ZERO);
+    assert!(flashing(&app, &screen, seen));
+}
+
 #[test]
 fn each_death_of_a_frame_s_ticks_finds_where_its_sprite_was() {
     // The screen notes the sprites once the frame's ticks are all taken

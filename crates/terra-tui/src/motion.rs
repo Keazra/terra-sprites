@@ -325,6 +325,15 @@ enum Happening {
     },
 }
 
+impl Happening {
+    /// The sprite it's about and the tile it plays on.
+    fn at(self) -> (EntityId, Pos) {
+        match self {
+            Happening::Death { id, tile, .. } | Happening::Hatching { id, tile, .. } => (id, tile),
+        }
+    }
+}
+
 /// A death or a hatching, from when it began, in the app's `running_for`,
 /// for as long as it lasts.
 #[derive(Debug, Clone, Copy)]
@@ -397,21 +406,21 @@ impl Motion {
         }
     }
 
-    /// Starts what `event` sets off at `now`, at `speed`: a death, for a
-    /// sprite seen on the map, or a hatching, for an egg seen there. The
-    /// newest takes the oldest's place once as many play as may at once. An
-    /// event about a sprite or an egg not seen starts nothing.
-    pub(crate) fn took_in(&mut self, event: &EventKind, now: Duration, speed: Speed) {
+    /// What `event` sets off, while motion is on, and how long it lasts at
+    /// 1×: a death, for a sprite seen on the map, or a hatching, for an egg
+    /// seen there. An event about a sprite or an egg not seen sets off
+    /// nothing.
+    fn set_off_by(&self, event: &EventKind) -> Option<(Happening, Duration)> {
         if !self.on {
-            return;
+            return None;
         }
-        let (happening, full) = match *event {
+        match *event {
             EventKind::Died { id, .. } => match self.seen.get(&id) {
                 Some(&Seen::Sprite {
                     tile,
                     symbol,
                     colour,
-                }) => (
+                }) => Some((
                     Happening::Death {
                         id,
                         tile,
@@ -419,26 +428,72 @@ impl Motion {
                         colour,
                     },
                     DEATH,
-                ),
-                _ => return,
+                )),
+                _ => None,
             },
             EventKind::Hatched { id, .. } => match self.seen.get(&id) {
-                Some(&Seen::Egg { tile, colour }) => (
+                Some(&Seen::Egg { tile, colour }) => Some((
                     Happening::Hatching {
                         id,
                         tile,
                         egg: colour,
-                        cracked: self.cracks.remove(&id).is_some(),
+                        cracked: self.cracks.contains_key(&id),
                     },
                     HATCHING,
-                ),
-                _ => return,
+                )),
+                _ => None,
             },
-            _ => return,
+            _ => None,
+        }
+    }
+
+    /// If `event` sets off a death or a hatching, its sprite and tile, and
+    /// those of each one playing: what `took_in` asks could be drawn. None
+    /// if it sets off nothing.
+    pub(crate) fn at_stake(&self, event: &EventKind) -> Vec<(EntityId, Pos)> {
+        let Some((new, _)) = self.set_off_by(event) else {
+            return Vec::new();
         };
+        self.moments
+            .iter()
+            .map(|moment| moment.happening)
+            .chain([new])
+            .map(Happening::at)
+            .collect()
+    }
+
+    /// Starts what `event` sets off at `now`, at `speed`, as `set_off_by`
+    /// says. Only those that `could_draw` says could be drawn just now
+    /// count towards how many play at once: one of them takes the place of
+    /// the oldest of them once as many play as may (design §6.9), so a
+    /// death or hatching the player can't see never takes the place of one
+    /// they can.
+    pub(crate) fn took_in(
+        &mut self,
+        event: &EventKind,
+        now: Duration,
+        speed: Speed,
+        could_draw: impl Fn(EntityId, Pos) -> bool,
+    ) {
+        let Some((happening, full)) = self.set_off_by(event) else {
+            return;
+        };
+        if let Happening::Hatching { id, .. } = happening {
+            self.cracks.remove(&id);
+        }
         self.forget_finished(now);
-        while self.moments.len() >= most(speed) {
-            self.moments.pop_front();
+        let drawn = |moment: &Moment| {
+            let (id, tile) = moment.happening.at();
+            could_draw(id, tile)
+        };
+        let (id, tile) = happening.at();
+        if could_draw(id, tile) {
+            while self.moments.iter().filter(|&moment| drawn(moment)).count() >= most(speed) {
+                let Some(oldest) = self.moments.iter().position(drawn) else {
+                    break;
+                };
+                self.moments.remove(oldest);
+            }
         }
         self.moments.push_back(Moment {
             happening,
@@ -691,14 +746,26 @@ impl Motion {
         self.sweep.filter(|sweep| age(sweep.began, now) < TAB_SWEEP)
     }
 
-    /// The deaths and hatchings playing at `now`, oldest first: the newest
-    /// of them, as many as may play at once at `speed`.
-    fn playing(&self, now: Duration, speed: Speed) -> impl Iterator<Item = &Moment> {
-        let skip = self.moments.len().saturating_sub(most(speed));
-        self.moments
+    /// The deaths and hatchings playing at `now`, oldest first, of those
+    /// `could_draw` says could be drawn just now: the newest of them, as
+    /// many as may play at once at `speed`.
+    fn playing(
+        &self,
+        now: Duration,
+        speed: Speed,
+        could_draw: impl Fn(EntityId, Pos) -> bool,
+    ) -> Vec<&Moment> {
+        let drawn: Vec<&Moment> = self
+            .moments
             .iter()
-            .skip(skip)
-            .filter(move |moment| age(moment.began, now) < moment.lasts)
+            .filter(|moment| age(moment.began, now) < moment.lasts)
+            .filter(|moment| {
+                let (id, tile) = moment.happening.at();
+                could_draw(id, tile)
+            })
+            .collect();
+        let skip = drawn.len().saturating_sub(most(speed));
+        drawn.into_iter().skip(skip).collect()
     }
 }
 
@@ -750,6 +817,14 @@ pub(crate) struct Bare {
     pub(crate) plain: bool,
 }
 
+/// Whether `app` could draw a death or a hatching of sprite `id` on `tile`
+/// just now (design §6.9): on the map view, and only if the policy lets
+/// what tells the player something about the sprite show (§6.4). Only those
+/// count towards how many play at once.
+pub(crate) fn could_draw(app: &App, id: EntityId, tile: Pos) -> bool {
+    app.cell_of(tile).is_some() && app.can_view(Panel::Emotes, Subject::Sprite(id))
+}
+
 /// Plays the map's motion over the tiles `ui::draw_tiles` drew in `inner`,
 /// `bare` and the items `lying` there among them, before the marks go over
 /// them (design §6.9): the water, the trail, each egg about to hatch
@@ -775,13 +850,10 @@ pub(crate) fn play_on_map(
     shimmer(buf, &on, now);
     trail(buf, &on, now);
     crack(buf, &on, lying, now);
-    for moment in app.motion_kept().playing(now, app.clock.speed()) {
+    let drawn = |id, tile| could_draw(app, id, tile);
+    for moment in app.motion_kept().playing(now, app.clock.speed(), drawn) {
         let age = age(moment.began, now);
         match moment.happening {
-            // What tells the player something about a sprite asks first
-            // (design §6.4, §6.9).
-            Happening::Death { id, .. } | Happening::Hatching { id, .. }
-                if !app.can_view(Panel::Emotes, Subject::Sprite(id)) => {}
             Happening::Death {
                 tile,
                 symbol,
