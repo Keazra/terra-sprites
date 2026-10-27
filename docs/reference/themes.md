@@ -174,7 +174,7 @@ With motion off, water is drawn in its `tiles` colour, as before.
 
 ### `colour`
 
-`colour: false` draws the whole screen in the terminal's own colours, with nothing but bold and reverse video, as the mono palette does: every colour the theme names, and every one the game draws itself, such as the title screen's greys, gives way to the terminal's. The theme still names its colours, since the fields above need them, but they're never seen: mono's are all `white`. The tile the selected sprite attends to, which `attention_marker` would give a background, is drawn bold, and motion's colours don't play, though the view still pans and a drive's bar still eases (design §6.9).
+`colour: false` draws the whole screen in the terminal's own colours, with nothing but bold and reverse video, as the mono palette does: every colour the theme names, and every one the game draws itself, such as the title screen's greys, gives way to the terminal's. The theme still names its colours, since the fields above need them, but they're never seen: mono's are all `white`. The tile the selected sprite attends to, which `attention_marker` would give a background, is underlined instead, which no glyph is, so it never reads as a fruiting bush's bold; and motion's colours don't play, though the view still pans and a drive's bar still eases (design §6.9).
 
 ## Working example
 

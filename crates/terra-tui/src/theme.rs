@@ -691,8 +691,8 @@ impl Theme {
     /// Whether this theme's palette has colour at all (design §6.2, #307).
     /// One without, such as mono, is drawn in the terminal's own colours,
     /// with only bold and reverse video ([`without_colour`]); the tile the
-    /// selected sprite attends to is bold, since its background can't be
-    /// seen, and motion's colours don't play.
+    /// selected sprite attends to is underlined, since its background can't
+    /// be seen, and motion's colours don't play.
     pub fn has_colour(&self) -> bool {
         self.colour
     }

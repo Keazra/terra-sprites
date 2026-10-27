@@ -4,9 +4,10 @@
 // terminal's own, its own greys too, so the colours a theme file must name
 // below are never seen: they're all white. What colour tells in the other
 // palettes is read here from the signs, arrows and capitals, which stay;
-// from bold, for headings, keys, what a tooltip can explain, a fruiting
-// bush and the tile the selected sprite attends to; and from reverse video,
-// for what's chosen and the selected sprite. Motion's colours don't play,
+// from bold, for headings, keys, what a tooltip can explain and a fruiting
+// bush; from reverse video, for what's chosen and the selected sprite; and
+// from an underline, for the tile the selected sprite attends to, which no
+// glyph has, so it never reads as fruit. Motion's colours don't play,
 // though the pan and the bars still move (§6.9). As a palette only its
 // colours, bold and reverse video are taken; its glyphs are the CP437
 // set's, so the file reads as a whole theme too. `NO_COLOR` starts the game
@@ -47,8 +48,8 @@
         "ball":      { "default": (glyph: '○', fg: white) },
         "egg":       { "default": (glyph: 'o', fg: white) },
     },
-    // A background, which mono can't show: the attended tile is drawn bold
-    // instead.
+    // A background, which mono can't show: the attended tile is underlined
+    // instead, since bold is a fruiting bush's.
     attention_marker: white,
     cursor: (
         arrows: (up: '↑', down: '↓', left: '←', right: '→'),

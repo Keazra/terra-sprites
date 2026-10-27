@@ -530,11 +530,12 @@ fn draw_tiles(buf: &mut Buffer, inner: Rect, app: &App, world: &World) {
                 style = style.add_modifier(Modifier::REVERSED);
             }
             // A palette with no colour can't show the marker's background,
-            // so it marks the tile bold (design §6.2, #307).
+            // so it underlines the tile, which no glyph is: bold tells a
+            // fruiting bush from a bare one there (design §6.2, #307).
             if attended == Some(pos) && app.theme.has_colour() {
                 style = style.bg(app.theme.attention_marker());
             } else if attended == Some(pos) {
-                style = style.add_modifier(Modifier::BOLD);
+                style = style.add_modifier(Modifier::UNDERLINED);
             }
             buf[(x, y)].set_char(symbol).set_style(style);
         }

@@ -4,12 +4,12 @@
 
 mod common;
 use common::screen::{HUNGRY_GENOME, app_for, garden_with_sprites, one_sprite_among, render};
-use common::{at, mono, render_on};
+use common::{WorldBuilder, at, mono, render_on, run};
 
 use std::time::Duration;
 
 use ratatui::buffer::Buffer;
-use ratatui::layout::Size;
+use ratatui::layout::{Position, Size};
 use ratatui::style::{Color, Modifier};
 use ratatui::{Terminal, backend::TestBackend};
 use terra_tui::app::App;
@@ -146,9 +146,9 @@ fn a_palette_without_colour_draws_lines_between_the_panels_even_with_shades() {
 }
 
 #[test]
-fn in_mono_the_tile_the_selected_sprite_attends_to_is_bold() {
+fn in_mono_the_tile_the_selected_sprite_attends_to_is_underlined() {
     // Design §6.2: the attention marker is a background, which mono can't
-    // show, so bold marks the tile instead.
+    // show, so the tile is underlined instead, which no glyph is.
     let (berry, bush) = (at(0, 1), at(8, 4));
     let objects = [(bush, "berry_bush"), (berry, "berry")];
     let (world, mut app) = one_sprite_among(HUNGRY_GENOME, &objects, &[], 1);
@@ -159,9 +159,54 @@ fn in_mono_the_tile_the_selected_sprite_attends_to_is_bold() {
     );
     let screen = render(&app, &world, 100, 30);
     assert_eq!(screen[berry_cell].symbol(), "•", "the berry, still drawn");
-    assert!(
-        screen[berry_cell].modifier.contains(Modifier::BOLD),
-        "marked"
+    let berry_style = screen[berry_cell].modifier;
+    assert!(berry_style.contains(Modifier::UNDERLINED), "marked");
+    assert!(!berry_style.contains(Modifier::BOLD), "{berry_style:?}");
+    assert!(!screen[bush_cell].modifier.contains(Modifier::UNDERLINED));
+}
+
+/// A hungry sprite on (2, 3) that attends to bushes, the nearest berry
+/// bush on (4, 3) and another on (8, 1), with `fruit` each, after a tick,
+/// and an app on it in mono with the sprite selected; and the two bushes'
+/// screen cells.
+fn attending_a_bush(fruit: u16) -> (Buffer, Position, Position) {
+    let genome = HUNGRY_GENOME.replace("category: \"fruit\"", "category: \"bush\"");
+    let (near, far) = (at(4, 3), at(8, 1));
+    let mut world = WorldBuilder::grass(10, 5)
+        .objects(&[(near, "berry_bush"), (far, "berry_bush")])
+        .genes(&[(at(2, 3), genome.as_str())])
+        .seed(7)
+        .build();
+    for bush in [near, far] {
+        world
+            .start_object(bush, "mature", &[("fruit", fruit)])
+            .expect("the bush");
+    }
+    run(&mut world, 1);
+    let mut app = app_for(&world, mono(), 100, 30);
+    app.apply(Action::SelectNext, &world);
+    let cells = (
+        app.cell_of(near).expect("in view"),
+        app.cell_of(far).expect("in view"),
     );
-    assert!(!screen[bush_cell].modifier.contains(Modifier::BOLD));
+    (render(&app, &world, 100, 30), cells.0, cells.1)
+}
+
+#[test]
+fn in_mono_the_attention_marker_never_reads_as_a_bush_s_fruit() {
+    // Design §6.2: bold is what tells a fruiting bush from a bare one in
+    // mono, so the marker leaves it as it is.
+    let (screen, near, far) = attending_a_bush(3);
+    let (near, far) = (screen[near].modifier, screen[far].modifier);
+    assert!(
+        near.contains(Modifier::BOLD | Modifier::UNDERLINED),
+        "{near:?}"
+    );
+    assert!(far.contains(Modifier::BOLD), "{far:?}");
+    assert!(!far.contains(Modifier::UNDERLINED), "{far:?}");
+    // A bare bush attended to isn't drawn as if it bore fruit.
+    let (screen, near, _) = attending_a_bush(0);
+    let near = screen[near].modifier;
+    assert!(near.contains(Modifier::UNDERLINED), "{near:?}");
+    assert!(!near.contains(Modifier::BOLD), "{near:?}");
 }
