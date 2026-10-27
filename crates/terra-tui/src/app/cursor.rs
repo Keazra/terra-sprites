@@ -495,8 +495,8 @@ impl App {
             self.follow = None;
             // It follows the pointer again, unless the player is aiming:
             // then it stays on what it aims until the aim ends (design v25
-            // §6.5).
-            if self.aim.is_none() {
+            // §6.5). While the view pans, it goes once the pan ends (§6.9).
+            if self.aim.is_none() && !self.waits_for_the_pan() {
                 self.cursor = self.pointed;
             }
             return;

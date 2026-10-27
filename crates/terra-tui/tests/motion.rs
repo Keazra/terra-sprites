@@ -20,7 +20,7 @@ use ratatui::layout::{Position, Rect, Size};
 use ratatui::style::Color;
 use ratatui::{Terminal, backend::TestBackend};
 use terra_sim::{DeathCause, EntityId, Event, EventKind, Pos, ScriptedAction, Terrain, World};
-use terra_tui::app::{App, ColourMode, Screen, Tab, Ticks};
+use terra_tui::app::{App, ColourMode, CursorMode, Screen, Tab, Ticks};
 use terra_tui::args::{Args, USAGE};
 use terra_tui::campbell::{self, FOREGROUND};
 use terra_tui::clock::Speed;
@@ -1764,6 +1764,92 @@ fn the_cursor_goes_to_the_tile_under_a_still_pointer_only_once_the_pan_ends() {
         assert_eq!(game_frame(&mut app, &world), Vec::new());
     }
     assert_eq!(app.cursor(), at(29, 6));
+}
+
+#[test]
+fn follow_stopped_while_it_pans_moves_the_cursor_only_once_the_pan_ends() {
+    // Design §6.9: the world never hears of a tile the pan passes, nor of
+    // the one under the pointer before it began.
+    let world = wide();
+    let mut app = moving(&world);
+    apply(&mut app, &world, Action::ToggleVisible);
+    apply(&mut app, &world, Action::SelectNext);
+    for _ in 0..12 {
+        game_frame(&mut app, &world);
+    }
+    let pointer = pointer_on(&app, at(20, 6));
+    apply(&mut app, &world, Action::Point(pointer));
+    apply(&mut app, &world, Action::Follow { at: None });
+    assert_eq!(app.cursor(), at(10, 5), "on #1");
+    // `Tab` to #2, in the east, and `F` two frames into the pan.
+    apply(&mut app, &world, Action::SelectNext);
+    app.take_commands();
+    let mut told = Vec::new();
+    for _ in 0..2 {
+        told.extend(game_frame(&mut app, &world));
+    }
+    apply(&mut app, &world, Action::Follow { at: None });
+    assert_eq!(app.followed(), None);
+    assert_eq!(app.cursor(), at(10, 5), "where it was, while it pans");
+    for _ in 0..12 {
+        told.extend(game_frame(&mut app, &world));
+    }
+    // Once it's there, under the pointer: 33 columns into a view from
+    // column 109.
+    assert_eq!(told, vec![at(142, 6)]);
+    assert_eq!(app.cursor(), at(142, 6));
+}
+
+/// Where the Cursor is when an aim is ended with `Esc` two frames into the
+/// pan `Tab` starts, with motion on or off, and the tiles the world is told
+/// it moved to from then on, until well after the pan.
+fn aim_ended_while_it_pans(motion: bool) -> (Pos, Vec<Pos>) {
+    let mut world = WorldBuilder::grass(150, 12)
+        .objects(&[(at(12, 6), "ball")])
+        .starters(&[at(10, 5), at(140, 5)])
+        .build();
+    let mut app = moving(&world);
+    app.set_motion(motion);
+    apply(&mut app, &world, Action::Mode(CursorMode::Grab));
+    apply(&mut app, &world, Action::ToggleVisible);
+    apply(&mut app, &world, Action::SelectNext);
+    for _ in 0..12 {
+        game_frame(&mut app, &world);
+    }
+    // The Cursor holds the ball, and the player aims it, pulling east.
+    let on_the_ball = pointer_on(&app, at(12, 6));
+    apply(&mut app, &world, Action::left_click(on_the_ball));
+    common::tick(&mut app, &mut world);
+    assert!(world.cursor().holds().is_some());
+    apply(&mut app, &world, Action::right_click(on_the_ball));
+    let pulled = pointer_on(&app, at(16, 6));
+    apply(&mut app, &world, Action::Point(pulled));
+    assert!(app.aiming());
+    // `Tab` to #2, in the east, and `Esc` two frames into the pan.
+    apply(&mut app, &world, Action::SelectNext);
+    app.take_commands();
+    let mut told = Vec::new();
+    for _ in 0..2 {
+        told.extend(game_frame(&mut app, &world));
+    }
+    apply(&mut app, &world, Action::Back);
+    assert!(!app.aiming());
+    let cursor = app.cursor();
+    for _ in 0..12 {
+        told.extend(game_frame(&mut app, &world));
+    }
+    (cursor, told)
+}
+
+#[test]
+fn an_aim_ended_while_it_pans_moves_the_cursor_only_once_the_pan_ends() {
+    // Design §6.9: the Cursor stays on what it aimed until the pan ends,
+    // and then goes where it would have gone at once with motion off.
+    let (on, told_on) = aim_ended_while_it_pans(true);
+    let (off, told_off) = aim_ended_while_it_pans(false);
+    assert_eq!(on, at(12, 6), "on the ball, where aiming began");
+    assert_eq!(told_off, vec![off], "at once, with motion off");
+    assert_eq!(told_on, told_off, "only that tile, with motion on");
 }
 
 #[test]

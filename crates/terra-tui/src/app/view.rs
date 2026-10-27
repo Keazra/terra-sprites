@@ -395,12 +395,20 @@ impl App {
     /// while the view pans: only once the pan ends, so the world never
     /// hears of the tiles between (design §6.9).
     pub(super) fn repoint(&mut self) {
-        if self.motion.pans(self.running_for, self.clock.speed()) {
-            return;
-        }
-        if let Some(cell) = self.pointer {
+        if let Some(cell) = self.pointer
+            && !self.waits_for_the_pan()
+        {
             self.point(cell);
         }
+    }
+
+    /// Whether the Cursor, going back to the pointer as Follow stops or an
+    /// aim ends, waits for the pan under way to end, when `repoint` puts it
+    /// on the tile under the pointer then: the tile last pointed at was
+    /// under it before the view moved, which the world mustn't hear of
+    /// (design §6.9). With no pointer on the map, it goes there at once.
+    pub(super) fn waits_for_the_pan(&self) -> bool {
+        self.pointer.is_some() && self.motion.pans(self.running_for, self.clock.speed())
     }
 
     /// Notes the tile the pointer on screen cell `cell` points at as the
