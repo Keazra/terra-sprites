@@ -159,7 +159,7 @@ A zero, `+.00`, is neither good nor bad, and a chemical's change on the Chem tab
 
 ### `motion`
 
-Motion is the small effects drawn over the screen as things happen, such as a death's flash and the water's waves (design §6.9); `--no-motion` turns it off. `motion` is a record of seven fields, each of which may be left out and is then drawn as the default theme draws it, but water: water the theme draws in a colour of its own in `tiles`, not the default theme's cyan or blue, and gives no shades for here drifts from that colour, as Campbell draws it, to a third of the way from there to white. A field the game doesn't know is refused, naming it. A fade blends exact colours, so a named colour here blends from how Windows Terminal's default scheme, Campbell, draws it, whatever the player's terminal shows.
+Motion is the small effects drawn over the screen as things happen, such as a death's flash and a hatching's sparks (design §6.9); `--no-motion` turns it off. `motion` is a record of five fields, each of which may be left out and is then drawn as the default theme draws it. A field the game doesn't know is refused, naming it. A fade blends exact colours, so a named colour here blends from how Windows Terminal's default scheme, Campbell, draws it, whatever the player's terminal shows.
 
 | Field | Meaning | Default theme |
 |---|---|---|
@@ -168,10 +168,6 @@ Motion is the small effects drawn over the screen as things happen, such as a de
 | `spark` | The sparks round an egg that hatches, and what the tile of one about to hatch glows towards. | `"#ffe9a0"` |
 | `trail` | The tint on the tiles the selected sprite has just left. | `"#2b3047"` |
 | `dark` | What a pop-up fades in from, and out to as it closes, and what was under it fades back from; what a tab opened sweeps in from in a theme without `panels`; and the background a fade takes on a tile that has none of its own. | `"#0c0c0c"` |
-| `shallow_water` | The two shades shallow water drifts between while motion is on, as `("#3a96dd", "#62b4f0")`. | `("#3a96dd", "#62b4f0")` |
-| `deep_water` | Deep water's two shades. | `("#0037da", "#2f62f2")` |
-
-With motion off, water is drawn in its `tiles` colour, as before.
 
 ### `colour`
 
@@ -254,4 +250,4 @@ A bright theme, for a terminal whose dark colours are hard to see: light colours
 )
 ```
 
-Save it as `bright.ron` in the themes folder and pick it as the Glyphs and the Colours on the settings screen (`Ctrl+T`). Boredom, crowdedness, arousal and anxiety are left out of `drives`, so a sprite bored, crowded, aroused or anxious above all else draws in white. `space` gives only the far stars, in gray rather than dark gray, so the glass and the nearer stars are drawn as the default theme draws them. `population` draws old sprites in white and the line of the world's limit in gray; the rest of the graph is drawn as in the default theme. `lineage` draws the sprites outside the lineage in gray, a little brighter than the default's dark gray. `text` makes headings light yellow and minor text gray, so they stand out more; gains, losses, keys and the open tab are styled as in the default theme. `panels` sets the shades in neutral greys. `motion` makes a death's flash white, and its other colours are the default theme's, but the water's: it leaves their shades out, so the light cyan and light blue it draws water in each drift to a lighter shade of their own.
+Save it as `bright.ron` in the themes folder and pick it as the Glyphs and the Colours on the settings screen (`Ctrl+T`). Boredom, crowdedness, arousal and anxiety are left out of `drives`, so a sprite bored, crowded, aroused or anxious above all else draws in white. `space` gives only the far stars, in gray rather than dark gray, so the glass and the nearer stars are drawn as the default theme draws them. `population` draws old sprites in white and the line of the world's limit in gray; the rest of the graph is drawn as in the default theme. `lineage` draws the sprites outside the lineage in gray, a little brighter than the default's dark gray. `text` makes headings light yellow and minor text gray, so they stand out more; gains, losses, keys and the open tab are styled as in the default theme. `panels` sets the shades in neutral greys. `motion` makes a death's flash white, and its other colours are the default theme's.

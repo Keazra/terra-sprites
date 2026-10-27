@@ -101,8 +101,7 @@
         spot:     (fg: "#afd7ff"),
     ),
     // No `panels`: lines run between the panels and the map. The ghost
-    // fades to a light grey; the water drifts from its own colour to a
-    // third of the way to white.
+    // fades to a light grey.
     motion: (
         flash: "#ffffff",
         ash: "#a8a8a8",

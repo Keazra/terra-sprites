@@ -18,7 +18,7 @@ use crate::app::{
 use crate::controls::{self, Context, Control, Hint, PaletteRow, Says};
 use crate::family_tree::{self, Lineage};
 use crate::inspector::{self, INSPECTOR_WIDTH, NOTHING_SELECTED, TabColumns, first_shown};
-use crate::motion::{self, Bare, Lying};
+use crate::motion::{self, Lying};
 use crate::policy::{Panel, Subject};
 use crate::space::{self, Place};
 use crate::spots::{Spot, Spots};
@@ -441,8 +441,8 @@ fn draw_tiles(buf: &mut Buffer, inner: Rect, app: &App, world: &World) {
     let cursor = app.shown_cursor();
     let lineage = lineage_on_map(app, world);
     let width = app.tile_width();
-    // Where bare ground shows, and an item lying on the map, for motion to
-    // play over (design §6.9).
+    // Where bare ground shows, for a death's ghost, and an item lying on the
+    // map, for an egg about to hatch, for motion to play over (design §6.9).
     let (mut bare, mut lying) = (Vec::new(), Vec::new());
     for y in inner.top()..inner.bottom() {
         for x in inner.left()..inner.right() {
@@ -516,11 +516,7 @@ fn draw_tiles(buf: &mut Buffer, inner: Rect, app: &App, world: &World) {
                 glyph.symbol
             };
             if on_terrain && motion::colours_play(app) {
-                bare.push(Bare {
-                    cell: Position::new(x, y),
-                    tile: pos,
-                    plain: cursor != Some(pos) && attended != Some(pos),
-                });
+                bare.push(Position::new(x, y));
             }
             let mut style = Style::default().fg(glyph.fg);
             if glyph.bold {

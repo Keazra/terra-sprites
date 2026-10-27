@@ -15,7 +15,6 @@ use serde::Deserialize;
 use terra_sim::{DataPack, Terrain};
 
 use crate::app::{CursorMode, StatusMark};
-use crate::campbell;
 use crate::family_tree::Lineage;
 use crate::graph::Band;
 use crate::listed::listed_enum;
@@ -270,21 +269,6 @@ pub struct MotionLook {
     /// The dark a pop-up fades in from and out to, and the background a
     /// fade takes on a tile that has none of its own.
     pub dark: Color,
-    /// The two shades shallow water drifts between.
-    pub shallow_water: [Color; 2],
-    /// The two shades deep water drifts between.
-    pub deep_water: [Color; 2],
-}
-
-impl MotionLook {
-    /// The two shades `terrain` drifts between, if it's water.
-    pub fn water(&self, terrain: Terrain) -> Option<[Color; 2]> {
-        match terrain {
-            Terrain::ShallowWater => Some(self.shallow_water),
-            Terrain::DeepWater => Some(self.deep_water),
-            _ => None,
-        }
-    }
 }
 
 /// The default theme's file: the CP437 glyph set and the default palette.
@@ -831,24 +815,12 @@ impl Theme {
             .unwrap_or_default()
             .look(builtin.text.unwrap_or_default())
             .expect("the built-in cp437 theme styles every text role");
-        // And any of motion's colours (design §6.9), but water's: where the
-        // theme draws water in a colour of its own, it drifts from that.
-        let theirs = file.motion.unwrap_or_default();
-        let gives = [theirs.shallow_water.is_some(), theirs.deep_water.is_some()];
-        let mut motion = theirs
+        // And any of motion's colours (design §6.9).
+        let motion = file
+            .motion
+            .unwrap_or_default()
             .look(builtin.motion.unwrap_or_default())
             .expect("the built-in cp437 theme has every one of motion's colours");
-        let default_tiles = glyphs(builtin.tiles);
-        for (gives, (terrain, shades)) in gives.into_iter().zip([
-            (Terrain::ShallowWater, &mut motion.shallow_water),
-            (Terrain::DeepWater, &mut motion.deep_water),
-        ]) {
-            let tile = SemanticTile::Terrain(terrain);
-            let own = tiles[&tile].fg;
-            if !gives && own != default_tiles[&tile].fg {
-                *shades = water_shades(own);
-            }
-        }
         let theme = Theme {
             tiles,
             objects,
@@ -1317,41 +1289,20 @@ struct MotionFile {
     trail: Option<Colour>,
     #[serde(default, deserialize_with = "implicit_some")]
     dark: Option<Colour>,
-    /// Two shades, as `("#3a96dd", "#62b4f0")`.
-    #[serde(default, deserialize_with = "implicit_some")]
-    shallow_water: Option<(Colour, Colour)>,
-    #[serde(default, deserialize_with = "implicit_some")]
-    deep_water: Option<(Colour, Colour)>,
 }
 
 impl MotionFile {
     /// The colours this section gives, with `default`'s for any it leaves
     /// out: `None` if both leave one out.
     fn look(self, default: MotionFile) -> Option<MotionLook> {
-        let pair = |(from, to): (Colour, Colour)| [from.into(), to.into()];
         Some(MotionLook {
             flash: self.flash.or(default.flash)?.into(),
             ash: self.ash.or(default.ash)?.into(),
             spark: self.spark.or(default.spark)?.into(),
             trail: self.trail.or(default.trail)?.into(),
             dark: self.dark.or(default.dark)?.into(),
-            shallow_water: pair(self.shallow_water.or(default.shallow_water)?),
-            deep_water: pair(self.deep_water.or(default.deep_water)?),
         })
     }
-}
-
-/// The two shades water drawn in `colour` drifts between while motion is
-/// on, where a theme draws it in a colour of its own and gives no shades
-/// for it (design §6.9): the colour as Campbell draws it, and a third of
-/// the way from there to white.
-fn water_shades(colour: Color) -> [Color; 2] {
-    let [r, g, b] = campbell::rgb(colour).unwrap_or(campbell::FOREGROUND);
-    let lighter = |c: u8| c + (u8::MAX - c) / 3;
-    [
-        Color::Rgb(r, g, b),
-        Color::Rgb(lighter(r), lighter(g), lighter(b)),
-    ]
 }
 
 /// A theme file's `cursor` section.

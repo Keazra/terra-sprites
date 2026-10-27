@@ -506,44 +506,42 @@ mod tests {
         assert!(last.contains("tick 15 "), "{last}");
     }
 
-    /// A 40×20 lake of shallow water.
-    fn lake() -> World {
-        let rows = vec!["~".repeat(40); 20];
-        let rows: Vec<&str> = rows.iter().map(String::as_str).collect();
-        let map = Map::from_ascii(&rows, &pack()).expect("valid drawing");
-        let scenario = Scenario {
-            map,
-            objects: &[],
-            sprites: &[],
-            scripted: &[],
-            newborns: &[],
-        };
-        World::from_scenario(scenario, pack(), 7).expect("valid scenario")
-    }
-
     #[test]
     fn a_world_s_clip_plays_motion_unless_told_not_to() {
-        // Design §6.9: the water drifts between its shades, in a clip as in
-        // the game, and with `--no-motion` it keeps its named colour, so
-        // its frames, all alike, are one.
-        let scene = scene(0, 2, Pace::Game(Speed::X1), Track::Nothing);
-        let framing = framing(Size::new(20, 10), true);
-        let clip = world_clip(live(lake()), Theme::cp437(), &scene, &framing).unwrap();
-        assert!(clip.frames.len() > 1, "{}", clip.frames.len());
-        assert!(matches!(
-            clip.frames[0].screen[(10, 5)].fg,
-            ratatui::style::Color::Rgb(..)
-        ));
+        // Design §6.9: the sprite the view tracks leaves a trail, tinting
+        // the tiles it has just left, in a clip as in the game, and with
+        // `--no-motion` it leaves none.
+        let walks = Pos { x: 14, y: 10 };
+        let world = || {
+            field(
+                &[walks],
+                &[(
+                    walks,
+                    ScriptedAction::Wander {
+                        destination: Pos { x: 30, y: 10 },
+                    },
+                )],
+            )
+        };
+        let scene = scene(0, 8, Pace::Game(Speed::X2), Track::First);
+        let framing = framing(Size::new(21, 11), true);
+        let tinted = |clip: &Clip| {
+            clip.frames.iter().any(|frame| {
+                frame
+                    .screen
+                    .content()
+                    .iter()
+                    .any(|cell| matches!(cell.bg, ratatui::style::Color::Rgb(..)))
+            })
+        };
+        let clip = world_clip(live(world()), Theme::cp437(), &scene, &framing).unwrap();
+        assert!(tinted(&clip), "a trail");
         let still = WorldScene {
             motion: false,
             ..scene
         };
-        let clip = world_clip(live(lake()), Theme::cp437(), &still, &framing).unwrap();
-        assert_eq!(clip.frames.len(), 1);
-        assert_eq!(
-            clip.frames[0].screen[(10, 5)].fg,
-            ratatui::style::Color::Cyan
-        );
+        let clip = world_clip(live(world()), Theme::cp437(), &still, &framing).unwrap();
+        assert!(!tinted(&clip), "no trail");
     }
 
     #[test]

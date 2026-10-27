@@ -30,8 +30,7 @@
 //!   draws as many as `App::drive_bar` says.
 //! - **Time** is real time, which the frame loop hands the app (§6.6):
 //!   [`age`] says how far into an effect a frame is, and [`eased`] how far
-//!   that's got, fast and then slowing. A loop works out its own phase, in
-//!   whole milliseconds, as the water does.
+//!   that's got, fast and then slowing.
 //! - **It thins out at 4× and up** ([`thins_out`]): fewer deaths and
 //!   hatchings at once, and shorter, as the trail is, and the bars and the
 //!   view jump.
@@ -82,19 +81,6 @@ const GLOW: f32 = 0.4;
 const MOST: usize = 4;
 const MOST_THINNED: usize = 2;
 
-/// How long each step of the water's wave is shown: 16 steps make its 4 s
-/// cycle (design §6.9). Between steps the water stays still, so a clip's
-/// frames between them are the same frame.
-const WAVE_STEP_MS: u128 = 250;
-
-/// Which of the water's shades each step of its wave shows, from its first
-/// (0) to its second (`SHADES`): it rises, rests and falls back.
-const WAVE: [u8; 16] = [0, 0, 1, 2, 3, 4, 5, 6, 6, 6, 5, 4, 3, 2, 1, 0];
-
-/// The water's last shade, its second colour: seven fixed shades, the two
-/// ends included.
-const SHADES: u8 = 6;
-
 /// The steps a hatching's sparks start on, in milliseconds.
 const SPARK_STEP_MS: u64 = 50;
 
@@ -129,8 +115,8 @@ const PAN_PAST: i32 = 2;
 
 /// Whether motion's colours play over the screen (design §6.9): while
 /// motion is on, in a palette with colour. Mono has none, so its deaths,
-/// hatchings, cracks, water, trail, tab sweeps and pop-up fades don't play,
-/// though the pan and the bars, which move no colour, still do (§6.2, #307).
+/// hatchings, cracks, trail, tab sweeps and pop-up fades don't play, though
+/// the pan and the bars, which move no colour, still do (§6.2, #307).
 pub(crate) fn colours_play(app: &App) -> bool {
     app.motion() && app.theme.has_colour()
 }
@@ -811,16 +797,6 @@ pub(crate) struct Lying {
     pub(crate) id: EntityId,
 }
 
-/// A screen cell of the map view that `ui::draw_tiles` drew bare ground in:
-/// no sprite, object or mark. `plain` while it's neither the Cursor's tile
-/// nor the one the selected sprite attends to, which have their own looks.
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct Bare {
-    pub(crate) cell: Position,
-    pub(crate) tile: Pos,
-    pub(crate) plain: bool,
-}
-
 /// Whether `app` could draw a death or a hatching of sprite `id` on `tile`
 /// just now (design §6.9): on the map view, not under the inspector open
 /// over it (§6.1), and only if the policy lets what tells the player
@@ -833,15 +809,16 @@ pub(crate) fn could_draw(app: &App, id: EntityId, tile: Pos) -> bool {
 }
 
 /// Plays the map's motion over the tiles `ui::draw_tiles` drew in `inner`,
-/// `bare` and the items `lying` there among them, before the marks go over
-/// them (design §6.9): the water, the trail, each egg about to hatch
-/// cracking, and then each death and hatching, oldest first.
+/// before the marks go over them (design §6.9): the trail, each egg about
+/// to hatch cracking among the items `lying` there, and then each death
+/// and hatching, oldest first. `bare` are the screen cells it drew bare
+/// ground in, with no sprite, object or mark, where a death's ghost shows.
 pub(crate) fn play_on_map(
     buf: &mut Buffer,
     inner: Rect,
     app: &App,
     world: &World,
-    (bare, lying): (&[Bare], &[Lying]),
+    (bare, lying): (&[Position], &[Lying]),
 ) {
     if !colours_play(app) {
         return;
@@ -854,7 +831,6 @@ pub(crate) fn play_on_map(
         bare,
     };
     let now = app.running_for();
-    shimmer(buf, &on, now);
     trail(buf, &on, now);
     crack(buf, &on, lying, now);
     let drawn = |id, tile| could_draw(app, id, tile);
@@ -996,7 +972,7 @@ struct OnMap<'a> {
     app: &'a App,
     world: &'a World,
     look: MotionLook,
-    bare: &'a [Bare],
+    bare: &'a [Position],
 }
 
 impl OnMap<'_> {
@@ -1017,25 +993,7 @@ impl OnMap<'_> {
 
     /// Whether screen cell `cell` shows bare ground.
     fn shows_bare(&self, cell: Position) -> bool {
-        self.bare.iter().any(|spot| spot.cell == cell)
-    }
-}
-
-/// Draws bare water in its shade at `now`: each water drifts between its
-/// two shades on a 4 s cycle, its phase by where the tile is, so waves roll
-/// across the lake (design §6.9). Under a sprite, an object or a mark, and
-/// on the Cursor's tile and the attended one, it keeps its own colour.
-fn shimmer(buf: &mut Buffer, on: &OnMap, now: Duration) {
-    let step = now.as_millis() / WAVE_STEP_MS;
-    let steps = WAVE.len() as u128;
-    for spot in on.bare.iter().filter(|spot| spot.plain) {
-        let Some([from, to]) = on.look.water(on.world.map().terrain(spot.tile)) else {
-            continue;
-        };
-        let along = (u128::from(spot.tile.x) + 2 * u128::from(spot.tile.y)) % steps;
-        let phase = (step % steps + steps - along) % steps;
-        let shade = WAVE[phase as usize];
-        buf[spot.cell].set_fg(blend(from, to, shade));
+        self.bare.contains(&cell)
     }
 }
 
@@ -1099,30 +1057,6 @@ fn glow(buf: &Buffer, on: &OnMap, cell: Position, way: f32) -> Color {
     let own = campbell::exact(buf[cell].bg, dark);
     let glow = ColorSpace::Rgb.lerp(&own, &campbell::exact(on.look.spark, dark), GLOW);
     ColorSpace::Rgb.lerp(&own, &glow, way)
-}
-
-/// The water's shade `shade` of `SHADES` from `from` to `to`, each as
-/// Campbell draws it, in whole numbers.
-fn blend(from: Color, to: Color, shade: u8) -> Color {
-    let (from, to) = (
-        campbell::rgb(from).unwrap_or(FOREGROUND),
-        campbell::rgb(to).unwrap_or(FOREGROUND),
-    );
-    let mix = |from: u8, to: u8| {
-        let (from, to, shade, shades) = (
-            u16::from(from),
-            u16::from(to),
-            u16::from(shade),
-            u16::from(SHADES),
-        );
-        let mixed = (from * (shades - shade) + to * shade + shades / 2) / shades;
-        u8::try_from(mixed).unwrap_or(u8::MAX)
-    };
-    Color::Rgb(
-        mix(from[0], to[0]),
-        mix(from[1], to[1]),
-        mix(from[2], to[2]),
-    )
 }
 
 /// `cell`'s colour as an exact one, for a fade to blend from (design §6.9).
@@ -1274,14 +1208,5 @@ mod tests {
         assert!(starts.iter().all(|start| start.as_millis() % 50 == 0));
         let different: BTreeSet<Duration> = starts.iter().copied().collect();
         assert!(different.len() >= 4, "{starts:?}");
-    }
-
-    #[test]
-    fn water_s_shades_run_from_one_end_to_the_other() {
-        let (from, to) = (Color::Rgb(0, 0x37, 0xDA), Color::Rgb(0x2F, 0x62, 0xF2));
-        assert_eq!(blend(from, to, 0), from);
-        assert_eq!(blend(from, to, SHADES), to);
-        assert_eq!(blend(Color::Blue, to, 0), from);
-        assert_eq!(blend(from, to, 3), Color::Rgb(0x18, 0x4D, 0xE6));
     }
 }

@@ -27,7 +27,7 @@ use terra_tui::clock::Speed;
 use terra_tui::input::Action;
 use terra_tui::policy::{InfoPolicy, Panel, Subject};
 use terra_tui::start;
-use terra_tui::theme::{self, MotionLook, Theme};
+use terra_tui::theme::{MotionLook, Theme};
 use terra_tui::title::Title;
 use terra_tui::ui;
 
@@ -109,16 +109,9 @@ fn the_default_theme_gives_motion_its_exact_colours_and_ascii_takes_them() {
         spark: rgb(0xffe9a0),
         trail: rgb(0x2b3047),
         dark: rgb(0x0c0c0c),
-        shallow_water: [rgb(0x3a96dd), rgb(0x62b4f0)],
-        deep_water: [rgb(0x0037da), rgb(0x2f62f2)],
     };
     assert_eq!(Theme::cp437().motion(), expected);
     assert_eq!(Theme::ascii().motion(), expected);
-    assert_eq!(
-        expected.water(Terrain::DeepWater),
-        Some([rgb(0x0037da), rgb(0x2f62f2)])
-    );
-    assert_eq!(expected.water(Terrain::Grass), None);
 }
 
 #[test]
@@ -127,32 +120,18 @@ fn a_theme_s_motion_section_may_leave_colours_out_and_name_them() {
     // does (design §6.9), and a colour the game doesn't know is refused.
     let pack = common::pack();
     let theme = Theme::from_ron(
-        &ascii_and(r##"    motion: (ash: gray, deep_water: (blue, "#2020ff")),"##),
+        &ascii_and(r##"    motion: (ash: gray, spark: "#2020ff"),"##),
         &pack,
     )
     .expect("loads");
     let (ours, default) = (theme.motion(), Theme::cp437().motion());
     assert_eq!(ours.ash, Color::Gray);
-    assert_eq!(ours.deep_water, [Color::Blue, Color::Rgb(0x20, 0x20, 0xff)]);
+    assert_eq!(ours.spark, Color::Rgb(0x20, 0x20, 0xff));
     assert_eq!(ours.flash, default.flash);
-    assert_eq!(ours.shallow_water, default.shallow_water);
+    assert_eq!(ours.trail, default.trail);
     let err =
         Theme::from_ron(&ascii_and("    motion: (glow: white),"), &pack).expect_err("refused");
     assert!(err.contains("glow"), "{err}");
-}
-
-#[test]
-fn each_water_s_two_shades_stay_apart_in_256_colours() {
-    // Design §6.2: where exact colours aren't shown, each is drawn as the
-    // nearest of 256, and water must still drift between two there.
-    let motion = Theme::cp437().motion();
-    for [from, to] in [motion.shallow_water, motion.deep_water] {
-        let mut buffer = Buffer::empty(Rect::new(0, 0, 2, 1));
-        buffer[(0, 0)].set_fg(from);
-        buffer[(1, 0)].set_fg(to);
-        theme::in_256_colours(&mut buffer);
-        assert_ne!(buffer[(0, 0)].fg, buffer[(1, 0)].fg, "{from:?} and {to:?}");
-    }
 }
 
 /// `n` milliseconds.
@@ -238,133 +217,6 @@ fn colours_of(app: &App, world: &World, screen: &Buffer, terrain: Terrain) -> Ve
 }
 
 #[test]
-fn water_drifts_between_its_two_shades_in_waves_across_the_lake() {
-    let world = lake().build();
-    let mut app = moving(&world);
-    cursor_to(&mut app, &world, at(0, 0));
-    let motion = app.theme.motion();
-    // A frame every tenth of a second, over a cycle and a bit.
-    let mut screens = vec![frame(&mut app, &world, Duration::ZERO)];
-    for _ in 0..45 {
-        screens.push(frame(&mut app, &world, ms(100)));
-    }
-    for (terrain, ends) in [
-        (Terrain::ShallowWater, motion.shallow_water),
-        (Terrain::DeepWater, motion.deep_water),
-    ] {
-        let at_each: Vec<Vec<Color>> = screens
-            .iter()
-            .map(|screen| colours_of(&app, &world, screen, terrain))
-            .collect();
-        let shades: BTreeSet<String> = at_each.iter().flatten().map(|c| format!("{c:?}")).collect();
-        // A few fixed shades, from one end to the other.
-        assert!((6..=8).contains(&shades.len()), "{terrain:?}: {shades:?}");
-        for end in ends {
-            assert!(shades.contains(&format!("{end:?}")), "{terrain:?}: {end:?}");
-        }
-        assert!(
-            at_each
-                .iter()
-                .flatten()
-                .all(|c| matches!(c, Color::Rgb(..))),
-            "exact while motion is on"
-        );
-        // In waves, not the whole lake at once: at any moment, more than
-        // one shade.
-        let now: BTreeSet<String> = at_each[0].iter().map(|c| format!("{c:?}")).collect();
-        assert!(now.len() > 1, "{terrain:?}: {now:?}");
-        // A 4 s cycle.
-        assert_eq!(at_each[40], at_each[0], "{terrain:?}");
-        assert_ne!(at_each[20], at_each[0], "{terrain:?}");
-    }
-    // The waves roll across the lake: a moment later, each tile of the
-    // shore's top row shows what the tile west of it showed.
-    let row = |screen: &Buffer| -> Vec<Color> {
-        (3..12).map(|x| screen[cell(&app, at(x, 0))].fg).collect()
-    };
-    let first = row(&screens[0]);
-    assert!(
-        screens[1..20]
-            .iter()
-            .any(|screen| row(screen)[1..] == first[..first.len() - 1]),
-        "{first:?}"
-    );
-}
-
-#[test]
-fn water_shimmers_only_where_bare_water_shows() {
-    // Not under a sprite, an object, a mark or the Cursor (design §6.9).
-    let world = lake().starters(&[at(4, 0)]).build();
-    let mut app = moving(&world);
-    cursor_to(&mut app, &world, at(3, 5));
-    for screen in [
-        frame(&mut app, &world, Duration::ZERO),
-        frame(&mut app, &world, ms(1300)),
-    ] {
-        for at_cell in cells(&app, at(4, 0)) {
-            let fg = screen[at_cell].fg;
-            assert!(!matches!(fg, Color::Rgb(..)), "the sprite's tile: {fg:?}");
-        }
-        for at_cell in cells(&app, at(3, 5)) {
-            assert_eq!(screen[at_cell].fg, Color::Cyan, "the Cursor's tile");
-        }
-        assert!(matches!(screen[cell(&app, at(5, 0))].fg, Color::Rgb(..)));
-    }
-}
-
-#[test]
-fn water_a_theme_draws_in_its_own_colour_drifts_from_that_colour() {
-    // Design §6.9: where a theme recolours water and its `motion` section
-    // gives no shades for it, water drifts from its own colour, as Campbell
-    // draws it, a third of the way to white; water in the default theme's
-    // colour keeps the default theme's shades.
-    let text = ASCII_THEME.replace(
-        "terrain(deep_water):    (glyph: '=', fg: blue)",
-        "terrain(deep_water):    (glyph: '=', fg: light_blue)",
-    );
-    assert_ne!(text, ASCII_THEME, "deep water recoloured");
-    let theme = Theme::from_ron(&text, &common::pack()).expect("loads");
-    let (light_blue, lighter) = (Color::Rgb(0x3b, 0x78, 0xff), Color::Rgb(0x7c, 0xa5, 0xff));
-    assert_eq!(theme.motion().deep_water, [light_blue, lighter]);
-    let default = Theme::cp437().motion();
-    assert_eq!(theme.motion().shallow_water, default.shallow_water);
-    // Apart in 256 colours too (design §6.2).
-    let mut buffer = Buffer::empty(Rect::new(0, 0, 2, 1));
-    buffer[(0, 0)].set_fg(light_blue);
-    buffer[(1, 0)].set_fg(lighter);
-    theme::in_256_colours(&mut buffer);
-    assert_ne!(buffer[(0, 0)].fg, buffer[(1, 0)].fg);
-    // A theme that gives shades keeps them.
-    let given = Theme::from_ron(
-        &text.replacen(
-            "(\n",
-            "(\n    motion: (deep_water: (\"#102030\", \"#203040\")),\n",
-            1,
-        ),
-        &common::pack(),
-    );
-    let given = given.expect("loads");
-    assert_eq!(
-        given.motion().deep_water,
-        [Color::Rgb(0x10, 0x20, 0x30), Color::Rgb(0x20, 0x30, 0x40)]
-    );
-    // And the lake shimmers in it.
-    let world = lake().build();
-    let mut app = sized_app(&world, theme, SCREEN);
-    app.set_motion(true);
-    cursor_to(&mut app, &world, at(0, 0));
-    let mut shades = BTreeSet::new();
-    for step in [0, 1000, 1000] {
-        let screen = frame(&mut app, &world, ms(step));
-        for colour in colours_of(&app, &world, &screen, Terrain::DeepWater) {
-            shades.insert(format!("{colour:?}"));
-        }
-    }
-    assert!(shades.contains(&format!("{light_blue:?}")), "{shades:?}");
-    assert!(shades.contains(&format!("{lighter:?}")), "{shades:?}");
-}
-
-#[test]
 fn with_motion_off_water_keeps_its_named_colours() {
     let world = lake().build();
     let mut app = app_on(&world);
@@ -377,6 +229,30 @@ fn with_motion_off_water_keeps_its_named_colours() {
         let deep = colours_of(&app, &world, &screen, Terrain::DeepWater);
         assert!(shallow.iter().all(|&c| c == Color::Cyan), "{shallow:?}");
         assert!(deep.iter().all(|&c| c == Color::Blue), "{deep:?}");
+    }
+}
+
+#[test]
+fn with_motion_on_water_stays_still_in_its_theme_s_colours() {
+    // Design §6.9: water has no motion until it moves like real water
+    // (#399), so a lake draws the same in every frame, in the colours the
+    // theme gives it, as with motion off.
+    let world = lake().build();
+    let mut app = moving(&world);
+    cursor_to(&mut app, &world, at(0, 0));
+    // A frame every tenth of a second, for 4.5 seconds.
+    let mut screens = vec![frame(&mut app, &world, Duration::ZERO)];
+    for _ in 0..45 {
+        screens.push(frame(&mut app, &world, ms(100)));
+    }
+    for (n, screen) in screens.iter().enumerate() {
+        let shallow = colours_of(&app, &world, screen, Terrain::ShallowWater);
+        let deep = colours_of(&app, &world, screen, Terrain::DeepWater);
+        assert!(
+            shallow.iter().all(|&c| c == Color::Cyan),
+            "{n}: {shallow:?}"
+        );
+        assert!(deep.iter().all(|&c| c == Color::Blue), "{n}: {deep:?}");
     }
 }
 
@@ -954,10 +830,6 @@ fn the_same_app_drawn_twice_draws_the_same_screen() {
     app.record(&deaths(&ids), &after);
     app.animate(ms(300));
     assert_eq!(render(&app, &after), render(&app, &after));
-    let world = lake().build();
-    let mut app = moving(&world);
-    app.animate(ms(700));
-    assert_eq!(render(&app, &world), render(&app, &world));
     // A tab sweeping in, a pop-up fading in over it and a bar easing.
     let (before, after) = (hungry(&[(at(3, 2), 0.2)]), hungry(&[(at(3, 2), 0.8)]));
     let mut app = watching(&before);

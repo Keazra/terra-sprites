@@ -905,7 +905,7 @@ The background a palette may give the inspector and the event log, a little ligh
 _Avoid_: border, frame, box (pop-ups have boxes; the panels don't)
 
 **Motion** (#306):
-The small effects drawn over the finished screen in real time, not ticks: a death's flash and ghost, an egg's crack and a hatching's sparks, a tab sweeping in, a pop-up fading, water shimmering, a drive's bar easing, the pan and the trail. One switch turns it all off; it thins out at 4× and up.
+The small effects drawn over the finished screen in real time, not ticks: a death's flash and ghost, an egg's crack and a hatching's sparks, a tab sweeping in, a pop-up fading, a drive's bar easing, the pan and the trail. One switch turns it all off; it thins out at 4× and up.
 _Avoid_: animation (the emotes' swapping is older, and not part of it)
 
 ### The Cursor

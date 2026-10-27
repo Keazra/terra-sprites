@@ -173,8 +173,8 @@ fn the_ascii_glyphs_sit_on_the_default_palette_s_shades() {
 /// Every colour `theme` draws a character of the map or the text in, with
 /// what it's for: the tiles, the objects, the Cursor, the glass and the
 /// stars, the drives, the lineage, the population graph, the text roles,
-/// and the ghost's ash and the water's shades while motion is on. A text
-/// role with no colour of its own is `Reset`, the terminal's own.
+/// and the ghost's ash while motion is on. A text role with no colour of
+/// its own is `Reset`, the terminal's own.
 fn foreground_colours(theme: &Theme) -> Vec<(String, Color)> {
     let pack = pack();
     let mut colours: Vec<(String, Color)> = every_tile()
@@ -221,10 +221,6 @@ fn foreground_colours(theme: &Theme) -> Vec<(String, Color)> {
         ("eggs on the graph", graph.egg),
         ("the graph's limit", graph.limit.fg),
         ("the ghost's ash", motion.ash),
-        ("shallow water", motion.shallow_water[0]),
-        ("shallow water's second shade", motion.shallow_water[1]),
-        ("deep water", motion.deep_water[0]),
-        ("deep water's second shade", motion.deep_water[1]),
     ] {
         colours.push((what.into(), colour));
     }
