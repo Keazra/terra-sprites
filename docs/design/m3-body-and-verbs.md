@@ -4,7 +4,7 @@
 - **Date:** 2026-10-26
 - **History:** edited in place; each change is a file in [`changes/`](changes/)
 - **Builds on:** [M1 design](m1-a-sprite-lives.md), the rulebook for everything M2 and M3 don't change, and [M2 design](m2-generations.md), whose generations, families and harsher world this keeps
-- **Covers:** what milestone 3 contains, when it starts and how it reaches players, its slices and their order, content safety, what "M3 is done" means, the rules every new verb shares, and the settled rules of each piece: limbs (Slice 33), grief (34), hands (35), grab before eat (36), play as a feeling (37), grip, push and pull (38), real sleep (39), eggs in arms (40), pregnancy (41), dead bodies (42), sharing food (43), parents correcting their young (44), water play and thornbushes you can eat (45), one "take in" verb (46), the event log (47), the data checker (48), first steps (49), Look 10's new layout for M3's screen, old worlds, and M3's acceptance (50)
+- **Covers:** what milestone 3 contains, when it starts and how it reaches players, its slices and their order, content safety, what "M3 is done" means, the rules every new verb shares, and the settled rules of each piece: limbs (Slice 33), grief (34), hands (35), grab before eat (36), play as a feeling (37), grip, push and pull (38), real sleep (39), eggs in arms (40), pregnancy (41), Nests and their Nest Areas (41b, 41c), dead bodies (42), sharing food (43), parents correcting their young (44), water play and thornbushes you can eat (45), one "take in" verb (46), the event log (47), the data checker (48), first steps (49), Look 10's new layout for M3's screen, old worlds, and M3's acceptance (50)
 
 ---
 
@@ -37,8 +37,9 @@ M3 was planned on the map [Finishing M2 and planning M3](https://github.com/Keaz
 | 21 | **A hurt limb heals in about half an hour,** and clumsiness is gentle: a sore limb works three quarters as well, a hurt lands on the limb the act used, and a sore head or arm fumbles some tries | [#359](https://github.com/Keazra/terra-sprites/issues/359)'s round | §5.2, §6.4, §7.4 |
 | 22 | **Grief is a feeling you can see,** felt most for a partner, its own young or a parent; giving up brings a quieter grief; **calls are drawn as waves** of sound | [#360](https://github.com/Keazra/terra-sprites/issues/360)'s round, and the owner's ask in it | §1.1, §3, §8.4, §8.5 |
 | 23 | **Hands start with boredom's gentle pull,** a throw lines up and goes as far as the sprite is **strong**, a new trait; berries share a tile, picked up one at a time or **gathered** by the heap, the sprite's choice; the Body tab says the limbs **in words**, and the little picture waits | [#361](https://github.com/Keazra/terra-sprites/issues/361)'s round, and the owner's asks in it | §1.1, §3, §5.2, §6, §7.3, §9 |
+| 24 | **Families get Nests:** a home on the map that holds warmth for their eggs while they forage, where sprites sleep better and worry a little less, with a **Nest Area** around it that grows with the family. Built straight after Slice 41, as Slices 41b and 41c | The owner's Nests proposal and its round, 2026-10-27 ([#396](https://github.com/Keazra/terra-sprites/issues/396), [#397](https://github.com/Keazra/terra-sprites/issues/397)) | §1.1, §1.2, §3, §5.2, §5.6, §13.2, §15 |
 
-Rows 14 to 20 are #233's round 1, which the owner settled on 2026-10-26: rows 14 to 18 as recommended, row 19 in the owner's own answer, and row 20 the slice the owner asked for in it. Rows 21 to 23 are the rounds of Slices 33, 34 and 35, settled with the owner on 2026-10-26: Slice 33's as recommended; Slice 34's as recommended but for a little more of the search's second option, with calls drawn as waves the owner's ask; and Slice 35's as recommended, with strength, heaps and the status line the owner's asks, and words on the Body tab the owner's choice over a picture for now.
+Rows 14 to 20 are #233's round 1, which the owner settled on 2026-10-26: rows 14 to 18 as recommended, row 19 in the owner's own answer, and row 20 the slice the owner asked for in it. Rows 21 to 23 are the rounds of Slices 33, 34 and 35, settled with the owner on 2026-10-26: Slice 33's as recommended; Slice 34's as recommended but for a little more of the search's second option, with calls drawn as waves the owner's ask; and Slice 35's as recommended, with strength, heaps and the status line the owner's asks, and words on the Body tab the owner's choice over a picture for now. Row 24 is the owner's own design, proposed on 2026-10-27; its round settled where it goes, how sprites aim at a tile, and where an egg lies, all three as recommended.
 
 ---
 
@@ -71,6 +72,8 @@ The owner's principles carry over unchanged (`docs/agents/how-we-work.md`). Four
 | Real sleep, with learning where to sleep ([#125](https://github.com/Keazra/terra-sprites/issues/125), [#264](https://github.com/Keazra/terra-sprites/issues/264)) | 39 | [#288](https://github.com/Keazra/terra-sprites/issues/288) |
 | Eggs in arms, and eggs that break | 40 | #227, #231 |
 | Pregnancy, with eggs that need warmth ([#325](https://github.com/Keazra/terra-sprites/issues/325)) | 41 | [#293](https://github.com/Keazra/terra-sprites/issues/293) |
+| Nests: a family's home, which holds warmth for its eggs | 41b | [#396](https://github.com/Keazra/terra-sprites/issues/396) |
+| Nest Areas: the tiles around a Nest, which grow with the family | 41c | [#397](https://github.com/Keazra/terra-sprites/issues/397) |
 | Dead bodies | 42 | [#85](https://github.com/Keazra/terra-sprites/issues/85) |
 | Sharing food, with foster carers ([#263](https://github.com/Keazra/terra-sprites/issues/263)) | 43 | #227 |
 | Parents correct their young | 44 | [#67](https://github.com/Keazra/terra-sprites/issues/67), its correcting half |
@@ -97,7 +100,7 @@ Each waits for something that comes later, as #232 round 1 Q3 settled:
 | M6 | Language ([#68](https://github.com/Keazra/terra-sprites/issues/68)); family voices ([#278](https://github.com/Keazra/terra-sprites/issues/278)) |
 
 - **Favourite things** ([#65](https://github.com/Keazra/terra-sprites/issues/65)) stays open without a milestone. Slice 37 reports how varied sprites' favourite play is; tastes in the genes, and a parent learning its child's likes, wait.
-- **Nothing new in the meadow** (#227 Q4). Berries become tiny, and the new verbs act on what's there. New toys are Wild Terra's (M5), and panels come with the ship.
+- **Nothing new in the meadow** (#227 Q4). Berries become tiny, and the new verbs act on what's there. New toys are Wild Terra's (M5), and panels come with the ship. **Nests** (§15.4) are the one exception, the owner's choice on 2026-10-27: sprites make them, and nothing places them in the world.
 - **Thrown and pushed things never hurt anyone,** as a rolling ball doesn't today (#227 Q7). The one exception is a push into something that hurts, such as thorns. Size stands in for weight.
 - **Juicy berries** wait (#232 round 1 Q1): thirst is what makes childhood hard since #225, so berries that quench it would undo the unattended band.
 - **The leftover halves** are filed as new issues by the slices that close their issues: juicy berries (#64, by Slice 45), a parent learning its child's likes (#67, by 44), and pets and pricks meaning less each time (#72, by 38). Roughhousing as its own thing (#46's second half) stays later, though bored sprites gripping and hitting each other is a start (#230).
@@ -139,6 +142,8 @@ Each slice is a GitHub issue in the "M3 — Body & verbs" milestone and its own 
 | 39 | Real sleep, with learning where to sleep | 33 | **C** | B12 |
 | 40 | Eggs in arms, and eggs that break | 34, 35, 37 | **C** | B4 |
 | 41 | Pregnancy, with eggs that need warmth | 40 | **C** | B13 |
+| 41b | Nests | 39, 41 | **C** | B21 |
+| 41c | Nest Areas | 38, 41b | M | B21 |
 | 42 | Dead bodies | 34, 38, 40 | M | B14 |
 | 43 | Sharing food, with foster carers | 35, 36, 39, 40 | M | B6 |
 | 44 | Parents correct their young | 37, 40 | M | B15 |
@@ -151,8 +156,9 @@ Each slice is a GitHub issue in the "M3 — Body & verbs" milestone and its own 
 | 50 | M3 acceptance, and v0.3.0 | all | the play-through | B11, and every check again |
 
 - **Why this order** (#232): the body first, so every verb is built asking how usable each limb is; then hands, since eating, play, eggs and sharing all hold things; the critical slices one at a time, so only one proper playtest is ever waiting; and danger before help, since 96–100% of young in families grow up today, against M3's band of 60–90%.
-- **Side by side:** 33 with 34, 38 with 39, 41 with 43, 44 with 45, 46 with 48, 47 beside any of them once Look 3 is in, and Look 10 beside 48. The critical slices (36, 37, 39, 40, 41 and Look 10) go one at a time.
+- **Side by side:** 33 with 34, 38 with 39, 41 with 43, 41c with 42, 44 with 45, 46 with 48, 47 beside any of them once Look 3 is in, and Look 10 beside 48. The critical slices (36, 37, 39, 40, 41, 41b and Look 10) go one at a time.
 - **Slice 41 is critical** since eggs that need warmth join it: an egg left to go cold is a new way to die (#233 round 1 Q4). It was medium in #232.
+- **Nests come straight after Slice 41** (the owner's proposal and its round, 2026-10-27), when every verb and feeling they use is built and eggs have just come to need warmth. They're two slices beside the eighteen: 41b, the Nest and its warmth, and 41c, its Nest Area, the tiles around it. If M3 runs long, the owner can move 41c to M5 at the look halfway through (§5.4) without undoing 41b.
 - **Look 10 comes late** (the owner, 2026-10-26), once everything M3 adds is on screen, so the layout is designed once with the whole picture, and First steps teaches the finished screen.
 - **Slice 46 waits for 45,** since both rewrite water's list of what each verb does to it.
 - **Every slice also keeps** M1's A9 (each new field documented with a working example, and the plain explanation Look 3 asks of every data entry), the speed rule (§5.5), and every check from the slices before it. From Slice 48 on, a slice that adds a new kind of data adds the checker's warnings for it.
@@ -214,6 +220,7 @@ From #231 Q1:
 | **B18** | **An event log that says where** (Slice 47). Each line says where; a click takes the view there, flashes the tile and selects a living sprite; `j` opens the whole log | Snapshot tests at 100 columns and Look 4's smaller sizes, in every theme; a click centres the view and flashes the tile; a death's place shows; `j` is in the help and the manual's key table; filters work in the full view. The bar: the full log keeps at least **the last hour of play** of a full default world, middle seed, and with it open the frame stays within budget at Max with 100 sprites (the debug overlay shows it) |
 | **B19** | **A checker for modders' data** (Slice 48). `--check-data <folder>` warns about data that loads but can never do anything, naming the file and entry | For each kind of warning on #276's list, plus any the slice's round adds for M3's data, a test pack with just that fault gives just that warning; it never refuses data; the checks are in `terra-sim`; the reference docs show the flag with an example. The bar: **no warnings** on the game's own data or on any example in `docs/reference/`, and under a second on the game's own data on the owner's PC |
 | **B20** | **First steps** (Slice 49). From the title screen, three or four small worlds, each with one goal on the status line; finishing one offers the next; the last teaches pushing a ball | Each world and goal are data; a test plays each with a scripted Cursor that rewards each right try and finishes it, and the same world with nothing done doesn't finish on its own. The bar: the scripted player finishes every world within **30 minutes of play** (under 8 minutes at 4×) in at least **9 of 10 seeds**. That's far quicker than B10's two hours of training, so the push world is built to learn fast: a young sprite, one ball beside it, little else to do |
+| **B21** | **Nests** (Slices 41b, 41c). Families make a home: a Nest where they sleep and keep their eggs warm while they forage, with tiles around it that grow with the family and fade when there are too many | Tests for §15.4's and §15.5's rules: a Nest is made only on the sprite's own tile, where its terrain can hold one and no other family's Nest is near; nothing else shares its tile; a warm Nest keeps an egg beside it warm until its warmth runs out, and a sprite on it or beside it charges it; at home, anxiety is lowered by a share, so a parent there still goes looking for a missing young one; a touch or push on a Nest claims the most stable free tile joined to its Nest Area, never one whose terrain can't hold it; tiles past what a camp's Nests hold fade, the outermost first. In the viability run: families make Nests on their own in every seed; G5's three bands, the 90% cap and Slice 32's family bars hold; roaming ([#318](https://github.com/Keazra/terra-sprites/issues/318)) and §5.4's held-over bars do no worse than `main`. For information: how many eggs are laid beside a Nest, and how often a Nest kept an egg warm with both parents away. The slices' numbers: how much warmth a Nest holds, and how long a Nest Area tile takes to fade |
 
 - **Planting** isn't a check of its own: a carried berry dropped on grass can already sprout (1 time in 10), and B2 checks that sprites carry and drop things. Beds are M4's.
 - **The small additions** need no checks of their own beyond the ones named above: they're covered by tests and snapshot tests in their slices. A scuff in gentle play, if the play round brings it in, keeps B1's "at most 1 sprite in 10 has a useless limb". How varied sprites' favourite play is (#65) is reported for information.
@@ -270,11 +277,12 @@ From #231 Q12, Q18, Q19, as `docs/agents/how-we-work.md` has it: **critical**, t
 | Real sleep | **Critical** | Long sleeps change much of what's on screen, and a sleeping young sprite is a new way to die |
 | Eggs in arms, breaking, grief | **Critical** | A new way to die and a new sadness, and only playing shows whether it's a moment or a slaughter |
 | Eggs that need warmth | **Critical** | A new way to die, for eggs left alone |
+| Nests, and their warmth for eggs | **Critical** | A new way for eggs to live or die, and where families spend their lives on screen |
 | Look 10, M3's screen laid out again | **Critical** | It moves what every slice before it put on screen, and First steps teaches it |
 | Hands: holding by size, carrying, dropping, throwing | Medium | Seen all through the critical playtests anyway |
 | Hurt limbs | Medium | Limping and crawling must read clearly on the map and the Body tab |
 | Grip: push, pull, breaking free | Medium | New and visible, but its rules are exact and tests pin them down |
-| Pregnancy, dead bodies, sharing, correcting, water play, take in, the event log, first steps | Medium | A moment to see once; the runs count how often |
+| Pregnancy, Nest Areas, dead bodies, sharing, correcting, water play, take in, the event log, first steps | Medium | A moment to see once; the runs count how often |
 | Curiosity, and teaching Push and Pull | Medium | Teaching is tried once |
 | Things saying what verbs do; the data checker; words for the new verbs, and the Brain tab's list; docs for the new data; speed | Minor | Tests prove it, and nothing new shows on screen that the critical playtests don't show anyway |
 
@@ -634,7 +642,7 @@ From #237 round 2 Q3 and #288, with #125's, #264's and #277's sleep questions fr
 - How sleep shows on the map and in the inspector.
 - Whether the sleep genes are needs genes (M2 design §16.6), for careful copying if #237's reserve is ever switched on.
 - Whether family members sleep near each other, as a leaning.
-- **Learning where to sleep** ([#125](https://github.com/Keazra/terra-sprites/issues/125)): whether sleep can be learned as helping, and aimed at a place or beside family, so sprites learn where and with whom they sleep well.
+- **Learning where to sleep** ([#125](https://github.com/Keazra/terra-sprites/issues/125)): whether sleep can be learned as helping, and aimed at a place or beside family, so sprites learn where and with whom they sleep well. From Slice 41b a Nest is a thing to learn it about (§15.4), so the round keeps that door open.
 - **Whether sleep slows drying out too** ([#264](https://github.com/Keazra/terra-sprites/issues/264)); energy is covered. Sitting out a famine itself waits for lean spells, as fat does.
 - How sleep counts against #318's bar on grown sprites being on the move (M2 design §10.9), and what it does to §5.4's held-over bars.
 
@@ -681,9 +689,9 @@ All of it following a break only:
 
 ---
 
-## 15. Pregnancy, with eggs that need warmth (Slice 41)
+## 15. Pregnancy, eggs that need warmth, and Nests (Slices 41, 41b and 41c)
 
-From #293 and #232's B13, with #325 joining in #233 round 1 Q4.
+From #293 and #232's B13, with #325 joining in #233 round 1 Q4. Nests (§15.4–§15.6) are the owner's proposal of 2026-10-27, its design the owner's and its round's three answers as recommended ([#396](https://github.com/Keazra/terra-sprites/issues/396), [#397](https://github.com/Keazra/terra-sprites/issues/397)).
 
 ### 15.1 Pregnancy
 
@@ -698,6 +706,7 @@ From #293 and #232's B13, with #325 joining in #233 round 1 Q4.
 - **Why:** nothing threatens the young in M2, so parents evolve to stop looking for them (§5.3). Warm eggs give caring parents a reason to stay. It doesn't touch the lone newborns' bar (10–30%), since the unattended run starts from newborns, not eggs.
 - **With pregnancy,** a mother keeps her egg warm inside her, then beside her once it's laid, so the family bars are tuned once for both.
 - It makes Slice 41 critical (§3).
+- **From Slice 41b, a warm Nest beside an egg counts as a parent beside it** (§15.4), so the warmth is built for a second source of it.
 
 ### 15.3 Left for its round
 
@@ -705,9 +714,47 @@ From #293 and #232's B13, with #325 joining in #233 round 1 Q4.
 - What it does to the mother: how much hungrier and slower, and how the player sees it on the map and in the Body and Chem tabs.
 - When the egg's cost is paid: all at mating, or spread over the pregnancy.
 - Where pregnancy lives: the body (the engine) or the genes.
-- How long an egg can be left before it goes cold, whether it can be warmed again, and whether a carried egg counts as warm.
+- How long an egg can be left before it goes cold, whether it can be warmed again, and whether a carried egg counts as warm; and how an egg's warmth is built, so a Nest can warm it too from Slice 41b (§15.4).
 - What happens to an egg the Cursor carries away from its parents.
 - Whether a sprite breeding alone carries its egg too.
+
+### 15.4 Nests (Slice 41b)
+
+A family's home on the map: the owner's design ([#396](https://github.com/Keazra/terra-sprites/issues/396)). Today a family stays together because anxiety pulls its members back to where they last saw each other, so a household drifts across the map as it forages. A Nest gives it a place.
+
+- **A Nest is a fixture,** an object type in the data, flat, on one tile. It's the first fixture a sprite can walk onto: M1 loads a fixture only if it's solid as well (M1 design §3.5.1), and a Nest is the floor-switch half of [#27](https://github.com/Keazra/terra-sprites/issues/27). A sprite stands, rests or sleeps on it. **Nothing else shares its tile,** as M1 design §3.4 has it, so eggs and berries go on the tiles right beside it (§15.5), which its warmth reaches.
+- **Making one.** The tile a sprite stands on becomes something it can aim a verb at, the **underfoot** target, as it aims at water today: only its own tile, and only where the tile's terrain can hold a Nest (§15.5) and nothing stands there. Touching it, or gripping and pushing it, shapes a Nest there, as the underfoot target's data says, if no other family's Nest is near (a `DensityBelow` condition, M1 design §3.5.2). No loose materials yet: a Nest has a **quality** stage in its data, so bedding can raise it later (§26).
+- **Whose it is.** A Nest remembers the sprites that made it, as an egg remembers its parents. Its **household** is its makers and their family: their partners, young and eggs. Its own Nest draws a sprite's eye as its own egg does, through attention instincts that name whom (M2 design §15.6).
+- **Spacing.** A sprite makes a Nest only where no other family's Nest is near, so families space out. The distance is the data's, about room nearby's 10 tiles: room nearby lets a pair breed with up to two other grown sprites near (M2 design §10.9), so a third pair close by, or grown young who stay, stops everyone there breeding. That same rule is what nudges grown young away from home.
+- **The warmth battery** ([#325](https://github.com/Keazra/terra-sprites/issues/325)). A Nest isn't warm by itself. It holds warmth as a counter in its data: a sprite on it or resting beside it charges it, and it gives the warmth off slowly when left. An egg on a tile right beside a warm Nest counts as warm, as one beside a parent does (§15.2), until the charge runs out. A Nest of higher quality holds more and loses it more slowly. Charging needs one new location condition in the rule vocabulary, a sprite on the tile or beside it.
+  - **Why:** Slice 41's warm eggs tie a parent to its egg. A battery lets both parents go and eat, which helps the bar grown sprites miss today, dying of hunger or thirst (§5.4).
+  - **The catch:** it also makes eggs safer, and M3 needs young raised among sprites at 90% at most (§5.2), so eggs must still need their parents. How much a Nest holds is the slice's main dial.
+  - **No standing still** ([#318](https://github.com/Keazra/terra-sprites/issues/318)): food and water never come from a Nest, so parents still go out, bring berries back in their arms (Slice 35), warm the Nest again and share food (Slice 43).
+- **Sleep.** Sleeping on a Nest eases sleepiness faster (Slice 39). A Nest is a fixed thing, so a sprite that finds sleep good there remembers it as a place (M2 design §7.1) with no new code: it's the thing #125's learning where to sleep is learned about.
+- **Worry at home.** Being home, on its own Nest or the tiles around it (its Nest Area, from Slice 41c), is a sense the world gives. In the starter genes it lowers anxiety **by a share, never by a flat amount**: a reaction with a "home" chemical as its helper takes away a share of the anxiety there is, so a missing young one still leaves a parent at home about three quarters as worried, and it still goes looking (Slices 32 and 34). It needs no new kind of gene.
+- **A store.** Berries put down beside the Nest (Slice 35) are there for the young, and a pregnant mother, to eat (Slices 41 and 43).
+- **Rank: critical** (§5.6).
+
+### 15.5 Nest Areas (Slice 41c)
+
+The tiles around a Nest ([#397](https://github.com/Keazra/terra-sprites/issues/397)). If M3 runs long, the owner can move this slice to M5 at the look halfway through (§5.4), without undoing §15.4.
+
+- **A Nest Area is a mark on a tile,** not an object and not a terrain: a tile still has one terrain and one object (M1 design §3.4), so things still go on it, and when the mark fades the tile is as it was. It's world state, saved, hashed and held to its rules by the world's self-check, and the first thing about a tile, beside what stands on it, that changes during play. Fading is scheduled the way objects' turns are (M4 design §10), so a Nest Area left alone costs nothing.
+- **When a Nest is made,** the four tiles beside it, north, east, south and west, join its Nest Area where they can hold one.
+- **Growing.** A sprite touches, or grips and pushes, its own Nest, and the Nest's data claims the best free tile joined to its Nest Area: the most stable terrain first, ties by the world's dice (§6.4). That's one new effect in the rule vocabulary. It's M3's lever (B8): a fixture that does what its data says. The sprite doesn't choose the edge, since choosing where to stand comes after M3 ([#246](https://github.com/Keazra/terra-sprites/issues/246)).
+- **Feeling snug.** A sprite senses how its household compares with its Nest Area's tiles, against the data's comfortable size, about 3 to 4 tiles for each sprite or egg. When a partner joins, eggs are laid or young hatch, it feels snug, which leans a grown sprite to widen the Nest Area or make another Nest beside it. As the young grow up and leave, the household needs less, and the outer tiles go untended and fade.
+- **What a Nest holds.** Each Nest holds so many tiles of Nest Area without them fading, more as its quality rises. Nests whose Nest Areas touch, a **camp**, pool what they hold. Past it, the newest and outermost tiles fade over time. Snug at what its Nests hold, a sprite leans to make another Nest in the camp rather than push an edge that fades.
+- **Each terrain says how well it holds a Nest and its Nest Area,** in `terrain.ron`: dirt best, fading slowest; grass less, since it grows back; sand fast. Shallow water, deep water and rock never, and growing passes them by. On the ship, plating can't hold one bare (M4 design §3.2).
+- **Seeing off troublemakers.** Sprites are social, so a Nest Area is no fortress: visitors who walk through, rest or play cause no worry. Only a sprite the household already dislikes or fears (what it has learned of that individual, M1 design §5.6), on its Nest Area, brings a spike of territorial worry, which leans the owner to call a warning, grip and push the troublemaker out (§12), or hit it if it stays. A sprite outside the family that grabs or throws the family's egg (§14), or hits or pushes one of the family, on its Nest Area, is learned as bad and frightening by the family that sees it, so they step in at once and on its next visit. Both are leanings in the starter genes, never rules.
+- **Rank: medium** (§5.6).
+
+### 15.6 Left for the Nest slices' rounds
+
+- How much warmth a Nest holds, how fast it charges and gives it off, and who charges it: any sprite, or only its household (B21's number).
+- Whether a Nest nobody warms or sleeps on fades, so bored sprites' stray Nests don't last.
+- How far a new Nest keeps from another family's, the comfortable size, how many tiles one Nest holds, and how fast each terrain's tiles fade (B21's number).
+- The instincts for making a Nest, growing its Nest Area and seeing off troublemakers; how strong the sleep bonus is and what share of worry home takes away.
+- How a Nest, a Nest Area and a camp show on the map in every theme and the plain ASCII look, and on the Body tab.
 
 ---
 
@@ -855,3 +902,4 @@ What M3's design points to, for the milestones after it:
 - **Favourite things** ([#65](https://github.com/Keazra/terra-sprites/issues/65)), with a parent learning its child's likes.
 - **The rest of grief** ([#206](https://github.com/Keazra/terra-sprites/issues/206)): who matters, a lasting memory whose pain fades, mourning places.
 - **The ship** (M4): panels, switches and garden beds worked with M3's verbs ([M4 design](m4-terra.md) §6.3, §7.2).
+- **Nests** (§15.4, §15.5): bedding that raises a Nest's quality, and cold nights to keep warm through, with Wild Terra (M5); a camp growing where its family chooses, with choosing where to stand (#246).
