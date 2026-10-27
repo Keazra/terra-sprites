@@ -354,7 +354,7 @@ pub const SETTINGS: Control = control(
     &[presses("Ctrl+T", "settings", Action::OpenSettings)],
     "settings",
     &[Heading::Files],
-    "glyphs ascii colours palette theme mono contrast blind motion square tiles look options",
+    "glyphs ascii colours palette theme mono contrast blind game kid green motion square tiles look options",
 );
 pub const TAKE_OVER: Control = control(
     "Ctrl+R",
