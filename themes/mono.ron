@@ -5,13 +5,16 @@
 // below are never seen: they're all white. What colour tells in the other
 // palettes is read here from the signs, arrows and capitals, which stay;
 // from bold, for headings, keys, what a tooltip can explain and a fruiting
-// bush; from reverse video, for what's chosen and the selected sprite; and
-// from an underline, for the tile the selected sprite attends to, which no
-// glyph has, so it never reads as fruit. Motion's colours don't play,
-// though the pan and the bars still move (§6.9). As a palette only its
-// colours, bold and reverse video are taken; its glyphs are the CP437
-// set's, so the file reads as a whole theme too. `NO_COLOR` starts the game
-// in it, unless the player has picked a palette.
+// bush; from reverse video, for what's chosen and the selected sprite; from
+// an underline, for the tile the selected sprite attends to, which no glyph
+// has, so it never reads as fruit; and from the population graph's own
+// character for each band. What it can't show is a sprite's colour (`b`):
+// its strongest drive is read in the sprite list and the Body tab, and its
+// lineage on the family tree, as `b` and the help say. Motion's colours
+// don't play, though the pan and the bars still move (§6.9). As a palette
+// only its colours, bold and reverse video are taken; its glyphs are the
+// CP437 set's, so the file reads as a whole theme too. `NO_COLOR` starts
+// the game in it, unless the player has picked a palette.
 (
     colour: false,
     tiles: {
