@@ -984,6 +984,57 @@ fn a_hatching_takes_over_from_the_flashing_its_last_flash_fading_as_the_young_wa
     assert_eq!(warm[young].bg, plain[young].bg);
 }
 
+/// Runs `world` until an egg lying on the map, with no sprite on it, is
+/// past its tick, both apps taking in each tick: the egg's ID and its tile.
+/// A sprite stood on it when its stages ended and has stepped off, so it
+/// hatches on the next tick.
+fn until_past_due_and_clear(world: &mut World, on: &mut App, off: &mut App) -> (EntityId, Pos) {
+    for _ in 0..2000 {
+        one_tick(world, on, off);
+        let due = world.eggs().find_map(|egg| {
+            let tile = egg.pos()?;
+            (egg.hatches() < world.tick() && world.sprite_at(tile).is_none())
+                .then_some((egg.id(), tile))
+        });
+        if let Some(due) = due {
+            return due;
+        }
+    }
+    panic!("no egg was stood on past its tick");
+}
+
+#[test]
+fn an_egg_stood_on_past_its_tick_flashes_once_clear_and_its_young_starts_at_the_last_flash() {
+    // Design §6.9: an egg a sprite stands on as its stages end hatches on
+    // the tick after the sprite steps off. Clear, it flashes as on its last
+    // tick until then, every 120 ms and seven tenths of the way, and the
+    // young starts where the last flash peaks.
+    let mut world = lone_line(0);
+    let (mut on, mut off) = twins(&world);
+    let (egg, tile) = until_past_due_and_clear(&mut world, &mut on, &mut off);
+    let last_tick = flashes(&mut on, &world, tile, 400);
+    assert!(last_tick.len() >= 3, "{last_tick:?}");
+    assert_eq!(
+        periods(&last_tick),
+        vec![120; last_tick.len() - 1],
+        "{last_tick:?}"
+    );
+    assert!(
+        last_tick.iter().all(|&(_, bg)| bg == LAST_FLASH),
+        "{last_tick:?}"
+    );
+    let events = one_tick(&mut world, &mut on, &mut off);
+    assert!(
+        events
+            .iter()
+            .any(|event| matches!(event.kind, EventKind::Hatched { id, .. } if id == egg)),
+        "{events:?}"
+    );
+    let young = cell(&on, world.sprite(egg).expect("hatched").pos());
+    let start = frame(&mut on, &world, Duration::ZERO);
+    assert_eq!(start[young].bg, LAST_FLASH);
+}
+
 #[test]
 fn at_4x_an_egg_flashes_as_at_1x() {
     // Design §6.9: the flashes come at the period of the ticks left, so at

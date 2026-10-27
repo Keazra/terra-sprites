@@ -73,7 +73,8 @@ impl App {
     /// the ticks just taken in, for each to flash (design §6.9). The screen
     /// can tell: an egg hatches on the tick its stages end, unless the
     /// Cursor holds it or a sprite stands on it then, and sprites move
-    /// after.
+    /// after. One a sprite stood on then, which has since stepped off, is
+    /// past its tick and hatches on the next, so it has one tick left.
     pub(super) fn note_flashing(&mut self, world: &World) {
         if !self.motion.on() {
             return;
@@ -86,6 +87,7 @@ impl App {
             })
             .filter_map(|egg| match inspector::hatching(&egg, world) {
                 Hatching::In(left) if left <= motion::FLASH_FROM => Some((egg.id(), left)),
+                Hatching::OnceClear => Some((egg.id(), 1)),
                 _ => None,
             })
             .collect();
