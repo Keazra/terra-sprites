@@ -9,7 +9,8 @@ use crate::text::thousands;
 impl App {
     /// Starts following `playback`, a replay called `name`, paused at its
     /// start (design §2.7): from here on the world can't be changed, only
-    /// watched.
+    /// watched. The status line says so, unless it's saying why something
+    /// was refused as the world opened.
     pub fn start_replay(&mut self, name: &str, playback: &Playback) {
         self.replay = Some(Replay {
             end: playback.end(),
@@ -27,10 +28,15 @@ impl App {
         } else {
             format!("a save at tick {}", thousands(playback.start()))
         };
-        self.tell_player(format!(
-            "Replaying {name}: from {from} to tick {}",
-            thousands(playback.end())
-        ));
+        // What was said as the world opened stays, such as why the saved
+        // settings weren't all taken (design §6.7, #307): the top bar says
+        // it's a replay.
+        if self.refusal().is_none() {
+            self.tell_player(format!(
+                "Replaying {name}: from {from} to tick {}",
+                thousands(playback.end())
+            ));
+        }
         self.take_in_replay(playback);
     }
 

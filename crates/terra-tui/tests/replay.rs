@@ -58,6 +58,19 @@ fn replaying(playback: &Playback) -> App {
 }
 
 #[test]
+fn why_the_saved_settings_weren_t_taken_stays_as_a_replay_starts() {
+    // Design §6.7, #307: `--replay` opens the world straight away, so the
+    // status line says it, and the replay's start mustn't take its place.
+    let playback = replay_of(&played(ball_world(), 30), "unread-settings");
+    let mut app = app_for(playback.world());
+    let why = "Couldn't read the settings: 1:10: Expected a boolean";
+    app.note_unread_settings(why.into());
+    app.start_replay("last_session.replay", &playback);
+    assert_eq!(app.refusal(), Some(why));
+    assert!(app.replaying());
+}
+
+#[test]
 fn a_live_session_writes_a_session_log_that_plays_back_to_the_same_world() {
     let session = played(ball_world(), 1_200);
     let mut playback = replay_of(&session, "live");

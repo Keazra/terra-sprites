@@ -109,7 +109,7 @@ On Windows, use the line for the shell you're in: PowerShell, which Windows Term
 
 A replay brings its own world, so `--seed`, `--preset` and `--data` can't go with it; `--ascii` and `--theme` can.
 
-- **It starts paused,** saying where it's from and how far it goes: "Replaying last_session.replay: from a new world to tick 48,210", or "from a save at tick 300". The top bar says "replay to tick 48,210" where it would say when the world was last saved.
+- **It starts paused,** saying where it's from and how far it goes: "Replaying last_session.replay: from a new world to tick 48,210", or "from a save at tick 300"; but if your settings couldn't be read, the status line says that instead ([settings](settings.md#at-start)). The top bar says "replay to tick 48,210" where it would say when the world was last saved.
 - **You watch; the recording plays.** Time works (pause, step, speed), as do the view, selecting, following, the sprite list and the inspector. Whatever would change the world is refused, with "It's a replay: only time, the view and the inspector work, until Ctrl+R takes it over": the Train and Grab modes, the mouse wheel over the map, naming a sprite, showing the Cursor (`H`) and loading a save. Saving (`F5`, `Ctrl+S`) and exporting a genome (`g`) still work, since they only read the world.
 - **The recorded player's Cursor isn't drawn,** though what it did happens: the pets land, the items move.
 - **At the end it pauses once:** "The replay ends here, at tick 48,210: time can run on, with nothing more done". The top bar says "replay ended". Time can run on from there, with nobody clicking.
