@@ -822,7 +822,7 @@ The box `:` opens near the top of the map view: typing finds any control that wo
 _Avoid_: command line, console, search (that's the help's)
 
 **Spot** (#304):
-A part of the screen the pointer can be on that says what it is in a tooltip, or takes a click, or both: a name, such as an inspector tab's, a drive's, a gene's or the sprite's in a line of the event log, or a Brain tab memory heading, which takes a click and says nothing. The inspector, the event log and each pop-up note their spots as they're drawn, afresh each frame, and a pop-up's box is one too, which says nothing and takes the pointer before what's under it. A spot a tooltip can explain is drawn in the theme's Spot colour, unless it keeps a look of its own until the pointer is on it: the open tab its selected look, and a gene with no effect its muted one.
+A part of the screen the pointer can be on that says what it is in a tooltip, or takes a click, or both: a name, such as a drive's, a gene's or the sprite's in a line of the event log, or an inspector tab's or a Brain tab memory heading, which takes a click and says nothing. The inspector, the event log and each pop-up note their spots as they're drawn, afresh each frame, and a pop-up's box is one too, which says nothing and takes the pointer before what's under it. A spot a tooltip can explain is drawn in the theme's Spot colour, unless it keeps a look of its own until the pointer is on it, as a gene with no effect keeps its muted one.
 _Avoid_: hotspot, hit box
 
 **Tooltip** (#304):

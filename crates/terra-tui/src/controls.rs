@@ -580,7 +580,7 @@ pub const POINT: Control = control(
     &[],
     "a highlighted name: a tooltip says what it is",
     &[Heading::Pointer],
-    "hover tooltip explain drive chemical gene tab name",
+    "hover tooltip explain drive chemical gene filter name",
 );
 
 // The debug overlay (design §6.1, #311).

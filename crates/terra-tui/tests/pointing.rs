@@ -284,14 +284,35 @@ fn each_trait_s_name_on_the_line_they_share_says_what_it_is() {
 }
 
 #[test]
-fn a_tab_says_what_it_shows_and_its_keys() {
+fn a_tab_says_nothing_and_keeps_its_look_but_takes_a_click() {
+    // A tab's name says what it shows, so Fauxpaw had it say nothing
+    // more on 2026-10-27, and keep the look it had.
     let (world, mut app, _) = selected(SCREEN, Tab::Body);
-    let said = pointing_at_text(&mut app, &world, SCREEN, "Brain");
-    assert_eq!(said.name, "Brain tab");
-    assert_eq!(
-        said.words,
-        "What it notices and decides, and what it has learned click to open it · [ ] switch tabs"
+    let look = |screen: &Buffer, cell: Position| {
+        let cell = &screen[cell];
+        (cell.fg, cell.bg, cell.modifier)
+    };
+    let (body, brain) = (
+        cell_of_text(&app, &world, SCREEN, "Body"),
+        cell_of_text(&app, &world, SCREEN, "Brain"),
     );
+    let screen = render(&app, &world);
+    let (open, shut) = (look(&screen, body), look(&screen, brain));
+    let spot = app.theme.text().spot.fg.expect("a colour");
+    assert_ne!(open.0, spot, "the open tab isn't in the spot colour");
+    assert_ne!(shut.0, spot, "nor is a tab that's shut");
+    assert!(
+        open.2.contains(Modifier::REVERSED),
+        "the open one is selected"
+    );
+    for (cell, was) in [(brain, shut), (body, open)] {
+        assert!(pointing_at(&mut app, &world, SCREEN, cell).is_none());
+        let screen = render(&app, &world);
+        assert_eq!(look(&screen, cell), was, "pointed at, it isn't lit");
+        assert_eq!(look(&screen, body), open, "the open tab keeps its look");
+    }
+    apply(&mut app, &world, Action::left_click(brain));
+    assert_eq!(app.tab(), Tab::Brain, "a click opens it");
 }
 
 #[test]
@@ -341,7 +362,7 @@ fn what_a_tooltip_can_explain_is_drawn_in_the_spot_colour() {
     assert_eq!(fg("hunger", 0), spot, "a drive's name");
     assert_eq!(fg("hunger", 5), spot, "to its end");
     assert_ne!(fg("hunger", 6), spot, "not past it");
-    assert_eq!(fg("Brain", 0), spot, "a tab's name");
+    assert_ne!(fg("Brain", 0), spot, "not a tab's name, which says nothing");
     assert_eq!(fg("selected major", 0), spot, "the event filters");
     let (world, app, _) = selected(TALL, Tab::Genome);
     let screen = render_on(&app, &world, TALL);
@@ -673,7 +694,9 @@ fn beside_the_debug_overlay_every_tile_can_still_be_pointed_at() {
 
 #[test]
 fn a_tooltip_keeps_off_the_debug_overlay() {
-    let (world, mut app, _) = selected(SCREEN, Tab::Body);
+    // The Chem tab's first names are beside the box, so a tooltip below
+    // them and to their left would cover it.
+    let (world, mut app, _) = selected(SCREEN, Tab::Chem);
     apply(&mut app, &world, Action::DebugOverlay);
     let overlay = overlay_box(&app, &world);
     let drawn = |screen: &Buffer| -> Vec<String> {
@@ -686,8 +709,9 @@ fn a_tooltip_keeps_off_the_debug_overlay() {
     // Where it would cover the box, it goes elsewhere, or where there's
     // nowhere else, isn't drawn.
     let mut drawn_somewhere = 0;
-    for text in ["Brain", "Genome", "hunger", "tiredness", "selected major"] {
-        let cell = cell_of_text(&app, &world, SCREEN, text);
+    let names = ["energy", "hydration", "hunger", "selected major"];
+    let cells = names.map(|text| (text, cell_of_text(&app, &world, SCREEN, text)));
+    for (text, cell) in cells {
         if let Some(said) = pointing_at(&mut app, &world, SCREEN, cell) {
             assert!(!said.area.intersects(overlay), "{text}: {said:?}");
             drawn_somewhere += 1;
@@ -759,31 +783,6 @@ fn a_log_line_that_does_not_name_its_sprite_is_all_of_it_its_spot() {
     let said = pointing_at(&mut app, &world, SCREEN, end).expect("a tooltip");
     assert_eq!(said.name, app.names().label(id));
     assert_eq!(said.words, "Whom this line is about click to select it");
-}
-
-#[test]
-fn the_open_tab_keeps_its_look_and_a_pointed_tab_looks_unlike_it() {
-    let (world, mut app, _) = selected(SCREEN, Tab::Body);
-    let look = |screen: &Buffer, cell: Position| {
-        let cell = &screen[cell];
-        (cell.fg, cell.bg, cell.modifier)
-    };
-    let (body, brain) = (
-        cell_of_text(&app, &world, SCREEN, "Body"),
-        cell_of_text(&app, &world, SCREEN, "Brain"),
-    );
-    let screen = render(&app, &world);
-    let open = look(&screen, body);
-    let spot = app.theme.text().spot.fg.expect("a colour");
-    assert_ne!(open.0, spot, "the open tab isn't in the spot colour");
-    assert!(open.2.contains(Modifier::REVERSED), "but selected");
-    apply(&mut app, &world, Action::Point(brain));
-    let screen = render(&app, &world);
-    assert_eq!(look(&screen, body), open, "it keeps its look");
-    assert_ne!(look(&screen, brain), open, "a pointed tab looks unlike it");
-    apply(&mut app, &world, Action::Point(body));
-    let screen = render(&app, &world);
-    assert_ne!(look(&screen, body), open, "pointed at, it's lit");
 }
 
 /// Genes the starter genome has none of: a gene with no effect, a starting

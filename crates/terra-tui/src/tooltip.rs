@@ -1,9 +1,9 @@
 //! Tooltips (design §6.1, #304): what the pointer is over, said in a box
-//! below it and to its left, and the spot under it lit up. A tab's name
-//! and what it shows, what the event log's filters do, a chemical's name
-//! and what its data says it is, what a gene does, and which sprite a line
-//! of the log is about. Whatever a tooltip can explain is drawn in the
-//! theme's spot style, so the player can see what to point at.
+//! below it and to its left, and the spot under it lit up. What the event
+//! log's filters do, a chemical's name and what its data says it is, what
+//! a gene does, and which sprite a line of the log is about. Whatever a
+//! tooltip can explain is drawn in the theme's spot style, so the player
+//! can see what to point at.
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Margin, Position, Rect};
@@ -30,20 +30,12 @@ pub(crate) struct Explained {
     pub(crate) hint: Option<String>,
 }
 
-/// What `spot` says it is, if anything. A memory heading says nothing,
-/// since it's a heading, and a pop-up's box says nothing, so the pointer
-/// on one explains nothing beneath it.
+/// What `spot` says it is, if anything. A tab's name says nothing, since
+/// it says what the tab shows (Fauxpaw, 2026-10-27), a memory heading says
+/// nothing, since it's a heading, and a pop-up's box says nothing, so the
+/// pointer on one explains nothing beneath it.
 pub(crate) fn explained(spot: &Spot, app: &App, world: &World) -> Option<Explained> {
     match spot {
-        Spot::Tab(tab) => Some(Explained {
-            name: format!("{} tab", tab.label()),
-            about: capitalised(tab.about()),
-            hint: Some(format!(
-                "click to open it · {} {}",
-                controls::TABS.written,
-                controls::TABS.does
-            )),
-        }),
         Spot::Filters => Some(Explained {
             name: "Event filter".into(),
             about:
@@ -90,7 +82,7 @@ pub(crate) fn explained(spot: &Spot, app: &App, world: &World) -> Option<Explain
                 hint,
             })
         }
-        Spot::Memory(_) | Spot::PopUp => None,
+        Spot::Tab(_) | Spot::Memory(_) | Spot::PopUp => None,
     }
 }
 
@@ -108,7 +100,7 @@ fn kind_words(kind: ChemicalKind) -> &'static str {
 /// Draws whatever a tooltip can explain in the theme's spot style, where
 /// nothing drawn later is over it (design §6.1, §6.2), but what keeps a
 /// look of its own: what's minor stays muted, so a gene with no effect
-/// still reads as one until it's pointed at, and the open tab selected.
+/// still reads as one until it's pointed at.
 pub(crate) fn mark_spots(buf: &mut Buffer, app: &App, spots: &Spots) {
     let look = app.theme.text();
     for spot in spots.marked() {
@@ -130,12 +122,13 @@ pub(crate) fn pointer(app: &App) -> Option<Position> {
 
 /// Lights up the spot the pointer is on, all of it, a gene's name on each
 /// of its lines, in the theme's spot style in reverse video (design §6.1,
-/// §6.2), except where a pop-up is over it. A pop-up's box isn't lit.
+/// §6.2), except where a pop-up is over it. A tab's name and a pop-up's
+/// box aren't lit.
 pub(crate) fn light_up_spot(buf: &mut Buffer, app: &App, spots: &Spots) {
     let Some(spot) = pointer(app).and_then(|cell| spots.at(cell)) else {
         return;
     };
-    if *spot == Spot::PopUp {
+    if !spot.lights_up() {
         return;
     }
     let lit = app.theme.text().spot.add_modifier(Modifier::REVERSED);

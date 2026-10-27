@@ -16,7 +16,9 @@ use crate::inspector::MemoryOpen;
 /// something about, or a click lands on (design §6.1).
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Spot {
-    /// An inspector tab's name, in its title row.
+    /// An inspector tab's name, in its title row, which takes a click and
+    /// says nothing, since a tab's name says what it shows (Fauxpaw,
+    /// 2026-10-27).
     Tab(Tab),
     /// The event log's filters, at the right of its title row.
     Filters,
@@ -55,10 +57,16 @@ impl Spot {
 
     /// Whether it says what it is, in a tooltip, and so is drawn in the
     /// theme's spot style unless it keeps a look of its own (design §6.1,
-    /// §6.2): all but a memory heading, which is a heading, and a pop-up's
-    /// box.
+    /// §6.2): all but a tab's name, a memory heading, which is a heading,
+    /// and a pop-up's box.
     pub(crate) fn explains(&self) -> bool {
-        !matches!(self, Spot::Memory(_) | Spot::PopUp)
+        !matches!(self, Spot::Tab(_) | Spot::Memory(_) | Spot::PopUp)
+    }
+
+    /// Whether the pointer on it lights it up (design §6.1): all but a
+    /// tab's name, which keeps the look it had, and a pop-up's box.
+    pub(crate) fn lights_up(&self) -> bool {
+        !matches!(self, Spot::Tab(_) | Spot::PopUp)
     }
 }
 
@@ -76,8 +84,7 @@ impl Spots {
 
     /// Notes that `spot` is drawn over `area` in a look of its own, which
     /// it keeps until the pointer is on it (design §6.2): what's minor
-    /// stays muted, as a gene with no effect does, and the open tab
-    /// selected.
+    /// stays muted, as a gene with no effect does.
     pub(crate) fn note_unmarked(&mut self, area: Rect, spot: Spot) {
         self.noted(area, spot, false);
     }

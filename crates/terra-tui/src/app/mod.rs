@@ -307,18 +307,6 @@ listed_enum! {
 }
 
 impl Tab {
-    /// What the tab shows, as its tooltip says it while the pointer is on
-    /// its name (design §6.1).
-    pub fn about(self) -> &'static str {
-        match self {
-            Tab::Body => "what it's doing, its drives and its body",
-            Tab::Brain => "what it notices and decides, and what it has learned",
-            Tab::Chem => "the chemicals in its body",
-            Tab::Genome => "its genes, and what each does",
-            Tab::World => "the whole world: who lives, who died, and its things",
-        }
-    }
-
     /// The tab `steps` along from this one, wrapping around.
     fn along(self, steps: i32) -> Tab {
         along(&Tab::ALL, self, steps)

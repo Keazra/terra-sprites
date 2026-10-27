@@ -1396,16 +1396,11 @@ fn render_inspector(buf: &mut Buffer, area: Rect, app: &App, world: &World, spot
     }
     let title = inspector::title(app);
     buf.set_line(area.x + 1, area.y, &title, area.width.saturating_sub(1));
-    // Each tab where its name is, so a click there opens it (design §6.1),
-    // the open one keeping its selected look.
+    // Each tab where its name is, so a click there opens it (design §6.1).
     for (tab, columns) in inspector::tab_places(app.tab()) {
         let start = area.x + 1 + columns.start as u16;
         let place = Rect::new(start, area.y, columns.len() as u16, 1).intersection(area);
-        if tab == app.tab() {
-            spots.note_unmarked(place, Spot::Tab(tab));
-        } else {
-            spots.note(place, Spot::Tab(tab));
-        }
+        spots.note(place, Spot::Tab(tab));
     }
     let inner = inspector::tab_area(area);
     let lines = inspector::shown(app, world);
