@@ -346,14 +346,14 @@ impl Motion {
     }
 
     /// Starts tab `to` sweeping in at `now`, opened from `from` while the
-    /// inspector shows (design §6.9): from the left when it's right of the
-    /// old one, and from the right when it's left of it. Reopening the tab
-    /// already open sweeps nothing.
+    /// inspector shows (design §6.9): from the side it's on, from the
+    /// right when it's right of the old one and from the left when it's
+    /// left of it. Reopening the tab already open sweeps nothing.
     pub(crate) fn opened_tab(&mut self, from: Tab, to: Tab, now: Duration) {
         let place = |tab: Tab| Tab::ALL.iter().position(|&one| one == tab);
         if self.on && from != to {
             self.sweep = Some(Sweep {
-                from_left: place(to) > place(from),
+                from_left: place(to) < place(from),
                 began: now,
             });
         }

@@ -851,15 +851,17 @@ fn a_tab_opened_sweeps_in_out_of_the_panel_s_shade() {
 }
 
 #[test]
-fn a_tab_sweeps_in_from_the_left_when_it_s_right_of_the_old_one_and_from_the_right_when_left() {
+fn a_tab_sweeps_in_from_the_side_it_s_on_of_the_old_one() {
     let world = one_on_a_field();
-    // By where the tabs are, not the key: `[` from Body wraps round to
-    // World, on Body's right, and `]` from World to Body, on its left.
+    // From the right when it's right of the old one, as `]` opens, and
+    // from the left when it's left of it. By where the tabs are, not the
+    // key: `[` from Body wraps round to World, on Body's right, and `]`
+    // from World to Body, on its left.
     for (keys, from_left) in [
-        (&[Action::NextTab][..], true),
-        (&[Action::PreviousTab], true),
-        (&[Action::NextTab, Action::PreviousTab], false),
-        (&[Action::PreviousTab, Action::NextTab], false),
+        (&[Action::NextTab][..], false),
+        (&[Action::PreviousTab], false),
+        (&[Action::NextTab, Action::PreviousTab], true),
+        (&[Action::PreviousTab, Action::NextTab], true),
     ] {
         let (mut on, mut off) = selected(&world);
         for (n, &key) in keys.iter().enumerate() {
@@ -950,7 +952,7 @@ fn a_tab_sweeps_in_over_the_inspector_filling_the_screen() {
     }
     differs_only_within(&start, &plain, body);
     let side = swept_from_left(&mut on, &mut off, &world, shade);
-    assert_eq!(side, Some(true));
+    assert_eq!(side, Some(false), "from the right, as `]` opens");
     let (end, plain) = frames(&mut on, &mut off, &world, ms(150));
     assert_eq!(end, plain);
 }
