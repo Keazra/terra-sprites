@@ -16,6 +16,10 @@ ctrlc = "3.5"
 ratatui = "0.30.2"
 ron = "0.12.2"
 serde = { version = "1.0.229", features = ["derive"] }
+# Motion over the finished screen (design §6.9, #306). Pinned, since it
+# follows Ratatui's versions; without its default features it brings no
+# effect language and keeps its own whole-millisecond durations.
+tachyonfx = { version = "=0.25.2", default-features = false, features = ["std"] }
 terra-sim = { path = "../terra-sim" }
 
 # The renderer (#241), an example, so the game itself gains nothing: it
