@@ -113,11 +113,11 @@ pub(super) fn genome_tab(sprite: &SpriteView, app: &App) -> Vec<TabLine> {
                 switch_text(switch),
                 health_text(health)
             );
-            let name = gene_name(gene);
+            let name = name_on_its_line(gene);
             let reason = match how {
                 Expression::Expressed => {
                     let shown = wrapped(&text, 1, plain, look.muted);
-                    lines.extend(name_spotted(shown, &name, index));
+                    lines.extend(name_spotted(shown, &name, index, false));
                     continue;
                 }
                 Expression::Flagged(reason) => format!("flagged: {reason}"),
@@ -130,7 +130,7 @@ pub(super) fn genome_tab(sprite: &SpriteView, app: &App) -> Vec<TabLine> {
             };
             // A gene with no effect is minor, and says why (design §6.2).
             let shown = wrapped(&text, 1, look.muted, look.muted);
-            lines.extend(name_spotted(shown, &name, index));
+            lines.extend(name_spotted(shown, &name, index, true));
             lines.extend(
                 wrapped(&reason, 3, look.muted, look.muted)
                     .into_iter()
@@ -143,18 +143,28 @@ pub(super) fn genome_tab(sprite: &SpriteView, app: &App) -> Vec<TabLine> {
 
 /// A gene's `lines`, as `wrapped` draws its text, with the spot of the
 /// gene at `index` over its name's words, `name`, where they are on them:
-/// not over its numbers, between them or after (#304).
-fn name_spotted(lines: Vec<Line<'static>>, name: &str, index: usize) -> Vec<TabLine> {
+/// not over its numbers, between them or after (#304). `minor` for a gene
+/// with no effect, whose name keeps its muted look (design §6.2).
+pub(super) fn name_spotted(
+    lines: Vec<Line<'static>>,
+    name: &str,
+    index: usize,
+    minor: bool,
+) -> Vec<TabLine> {
     let name = name.replace(BOUND, " ");
-    let mut words = name.split_whitespace().peekable();
+    // A comma ends a reaction's sides, and an unknown gene's parts.
+    let mut words = name
+        .split_whitespace()
+        .map(|word| word.trim_end_matches(','))
+        .peekable();
     lines
         .into_iter()
         .map(|line| {
             let text = line.to_string();
             let mut row = TabLine::from(line);
+            row.minor = minor;
             let mut column = 0;
             for token in text.split(' ') {
-                // A reaction's last word has a comma after it.
                 let word = token.trim_end_matches(',');
                 if !word.is_empty() && words.peek() == Some(&word) {
                     words.next();
@@ -348,6 +358,18 @@ fn numbers(gene: &GeneView) -> Vec<String> {
     }
 }
 
+/// The words of `gene`'s name as its line on the Genome tab has them, the
+/// line's words but its numbers (#304): its name, but for a starting
+/// level, whose line says it `starts at` its number.
+pub(super) fn name_on_its_line(gene: &GeneView) -> String {
+    match *gene {
+        GeneView::InitialConcentration { chem, .. } => {
+            format!("{} starts at", display_name(chem))
+        }
+        _ => gene_name(gene),
+    }
+}
+
 /// What a gene does, without its numbers: `low energy → hunger`, `thirst →
 /// drink`, `speed`.
 pub(crate) fn gene_name(gene: &GeneView) -> String {
@@ -432,7 +454,7 @@ fn switch_text(switch: Switch) -> String {
 }
 
 /// A gene as a plain line: `low energy → hunger +.00428 past .5`.
-fn gene_text(gene: &GeneView) -> String {
+pub(super) fn gene_text(gene: &GeneView) -> String {
     let numbers = numbers(gene);
     let n = |at: usize| numbers[at].as_str();
     // A number that may be empty, with a space before it if it isn't.
@@ -537,10 +559,10 @@ fn emitter_source(locus: &str, mode: EmitterMode, invert: bool) -> String {
     }
 }
 
-/// What `gene` does, in a sentence, as the status line says it while the
-/// pointer is on it (design §6.1). What each kind of gene does is the engine's,
-/// so the sentence's shape is the screen's; the names in it are the data
-/// pack's: `An emitter: hunger rises while energy is below .7`.
+/// What `gene` does, in a sentence, as its tooltip says it while the
+/// pointer is on its name (design §6.1). What each kind of gene does is the
+/// engine's, so the sentence's shape is the screen's; the names in it are
+/// the data pack's: `An emitter: hunger rises while energy is below .7`.
 pub(crate) fn gene_about(gene: &GeneView) -> String {
     let raises = |by: f32| if by < 0.0 { "lowers" } else { "raises" };
     let past = |threshold: f32| {

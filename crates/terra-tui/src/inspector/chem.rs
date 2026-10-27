@@ -81,6 +81,7 @@ pub(super) fn chem_tab(sprite: &SpriteView, look: TextLook) -> Vec<TabLine> {
         lines.push(TabLine {
             line: Line::from(text),
             spots,
+            minor: false,
         });
     }
     lines.extend(named.into_iter().map(line));

@@ -16,9 +16,11 @@ impl App {
         *self.spots.borrow_mut() = spots;
     }
 
-    /// The last screen cell the pointer was on, if it has been on one.
-    pub(crate) fn mouse(&self) -> Option<Position> {
-        self.mouse
+    /// Where the pointer is, unless a key has been pressed since it moved,
+    /// which puts away what it shows, its tooltip and what it lights up,
+    /// until it moves again (design §6.1, #304).
+    pub(crate) fn shown_pointer(&self) -> Option<Position> {
+        self.mouse.filter(|_| !self.keyed)
     }
 
     /// The spot the last frame drew at screen cell `cell`, if any.

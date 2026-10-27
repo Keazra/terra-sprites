@@ -60,15 +60,29 @@ impl Spot {
     }
 }
 
-/// The spots of one frame, in the order they were drawn.
+/// The spots of one frame, in the order they were drawn, each with whether
+/// it's marked in the theme's spot style.
 #[derive(Debug, Default)]
-pub(crate) struct Spots(Vec<(Rect, Spot)>);
+pub(crate) struct Spots(Vec<(Rect, Spot, bool)>);
 
 impl Spots {
-    /// Notes that `spot` is drawn over `area`.
+    /// Notes that `spot` is drawn over `area`, marked in the theme's spot
+    /// style if it explains itself (design §6.2).
     pub(crate) fn note(&mut self, area: Rect, spot: Spot) {
+        self.noted(area, spot, true);
+    }
+
+    /// Notes that `spot` is drawn over `area` in a look of its own, which
+    /// it keeps until the pointer is on it (design §6.2): what's minor
+    /// stays muted, as a gene with no effect does, and the open tab
+    /// selected.
+    pub(crate) fn note_unmarked(&mut self, area: Rect, spot: Spot) {
+        self.noted(area, spot, false);
+    }
+
+    fn noted(&mut self, area: Rect, spot: Spot, marked: bool) {
         if !area.is_empty() {
-            self.0.push((area, spot));
+            self.0.push((area, spot, marked));
         }
     }
 
@@ -78,8 +92,8 @@ impl Spots {
         self.0
             .iter()
             .rev()
-            .find(|(area, _)| area.contains(cell))
-            .map(|(_, spot)| spot)
+            .find(|(area, ..)| area.contains(cell))
+            .map(|(_, spot, _)| spot)
     }
 
     /// The screen cells where `spot` is drawn and nothing drawn later is
@@ -87,14 +101,28 @@ impl Spots {
     pub(crate) fn cells_of<'a>(&'a self, spot: &'a Spot) -> impl Iterator<Item = Position> + 'a {
         self.0
             .iter()
-            .filter(move |(_, noted)| noted == spot)
-            .flat_map(|(area, _)| area.positions())
+            .filter(move |(_, noted, _)| noted == spot)
+            .flat_map(|(area, ..)| area.positions())
             .filter(move |&cell| self.at(cell) == Some(spot))
     }
 
-    /// Every spot noted, in the order they were drawn.
-    pub(crate) fn all(&self) -> impl Iterator<Item = &Spot> {
-        self.0.iter().map(|(_, spot)| spot)
+    /// Every spot noted to be marked in the theme's spot style, in the
+    /// order they were drawn: those that explain themselves, but what
+    /// keeps a look of its own.
+    pub(crate) fn marked(&self) -> impl Iterator<Item = &Spot> {
+        self.0
+            .iter()
+            .filter(|(_, spot, marked)| *marked && spot.explains())
+            .map(|(_, spot, _)| spot)
+    }
+
+    /// Where each of the pop-ups is drawn, which no tooltip covers (design
+    /// §6.1).
+    pub(crate) fn pop_ups(&self) -> impl Iterator<Item = Rect> + '_ {
+        self.0
+            .iter()
+            .filter(|(_, spot, _)| *spot == Spot::PopUp)
+            .map(|(area, ..)| *area)
     }
 }
 
@@ -124,6 +152,18 @@ mod tests {
             cells,
             [(0, 0), (1, 0), (2, 0), (1, 1), (2, 1)].map(Position::from)
         );
+    }
+
+    #[test]
+    fn only_what_explains_itself_and_keeps_no_look_of_its_own_is_marked() {
+        let mut spots = Spots::default();
+        spots.note(Rect::new(0, 0, 4, 1), Spot::Gene(2));
+        spots.note_unmarked(Rect::new(0, 1, 4, 1), Spot::Gene(3));
+        spots.note(Rect::new(0, 2, 4, 1), Spot::PopUp);
+        let marked: Vec<&Spot> = spots.marked().collect();
+        assert_eq!(marked, [&Spot::Gene(2)]);
+        assert_eq!(spots.at(Position::new(1, 1)), Some(&Spot::Gene(3)));
+        assert_eq!(spots.pop_ups().collect::<Vec<_>>(), [Rect::new(0, 2, 4, 1)]);
     }
 
     #[test]

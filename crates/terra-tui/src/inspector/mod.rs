@@ -152,10 +152,12 @@ fn fitted_label(sprite: Option<(&str, &str)>, room: usize) -> String {
 
 /// A line of a tab as it's drawn, and its spots, each with the columns it
 /// takes from the line's start (design §6.1): a memory heading's is the
-/// block it opens or shuts (design v40 §6.1).
+/// block it opens or shuts (design v40 §6.1). On a minor line, as a gene's
+/// with no effect is, they keep its muted look (design §6.2).
 pub(crate) struct TabLine {
     pub(crate) line: Line<'static>,
     pub(crate) spots: Vec<(Range<u16>, Spot)>,
+    pub(crate) minor: bool,
 }
 
 impl From<Line<'static>> for TabLine {
@@ -164,6 +166,7 @@ impl From<Line<'static>> for TabLine {
         TabLine {
             line,
             spots: Vec::new(),
+            minor: false,
         }
     }
 }
@@ -179,6 +182,7 @@ impl TabLine {
         TabLine {
             line,
             spots: vec![(columns, spot)],
+            minor: false,
         }
     }
 

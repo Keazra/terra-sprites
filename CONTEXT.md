@@ -822,11 +822,11 @@ The box `:` opens near the top of the map view: typing finds any control that wo
 _Avoid_: command line, console, search (that's the help's)
 
 **Spot** (#304):
-A part of the screen that says what it is when the pointer is on it, in a tooltip, and which a click may land on: a name, such as an inspector tab's, a drive's, a gene's or the sprite's in a line of the event log. The inspector, the event log and each pop-up note their spots as they're drawn, afresh each frame, and a pop-up's box is one too, so it takes the pointer before what's under it. A spot that says what it is is drawn in the theme's Spot colour.
+A part of the screen the pointer can be on that says what it is in a tooltip, or takes a click, or both: a name, such as an inspector tab's, a drive's, a gene's or the sprite's in a line of the event log, or a Brain tab memory heading, which takes a click and says nothing. The inspector, the event log and each pop-up note their spots as they're drawn, afresh each frame, and a pop-up's box is one too, which says nothing and takes the pointer before what's under it. A spot a tooltip can explain is drawn in the theme's Spot colour, unless it keeps a look of its own until the pointer is on it: the open tab its selected look, and a gene with no effect its muted one.
 _Avoid_: hotspot, hit box
 
 **Tooltip** (#304):
-The box beside the pointer, below it and to its left, saying what the spot under it is: its name, what it is, and what a click or a key does with it. It's drawn afresh each frame, never over the pointer's cell, and takes nothing: it isn't a pop-up.
+The box beside the pointer, below it and to its left, saying what the spot under it is: its name, what it is, and what a click or a key does with it. It's drawn afresh each frame, only on the world's own screen, never over the pointer's cell or a pop-up, and takes nothing: it isn't a pop-up. A key press puts it away until the pointer moves.
 _Avoid_: hover box, pop-up (that's a menu or an overlay)
 
 **Sprite list**:
@@ -857,7 +857,7 @@ A mapping from semantic tiles to glyphs and colours, and from each text role to 
 _Avoid_: skin
 
 **Text role** (#302):
-What a piece of the screen's text is for, which the theme styles: a heading, muted (minor) text, good (a gain, or a reward felt), bad (a loss, or a punishment felt), a key in a hint, or selected (what's chosen, such as the open tab). Colour never carries a meaning alone: the signs, arrows and capitals stay.
+What a piece of the screen's text is for, which the theme styles: a heading, muted (minor) text, good (a gain, or a reward felt), bad (a loss, or a punishment felt), a key in a hint, selected (what's chosen, such as the open tab), or a spot (what a tooltip can explain). Colour never carries a meaning alone: the signs, arrows and capitals stay.
 _Avoid_: colour scheme, highlight (for a role)
 
 **Panel shade** (#302):

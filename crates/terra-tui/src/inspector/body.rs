@@ -386,8 +386,8 @@ pub(super) fn trait_name(which: Trait) -> &'static str {
     }
 }
 
-/// What a trait is, as the status line says it (design §6.1). Only what
-/// the engine makes it mean: what it costs is the data pack's.
+/// What a trait is, as its tooltip says it (design §6.1). Only what the
+/// engine makes it mean: what it costs is the data pack's.
 pub(super) fn trait_about(which: Trait) -> &'static str {
     match which {
         Trait::Speed => "how fast it walks",

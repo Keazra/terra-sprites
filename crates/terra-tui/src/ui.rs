@@ -150,7 +150,7 @@ pub fn render_with(frame: &mut Frame, app: &App, world: &World, parts: Parts) {
     // between the bars (design §6.1, #304).
     tooltip::mark_spots(frame.buffer_mut(), app, &spots);
     tooltip::light_up_spot(frame.buffer_mut(), app, &spots);
-    if let Some(Spot::LogLine(id)) = app.mouse().and_then(|cell| spots.at(cell)) {
+    if let Some(Spot::LogLine(id)) = tooltip::pointer(app).and_then(|cell| spots.at(cell)) {
         light_up(frame.buffer_mut(), app, world, *id, &spots);
     }
     let between_bars = Rect::new(
@@ -1396,11 +1396,16 @@ fn render_inspector(buf: &mut Buffer, area: Rect, app: &App, world: &World, spot
     }
     let title = inspector::title(app);
     buf.set_line(area.x + 1, area.y, &title, area.width.saturating_sub(1));
-    // Each tab where its name is, so a click there opens it (design §6.1).
+    // Each tab where its name is, so a click there opens it (design §6.1),
+    // the open one keeping its selected look.
     for (tab, columns) in inspector::tab_places(app.tab()) {
         let start = area.x + 1 + columns.start as u16;
-        let place = Rect::new(start, area.y, columns.len() as u16, 1);
-        spots.note(place.intersection(area), Spot::Tab(tab));
+        let place = Rect::new(start, area.y, columns.len() as u16, 1).intersection(area);
+        if tab == app.tab() {
+            spots.note_unmarked(place, Spot::Tab(tab));
+        } else {
+            spots.note(place, Spot::Tab(tab));
+        }
     }
     let inner = inspector::tab_area(area);
     let lines = inspector::shown(app, world);
@@ -1410,7 +1415,12 @@ fn render_inspector(buf: &mut Buffer, area: Rect, app: &App, world: &World, spot
         buf.set_line(inner.x, row, &shown.line, inner.width);
         for (columns, spot) in shown.spots {
             let place = Rect::new(inner.x + columns.start, row, columns.len() as u16, 1);
-            spots.note(place.intersection(inner), spot);
+            let place = place.intersection(inner);
+            if shown.minor {
+                spots.note_unmarked(place, spot);
+            } else {
+                spots.note(place, spot);
+            }
         }
     }
 }

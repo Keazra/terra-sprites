@@ -198,6 +198,18 @@ impl Action {
                 | Action::Wheel { .. }
         )
     }
+
+    /// The screen cell the pointer is on, if this is its doing.
+    pub fn pointer_cell(self) -> Option<Position> {
+        match self {
+            Action::Point(at)
+            | Action::Click { at, .. }
+            | Action::Wheel { at, .. }
+            | Action::Follow { at: Some(at) }
+            | Action::Release { at: Some(at), .. } => Some(at),
+            _ => None,
+        }
+    }
 }
 
 listed_enum! {

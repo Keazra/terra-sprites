@@ -7,9 +7,9 @@ use common::*;
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Rect, Size};
-use ratatui::style::Modifier;
-use terra_sim::{DeathCause, EntityId, Event, EventKind, World};
-use terra_tui::app::{App, Selection, Tab};
+use ratatui::style::{Color, Modifier};
+use terra_sim::{DeathCause, EntityId, Event, EventKind, Pos, World};
+use terra_tui::app::{App, CursorMode, Screen, Selection, Tab};
 use terra_tui::input::Action;
 use terra_tui::theme::Theme;
 
@@ -477,28 +477,78 @@ fn a_click_on_a_log_line_leaves_follow_as_it_is() {
     assert_eq!(app.followed(), Some(followed));
 }
 
-#[test]
-fn a_click_on_the_debug_overlay_never_lands_on_the_map_beneath() {
-    // Where the overlay's box is drawn, over the map view's top right.
+/// A world with a starter sprite on a tile the debug overlay's box is drawn
+/// over, the map view's top right, and an app on it, drawn, with the
+/// overlay `shown` or not: the world, the app, the tile and the sprite.
+fn under_the_overlay(shown: bool) -> (World, App, Pos, EntityId) {
     let empty = WorldBuilder::grass(60, 30).build();
     let mut app = app_on(&empty);
     apply(&mut app, &empty, Action::DebugOverlay);
     let corner = cell_of_text(&app, &empty, SCREEN, " Debug ");
-    let cell = Position::new(corner.x + 3, corner.y + 2);
-    let tile = app.tile_at(cell).expect("a tile beneath the box");
-    // A sprite there, which a click selects with the overlay hidden.
+    let tile = app
+        .tile_at(Position::new(corner.x + 3, corner.y + 2))
+        .expect("a tile beneath the box");
     let world = WorldBuilder::grass(60, 30).starters(&[tile]).build();
     let id = sprite_on(&world, tile);
-    let click = Action::left_click(Position::new(cell.x + 1, cell.y + 1));
+    let mut app = app_on(&world);
+    if shown {
+        apply(&mut app, &world, Action::DebugOverlay);
+    }
+    render(&app, &world);
+    (world, app, tile, id)
+}
+
+#[test]
+fn the_pointer_on_the_debug_overlay_never_lands_on_the_map_beneath() {
+    // With the overlay hidden, the pointer on the sprite's tile moves the
+    // Cursor there, a click selects it, the wheel changes the mode and a
+    // middle click follows it. With its box over the tile, none of them
+    // does (design §6.1).
     for shown in [false, true] {
-        let mut app = app_on(&world);
-        if shown {
-            apply(&mut app, &world, Action::DebugOverlay);
+        let (_, app, tile, _) = under_the_overlay(shown);
+        let on_it = pointer_on(&app, tile);
+        let actions = [
+            ("the pointer", Action::Point(on_it)),
+            ("a click", Action::left_click(on_it)),
+            (
+                "the wheel",
+                Action::Wheel {
+                    at: on_it,
+                    notches: 1,
+                },
+            ),
+            ("a middle click", Action::middle_click(on_it)),
+        ];
+        for (what, action) in actions {
+            let (world, mut app, ..) = under_the_overlay(shown);
+            let state = |app: &App| (app.cursor(), app.mode(), app.followed(), app.selection());
+            let before = state(&app);
+            apply(&mut app, &world, action);
+            assert_eq!(
+                state(&app) == before,
+                shown,
+                "{what}, overlay shown: {shown}"
+            );
         }
-        render(&app, &world);
-        apply(&mut app, &world, click);
-        let selected = app.selection() == Some(Selection::Living(id));
-        assert_eq!(selected, !shown, "overlay shown: {shown}");
+    }
+}
+
+#[test]
+fn a_sprite_under_a_pop_up_is_not_lit_from_its_line_in_the_log() {
+    for shown in [false, true] {
+        let (world, mut app, tile, id) = under_the_overlay(shown);
+        let grew_up = Event {
+            tick: 1,
+            kind: EventKind::GrewUp { id },
+        };
+        app.record(&[grew_up], &world);
+        let name = cell_of_text(&app, &world, SCREEN, &format!("Sprite #{} grew up", id.0));
+        apply(&mut app, &world, Action::Point(name));
+        let cell = app.cell_of(tile).expect("in view");
+        let lit = render(&app, &world)[cell]
+            .modifier
+            .contains(Modifier::REVERSED);
+        assert_eq!(lit, !shown, "overlay shown: {shown}");
     }
 }
 
@@ -517,4 +567,236 @@ fn a_pop_up_takes_the_pointer_before_what_is_under_it() {
         let said = pointing_at(&mut app, &world, SCREEN, name);
         assert!(said.is_none(), "{open:?}: {said:?}");
     }
+}
+
+#[test]
+fn no_tooltip_opens_where_a_click_does_not_do_what_it_says() {
+    // Only on the world's screen and its quit prompt (design §6.1): the
+    // palette, the Place menu and naming take keys, not the tabs' clicks.
+    let opens = [Action::Palette, Action::Rename, Action::Back];
+    for open in opens {
+        let (world, mut app, _) = selected(SCREEN, Tab::Body);
+        let brain = cell_of_text(&app, &world, SCREEN, "Brain");
+        apply(&mut app, &world, open);
+        let said = pointing_at(&mut app, &world, SCREEN, brain);
+        let quitting = app.screen() == Screen::QuitPrompt;
+        assert_eq!(said.is_some(), quitting, "{open:?}: {said:?}");
+    }
+    let (world, mut app, _) = selected(SCREEN, Tab::Body);
+    let brain = cell_of_text(&app, &world, SCREEN, "Brain");
+    // `C` twice opens the Place menu.
+    for _ in 0..2 {
+        apply(&mut app, &world, Action::Mode(CursorMode::Grab));
+    }
+    assert_eq!(app.screen(), Screen::PlaceMenu);
+    assert!(pointing_at(&mut app, &world, SCREEN, brain).is_none());
+}
+
+#[test]
+fn a_tooltip_keeps_off_the_debug_overlay() {
+    let (world, mut app, _) = selected(SCREEN, Tab::Body);
+    apply(&mut app, &world, Action::DebugOverlay);
+    // The overlay's box, from its top corners down to its bottom right one.
+    let screen = render(&app, &world);
+    let title = cell_of_text(&app, &world, SCREEN, " Debug ");
+    let is = |x: u16, y: u16, symbol: &str| screen[(x, y)].symbol() == symbol;
+    let left = (0..title.x)
+        .rev()
+        .find(|&x| is(x, title.y, "┌"))
+        .expect("┌");
+    let right = (title.x..SCREEN.width)
+        .find(|&x| is(x, title.y, "┐"))
+        .expect("┐");
+    let bottom = (title.y..SCREEN.height)
+        .find(|&y| is(right, y, "┘"))
+        .expect("┘");
+    let overlay = Rect::new(left, title.y, right - left + 1, bottom - title.y + 1);
+    let drawn = |screen: &Buffer| -> Vec<String> {
+        overlay
+            .positions()
+            .map(|cell| screen[cell].symbol().to_string())
+            .collect()
+    };
+    let shown = drawn(&screen);
+    // Where it would cover the box, it goes elsewhere, or where there's
+    // nowhere else, isn't drawn.
+    let mut drawn_somewhere = 0;
+    for text in ["Brain", "Genome", "hunger", "tiredness", "selected major"] {
+        let cell = cell_of_text(&app, &world, SCREEN, text);
+        if let Some(said) = pointing_at(&mut app, &world, SCREEN, cell) {
+            assert!(!said.area.intersects(overlay), "{text}: {said:?}");
+            drawn_somewhere += 1;
+        }
+        assert_eq!(drawn(&render(&app, &world)), shown, "{text}");
+    }
+    assert!(drawn_somewhere >= 2, "{drawn_somewhere}");
+}
+
+#[test]
+fn a_key_puts_the_tooltip_away_until_the_pointer_moves() {
+    let (world, mut app, _) = selected(SCREEN, Tab::Body);
+    let name = cell_of_text(&app, &world, SCREEN, "hunger");
+    assert!(pointing_at(&mut app, &world, SCREEN, name).is_some());
+    apply(&mut app, &world, Action::TogglePause);
+    let screen = render(&app, &world);
+    assert!(tooltip(&screen, name).is_none(), "put away");
+    let lit = screen[name].modifier.contains(Modifier::REVERSED);
+    assert!(!lit, "and its spot no longer lit");
+    assert!(
+        pointing_at(&mut app, &world, SCREEN, name).is_some(),
+        "back once the pointer moves"
+    );
+}
+
+#[test]
+fn closing_the_graph_or_the_tree_leaves_no_tooltip_where_the_pointer_was() {
+    for open in [Action::Population, Action::FamilyTree] {
+        let (world, mut app, _) = selected(SCREEN, Tab::Body);
+        let name = cell_of_text(&app, &world, SCREEN, "hunger");
+        assert!(pointing_at(&mut app, &world, SCREEN, name).is_some());
+        apply(&mut app, &world, open);
+        render(&app, &world);
+        apply(&mut app, &world, Action::Point(Position::new(5, 5)));
+        apply(&mut app, &world, Action::Back);
+        let screen = render(&app, &world);
+        assert!(tooltip(&screen, name).is_none(), "{open:?}");
+        assert!(
+            !screen[name].modifier.contains(Modifier::REVERSED),
+            "{open:?}: not lit"
+        );
+    }
+}
+
+#[test]
+fn a_log_line_that_does_not_name_its_sprite_is_all_of_it_its_spot() {
+    // A sprite named Mira is labelled `Mira #N`, but the line saying so
+    // names it as it was.
+    let world = field(&[], &[at(2, 2)]);
+    let mut app = app_on(&world);
+    let id = sprite_on(&world, at(2, 2));
+    let renamed = Event {
+        tick: 1,
+        kind: EventKind::Renamed {
+            id,
+            name: "Mira".into(),
+        },
+    };
+    app.record(&[renamed], &world);
+    let line = format!("You named Sprite #{} Mira", id.0);
+    let start = cell_of_text(&app, &world, SCREEN, &line);
+    let spot = Theme::cp437().text().spot.fg.expect("a colour");
+    let screen = render(&app, &world);
+    let width = line.chars().count() as u16;
+    for x in start.x..start.x + width {
+        assert_eq!(screen[(x, start.y)].fg, spot, "at {x}");
+    }
+    let end = Position::new(start.x + width - 1, start.y);
+    let said = pointing_at(&mut app, &world, SCREEN, end).expect("a tooltip");
+    assert_eq!(said.name, app.names().label(id));
+    assert_eq!(said.words, "Whom this line is about click to select it");
+}
+
+#[test]
+fn the_open_tab_keeps_its_look_and_a_pointed_tab_looks_unlike_it() {
+    let (world, mut app, _) = selected(SCREEN, Tab::Body);
+    let look = |screen: &Buffer, cell: Position| {
+        let cell = &screen[cell];
+        (cell.fg, cell.bg, cell.modifier)
+    };
+    let (body, brain) = (
+        cell_of_text(&app, &world, SCREEN, "Body"),
+        cell_of_text(&app, &world, SCREEN, "Brain"),
+    );
+    let screen = render(&app, &world);
+    let open = look(&screen, body);
+    let spot = app.theme.text().spot.fg.expect("a colour");
+    assert_ne!(open.0, spot, "the open tab isn't in the spot colour");
+    assert!(open.2.contains(Modifier::REVERSED), "but selected");
+    apply(&mut app, &world, Action::Point(brain));
+    let screen = render(&app, &world);
+    assert_eq!(look(&screen, body), open, "it keeps its look");
+    assert_ne!(look(&screen, brain), open, "a pointed tab looks unlike it");
+    apply(&mut app, &world, Action::Point(body));
+    let screen = render(&app, &world);
+    assert_ne!(look(&screen, body), open, "pointed at, it's lit");
+}
+
+/// Genes the starter genome has none of: a gene with no effect, a starting
+/// level, an instinct with a long name and an unknown gene.
+const ODD_GENES: &str = r#"(format: 1, genes: [
+    Emitter(locus: Locus("ate"), mode: Level, gain: 0.3, chem: "food"),
+    InitialConcentration(chem: "boredom", value: 0.2),
+    Instinct(inputs: [("loneliness", false), ("crowdedness", true), ("target_adjacent", true)], verb: Eat, weight: 0.5),
+    Gene(type: 900, version: 1, payload: "c0ffee"),
+])"#;
+
+/// An app in `theme` on a tall screen, with a sprite of `ODD_GENES`
+/// selected and its Genome tab open.
+fn odd_genes(theme: Theme) -> (World, App) {
+    let world = WorldBuilder::grass(10, 6)
+        .genes(&[(at(2, 2), ODD_GENES)])
+        .build();
+    let mut app = sized_app(&world, theme, TALL);
+    select(&mut app, &world, sprite_on(&world, at(2, 2)));
+    open(&mut app, &world, Tab::Genome);
+    (world, app)
+}
+
+#[test]
+fn a_starting_level_and_an_unknown_gene_say_what_they_are_too() {
+    let (world, mut app) = odd_genes(Theme::cp437());
+    let spot = app.theme.text().spot.fg.expect("a colour");
+    let screen = render_on(&app, &world, TALL);
+    let name = "boredom starts at";
+    let start = cell_of_text(&app, &world, TALL, name);
+    let width = name.chars().count() as u16;
+    for x in start.x..start.x + width {
+        assert_eq!(screen[(x, start.y)].fg, spot, "its name, at {x}");
+    }
+    let number = (start.x + width + 1, start.y);
+    assert_ne!(screen[number].fg, spot, "not its number");
+    let said = pointing_at_text(&mut app, &world, TALL, name);
+    assert_eq!(said.name, "boredom's start");
+    assert_eq!(
+        said.words,
+        "A starting level: boredom starts at .2 when it hatches"
+    );
+    // An unknown gene is all name, and to its end.
+    apply(&mut app, &world, Action::Point(Position::new(0, 0)));
+    let bytes = cell_of_text(&app, &world, TALL, "3 bytes");
+    let end = Position::new(bytes.x + 6, bytes.y);
+    let said = pointing_at(&mut app, &world, TALL, end).expect("a tooltip");
+    assert_eq!(said.words, "A gene this version of the game can't read");
+}
+
+#[test]
+fn a_gene_with_no_effect_keeps_its_muted_look_whatever_the_theme_s_muted_is() {
+    let ascii = include_str!("../../../themes/ascii.ron");
+    let shipped = "muted:    (fg: dark_gray)";
+    assert!(ascii.contains(shipped));
+    for muted in ["(fg: dark_gray)", "(bold: true)", "(reversed: true)"] {
+        let edited = ascii.replacen(shipped, &format!("muted:    {muted}"), 1);
+        let theme = Theme::from_ron(&edited, &pack()).expect("it loads");
+        let (world, mut app) = odd_genes(theme);
+        let look = app.theme.text();
+        let name = cell_of_text(&app, &world, TALL, "ate → food");
+        let screen = render_on(&app, &world, TALL);
+        let cell = &screen[name];
+        assert_eq!(cell.fg, look.muted.fg.unwrap_or(Color::Reset), "{muted}");
+        assert!(cell.modifier.contains(look.muted.add_modifier), "{muted}");
+        // Pointed at, it's lit like any other.
+        apply(&mut app, &world, Action::Point(name));
+        let screen = render_on(&app, &world, TALL);
+        assert_eq!(screen[name].fg, look.spot.fg.expect("a colour"), "{muted}");
+    }
+}
+
+#[test]
+fn a_name_too_long_for_its_tooltip_ends_with_dots() {
+    let (world, mut app) = odd_genes(Theme::cp437());
+    let said = pointing_at_text(&mut app, &world, TALL, "loneliness");
+    assert!(said.name.starts_with("loneliness & "), "{said:?}");
+    assert!(said.name.ends_with("..."), "{said:?}");
+    let room = usize::from(said.area.width) - 6;
+    assert!(said.name.chars().count() <= room, "{said:?}");
 }

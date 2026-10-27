@@ -307,8 +307,8 @@ listed_enum! {
 }
 
 impl Tab {
-    /// What the tab shows, as the status line says it while the pointer is
-    /// on its name (design §6.1).
+    /// What the tab shows, as its tooltip says it while the pointer is on
+    /// its name (design §6.1).
     pub fn about(self) -> &'static str {
         match self {
             Tab::Body => "what it's doing, its drives and its body",
@@ -467,6 +467,9 @@ pub struct App {
     /// The last screen cell the pointer was on, including the inspector,
     /// so Enter can open the lesson under it.
     mouse: Option<Position>,
+    /// Whether a key has been pressed since the pointer last moved, which
+    /// puts its tooltip away until it moves again (design §6.1, #304).
+    keyed: bool,
     /// Whether the detail view is on (design §6.1).
     detail: bool,
     /// Real time the app has been running, for the Decision marker's flashing.
@@ -768,6 +771,7 @@ impl App {
             tab_scroll: 0,
             open_lessons: BTreeSet::new(),
             mouse: None,
+            keyed: false,
             detail: false,
             running_for: Duration::ZERO,
             emotes: BTreeMap::new(),
@@ -910,6 +914,16 @@ impl App {
 
     /// Carries out an action on `world`, and says whether the game carries on.
     pub fn apply(&mut self, action: Action, world: &World) -> Flow {
+        // Where the pointer is, whatever's open, and whether a key has put
+        // its tooltip away since (design §6.1, #304).
+        match action.pointer_cell() {
+            Some(cell) => {
+                self.mouse = Some(cell);
+                self.keyed = false;
+            }
+            None if !action.is_pointer() => self.keyed = true,
+            None => {}
+        }
         // `F3` shows or hides the debug overlay over whatever's open, and
         // does nothing else: it answers no prompt and never touches the
         // world (design §6.1, #311).
@@ -977,16 +991,10 @@ impl App {
                 self.tracking = false;
                 self.scroll(dx, dy);
             }
+            // On a pop-up's box, the pointer points at nothing on the map
+            // beneath it, so no click or turn of the wheel lands there
+            // (`pointed_xy`, design §6.1).
             Action::Point(cell) => self.point(cell),
-            // A pop-up's box takes the pointer's clicks and the wheel, so
-            // they never land on the map beneath it (design §6.1).
-            Action::Click { at, .. }
-            | Action::Wheel { at, .. }
-            | Action::Follow { at: Some(at) }
-                if self.spot_at(at) == Some(Spot::PopUp) =>
-            {
-                self.point(at);
-            }
             // A left click on a spot that takes one, where the last frame
             // drew it, such as a tab or a line of the log (design §6.1).
             Action::Click {

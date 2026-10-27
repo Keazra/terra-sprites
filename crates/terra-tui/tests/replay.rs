@@ -6,14 +6,14 @@
 mod common;
 use common::screen::hint_cells;
 use common::{
-    app_on, at, ball_world, map_app, pack, pointer_on, render, render_on, row, run, scratch_folder,
-    type_in,
+    WorldBuilder, app_on, at, ball_world, map_app, pack, pointer_on, render, render_on, row, run,
+    scratch_folder, type_in,
 };
 
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::{Path, PathBuf};
 
-use ratatui::layout::{Rect, Size};
+use ratatui::layout::{Position, Rect, Size};
 use terra_sim::{Command, DataPack, Playback, World, WorldConfig};
 use terra_tui::app::{AUTOSAVE_EVERY, App, CursorMode, Flow, REPLAY_REFUSAL, Ticks};
 use terra_tui::files;
@@ -428,6 +428,37 @@ fn f3_shows_the_debug_overlay_in_a_replay_too() {
         "it only reads how the game runs (#311)"
     );
     assert_eq!(app.refusal(), None);
+}
+
+#[test]
+fn in_a_replay_the_wheel_on_the_debug_overlay_is_not_refused() {
+    // The overlay's box takes the wheel, which never reaches the map
+    // beneath it, where a replay refuses it (design §6.1).
+    // A map bigger than the view, so the box is over its tiles.
+    let world = WorldBuilder::grass(60, 30)
+        .objects(&[(at(5, 5), "ball")])
+        .starters(&[at(2, 2)])
+        .build();
+    let playback = replay_of(&played(world, 10), "overlay-wheel");
+    let world = playback.world();
+    let mut app = app_on(world);
+    app.start_replay("last_session.replay", &playback);
+    app.apply(Action::DebugOverlay, world);
+    let screen = render(&app, world);
+    let title = (0..screen.area.height)
+        .find_map(|y| {
+            let row = row(&screen, y);
+            let x = row.find(" Debug ")?;
+            Some(Position::new(row[..x].chars().count() as u16, y))
+        })
+        .expect("the overlay's box");
+    let wheel = |at| Action::Wheel { at, notches: 1 };
+    let on_box = Position::new(title.x + 3, title.y + 2);
+    assert!(app.tile_at(on_box).is_some(), "a tile beneath it");
+    app.apply(wheel(on_box), world);
+    assert_eq!(app.refusal(), None, "on its box");
+    app.apply(wheel(Position::new(title.x - 3, title.y + 2)), world);
+    assert_eq!(app.refusal(), Some(REPLAY_REFUSAL), "on the map");
 }
 
 #[test]

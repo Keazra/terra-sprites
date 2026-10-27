@@ -827,8 +827,8 @@ fn a_drive_bar_is_ten_cells_whatever_the_level() {
     assert_eq!(bar_parts(f32::NAN).concat(), "░░░░░░░░░░");
 }
 
-#[test]
-fn a_gene_says_what_it_does_in_a_sentence_of_its_kind() {
+/// A gene of every kind, and what its tooltip says it does (#304).
+fn genes_of_every_kind() -> Vec<(terra_sim::GeneView<'static>, &'static str)> {
     use terra_sim::{EmitterMode, GeneView, Trait, Whom};
     let emitter = |mode, invert, threshold, gain| GeneView::Emitter {
         locus: "injury",
@@ -838,7 +838,7 @@ fn a_gene_says_what_it_does_in_a_sentence_of_its_kind() {
         gain,
         chem: "pain",
     };
-    let says = [
+    vec![
         (
             emitter(EmitterMode::Level, true, 0.3, 0.004),
             "An emitter: pain rises while injury is below .7",
@@ -929,8 +929,36 @@ fn a_gene_says_what_it_does_in_a_sentence_of_its_kind() {
             },
             "A gene this version of the game can't read",
         ),
-    ];
-    for (gene, words) in says {
+    ]
+}
+
+#[test]
+fn a_gene_says_what_it_does_in_a_sentence_of_its_kind() {
+    for (gene, words) in genes_of_every_kind() {
         assert_eq!(gene_about(&gene), words, "{gene:?}");
+    }
+}
+
+#[test]
+fn every_kind_of_gene_has_the_words_of_its_line_but_its_numbers_as_its_spot() {
+    // #304: what's lit on the Genome tab, and what a tooltip explains.
+    for (gene, _) in genes_of_every_kind() {
+        let name = genome::name_on_its_line(&gene);
+        let lines = wrapped(&genome::gene_text(&gene), 1, Style::new(), Style::new());
+        let mut spotted = Vec::new();
+        for row in genome::name_spotted(lines, &name, 7, false) {
+            let drawn: Vec<char> = row.line.to_string().chars().collect();
+            for (columns, spot) in row.spots {
+                assert_eq!(spot, Spot::Gene(7), "{gene:?}");
+                let columns = usize::from(columns.start)..usize::from(columns.end);
+                spotted.push(drawn[columns].iter().collect::<String>());
+            }
+        }
+        // Its words, but for a comma after one, which is the line's.
+        let words: Vec<&str> = name
+            .split_whitespace()
+            .map(|word| word.trim_end_matches(','))
+            .collect();
+        assert_eq!(spotted.join(" "), words.join(" "), "{gene:?}");
     }
 }

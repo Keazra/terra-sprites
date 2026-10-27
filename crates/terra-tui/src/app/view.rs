@@ -10,6 +10,7 @@ use terra_sim::{Pos, World};
 use super::{App, Areas, Origin, Selection};
 use crate::input::Action;
 use crate::space::Place;
+use crate::spots::Spot;
 
 impl App {
     /// Where the viewport starts: the part of the map, and of what's past
@@ -63,7 +64,8 @@ impl App {
     /// view, the inspector's left column or the event log's title row,
     /// points at the last column or row, so every tile in view can be
     /// pointed at. Past the wall, at the glass or space, it points at no
-    /// tile (M2 design §11.4).
+    /// tile (M2 design §11.4). On a pop-up's box, or a cell down and right
+    /// of one, it points at nothing on the map beneath (design §6.1).
     pub(super) fn pointed_xy(&self, cell: Position) -> Option<(i32, i32)> {
         let area = self.tile_area;
         let reach = Rect::new(
@@ -75,10 +77,17 @@ impl App {
         if area.is_empty() || !reach.contains(cell) {
             return None;
         }
-        let (col, row) = (
-            cell.x.saturating_sub(1).max(area.x) - area.x,
-            cell.y.saturating_sub(1).max(area.y) - area.y,
+        let pointed = Position::new(
+            cell.x.saturating_sub(1).max(area.x),
+            cell.y.saturating_sub(1).max(area.y),
         );
+        if [cell, pointed]
+            .iter()
+            .any(|&at| self.spot_at(at) == Some(Spot::PopUp))
+        {
+            return None;
+        }
+        let (col, row) = (pointed.x - area.x, pointed.y - area.y);
         Some((
             self.viewport.x + i32::from(col),
             self.viewport.y + i32::from(row),

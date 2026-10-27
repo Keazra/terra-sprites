@@ -5,9 +5,9 @@
 // Signal chemicals (drives, reward, punishment) and Hormones by the genome.
 // Only Physical chemicals may be the target of an object verb's `Inject`.
 //
-// `about` says what it is, as the status line shows it after the name when
-// the pointer is on it (#304): for a drive, what raises it and what lowers
-// it in the starter genes.
+// `about` says what it is, as its tooltip shows it when the pointer is on
+// its name (#304): for a drive, what raises it and what lowers it in the
+// starter genes.
 [
     (id: 1,  name: "energy",      class: Physical, about: "what it runs on: food in its gut turns into it, and living and walking use it up"),
     (id: 2,  name: "hydration",   class: Physical, about: "the water in its body: drinking fills it, and it dries out over time"),

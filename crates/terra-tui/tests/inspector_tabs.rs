@@ -613,6 +613,28 @@ fn the_brain_tab_opens_the_rest_of_a_things_lessons() {
 }
 
 #[test]
+fn enter_opens_the_lessons_where_the_pointer_went_while_the_graph_was_open() {
+    // The graph keeps the Cursor where it was, but where the pointer is,
+    // for Enter and the tooltips, follows it (#304).
+    let objects = [(at(3, 3), "berry")];
+    let (world, mut app) = one_sprite_among(EVERY_NEED_GENOME, &objects, &[], 2);
+    open(&mut app, &world, Tab::Brain);
+    let more = brain_cell(&app, &world, "and 3 more");
+    app.apply(Action::Point(Position::new(5, 5)), &world);
+    app.apply(Action::Population, &world);
+    app.apply(Action::Point(more), &world);
+    app.apply(Action::Back, &world);
+    brain_lines(&app, &world);
+    app.apply(Action::Enter, &world);
+    assert!(
+        brain_lines(&app, &world)
+            .iter()
+            .any(|row| row.contains("crowdedness")),
+        "Enter opens the thing under the pointer"
+    );
+}
+
+#[test]
 fn choosing_another_sprite_shuts_lessons_that_were_open() {
     let neighbor = "(format: 1, genes: [])";
     let (eater, bystander) = (at(2, 3), at(8, 1));
