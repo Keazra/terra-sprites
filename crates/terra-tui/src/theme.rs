@@ -235,8 +235,8 @@ pub struct MotionLook {
     /// The tint the trail leaves on the tiles the selected sprite has just
     /// left.
     pub trail: Color,
-    /// The dark a pop-up fades in from, and the background a fade takes on
-    /// a tile that has none of its own.
+    /// The dark a pop-up fades in from and out to, and the background a
+    /// fade takes on a tile that has none of its own.
     pub dark: Color,
     /// The two shades shallow water drifts between.
     pub shallow_water: [Color; 2],

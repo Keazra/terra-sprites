@@ -887,7 +887,7 @@ impl App {
         // §6.9).
         let spots = &self.spots;
         self.motion
-            .saw(self.screen, || spots.borrow().fading().collect(), now);
+            .saw(self.screen, || spots.borrow().drawn_fading(), now);
         self.emotes.retain(|_, &mut (_, at)| now - at < EMOTE_FOR);
         self.resting
             .retain(|_, rest| rest.until().is_none_or(|until| now < until));

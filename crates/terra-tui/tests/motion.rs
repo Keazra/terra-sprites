@@ -1125,7 +1125,7 @@ fn box_titled(screen: &Buffer, title: &str) -> Rect {
 
 // Pop-ups (design §6.9).
 
-/// The default theme's dark, which a pop-up fades in from.
+/// The default theme's dark, which a pop-up fades in from and out to.
 fn dark() -> Color {
     Theme::cp437().motion().dark
 }
@@ -1173,24 +1173,46 @@ fn a_pop_up_fades_in_out_of_the_dark() {
 }
 
 #[test]
-fn what_was_under_a_pop_up_fades_back_from_the_dark_as_it_closes() {
+fn a_pop_up_fades_out_to_the_dark_as_it_closes_and_what_was_under_it_back() {
+    // Design §6.9: the pop-up as it was last drawn fades out to the dark
+    // over the first half, and what was under it fades back over the
+    // second, so its characters give way to theirs in the dark.
     let world = one_on_a_field();
     let (mut on, mut off) = selected(&world);
     both(&mut on, &mut off, &world, Action::Help);
     let help = on.overlay().expect("room for help");
-    frames(&mut on, &mut off, &world, ms(1000));
+    frames(&mut on, &mut off, &world, Duration::ZERO);
+    let (open, plain) = frames(&mut on, &mut off, &world, ms(1000));
+    assert_eq!(open, plain, "faded in");
     both(&mut on, &mut off, &world, Action::Help);
     let (start, plain) = frames(&mut on, &mut off, &world, Duration::ZERO);
-    // The map, the inspector and the event log, each from the dark.
+    for cell in help.positions() {
+        assert_eq!(start[cell], open[cell], "{cell:?}");
+    }
+    differs_only_within(&start, &plain, help);
+    // Fast and then slowing: well past half way to the dark at half its
+    // half.
+    let (quarter, plain) = frames(&mut on, &mut off, &world, ms(37));
+    let corner = Position::new(help.x, help.y);
+    assert_eq!(quarter[corner].symbol(), open[corner].symbol());
+    let Color::Rgb(red, ..) = quarter[corner].fg else {
+        panic!("{:?}", quarter[corner].fg)
+    };
+    assert!(red > 0x0C && red < (0x0C + 0xCC) / 2, "{red:#x}");
+    differs_only_within(&quarter, &plain, help);
+    // Half way, all of it dark: the map, the inspector and the event log,
+    // each to fade back from it.
+    let (half, plain) = frames(&mut on, &mut off, &world, ms(38));
     let dark = dark();
     for cell in help.positions() {
-        assert_eq!(start[cell].fg, dark, "{cell:?}");
+        assert_eq!(half[cell].fg, dark, "{cell:?}");
+        assert_eq!(half[cell].symbol(), plain[cell].symbol(), "{cell:?}");
     }
     let shaded = Position::new(70, 12);
     assert_eq!(plain[shaded].bg, shade());
-    assert_eq!(start[shaded].bg, dark);
-    differs_only_within(&start, &plain, help);
-    let (end, plain) = frames(&mut on, &mut off, &world, ms(150));
+    assert_eq!(half[shaded].bg, dark);
+    differs_only_within(&half, &plain, help);
+    let (end, plain) = frames(&mut on, &mut off, &world, ms(75));
     assert_eq!(end, plain);
 }
 
@@ -1211,12 +1233,22 @@ fn each_pop_up_fades_in_as_it_opens_and_out_as_it_closes() {
         both(&mut on, &mut off, &world, opens);
         let (start, plain) = frames(&mut on, &mut off, &world, Duration::ZERO);
         all_that_differs_is_dark(&start, &plain);
-        let (end, plain) = frames(&mut on, &mut off, &world, ms(150));
-        assert_eq!(end, plain, "{opens:?}");
+        let (open, plain) = frames(&mut on, &mut off, &world, ms(150));
+        assert_eq!(open, plain, "{opens:?}");
         both(&mut on, &mut off, &world, Action::Back);
+        // It starts as it was last drawn, and what was under it shows
+        // once it has faded out.
         let (start, plain) = frames(&mut on, &mut off, &world, Duration::ZERO);
-        all_that_differs_is_dark(&start, &plain);
-        let (end, plain) = frames(&mut on, &mut off, &world, ms(150));
+        assert_ne!(start, plain, "{opens:?}");
+        for cell in start.area.positions() {
+            assert!(
+                start[cell] == open[cell] || start[cell] == plain[cell],
+                "{opens:?}: {cell:?}"
+            );
+        }
+        let (half, plain) = frames(&mut on, &mut off, &world, ms(75));
+        all_that_differs_is_dark(&half, &plain);
+        let (end, plain) = frames(&mut on, &mut off, &world, ms(75));
         assert_eq!(end, plain, "{opens:?}");
     }
 }
@@ -1238,14 +1270,18 @@ fn tooltips_and_the_debug_overlay_don_t_fade() {
     for cell in debug.positions() {
         assert_eq!(shown[cell], plain[cell], "{cell:?}");
     }
-    // What was under help fades back as it closes, but not where the
-    // debug overlay is still drawn.
+    // Help fades out as it closes, and what was under it back, but not
+    // where the debug overlay is still drawn.
     frames(&mut on, &mut off, &world, ms(1000));
     both(&mut on, &mut off, &world, Action::Help);
-    let (shown, plain) = frames(&mut on, &mut off, &world, Duration::ZERO);
-    all_that_differs_is_dark(&shown, &plain);
-    for cell in debug.positions() {
-        assert_eq!(shown[cell], plain[cell], "{cell:?}");
+    for step in [0, 75] {
+        let (shown, plain) = frames(&mut on, &mut off, &world, ms(step));
+        if step > 0 {
+            all_that_differs_is_dark(&shown, &plain);
+        }
+        for cell in debug.positions() {
+            assert_eq!(shown[cell], plain[cell], "{cell:?}");
+        }
     }
     frames(&mut on, &mut off, &world, ms(1000));
     both(&mut on, &mut off, &world, Action::DebugOverlay);

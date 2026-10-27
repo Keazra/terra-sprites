@@ -8,7 +8,7 @@
 //!   removes a dead sprite before it says so; the deaths and hatchings
 //!   playing; the tab sweeping in, which `App::open` starts; what filled
 //!   the screen at the last frame, which the app's clock compares with
-//!   what does now to see a pop-up open or close, and where the last frame
+//!   what does now to see a pop-up open or close, and how the last frame
 //!   drew the pop-ups that closed; the selected sprite's drives' bars and
 //!   the tiles it has left, its trail, noted as ticks are taken in; and the
 //!   pan under way. Each effect keeps when it began, in the app's
@@ -96,8 +96,9 @@ const TAB_SWEEP: Duration = Duration::from_millis(250);
 /// shade to all of it.
 const SWEEP_EDGE: u16 = 6;
 
-/// How long a pop-up takes to fade in, and what was under one to fade
-/// back as it closes (design §6.9), at every speed.
+/// How long a pop-up takes to fade in, and to fade out as it closes, half
+/// of it, and what was under it to fade back, the other half (design §6.9),
+/// at every speed.
 const POP_UP: Duration = Duration::from_millis(150);
 
 /// How long a drive's bar takes to ease to its new value (design §6.9).
@@ -183,9 +184,10 @@ pub(crate) struct Motion {
     screen: Screen,
     /// When what's up now opened, while it fades in.
     opened: Option<Duration>,
-    /// Where the pop-ups that just closed were drawn, and when they closed,
-    /// while what was under them fades back.
-    closed: Option<(Vec<Rect>, Duration)>,
+    /// How the pop-ups that just closed were last drawn, where they were,
+    /// and when they closed, while they fade out and what was under them
+    /// fades back.
+    closed: Option<(Vec<Buffer>, Duration)>,
     /// The selected sprite's drives' bars, while it's in the world.
     bars: Option<Bars>,
     /// The selected sprite's trail, while it's in the world.
@@ -431,10 +433,16 @@ impl Motion {
     }
 
     /// Notes what fills the screen besides the map just now, `screen`, at
-    /// `now`. Whatever opens fades in, and what was under the pop-ups the
-    /// last frame drew that close, which `drawn` gives, fades back (design
-    /// §6.9). Only a change does, so turning motion on fades nothing.
-    pub(crate) fn saw(&mut self, screen: Screen, drawn: impl FnOnce() -> Vec<Rect>, now: Duration) {
+    /// `now`. Whatever opens fades in, and the pop-ups that close fade out,
+    /// as the last frame drew them, which `drawn` gives, and what was under
+    /// them fades back (design §6.9). Only a change does, so turning motion
+    /// on fades nothing.
+    pub(crate) fn saw(
+        &mut self,
+        screen: Screen,
+        drawn: impl FnOnce() -> Vec<Buffer>,
+        now: Duration,
+    ) {
         if screen == self.screen {
             return;
         }
@@ -623,9 +631,10 @@ impl Motion {
         self.opened.filter(|&began| age(began, now) < POP_UP)
     }
 
-    /// Where the pop-ups that just closed were drawn, and when, while what
-    /// was under them fades back at `now`.
-    fn closing(&self, now: Duration) -> Option<(&[Rect], Duration)> {
+    /// How the pop-ups that just closed were last drawn, and when they
+    /// closed, while they fade out and what was under them fades back at
+    /// `now`.
+    fn closing(&self, now: Duration) -> Option<(&[Buffer], Duration)> {
         self.closed
             .as_ref()
             .filter(|(_, began)| age(*began, now) < POP_UP)
@@ -728,9 +737,10 @@ pub(crate) fn play_on_map(buf: &mut Buffer, inner: Rect, app: &App, world: &Worl
 /// Plays the panels' motion over the finished screen once what can be
 /// pointed at among `spots` is marked, before the tooltip, which doesn't
 /// move (design §6.9): the tab sweeping in, where the inspector is drawn
-/// just now, under any pop-up; then what was under a pop-up that closed
-/// fading back, but where a pop-up is drawn now; and a pop-up that opened
-/// fading in, but under the debug overlay, which doesn't fade.
+/// just now, under any pop-up; then a pop-up that closed fading out to the
+/// dark, as the last frame drew it, and what was under it fading back from
+/// there, but where a pop-up is drawn now; and a pop-up that opened fading
+/// in, but under the debug overlay, which doesn't fade.
 pub(crate) fn play_on_panels(buf: &mut Buffer, app: &App, spots: &Spots) {
     if !app.motion() {
         return;
@@ -757,16 +767,30 @@ pub(crate) fn play_on_panels(buf: &mut Buffer, app: &App, spots: &Spots) {
         let body = inspector::tab_area(inspector);
         play_over(effect, age, buf, body, dark, under_a_pop_up);
     }
-    let fade = || fx::fade_from(dark_colour, dark_colour, timer(POP_UP));
+    let fade_in = |lasts| fx::fade_from(dark_colour, dark_colour, timer(lasts));
     if let Some((drawn, began)) = kept.closing(now) {
-        for &area in drawn {
-            play_over(fade(), age(began, now), buf, area, dark, under_a_pop_up);
+        // Out to the dark and back, so the pop-up's characters give way to
+        // what was under it while all is dark.
+        let (age, half) = (age(began, now), POP_UP / 2);
+        for pop_up in drawn {
+            let area = pop_up.area;
+            if age < half {
+                for cell in area.intersection(buf.area).positions() {
+                    if !under_a_pop_up(cell) {
+                        buf[cell] = pop_up[cell].clone();
+                    }
+                }
+                let fade_out = fx::fade_to(dark_colour, dark_colour, timer(half));
+                play_over(fade_out, age, buf, area, dark, under_a_pop_up);
+            } else {
+                play_over(fade_in(half), age - half, buf, area, dark, under_a_pop_up);
+            }
         }
     }
     if let Some(began) = kept.opening(now) {
         for area in spots.fading() {
             let over_it = |cell: Position| !spots.fades_at(cell);
-            play_over(fade(), age(began, now), buf, area, dark, over_it);
+            play_over(fade_in(POP_UP), age(began, now), buf, area, dark, over_it);
         }
     }
 }

@@ -171,8 +171,12 @@ pub fn render_with(frame: &mut Frame, app: &App, world: &World, parts: Parts) {
         light_up(frame.buffer_mut(), app, world, *id, &spots);
     }
     // Motion over the panels and pop-ups, under the tooltip, which doesn't
-    // move (design §6.9).
+    // move (design §6.9); and the pop-ups as they're drawn, for one that
+    // closes to fade out from.
     motion::play_on_panels(frame.buffer_mut(), app, &spots);
+    if app.motion() {
+        spots.keep_fading(frame.buffer_mut());
+    }
     let between_bars = Rect::new(
         area.x,
         area.y + parts.top_rows(),

@@ -169,10 +169,10 @@
     panels: (shade: "#181a22", title: "#282c3a"),
     // Motion's colours (design §6.9): a death's flash and the ash grey its
     // ghost fades to, a hatching's sparks, the trail's tint, the dark a
-    // pop-up fades from, and the two shades each water drifts between.
-    // Exact, since a fade blends exact colours; what a theme leaves out of
-    // this section, it draws as the default theme does, but water it draws
-    // in a colour of its own, which drifts from that colour.
+    // pop-up fades in from and out to, and the two shades each water drifts
+    // between. Exact, since a fade blends exact colours; what a theme leaves
+    // out of this section, it draws as the default theme does, but water it
+    // draws in a colour of its own, which drifts from that colour.
     motion: (
         flash: "#d0d0d0",
         ash: "#5c5c5c",

@@ -6,6 +6,7 @@
 //! A spot noted later comes first, so a pop-up, drawn over the panels,
 //! takes the pointer before what's under it.
 
+use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Rect};
 use terra_sim::{ChemicalKind, EntityId};
 
@@ -76,10 +77,11 @@ impl Spot {
 }
 
 /// The spots of one frame, in the order they were drawn, each with whether
-/// it's marked in the theme's spot style; and the pop-ups' boxes, each with
-/// whether it fades in and out (design §6.9).
+/// it's marked in the theme's spot style; the pop-ups' boxes, each with
+/// whether it fades in and out; and, while motion is on, how the frame drew
+/// those that fade, for one that closes to fade out from (design §6.9).
 #[derive(Debug, Default)]
-pub(crate) struct Spots(Vec<(Rect, Spot, bool)>, Vec<(Rect, bool)>);
+pub(crate) struct Spots(Vec<(Rect, Spot, bool)>, Vec<(Rect, bool)>, Vec<Buffer>);
 
 impl Spots {
     /// Notes that `spot` is drawn over `area`, marked in the theme's spot
@@ -156,6 +158,28 @@ impl Spots {
             .iter()
             .filter(|&&(_, fades)| fades)
             .map(|&(area, _)| area)
+    }
+
+    /// Keeps how `buf` draws each pop-up that fades, for it to fade out
+    /// from as it closes (design §6.9).
+    pub(crate) fn keep_fading(&mut self, buf: &Buffer) {
+        let kept = self
+            .fading()
+            .map(|area| {
+                let area = area.intersection(buf.area);
+                let mut kept = Buffer::empty(area);
+                for cell in area.positions() {
+                    kept[cell] = buf[cell].clone();
+                }
+                kept
+            })
+            .collect();
+        self.2 = kept;
+    }
+
+    /// How the frame drew each pop-up that fades, as `keep_fading` kept it.
+    pub(crate) fn drawn_fading(&self) -> Vec<Buffer> {
+        self.2.clone()
     }
 
     /// Whether a pop-up is drawn over screen cell `cell`.
