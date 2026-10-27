@@ -1446,7 +1446,7 @@ The species is dropped into a world it doesn't know and has to learn about it. I
     │ :          find a command       F5 F9      quicksave / load     PgUp PgDn  scroll a tab          │
     │ esc        let go, back, quit?  Ctrl+S     save as...           i          open, or full screen  │
     │ Ctrl+C     quit at once         Ctrl+O     load a save          DEBUG                            │
-    │                                 Ctrl+T     pick a theme         F3         how it's running      │
+    │                                 Ctrl+T     settings             F3         how it's running      │
     │                                 Ctrl+R     take over a replay                                    │
     │                                                                                                  │
     │ COLOURS: a sprite's strongest drive, once it's above half                                        │
@@ -1516,14 +1516,25 @@ The species is dropped into a world it doesn't know and has to learn about it. I
 - **Drawn from meaning:** the map renders **semantic tiles**, e.g. `Terrain(Grass)`, `Object("berry_bush", "fruiting")`, `Sprite { colour_mode_state }`, `Emote(Hurt)`, never characters directly.
 - **Themes** (`themes/*.ron`) map each semantic tile to a character, colours and modifiers.
   - Themes are **UI assets**. They aren't part of the sim data pack, and don't affect saves or replays.
-  - **Loading one** (v34): two are built in. The player's own go in the `themes` folder (§6.7) and are picked with `Ctrl+T`, or one starts the game with `--theme <file>`. A theme is checked when it's loaded, and one that's wrong is refused with a message saying what: it must draw every semantic tile and mode mark, every character in it must be in CP437, and every object type, visual state and drive it names must be in the world's data pack. It may leave object types, states and drives out, which fall back as below and as in §6.3.
+  - **A theme is a glyph set and a palette, chosen apart** (#307). The **glyph set** gives every character a theme holds: the map's, the Cursor's, the emotes', the glass's and the stars', and the graph's blocks. The **palette** gives the rest: each glyph's colour, bold and reverse video, the drives', the lineage's and the graph's colours, the text roles, the attention marker, the panel shades and motion's colours (§6.9). So a player can draw the map in ASCII with high contrast without a theme file of their own.
+  - **Built in:** two glyph sets, CP437 (the default) and ASCII (`--ascii`), and four palettes:
+
+    | Palette | What it's for |
+    |---|---|
+    | Default | The colours in the tables below: named colours on the map and the text, which follow the terminal's own scheme, and exact ones only where no name fits. |
+    | High contrast | Bright exact colours, the same in every terminal: minor text light grey rather than dark, headings and keys bold, a brighter attention marker, and lines between the panels in place of shades. |
+    | Colour-blind | Exact colours from Okabe and Ito's set for colour-blind readers, so the drives, the lineage, a gain against a loss and the graph's stages are told apart without red against green. |
+    | Mono | No colour at all, only bold and reverse video, and lines between the panels. What colour told elsewhere is read from the signs, arrows and capitals, which stay (below); motion's colours don't play, though the pan and the bars still move (§6.9). |
+
+  - **`NO_COLOR`** set in the environment, to anything but nothing, starts the game in mono, as [no-color.org](https://no-color.org) asks, unless the player has picked a palette on the settings screen (§6.7) or with `--theme`.
+  - **Loading one** (v34): the player's own theme files go in the `themes` folder (§6.7) and are picked on the settings screen (`Ctrl+T`, #307), as the glyph set, the palette or both; or one starts the game with `--theme <file>`, as both. A theme is checked when it's loaded, and one that's wrong is refused with a message saying what: it must draw every semantic tile and mode mark, every character in it must be in CP437, and every object type, visual state and drive it names must be in the world's data pack. It may leave object types, states and drives out, which fall back as below and as in §6.3.
   - The future Tiles milestone adds themes that map to a sheet index and tint instead.
 - **Objects are keyed by name and visual state**, e.g. `object("berry_bush", "fruiting")`. An object matching none of its visual rules is in the state `"default"`: the bare berry bush is `object("berry_bush", "default")`.
   - **Fallback:** a theme with no entry for an object's state uses that object's `"default"` entry, and failing that a `?` glyph. So a data pack's new object types still draw in any theme.
   - A test checks that each built-in theme covers every visual state of every object type in the built-in pack.
 - **All UI text is limited to CP437 characters**, so any CP437 bitmap font or tileset can render every panel.
 
-| Thing | `cp437` (default) | `ascii` (`--ascii`) | Colour |
+| Thing | CP437 glyphs (the default) | ASCII glyphs (`--ascii`) | Colour, in the default palette |
 |---|---|---|---|
 | Grass / dirt / sand | `.` `,` `:` | same | green / brown / yellow |
 | Shallow / deep water | `~` `≈` | `~` `=` | cyan / blue |
@@ -1559,8 +1570,8 @@ The species is dropped into a world it doesn't know and has to learn about it. I
   | Spot | What a tooltip can explain (§6.1, #304): a drive's name on the Body tab, a chemical's on the Chem tab, a gene's name on the Genome tab and the event log's filters; and a sprite's name in a line of the log while it's in the world, which lights the sprite up on the map; but what's minor, which keeps its muted look until the pointer is on it. The one the pointer is on is drawn in it in reverse video | a soft blue, `#87afd7`, quieter than the terminal's light blue (Fauxpaw, 2026-10-27) |
 
   A zero, `+.00`, is neither good nor bad, and a chemical's change on the Chem tab stays plain, since a rise is good for food and bad for hunger. A drive's bar on the Body tab is drawn in the colour the theme gives that drive, its empty part muted.
-- **Panels** (#302): a theme's `panels` section gives the shade the inspector and the event log sit on, and their title rows' shade: `#181a22` and `#282c3a` in the default theme. A theme without one, such as ASCII, draws lines between the panels instead (§6.1).
-- **`--ascii` swaps only what themes cover:** the map's glyphs, the Cursor, the emotes, and from #302 the text's colours and the panels, which ASCII draws with lines. Frames and text stay CP437 in every theme.
+- **Panels** (#302): a palette's `panels` section gives the shade the inspector and the event log sit on, and their title rows' shade: `#181a22` and `#282c3a` in the default palette. A palette without one, such as high contrast and mono, draws lines between the panels instead (§6.1). The shades go with the palette, not the glyph set (#307), so ASCII glyphs in the default palette sit on shades, where the ASCII theme drew lines before.
+- **`--ascii` picks the ASCII glyph set for the run** (#307): the map's glyphs, the Cursor and the emotes. Frames and text stay CP437 in every glyph set. With `--theme`, it draws the file's palette in ASCII.
 
 ### 6.3 Body language (UI only)
 
@@ -1715,7 +1726,7 @@ N ═ M
 | `F3` | Show or hide the debug overlay: how the game is running (§6.1, #311) |
 | `F5` / `F9` | Quicksave / quickload (§6.7, v32) |
 | `Ctrl+S` / `Ctrl+O` | Save by name / load a save from a list (§6.7, v32) |
-| `Ctrl+T` | Pick a theme from the built-in ones and the themes folder (§6.7, v34) |
+| `Ctrl+T` | The settings screen: the glyph set, the palette, motion and square tiles (§6.7, #307; a theme from v34) |
 | `Ctrl+R` | In a replay, take it over: play on from where it has reached (§2.7, v36) |
 | `?` | Open or close help, at the page for where the player is; typing in it searches it (§6.1, #303) |
 | `:` | Open the command palette: find any key by what it does, and do it (§6.1, #303) |
@@ -1761,9 +1772,12 @@ N ═ M
 - **Autosave:** every 10 real-time minutes, keeping the last 3. Only time that runs, unpaused, counts (v32), and quitting autosaves too, unless the world hasn't run since its last save.
 - **Location:** saves, autosaves, exported genomes and `last_session.replay` go in the platform data folder: `%APPDATA%\terra-sprites` on Windows, `~/Library/Application Support/terra-sprites` on macOS, and elsewhere `$XDG_DATA_HOME/terra-sprites` or `~/.local/share/terra-sprites`. The help overlay shows the path.
   - **Genomes** (v28) are exported to, and the Place menu reads them from, its `genomes` folder.
-  - **Themes** (v34) are read from its `themes` folder: `Ctrl+T` opens a menu, `Themes`, of the built-in `cp437` and `ascii`, then each `.ron` file there by name, in order, picked as the Place menu's items are. The map switches at once and the status line says "Theme: night"; a theme that doesn't load is refused on the status line, "Couldn't use theme night: …", and the theme in use stays. The theme picked lasts until the game is closed.
+  - **Themes** (v34) are read from its `themes` folder, each `.ron` file there by name, in order, and offered on the settings screen as glyphs and as colours (#307). The theme in use changes at once, and the status line says what changed, "Colours: night"; a theme that doesn't load is refused on the status line, "Couldn't use theme night: …", and the row keeps what it had.
+  - **The settings screen** (#307): `Ctrl+T` opens a box over the map, `Settings`, of how the game looks and feels, a row each: **Glyphs** (CP437, ASCII, then each theme file), **Colours** (default, high contrast, colour-blind, mono, then each theme file), **Motion** (on, off; §6.9) and **Square tiles** (on, off; `o` too, M2 design §11.7). `↑` and `↓`, or a row's number, choose a row, and `←` and `→`, `Enter` or a click change it. Time runs on behind it, as behind a menu, and `Esc` closes it. Look 8 adds the bell and focus (#309).
+  - **The settings are saved** (#307) in `settings.ron` in the game's folder, each time the player changes a row or presses `o`, and read at start. They're the player's, never the world's: a save or replay looks the same on any computer. Only what the player has changed is written, so a later version's new default still reaches a row they never touched. A flag lasts only for its run and isn't saved: `--ascii`, `--theme` and `--no-motion` win over the file for that run. A file the game can't read is left as it is and the game starts on the defaults, saying "Couldn't read the settings: …"; a theme file it names that no longer loads falls back to the default the same way. A field the game doesn't know, from a later version, is passed over. Without a game's folder (no home folder), the settings last only until the game is closed.
+  - **They carry everywhere:** over a load, and back to the title screen and into the next world.
   - **Saves** (v32) go in its `saves` folder: `quicksave.tspr`, `autosave-1.tspr` (the newest) to `autosave-3.tspr`, and each save by name as its name, with any character a file name can't hold on some system made a `-`, the dots and spaces Windows drops from a name's end left off, and a `-` after a name Windows keeps for a device (`con`, `lpt1`). The game says a save's name as it's stored, which is the name the load list shows. A save is written beside its file and then put in its place, so one cut short never breaks a good one.
-- **Command-line flags:** `--seed <n>`, `--preset <file>`, `--data <dir>`, `--ascii`, `--theme <file>` (v34; not with `--ascii`), `--replay <file>`, `--no-motion` (#306: the game starts with motion off, §6.9). `--seed`, `--preset` and `--data` make a new world, so each is refused with `--replay` (v35). M2 adds `--lab`, `--load <save>`, and `--fast-forward <hours>` with `--save <name>` (M2 design §16). `--version` prints the version and the commit the game was built from, as `terra-sprites 0.1.0 (cc96347)`, and stops (2026-10-08).
+- **Command-line flags:** `--seed <n>`, `--preset <file>`, `--data <dir>`, `--ascii` (#307: the ASCII glyph set), `--theme <file>` (v34; from #307 it can go with `--ascii`), `--replay <file>`, `--no-motion` (#306: the game starts with motion off, §6.9). The look's flags last for the run, over the saved settings (#307). `--seed`, `--preset` and `--data` make a new world, so each is refused with `--replay` (v35). M2 adds `--lab`, `--load <save>`, and `--fast-forward <hours>` with `--save <name>` (M2 design §16). `--version` prints the version and the commit the game was built from, as `terra-sprites 0.1.0 (cc96347)`, and stops (2026-10-08).
 
 ### 6.8 UI architecture
 

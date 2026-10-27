@@ -57,7 +57,7 @@ The number that, together with a world config and a data pack, determines a new 
 
 **World config**:
 The settings a new world is made from, such as the map's size. A **preset** is a file that holds one.
-_Avoid_: settings, options
+_Avoid_: settings (on its own: the settings screen is the player's choice of how the game looks), options
 
 ### Objects
 
@@ -831,7 +831,7 @@ _Avoid_: log level, view
 
 **Colour mode**:
 What colours a sprite on the map: its strongest drive once one is above half (each drive's colour is the theme's), plain, its own colour, or lineage (M2), which marks the selected sprite's lineage and grays the rest. `b` goes to the next.
-_Avoid_: tint, palette
+_Avoid_: tint, palette (that's a theme's colours)
 
 **Help screen**:
 The overlay `?` opens, in pages: the World page, every key grouped, the colour, emote and lineage legends, and the game's folder for its files; the Inspector page, the inspector's keys and the open tab's legend; and a page each for the sprite list, the population graph and the family tree. It opens at the page for where the player is, and typing in it searches every page (#303).
@@ -881,15 +881,27 @@ _Avoid_: icon, bubble, flash
 What the map view draws for a tile, named by meaning (such as grass terrain) rather than by character.
 
 **Theme**:
-A mapping from semantic tiles to glyphs and colours, and from each text role to a style; it may also give the panel shades. Two are built in; the player's own go in the themes folder and are picked with `Ctrl+T`.
+A mapping from semantic tiles to glyphs and colours, and from each text role to a style; it may also give the panel shades. It's a glyph set and a palette, chosen apart (#307): the built-in ones, or a theme file of the player's own from the themes folder, picked on the settings screen as either or both.
 _Avoid_: skin
+
+**Glyph set** (#307):
+The characters a theme draws with: the map's, the Cursor's, the emotes', the glass's, the stars' and the graph's blocks. Two are built in, CP437 and ASCII (`--ascii`).
+_Avoid_: font, charset, tileset (that's the Tiles milestone's)
+
+**Palette** (#307):
+The rest of a theme: the colours, bold and reverse video of each glyph, the drives', the lineage's and the graph's colours, the text roles, the attention marker, the panel shades and motion's colours. Four are built in: default, high contrast, colour-blind and mono, which has no colour at all and is where `NO_COLOR` starts the game. The settings screen calls it **Colours**.
+_Avoid_: colour scheme, colour mode (that's which colours a sprite takes, `b`), command palette (that's `:`'s box)
+
+**Settings screen** (#307):
+The box `Ctrl+T` opens, of how the game looks and feels, a row each: the glyph set, the palette, motion and square tiles. What the player changes there is saved in `settings.ron` in the game's folder, never in a world save.
+_Avoid_: options, preferences, config (that's the world config)
 
 **Text role** (#302):
 What a piece of the screen's text is for, which the theme styles: a heading, muted (minor) text, good (a gain, or a reward felt), bad (a loss, or a punishment felt), a key in a hint, selected (what's chosen, such as the open tab), or a spot (what a tooltip can explain, and the name of a log line's sprite). Colour never carries a meaning alone: the signs, arrows and capitals stay.
 _Avoid_: colour scheme, highlight (for a role)
 
 **Panel shade** (#302):
-The background a theme may give the inspector and the event log, a little lighter than the terminal's black, with their title rows lighter again, in place of lines between the panels. A theme without shades, such as ASCII, draws a line instead.
+The background a palette may give the inspector and the event log, a little lighter than the terminal's black, with their title rows lighter again, in place of lines between the panels. A palette without shades, such as high contrast or mono, draws a line instead.
 _Avoid_: border, frame, box (pop-ups have boxes; the panels don't)
 
 **Motion** (#306):
