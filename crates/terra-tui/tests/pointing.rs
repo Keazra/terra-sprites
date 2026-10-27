@@ -37,7 +37,9 @@ struct Tooltip {
 }
 
 /// The tooltip beside the pointer at `pointer` on `screen`, if one is
-/// drawn there: a box with a corner diagonally next to it.
+/// drawn there: a box with a corner diagonally next to it, or, where
+/// there's no room for one beside it, a box across its column just below
+/// or above it (#305).
 fn tooltip(screen: &Buffer, pointer: Position) -> Option<Tooltip> {
     let at = |x: i32, y: i32| {
         let (x, y) = (u16::try_from(x).ok()?, u16::try_from(y).ok()?);
@@ -86,6 +88,26 @@ fn tooltip(screen: &Buffer, pointer: Position) -> Option<Tooltip> {
         (
             x + 1,
             run(y - 2, -1, &|along| is(x + 1, along, "┌"))?,
+            right,
+            y - 1,
+        )
+    } else if let (Some(left), Some(right)) = (
+        run(x, -1, &|along| is(along, y + 1, "┌")),
+        run(x, 1, &|along| is(along, y + 1, "┐")),
+    ) {
+        (
+            left,
+            y + 1,
+            right,
+            run(y + 2, 1, &|along| is(left, along, "└"))?,
+        )
+    } else if let (Some(left), Some(right)) = (
+        run(x, -1, &|along| is(along, y - 1, "└")),
+        run(x, 1, &|along| is(along, y - 1, "┘")),
+    ) {
+        (
+            left,
+            run(y - 2, -1, &|along| is(left, along, "┌"))?,
             right,
             y - 1,
         )
@@ -999,4 +1021,61 @@ fn the_wheel_on_the_debug_overlay_over_the_inspector_scrolls_no_tab() {
     let below = Position::new(on_the_box.x, inspector.bottom() - 1);
     apply(&mut app, &world, wheel(below));
     assert!(app.tab_scroll() > 0, "below it, the tab scrolls");
+}
+
+/// Each cell of `screen` drawn in the spot colour (design §6.2).
+fn spot_cells(screen: &Buffer) -> Vec<Position> {
+    let spot = Theme::cp437().text().spot.fg.expect("a colour");
+    screen
+        .area
+        .positions()
+        .filter(|&cell| screen[cell].fg == spot)
+        .collect()
+}
+
+/// Says where a cell drawn in the spot colour on a `size` screen opens no
+/// tooltip when the pointer is on it, a cell at a time.
+fn without_a_tooltip(app: &mut App, world: &World, size: Size) -> Vec<Position> {
+    let cells = spot_cells(&render_on(app, world, size));
+    assert!(!cells.is_empty(), "something to point at at {size:?}");
+    cells
+        .into_iter()
+        .filter(|&cell| {
+            let said = pointing_at(app, world, size, cell);
+            !said.is_some_and(|said| !said.name.is_empty() && !said.area.contains(cell))
+        })
+        .collect()
+}
+
+#[test]
+fn on_a_screen_short_of_room_every_spot_still_says_what_it_is() {
+    // Under 100 columns, with the inspector open over the map, and short
+    // of rows, where a whole tooltip doesn't fit beside much of what can
+    // be pointed at (#305).
+    for (size, open) in [
+        (Size::new(60, 30), true),
+        (Size::new(80, 24), true),
+        (Size::new(100, 10), false),
+        (Size::new(100, 12), false),
+    ] {
+        for tab in [Tab::Body, Tab::Chem, Tab::Genome] {
+            let (world, mut app, _) = selected(size, tab);
+            if open {
+                apply(&mut app, &world, Action::Inspector);
+                assert!(app.inspector_open());
+            }
+            let missing = without_a_tooltip(&mut app, &world, size);
+            assert!(missing.is_empty(), "{size:?} {tab:?}: {missing:?}");
+        }
+    }
+    // With no room for the inspector, a line of the event log is as wide
+    // as the screen.
+    for width in [24, 30, 40] {
+        let size = Size::new(width, 30);
+        let world = field(&[], &[at(2, 2)]);
+        let mut app = sized_app(&world, Theme::cp437(), size);
+        app.record(&[grew_up(sprite_on(&world, at(2, 2)))], &world);
+        let missing = without_a_tooltip(&mut app, &world, size);
+        assert!(missing.is_empty(), "{size:?}: {missing:?}");
+    }
 }
