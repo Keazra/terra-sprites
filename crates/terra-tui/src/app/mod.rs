@@ -872,6 +872,11 @@ impl App {
             self.since_autosave += elapsed;
         }
         let now = self.running_for;
+        // The Cursor goes to the tile under a still pointer once the view
+        // has panned there (design §6.9).
+        if self.motion.pan_ended(now, self.clock.speed()) {
+            self.repoint();
+        }
         self.motion.forget_finished(now);
         // A pop-up opening or closing, against the frame last drawn (design
         // §6.9).

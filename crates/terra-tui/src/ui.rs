@@ -528,7 +528,7 @@ fn draw_stars(buf: &mut Buffer, inner: Rect, app: &App) {
     // In tiles, so they follow the zoom: each in its tile's first cell.
     let width = app.tile_width();
     let view = Size::new(inner.width.div_ceil(width), inner.height);
-    for (depth, at) in space::stars(view, app.viewport(), app.drift()) {
+    for (depth, at) in space::stars(view, app.shown_viewport(), app.drift()) {
         let cell = Position::new(inner.x + at.x * width, inner.y + at.y);
         if inner.contains(cell) && app.place_from(inner.as_position(), cell) == Place::Space {
             let star = app.theme.star(depth);
@@ -618,13 +618,13 @@ fn heading_for(app: &App, world: &World) -> Option<Pos> {
 
 /// The tile of the one thing the selected sprite attends to (design §5.3):
 /// where the map shades the Attention marker.
-fn attended_by(app: &App, world: &World) -> Option<Pos> {
+pub(crate) fn attended_by(app: &App, world: &World) -> Option<Pos> {
     world.sprite(marked(app)?)?.attending_to()
 }
 
 /// The selected sprite, if it's living and the policy lets the map mark
 /// where it's heading and what it attends to (design §6.4).
-fn marked(app: &App) -> Option<EntityId> {
+pub(crate) fn marked(app: &App) -> Option<EntityId> {
     match app.selection() {
         Some(Selection::Living(id)) if app.can_view(Panel::Markers, Subject::Sprite(id)) => {
             Some(id)

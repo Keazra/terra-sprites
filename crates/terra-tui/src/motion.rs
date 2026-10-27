@@ -1,7 +1,7 @@
 //! Motion (design §6.9, #306): small effects drawn over the finished screen
 //! in real time, so the eye goes to what just happened.
 //!
-//! How it fits together, for each effect to come:
+//! How it fits together:
 //!
 //! - **What the app keeps** is [`Motion`]: the switch; how each sprite and
 //!   egg was drawn after the last ticks taken in ([`Seen`]), since the world
@@ -9,9 +9,16 @@
 //!   playing; the tab sweeping in, which `App::open` starts; what filled
 //!   the screen at the last frame, which the app's clock compares with
 //!   what does now to see a pop-up open or close, and where the last frame
-//!   drew the pop-ups that closed; and the selected sprite's drives' bars,
-//!   noted as ticks are taken in. Each effect keeps when it began, in the
-//!   app's `running_for`. Nothing is stepped as it's drawn (§6.8).
+//!   drew the pop-ups that closed; the selected sprite's drives' bars and
+//!   the tiles it has left, its trail, noted as ticks are taken in; and the
+//!   pan under way. Each effect keeps when it began, in the app's
+//!   `running_for`. Nothing is stepped as it's drawn (§6.8).
+//! - **The pan** is no effect but where the map view is drawn from
+//!   ([`Motion::shown_from`]): the viewport jumps at once, and the map view,
+//!   with everything drawn on it and what the pointer points at, goes by
+//!   where the pan has reached. The Cursor goes to the tile under a still
+//!   pointer only once the pan ends, so the world never hears of the tiles
+//!   between.
 //! - **Drawing** builds each tachyonfx effect afresh every frame and plays
 //!   it once to its age (`play` on the map, `play_over` on the panels), so
 //!   the same app drawn twice draws the same screen. `ui::draw_tiles` calls
@@ -25,7 +32,8 @@
 //!   that's got, fast and then slowing. A loop works out its own phase, in
 //!   whole milliseconds, as the water does.
 //! - **It thins out at 4× and up** ([`thins_out`]): fewer deaths and
-//!   hatchings at once, and shorter, and the bars jump.
+//!   hatchings at once, and shorter, as the trail is, and the bars and the
+//!   view jump.
 //! - **Colours** are the theme's `motion` section's. A fade blends exact
 //!   colours, so a named one is blended as Campbell draws it
 //!   ([`campbell::exact`]), and a tile with no background of its own takes
@@ -35,8 +43,6 @@
 //! - **The same on every computer:** only colour effects that depend on
 //!   nothing but their age, eased by polynomials (`QuadOut`) and blended in
 //!   RGB, and no `sin`, `cos`, `powf` or `exp`.
-//!
-//! Still to come (#306): the trail and the pan, on the map.
 
 use std::collections::{BTreeMap, VecDeque};
 use std::time::Duration;
@@ -47,7 +53,7 @@ use ratatui::style::Color;
 use tachyonfx::{ColorSpace, Effect, EffectTimer, Interpolation, fx};
 use terra_sim::{EntityId, EventKind, Pos, World};
 
-use crate::app::{App, Screen, Tab};
+use crate::app::{App, Origin, Screen, Tab};
 use crate::campbell::{self, FOREGROUND, Rgb};
 use crate::clock::Speed;
 use crate::inspector;
@@ -96,6 +102,20 @@ const POP_UP: Duration = Duration::from_millis(150);
 
 /// How long a drive's bar takes to ease to its new value (design §6.9).
 const BAR: Duration = Duration::from_millis(400);
+
+/// How long each tile of the trail takes to fade (design §6.9): half as
+/// long at 4× and up.
+const TRAIL: Duration = Duration::from_millis(1500);
+
+/// The most tiles the trail tints at once (design §6.9).
+const TRAIL_TILES: usize = 8;
+
+/// How long the pan takes (design §6.9).
+const PAN: Duration = Duration::from_millis(300);
+
+/// How many tiles, across or down, the view may move to centre on a sprite
+/// and still jump rather than pan (design §6.9).
+const PAN_PAST: i32 = 2;
 
 /// Whether motion thins out at `speed` (design §6.9): at 4× and up, which
 /// takes in Lab's faster speeds.
@@ -168,6 +188,41 @@ pub(crate) struct Motion {
     closed: Option<(Vec<Rect>, Duration)>,
     /// The selected sprite's drives' bars, while it's in the world.
     bars: Option<Bars>,
+    /// The selected sprite's trail, while it's in the world.
+    trail: Option<Trail>,
+    /// The map view panning to where the viewport is, until the app's
+    /// clock sees it end.
+    pan: Option<Pan>,
+}
+
+/// The map view panning from where it was drawn, `from`, to wherever the
+/// viewport is, from when it began (design §6.9). The viewport may move
+/// on while it pans, as Track follows a sprite, and the pan goes there.
+#[derive(Debug, Clone, Copy)]
+struct Pan {
+    from: Origin,
+    began: Duration,
+}
+
+/// The tiles the selected sprite has just left, as the screen saw it move
+/// from frame to frame (design §6.9).
+#[derive(Debug, Clone)]
+struct Trail {
+    sprite: EntityId,
+    /// The tile it was on when last seen.
+    on: Pos,
+    /// The tiles it has left and not yet faded, oldest first: each tile
+    /// once, as it last left it.
+    left: VecDeque<Left>,
+}
+
+/// A tile the selected sprite left, from when it left it, fading for as
+/// long as it lasts.
+#[derive(Debug, Clone, Copy)]
+struct Left {
+    tile: Pos,
+    began: Duration,
+    lasts: Duration,
 }
 
 /// The selected sprite's drives' bars on the Body tab, by the drive's name,
@@ -264,6 +319,8 @@ impl Motion {
             opened: None,
             closed: None,
             bars: None,
+            trail: None,
+            pan: None,
         }
     }
 
@@ -283,6 +340,8 @@ impl Motion {
             self.opened = None;
             self.closed = None;
             self.bars = None;
+            self.trail = None;
+            self.pan = None;
         }
     }
 
@@ -361,6 +420,9 @@ impl Motion {
     pub(crate) fn forget_finished(&mut self, now: Duration) {
         self.moments
             .retain(|moment| age(moment.began, now) < moment.lasts);
+        if let Some(trail) = &mut self.trail {
+            trail.left.retain(|left| age(left.began, now) < left.lasts);
+        }
         self.sweep = self.sweeping(now);
         self.opened = self.opening(now);
         if self.closing(now).is_none() {
@@ -428,6 +490,110 @@ impl Motion {
     /// levels at once.
     pub(crate) fn forget_bars(&mut self) {
         self.bars = None;
+    }
+
+    /// Notes the tile the selected sprite is on, after the ticks just
+    /// taken in at `now` and `speed`: `sprite`, with its ID, or none if no
+    /// sprite in the world is selected. A tile it has left since it was
+    /// last seen joins its trail, the newest of at most `TRAIL_TILES`
+    /// (design §6.9).
+    pub(crate) fn note_trail(
+        &mut self,
+        sprite: Option<(EntityId, Pos)>,
+        now: Duration,
+        speed: Speed,
+    ) {
+        let Some((id, on)) = sprite.filter(|_| self.on) else {
+            self.trail = None;
+            return;
+        };
+        match &mut self.trail {
+            Some(trail) if trail.sprite == id => {
+                if trail.on == on {
+                    return;
+                }
+                let left = std::mem::replace(&mut trail.on, on);
+                trail.left.retain(|old| old.tile != left && old.tile != on);
+                trail.left.push_back(Left {
+                    tile: left,
+                    began: now,
+                    lasts: at_speed(TRAIL, speed),
+                });
+                while trail.left.len() > TRAIL_TILES {
+                    trail.left.pop_front();
+                }
+            }
+            _ => {
+                self.trail = Some(Trail {
+                    sprite: id,
+                    on,
+                    left: VecDeque::new(),
+                });
+            }
+        }
+    }
+
+    /// Forgets the trail, as another sprite is selected (design §6.9).
+    pub(crate) fn forget_trail(&mut self) {
+        self.trail = None;
+    }
+
+    /// Notes the view centred on a sprite at `now`: the viewport moved
+    /// from `was` to `to` while the map view was drawn from `drawn`. Moved
+    /// more than `PAN_PAST` tiles, the map view pans there from where it's
+    /// drawn, a pan already under way included; a shorter move leaves a pan
+    /// under way to go on there, and otherwise jumps (design §6.9).
+    pub(crate) fn centred(&mut self, (was, drawn, to): (Origin, Origin, Origin), now: Duration) {
+        if self.on && (to.x - was.x).abs().max((to.y - was.y).abs()) > PAN_PAST {
+            self.pan = Some(Pan {
+                from: drawn,
+                began: now,
+            });
+        }
+    }
+
+    /// Ends the pan under way, if one is, as the view jumps: scrolled, the
+    /// tiles squared, or the screen a new size (design §6.9).
+    pub(crate) fn stop_pan(&mut self) {
+        self.pan = None;
+    }
+
+    /// Where the map view is drawn from at `now` and `speed`, the viewport
+    /// at `viewport`: where the pan has reached, in whole tiles, while one
+    /// is under way, and the viewport otherwise (design §6.9).
+    pub(crate) fn shown_from(&self, viewport: Origin, now: Duration, speed: Speed) -> Origin {
+        let Some(pan) = self.panning(now, speed) else {
+            return viewport;
+        };
+        let way = eased(age(pan.began, now), PAN);
+        let along = |from: i32, to: i32| from + ((to - from) as f32 * way).round() as i32;
+        Origin {
+            x: along(pan.from.x, viewport.x),
+            y: along(pan.from.y, viewport.y),
+        }
+    }
+
+    /// The pan under way at `now` and `speed`, if one is: at 4× and up,
+    /// the view jumps instead (design §6.9).
+    fn panning(&self, now: Duration, speed: Speed) -> Option<Pan> {
+        self.pan
+            .filter(|pan| !thins_out(speed) && age(pan.began, now) < PAN)
+    }
+
+    /// Whether a pan is under way at `now` and `speed`.
+    pub(crate) fn pans(&self, now: Duration, speed: Speed) -> bool {
+        self.panning(now, speed).is_some()
+    }
+
+    /// Whether the pan has just ended by `now` and `speed`, which forgets
+    /// it: the moment the Cursor goes to the tile under a still pointer
+    /// (design §6.9).
+    pub(crate) fn pan_ended(&mut self, now: Duration, speed: Speed) -> bool {
+        let ended = self.pan.is_some() && !self.pans(now, speed);
+        if ended {
+            self.pan = None;
+        }
+        ended
     }
 
     /// How many blocks drive `drive`'s bar fills on sprite `id`'s Body tab
@@ -524,7 +690,7 @@ pub(crate) struct Bare {
 
 /// Plays the map's motion over the tiles `ui::draw_tiles` drew in `inner`,
 /// `bare` among them, before the marks go over them (design §6.9): the
-/// water, and then each death and hatching, oldest first.
+/// water, the trail, and then each death and hatching, oldest first.
 pub(crate) fn play_on_map(buf: &mut Buffer, inner: Rect, app: &App, world: &World, bare: &[Bare]) {
     if !app.motion() {
         return;
@@ -538,6 +704,7 @@ pub(crate) fn play_on_map(buf: &mut Buffer, inner: Rect, app: &App, world: &Worl
     };
     let now = app.running_for();
     shimmer(buf, &on, now);
+    trail(buf, &on, now);
     for moment in app.motion_kept().playing(now, app.clock.speed()) {
         let age = age(moment.began, now);
         match moment.happening {
@@ -698,6 +865,35 @@ fn shimmer(buf: &mut Buffer, on: &OnMap, now: Duration) {
         let phase = (step % steps + steps - along) % steps;
         let shade = WAVE[phase as usize];
         buf[spot.cell].set_fg(blend(from, to, shade));
+    }
+}
+
+/// Tints the tiles the selected sprite has just left, each fading back to
+/// its own background from when it was left (design §6.9): on any tile but
+/// the Cursor's and the attended one, which have looks of their own, nor
+/// the sprite's own, which leaves the trail as it steps back onto it. It
+/// asks the policy first, as the map's markers do (§6.4).
+fn trail(buf: &mut Buffer, on: &OnMap, now: Duration) {
+    let Some(trail) = &on.app.motion_kept().trail else {
+        return;
+    };
+    if ui::marked(on.app) != Some(trail.sprite) {
+        return;
+    }
+    let own_looks = [on.app.shown_cursor(), ui::attended_by(on.app, on.world)];
+    let dark = campbell::rgb(on.look.dark).unwrap_or(campbell::BACKGROUND);
+    let tint = campbell::exact(on.look.trail, dark);
+    for left in &trail.left {
+        let age = age(left.began, now);
+        if age >= left.lasts || own_looks.contains(&Some(left.tile)) {
+            continue;
+        }
+        let back = eased(age, left.lasts);
+        for cell in on.cells(left.tile) {
+            let own = campbell::exact(buf[cell].bg, dark);
+            let bg = ColorSpace::Rgb.lerp(&tint, &own, back);
+            play(fx::paint_bg(bg, timer(left.lasts)), age, buf, cell);
+        }
     }
 }
 

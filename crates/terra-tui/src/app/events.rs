@@ -48,6 +48,7 @@ impl App {
         self.take_in_tick(events, world);
         self.note_looks(world);
         self.note_bars(world);
+        self.note_trail(world);
     }
 
     /// Takes in one tick's `events`, as `record` says, but for noting how
@@ -345,6 +346,7 @@ impl App {
         }
         self.note_looks(world);
         self.note_bars(world);
+        self.note_trail(world);
     }
 
     /// The Cursor's touch on sprite `id`, on `tick`: its emote, and a line

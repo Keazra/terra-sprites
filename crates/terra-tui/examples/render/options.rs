@@ -66,8 +66,9 @@ usage: render title [options] -o <file>
   --cursor             show the Cursor, following the tracked sprite; by
                        default it's out of the picture
   --tab <name>         the inspector tab: body, brain, chem, genome or world
-  --no-motion          draw it without motion: the water still, and no
-                       flash where a sprite dies
+  --no-motion          draw it without motion: the water still, no trail
+                       behind the sprite tracked, and no flash where a
+                       sprite dies
   --ascii              draw with the ascii theme
   --theme <file>       draw with a theme of your own
   --font <file.ttf>    draw with this font instead of Cascadia Mono

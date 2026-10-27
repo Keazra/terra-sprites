@@ -5,6 +5,7 @@
 //! keep their pictures; these turn it on.
 
 mod common;
+use common::screen::{HUNGRY_GENOME, SPEED_10, one_sprite_among};
 use common::{
     SCORCHED, SCREEN, WorldBuilder, app_on, apply, at, ball_world, cell_of_text, died, field,
     frame, frame_on, lone_line, pack_changing, pointer_on, render, scratch_folder, select,
@@ -18,7 +19,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Rect, Size};
 use ratatui::style::Color;
 use ratatui::{Terminal, backend::TestBackend};
-use terra_sim::{DeathCause, EntityId, Event, EventKind, Pos, Terrain, World};
+use terra_sim::{DeathCause, EntityId, Event, EventKind, Pos, ScriptedAction, Terrain, World};
 use terra_tui::app::{App, ColourMode, Screen, Tab, Ticks};
 use terra_tui::args::{Args, USAGE};
 use terra_tui::campbell::{self, FOREGROUND};
@@ -715,6 +716,17 @@ fn the_same_app_drawn_twice_draws_the_same_screen() {
     app.animate(ms(60));
     let screen = render(&app, &after);
     assert_eq!(render(&app, &after), screen);
+    // The trail fading, and the view panning.
+    let (worlds, id) = walk(&[at(2, 2), at(3, 2)]);
+    let mut app = following(&worlds, id);
+    app.record(&[], &worlds[1]);
+    app.animate(ms(400));
+    assert_eq!(render(&app, &worlds[1]), render(&app, &worlds[1]));
+    let world = wide();
+    let mut app = moving(&world);
+    apply(&mut app, &world, Action::SelectNext);
+    app.animate(ms(120));
+    assert_eq!(render(&app, &world), render(&app, &world));
 }
 
 // A tab opened (design §6.9).
@@ -1369,4 +1381,529 @@ fn a_bar_snaps_on_first_sight_on_a_new_selection_with_motion_off_and_at_4x() {
         let (blocks, _) = hunger_bar(&frame(&mut app, &after, Duration::ZERO));
         assert_eq!(blocks, 8, "4x: {faster}");
     }
+}
+
+// The trail (design §6.9).
+
+/// The worlds a sprite walking through `tiles` on a 10×6 field leaves,
+/// one a tile, as the screen sees it after each frame's ticks; and its
+/// ID, the same in each.
+fn walk(tiles: &[Pos]) -> (Vec<World>, EntityId) {
+    let worlds: Vec<World> = tiles.iter().map(|&tile| field(&[], &[tile])).collect();
+    let id = sprite_on(&worlds[0], tiles[0]);
+    for (world, &tile) in worlds.iter().zip(tiles) {
+        assert_eq!(sprite_on(world, tile), id, "one sprite, walking");
+    }
+    (worlds, id)
+}
+
+/// An app with motion on that has selected the sprite walking in `walk`,
+/// the Cursor out of its way, and taken in the first of `worlds`.
+fn following(worlds: &[World], id: EntityId) -> App {
+    let mut app = moving(&worlds[0]);
+    cursor_to(&mut app, &worlds[0], at(9, 4));
+    select(&mut app, &worlds[0], id);
+    frame(&mut app, &worlds[0], ms(1000));
+    app.record(&[], &worlds[0]);
+    app
+}
+
+/// Whether each cell of `tile` on `screen` is tinted with the trail's
+/// colour, as a tile just left is.
+fn trailing(app: &App, screen: &Buffer, tile: Pos) -> bool {
+    let trail = app.theme.motion().trail;
+    cells(app, tile)
+        .iter()
+        .all(|&at_cell| screen[at_cell].bg == trail)
+}
+
+/// Whether no cell of `tile` on `screen` has a background of its own, as
+/// grass the trail has left.
+fn untinted(app: &App, screen: &Buffer, tile: Pos) -> bool {
+    cells(app, tile)
+        .iter()
+        .all(|&at_cell| screen[at_cell].bg == Color::Reset)
+}
+
+#[test]
+fn the_tiles_the_selected_sprite_leaves_keep_a_tint_that_fades() {
+    let (worlds, id) = walk(&[at(2, 2), at(3, 2), at(4, 2)]);
+    let mut app = following(&worlds, id);
+    app.record(&[], &worlds[1]);
+    app.animate(ms(500));
+    app.record(&[], &worlds[2]);
+    let screen = frame(&mut app, &worlds[2], Duration::ZERO);
+    // Just left: the trail's colour.
+    assert!(trailing(&app, &screen, at(3, 2)));
+    // Left half a second before: on its way back to the dark under the
+    // grass, quick at first, so past half way a third of the way in.
+    let (Color::Rgb(tint, ..), Color::Rgb(dark, ..)) =
+        (app.theme.motion().trail, app.theme.motion().dark)
+    else {
+        panic!("exact colours")
+    };
+    let Color::Rgb(older, ..) = screen[cell(&app, at(2, 2))].bg else {
+        panic!("{:?}", screen[cell(&app, at(2, 2))].bg)
+    };
+    assert!(older > dark && older < (tint + dark) / 2, "{older:#x}");
+    // The sprite's own tile and those it hasn't been on keep their look.
+    assert_eq!(screen[cell(&app, at(4, 2))].bg, Color::Reset);
+    assert!(untinted(&app, &screen, at(5, 2)));
+    // Each tile is over 1.5 s after it was left.
+    let screen = frame(&mut app, &worlds[2], ms(1000));
+    assert!(untinted(&app, &screen, at(2, 2)));
+    assert!(!untinted(&app, &screen, at(3, 2)));
+    let screen = frame(&mut app, &worlds[2], ms(500));
+    assert!(untinted(&app, &screen, at(3, 2)));
+}
+
+#[test]
+fn at_4x_a_trail_tile_fades_in_half_the_time() {
+    let (worlds, id) = walk(&[at(2, 2), at(3, 2)]);
+    let mut app = following(&worlds, id);
+    at_4x(&mut app);
+    app.record(&[], &worlds[1]);
+    let fading = frame(&mut app, &worlds[1], ms(700));
+    assert!(!untinted(&app, &fading, at(2, 2)));
+    let over = frame(&mut app, &worlds[1], ms(50));
+    assert!(untinted(&app, &over, at(2, 2)));
+}
+
+#[test]
+fn the_trail_tints_at_most_eight_tiles_the_newest() {
+    let tiles: Vec<Pos> = (0..10).map(|x| at(x, 2)).collect();
+    let (worlds, id) = walk(&tiles);
+    let mut app = following(&worlds, id);
+    for world in &worlds[1..] {
+        app.record(&[], world);
+    }
+    let screen = frame(&mut app, &worlds[9], Duration::ZERO);
+    let tinted: Vec<Pos> = tiles[..9]
+        .iter()
+        .copied()
+        .filter(|&tile| !untinted(&app, &screen, tile))
+        .collect();
+    assert_eq!(tinted, tiles[1..9]);
+}
+
+#[test]
+fn the_trail_leaves_the_sprite_s_tile_and_the_cursor_s_their_own_looks() {
+    // Back onto a tile it left, and the Cursor on another.
+    let (worlds, id) = walk(&[at(2, 2), at(3, 2), at(4, 2), at(3, 2)]);
+    let mut app = following(&worlds, id);
+    for world in &worlds[1..] {
+        app.record(&[], world);
+    }
+    let screen = frame(&mut app, &worlds[3], Duration::ZERO);
+    assert!(trailing(&app, &screen, at(4, 2)));
+    assert!(trailing(&app, &screen, at(2, 2)));
+    let own = cell(&app, at(3, 2));
+    assert_eq!(screen[own].bg, Color::Reset, "the sprite's own tile");
+    cursor_to(&mut app, &worlds[3], at(4, 2));
+    let screen = frame(&mut app, &worlds[3], Duration::ZERO);
+    assert!(untinted(&app, &screen, at(4, 2)), "the Cursor's tile");
+}
+
+#[test]
+fn the_trail_leaves_the_attended_tile_its_shade() {
+    // The sprite stood on a berry, and attends to it from where it went.
+    let berry = [(at(0, 1), "berry")];
+    let before = WorldBuilder::grass(10, 5)
+        .objects(&berry)
+        .genes(&[(at(0, 1), HUNGRY_GENOME)])
+        .seed(7)
+        .build();
+    let (after, _) = one_sprite_among(HUNGRY_GENOME, &berry, &[], 1);
+    let id = before.sprites().next().expect("the sprite").id();
+    let attended = after.sprite(id).and_then(|sprite| sprite.attending_to());
+    assert_eq!(attended, Some(at(0, 1)));
+    let mut app = following(&[before], id);
+    app.record(&[], &after);
+    let screen = frame(&mut app, &after, Duration::ZERO);
+    let shaded = screen[cell(&app, at(0, 1))].bg;
+    assert_eq!(shaded, app.theme.attention_marker());
+}
+
+#[test]
+fn the_trail_goes_with_a_new_selection_and_the_sprite_s_death() {
+    let tiles = [at(2, 2), at(7, 4)];
+    let worlds = [field(&[], &tiles), field(&[], &[at(3, 2), at(7, 4)])];
+    let (one, two) = (
+        sprite_on(&worlds[0], at(2, 2)),
+        sprite_on(&worlds[0], at(7, 4)),
+    );
+    let mut app = following(&worlds, one);
+    app.record(&[], &worlds[1]);
+    let screen = frame(&mut app, &worlds[1], Duration::ZERO);
+    assert!(trailing(&app, &screen, at(2, 2)));
+    select(&mut app, &worlds[1], two);
+    let screen = frame(&mut app, &worlds[1], Duration::ZERO);
+    assert!(untinted(&app, &screen, at(2, 2)));
+    // Selected again, it starts afresh.
+    select(&mut app, &worlds[1], one);
+    let screen = frame(&mut app, &worlds[1], Duration::ZERO);
+    assert!(untinted(&app, &screen, at(2, 2)));
+    // Its death ends it.
+    let mut app = following(&worlds, one);
+    app.record(&[], &worlds[1]);
+    let gone = field(&[], &[at(7, 4)]);
+    app.record(&deaths(&[one]), &gone);
+    let screen = frame(&mut app, &gone, Duration::ZERO);
+    assert!(untinted(&app, &screen, at(2, 2)));
+}
+
+/// A policy that shows everything but the map's markers.
+struct NoMarkers;
+
+impl InfoPolicy for NoMarkers {
+    fn can_view(&self, panel: Panel, _subject: Subject) -> bool {
+        panel != Panel::Markers
+    }
+}
+
+#[test]
+fn the_trail_asks_the_policy_first_and_is_gone_with_motion_off() {
+    // Design §6.4: it tells the player where the selected sprite has been,
+    // as the markers tell where it's heading, and asks `Markers`.
+    let (worlds, id) = walk(&[at(2, 2), at(3, 2)]);
+    for hidden in [true, false] {
+        let mut app = following(&worlds, id);
+        if hidden {
+            app.set_policy(NoMarkers);
+        } else {
+            app.set_motion(false);
+        }
+        app.record(&[], &worlds[1]);
+        let screen = frame(&mut app, &worlds[1], Duration::ZERO);
+        assert!(untinted(&app, &screen, at(2, 2)), "hidden: {hidden}");
+    }
+}
+
+#[test]
+fn a_sprite_walking_in_play_leaves_a_trail_behind_it() {
+    let start = at(1, 2);
+    let mut world = WorldBuilder::grass(12, 5)
+        .genes(&[(start, SPEED_10)])
+        .scripts(&[(
+            start,
+            ScriptedAction::Wander {
+                destination: at(10, 2),
+            },
+        )])
+        .build();
+    let id = sprite_on(&world, start);
+    let mut app = following(std::slice::from_ref(&world), id);
+    let mut been = vec![start];
+    for _ in 0..4 {
+        common::tick(&mut app, &mut world);
+        app.animate(ms(100));
+        been.push(world.sprite(id).expect("walking").pos());
+    }
+    let here = been.pop().expect("where it is");
+    assert_ne!(here, start, "it walked");
+    let screen = frame(&mut app, &world, Duration::ZERO);
+    for tile in been.into_iter().filter(|&tile| tile != here) {
+        assert!(!untinted(&app, &screen, tile), "{tile:?}");
+    }
+}
+
+// The pan (design §6.9).
+
+/// A grass world 150 tiles across and 12 down, wider than the map view,
+/// with a sprite near its west end, #1, one near its east end, #2, and #3
+/// a little way east of #1. The view
+/// starts on the middle of the map, from column 48, and centring on the
+/// sprite in the west takes it to column -13, as far past the wall as it
+/// goes.
+fn wide() -> World {
+    WorldBuilder::grass(150, 12)
+        .starters(&[at(10, 5), at(140, 5), at(13, 5)])
+        .build()
+}
+
+/// The map view's cells on a 100×30 screen.
+fn map_view() -> Rect {
+    ui::areas(SCREEN).tiles
+}
+
+/// Whether `shown` and `plain` draw the same map view on a 100×30 screen.
+fn same_map_view(shown: &Buffer, plain: &Buffer) -> bool {
+    same_map_view_on(shown, plain, SCREEN)
+}
+
+/// Whether `shown` and `plain` draw the same map view on a screen of
+/// `size`.
+fn same_map_view_on(shown: &Buffer, plain: &Buffer, size: Size) -> bool {
+    ui::areas(size)
+        .tiles
+        .positions()
+        .all(|cell| shown[cell] == plain[cell])
+}
+
+/// Scrolls `app` by `dx` tiles across, as the arrows do.
+fn scroll_by(app: &mut App, world: &World, dx: i32) {
+    apply(app, world, Action::Scroll { dx, dy: 0 });
+}
+
+#[test]
+fn the_view_pans_to_a_sprite_far_away_quickly_at_first_and_then_slowing() {
+    let world = wide();
+    let (mut on, mut off) = twins(&world);
+    assert_eq!(on.viewport().x, 48);
+    both(&mut on, &mut off, &world, Action::SelectNext);
+    // The viewport jumps at once; only the drawing pans.
+    assert_eq!(on.viewport().x, -13);
+    assert_eq!(off.viewport().x, -13);
+    // The Cursor follows #1, so it's drawn on the map with its marks.
+    both(&mut on, &mut off, &world, Action::Follow { at: None });
+    assert_eq!(on.cursor(), at(10, 5));
+    let (shown, plain) = frames(&mut on, &mut off, &world, Duration::ZERO);
+    assert!(!same_map_view(&shown, &plain), "it starts where it was");
+    // Half the 0.3 s in, three quarters of the way, in whole tiles: as the
+    // view is from column 2. Everything on the map moves with it, the
+    // Cursor too.
+    scroll_by(&mut off, &world, 15);
+    let (shown, plain) = frames(&mut on, &mut off, &world, ms(150));
+    assert!(same_map_view(&shown, &plain), "from column 2");
+    // A tenth of a second later, nearly there: past the wall, with the
+    // glass and the stars, from column -11.
+    scroll_by(&mut off, &world, -13);
+    let (shown, plain) = frames(&mut on, &mut off, &world, ms(100));
+    assert!(same_map_view(&shown, &plain), "from column -11");
+    // There at 0.3 s.
+    scroll_by(&mut off, &world, -2);
+    let (shown, plain) = frames(&mut on, &mut off, &world, ms(50));
+    assert!(same_map_view(&shown, &plain), "from column -13");
+    assert_eq!(on.viewport(), off.viewport());
+}
+
+/// Where `symbol` is drawn in the map view on `screen`, if it is.
+fn drawn_at(screen: &Buffer, symbol: &str) -> Option<Position> {
+    map_view()
+        .positions()
+        .find(|&cell| screen[cell].symbol() == symbol)
+}
+
+/// One frame of the game on a 100×30 screen: the app fitted to it, drawn,
+/// its clock moved on 33 ms and a frame's ticks taken in, none of which
+/// changed `world`; and the tiles the world was told the Cursor moved to.
+fn game_frame(app: &mut App, world: &World) -> Vec<Pos> {
+    app.fit(ui::areas(SCREEN));
+    render(app, world);
+    app.animate(ms(33));
+    take_in(app, world);
+    app.take_commands()
+        .into_iter()
+        .filter_map(|command| match command {
+            terra_sim::Command::MoveCursor { tile } => Some(tile),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn the_cursor_goes_to_the_tile_under_a_still_pointer_only_once_the_pan_ends() {
+    // Design §6.5: while sprites can see the Cursor, the world hears of
+    // each tile it moves to, and the tiles the pan passes aren't any.
+    let world = wide();
+    let mut app = moving(&world);
+    apply(&mut app, &world, Action::ToggleVisible);
+    let pointer = pointer_on(&app, at(90, 6));
+    apply(&mut app, &world, Action::Point(pointer));
+    assert_eq!(app.cursor(), at(90, 6));
+    app.take_commands();
+    apply(&mut app, &world, Action::SelectNext);
+    let mut told = app.take_commands();
+    told.retain(|command| matches!(command, terra_sim::Command::MoveCursor { .. }));
+    assert_eq!(told, Vec::new());
+    // Nine frames take it most of the way, the Cursor where it was.
+    for _ in 0..9 {
+        assert_eq!(game_frame(&mut app, &world), Vec::new());
+        assert_eq!(app.cursor(), at(90, 6));
+    }
+    // The pan ends in the tenth, and the Cursor goes under the pointer at
+    // once, where column 90 was: 42 columns into a view from column -13.
+    assert_eq!(game_frame(&mut app, &world), vec![at(29, 6)]);
+    for _ in 0..3 {
+        assert_eq!(game_frame(&mut app, &world), Vec::new());
+    }
+    assert_eq!(app.cursor(), at(29, 6));
+}
+
+#[test]
+fn while_it_pans_the_pointer_and_a_click_go_by_what_s_drawn() {
+    let world = wide();
+    let mut app = moving(&world);
+    apply(&mut app, &world, Action::SelectNext);
+    let screen = frame(&mut app, &world, ms(150));
+    // #3, drawn mid-pan where the view from column 2 has it.
+    let drawn = drawn_at(&screen, "☺").expect("#3 is drawn");
+    let pointer = Position::new(drawn.x + 1, drawn.y + 1);
+    apply(&mut app, &world, Action::Point(pointer));
+    assert_eq!(app.cursor(), at(13, 5));
+    apply(&mut app, &world, Action::left_click(pointer));
+    let third = sprite_on(&world, at(13, 5));
+    assert_eq!(
+        app.selection(),
+        Some(terra_tui::app::Selection::Living(third))
+    );
+}
+
+#[test]
+fn a_pan_under_way_is_taken_on_from_where_it_s_drawn() {
+    // `Tab` again, to #2 in the east, when it's half way to #1 in the west.
+    let world = wide();
+    let (mut on, mut off) = twins(&world);
+    both(&mut on, &mut off, &world, Action::SelectNext);
+    frames(&mut on, &mut off, &world, ms(150));
+    both(&mut on, &mut off, &world, Action::SelectNext);
+    assert_eq!(on.viewport().x, 109);
+    // From column 2, where it had got to, not from where it was going.
+    scroll_by(&mut off, &world, -107);
+    let (shown, plain) = frames(&mut on, &mut off, &world, Duration::ZERO);
+    assert!(same_map_view(&shown, &plain), "from column 2");
+    scroll_by(&mut off, &world, 80);
+    let (shown, plain) = frames(&mut on, &mut off, &world, ms(150));
+    assert!(same_map_view(&shown, &plain), "from column 82");
+}
+
+#[test]
+fn scrolling_the_tiles_squared_and_a_new_screen_size_jump_even_while_it_pans() {
+    let world = wide();
+    // Scrolled by hand, from a still view and from one panning.
+    let (mut on, mut off) = twins(&world);
+    both(&mut on, &mut off, &world, Action::Scroll { dx: 20, dy: 0 });
+    let (shown, plain) = frames(&mut on, &mut off, &world, Duration::ZERO);
+    assert!(same_map_view(&shown, &plain), "scrolled");
+    both(&mut on, &mut off, &world, Action::SelectNext);
+    frames(&mut on, &mut off, &world, ms(100));
+    both(&mut on, &mut off, &world, Action::Scroll { dx: 1, dy: 0 });
+    let (shown, plain) = frames(&mut on, &mut off, &world, Duration::ZERO);
+    assert!(same_map_view(&shown, &plain), "scrolled while it panned");
+    // Tiles squared while it pans.
+    let (mut on, mut off) = twins(&world);
+    both(&mut on, &mut off, &world, Action::SelectNext);
+    frames(&mut on, &mut off, &world, ms(100));
+    both(&mut on, &mut off, &world, Action::Zoom);
+    let (shown, plain) = frames(&mut on, &mut off, &world, Duration::ZERO);
+    assert!(same_map_view(&shown, &plain), "square tiles");
+    // The screen a new size while it pans.
+    let (mut on, mut off) = twins(&world);
+    both(&mut on, &mut off, &world, Action::SelectNext);
+    frames(&mut on, &mut off, &world, ms(100));
+    let bigger = Size::new(120, 30);
+    on.fit(ui::areas(bigger));
+    off.fit(ui::areas(bigger));
+    let (shown, plain) = frames_on(&mut on, &mut off, &world, Duration::ZERO, bigger);
+    assert!(
+        same_map_view_on(&shown, &plain, bigger),
+        "a new screen size"
+    );
+}
+
+#[test]
+fn at_4x_and_with_motion_turned_off_the_view_jumps() {
+    let world = wide();
+    let (mut on, mut off) = twins(&world);
+    at_4x(&mut on);
+    at_4x(&mut off);
+    both(&mut on, &mut off, &world, Action::SelectNext);
+    let (shown, plain) = frames(&mut on, &mut off, &world, Duration::ZERO);
+    assert!(same_map_view(&shown, &plain), "at 4×");
+    // Turned off while it pans.
+    let (mut on, mut off) = twins(&world);
+    both(&mut on, &mut off, &world, Action::SelectNext);
+    frames(&mut on, &mut off, &world, ms(100));
+    on.set_motion(false);
+    let (shown, plain) = frames(&mut on, &mut off, &world, Duration::ZERO);
+    assert!(same_map_view(&shown, &plain), "turned off");
+}
+
+#[test]
+fn track_pans_to_its_sprite_and_then_jumps_a_tile_at_a_time_with_it() {
+    // #1 walks a tile east; with the view on the middle of the map, it's
+    // in sight, so `Tab` leaves the view where it is.
+    let worlds =
+        [at(60, 5), at(61, 5)].map(|tile| WorldBuilder::grass(150, 12).starters(&[tile]).build());
+    let (mut on, mut off) = twins(&worlds[0]);
+    both(&mut on, &mut off, &worlds[0], Action::SelectNext);
+    assert_eq!(on.viewport().x, 48);
+    both(&mut on, &mut off, &worlds[0], Action::Track);
+    assert_eq!(on.viewport().x, 33);
+    let (shown, plain) = frames(&mut on, &mut off, &worlds[0], Duration::ZERO);
+    assert!(!same_map_view(&shown, &plain), "Track pans to it");
+    let (shown, plain) = frames(&mut on, &mut off, &worlds[0], ms(300));
+    assert!(same_map_view(&shown, &plain), "and gets there");
+    on.record(&[], &worlds[1]);
+    off.record(&[], &worlds[1]);
+    assert_eq!(on.viewport().x, 34);
+    let (shown, plain) = frames(&mut on, &mut off, &worlds[1], Duration::ZERO);
+    assert!(same_map_view(&shown, &plain), "a tile, at once");
+}
+
+#[test]
+fn the_sprite_list_pans_to_the_sprite_it_goes_to() {
+    let world = wide();
+    let (mut on, mut off) = twins(&world);
+    both(&mut on, &mut off, &world, Action::SpriteList);
+    both(&mut on, &mut off, &world, Action::Enter);
+    assert_eq!(on.screen(), Screen::Normal);
+    assert_eq!(on.viewport().x, -13);
+    let (shown, plain) = frames(&mut on, &mut off, &world, Duration::ZERO);
+    assert!(!same_map_view(&shown, &plain), "it pans");
+    let (shown, plain) = frames(&mut on, &mut off, &world, ms(300));
+    assert!(same_map_view(&shown, &plain), "and gets there");
+}
+
+#[test]
+fn walking_the_family_tree_pans_to_the_one_walked_to() {
+    // By tick 45, #1 has two young: #2, grown up, and #3, an egg lying
+    // beside her (`family_tree.rs`).
+    let [quick, eggs] = common::QUICK;
+    let world = common::grow(
+        &[quick, eggs, common::LONE],
+        (120, 50),
+        &[(at(60, 25), common::LONE_MOTHER)],
+        45,
+    );
+    let mut app = moving(&world);
+    let tiles = map_view();
+    let middle = Position::new(tiles.x + tiles.width / 2, tiles.y + tiles.height / 2);
+    let egg = world
+        .egg(EntityId(3))
+        .and_then(|egg| egg.pos())
+        .expect("#3");
+    apply(&mut app, &world, Action::SelectNext);
+    apply(&mut app, &world, Action::Scroll { dx: -60, dy: -30 });
+    apply(&mut app, &world, Action::FamilyTree);
+    for action in [
+        Action::Scroll { dx: 0, dy: 1 },
+        Action::Scroll { dx: 1, dy: 0 },
+        Action::Enter,
+    ] {
+        apply(&mut app, &world, action);
+    }
+    assert_eq!(
+        app.selection(),
+        Some(terra_tui::app::Selection::Living(EntityId(3)))
+    );
+    frame(&mut app, &world, Duration::ZERO);
+    assert_ne!(app.cell_of(egg), Some(middle), "on its way");
+    frame(&mut app, &world, ms(300));
+    assert_eq!(app.cell_of(egg), Some(middle), "there");
+}
+
+#[test]
+fn tab_to_a_sprite_the_pan_is_passing_pans_on_to_it() {
+    // Out of sight is where the view is going, not where it's drawn: #2
+    // is in the map view half way to #1, but not once it gets there.
+    let world = WorldBuilder::grass(150, 12)
+        .starters(&[at(10, 5), at(60, 5)])
+        .build();
+    let mut app = moving(&world);
+    apply(&mut app, &world, Action::SelectNext);
+    let screen = frame(&mut app, &world, ms(100));
+    assert!(drawn_at(&screen, "☺").is_some(), "#2 is drawn");
+    apply(&mut app, &world, Action::SelectNext);
+    assert_eq!(app.viewport().x, 33);
 }

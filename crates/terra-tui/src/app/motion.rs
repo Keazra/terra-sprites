@@ -1,9 +1,9 @@
 //! Motion's switch, and what the app keeps for it (design §6.9): the looks
 //! of the sprites and eggs on the map after each tick it takes in, and the
-//! deaths and hatchings those ticks set off; and the levels of the selected
-//! sprite's drives, which its bars ease to. The tab sweeping in starts as
-//! a tab opens (`open`), and a pop-up's fades as the app's clock moves on
-//! (`animate`).
+//! deaths and hatchings those ticks set off; the levels of the selected
+//! sprite's drives, which its bars ease to; and the tile it's on, for its
+//! trail. The tab sweeping in starts as a tab opens (`open`), and a
+//! pop-up's fades as the app's clock moves on (`animate`).
 
 use std::time::Duration;
 
@@ -75,6 +75,20 @@ impl App {
         });
         self.motion
             .note_bars(drives, self.running_for, self.clock.speed());
+    }
+
+    /// Notes the tile the selected sprite is on, after the ticks just taken
+    /// in, for the trail it leaves (design §6.9).
+    pub(super) fn note_trail(&mut self, world: &World) {
+        if !self.motion.on() {
+            return;
+        }
+        let sprite = match self.selection {
+            Some(Selection::Living(id)) => world.sprite(id).map(|sprite| (id, sprite.pos())),
+            _ => None,
+        };
+        self.motion
+            .note_trail(sprite, self.running_for, self.clock.speed());
     }
 
     /// How many blocks drive `drive`'s bar fills on sprite `id`'s Body tab

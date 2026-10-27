@@ -44,6 +44,7 @@ impl App {
             self.observed.clear();
             self.open_lessons.clear();
             self.motion.forget_bars();
+            self.motion.forget_trail();
         }
         self.selection = Some(selection);
     }
@@ -98,13 +99,12 @@ impl App {
     /// Selects `id`, and centres the viewport on it, where it is at `pos`
     /// if it's anywhere, only if it's out of sight (design §6.5): out of
     /// view, or under the inspector open over the map view (design §6.1,
-    /// #305). As `Tab` does, and a click on a line of the event log about
-    /// it.
+    /// #305), once any pan has got there. As `Tab` does, and a click on a
+    /// line of the event log about it. The map view pans there (§6.9).
     pub(super) fn select_in_view(&mut self, id: EntityId, pos: Option<Pos>) {
         self.select(id);
-        let out_of_sight = |pos: Pos| self.cell_of(pos).is_none() || self.under_the_inspector(pos);
-        if let Some(pos) = pos.filter(|&pos| out_of_sight(pos)) {
-            self.centre_on(pos);
+        if let Some(pos) = pos.filter(|&pos| self.out_of_sight(pos)) {
+            self.pan_to(pos);
         }
     }
 
