@@ -7,9 +7,9 @@
 mod common;
 use common::screen::{HUNGRY_GENOME, SPEED_10, one_sprite_among};
 use common::{
-    SCORCHED, SCREEN, WorldBuilder, app_on, apply, at, ball_world, cell_of_text, died, field,
-    frame, frame_on, lone_line, mono, pack_changing, pointer_on, render, scratch_folder, select,
-    sized_app, sprite_on,
+    Changes, LONE_MOTHER, SCORCHED, SCREEN, WorldBuilder, app_on, apply, at, ball_world,
+    cell_of_text, died, field, frame, frame_on, grow, lone_line, mono, pack_changing, pointer_on,
+    render, scratch_folder, select, sized_app, sprite_on,
 };
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -715,61 +715,256 @@ fn a_hatched_young_warms_from_the_egg_s_colour_to_its_own() {
     assert_eq!(half[first].fg, plain[first].fg);
 }
 
+/// Runs `world` one tick, both apps taking it in: its events.
+fn one_tick(world: &mut World, on: &mut App, off: &mut App) -> Vec<Event> {
+    let events = world.step();
+    on.record(&events, world);
+    off.record(&events, world);
+    events
+}
+
 /// Runs `world` until an egg lying on the map, with no sprite on it, will
-/// hatch on the next tick, both apps taking in each tick: the egg's ID and
-/// its tile.
-fn until_about_to_hatch(world: &mut World, on: &mut App, off: &mut App) -> (EntityId, Pos) {
+/// hatch in `left` ticks, the one it hatches on included, both apps taking
+/// in each tick: the egg's ID and its tile.
+fn until_due_in(world: &mut World, on: &mut App, off: &mut App, left: u64) -> (EntityId, Pos) {
     for _ in 0..400 {
-        let events = world.step();
-        on.record(&events, world);
-        off.record(&events, world);
+        one_tick(world, on, off);
         let due = world.eggs().find_map(|egg| {
             let tile = egg.pos()?;
-            (egg.hatches() == world.tick() && world.sprite_at(tile).is_none())
+            (egg.hatches() + 1 == world.tick() + left && world.sprite_at(tile).is_none())
                 .then_some((egg.id(), tile))
         });
         if let Some(due) = due {
             return due;
         }
     }
-    panic!("no egg came due");
+    panic!("no egg came due in {left} ticks");
 }
 
-/// The glow of an egg about to hatch on a tile with no background of its
-/// own, in the default theme: four tenths of the way from the dark to the
-/// sparks' colour.
-const GLOW: Color = Color::Rgb(0x6D, 0x64, 0x47);
+/// Runs `world` until an egg lying on the map, with no sprite on it, will
+/// hatch on the next tick, as `until_due_in`.
+fn until_about_to_hatch(world: &mut World, on: &mut App, off: &mut App) -> (EntityId, Pos) {
+    until_due_in(world, on, off, 1)
+}
+
+/// The change that makes eggs hatch 120 ticks after they're laid, with
+/// `QUICK`'s first, so the screen sees one before it starts to flash.
+const SLOW_EGGS: Changes = (
+    "objects.ron",
+    &[(
+        "ticks: (750, 750), next: Hatch",
+        "ticks: (120, 120), next: Hatch",
+    )],
+);
+
+/// What an egg about to hatch flashes to on a tile with no background of
+/// its own, in the default theme (design §6.9): three tenths of the way
+/// from the dark to the sparks' colour at 100 ticks from hatching, and
+/// seven tenths on the last tick.
+const FIRST_FLASH: Color = Color::Rgb(0x54, 0x4E, 0x38);
+const LAST_FLASH: Color = Color::Rgb(0xB6, 0xA6, 0x73);
+
+/// The dark, motion's background for a tile with none of its own, which a
+/// flash fades back to.
+const DARK: Color = Color::Rgb(0x0C, 0x0C, 0x0C);
 
 #[test]
-fn an_egg_about_to_hatch_cracks_and_glows_until_the_young_appears() {
-    // Design §6.9, #306: the screen can tell an egg will hatch on the next
-    // tick, so from the frame that sees it, its tile glows, quickly at
-    // first, and holds so, while paused too, until the young appears;
-    // then the glow fades as the young warms.
+fn an_egg_starts_to_flash_100_ticks_before_it_hatches() {
+    // Design §6.9, Fauxpaw's playtest of Look 5: from 100 ticks out, its
+    // tile's background glows three tenths of the way to the sparks' colour
+    // at once and fades, quickly at first, over 1.605 s, and flashes again,
+    // while paused too. Colour only: the egg's glyph is as it is.
+    let [quick, _] = common::QUICK;
+    let mut world = grow(
+        &[quick, SLOW_EGGS, common::LONE],
+        (12, 6),
+        &[(at(1, 4), LONE_MOTHER)],
+        0,
+    );
+    let (mut on, mut off) = twins(&world);
+    let (egg, tile) = until_due_in(&mut world, &mut on, &mut off, 101);
+    let first = cell(&on, tile);
+    for step in [0, 400, 800, 1605] {
+        let shown = frame(&mut on, &world, ms(step));
+        let plain = frame(&mut off, &world, ms(step));
+        assert_eq!(shown[first], plain[first], "101 ticks out, {step} ms on");
+    }
+    one_tick(&mut world, &mut on, &mut off);
+    assert_eq!(world.egg(egg).and_then(|egg| egg.pos()), Some(tile));
+    assert!(world.sprite_at(tile).is_none());
+    on.clock.pause();
+    let plain = frame(&mut off, &world, Duration::ZERO);
+    let start = frame(&mut on, &world, Duration::ZERO);
+    assert_eq!(start[first].bg, FIRST_FLASH);
+    let fading = frame(&mut on, &world, ms(802));
+    let faded = frame(&mut on, &world, ms(802));
+    assert_eq!(faded[first].bg, DARK, "faded back by its end");
+    let again = frame(&mut on, &world, ms(1));
+    assert_eq!(again[first].bg, FIRST_FLASH, "the next flash");
+    // Fast and then slowing: well past half way back at half time.
+    let Color::Rgb(red, ..) = fading[first].bg else {
+        panic!("{:?}", fading[first].bg)
+    };
+    assert!(red > 0x0C && red < (0x54 + 0x0C) / 2, "{red:#x}");
+    for screen in [&start, &fading, &faded, &again] {
+        let glyph = (screen[first].symbol(), screen[first].fg);
+        assert_eq!(glyph, (plain[first].symbol(), plain[first].fg));
+    }
+}
+
+/// How bright `colour` is: the sum of its parts, or none for the
+/// terminal's own.
+fn brightness(colour: Color) -> u32 {
+    match colour {
+        Color::Rgb(r, g, b) => u32::from(r) + u32::from(g) + u32::from(b),
+        _ => 0,
+    }
+}
+
+/// Draws `app`'s frames a millisecond apart, for at most `within`
+/// milliseconds, until a flash starts on `tile`, where its background
+/// brightens from the frame before: how long that took, and what it
+/// flashed to.
+fn next_flash(app: &mut App, world: &World, tile: Pos, within: u64) -> Option<(u64, Color)> {
+    let first = cell(app, tile);
+    let mut was = render(app, world)[first].bg;
+    for n in 1..=within {
+        let bg = frame(app, world, ms(1))[first].bg;
+        if brightness(bg) > brightness(was) {
+            return Some((n, bg));
+        }
+        was = bg;
+    }
+    None
+}
+
+/// When each flash on `tile` starts over the next `for_ms` milliseconds,
+/// in milliseconds from now, `app` drawing a frame each millisecond, and
+/// what it flashes to.
+fn flashes(app: &mut App, world: &World, tile: Pos, for_ms: u64) -> Vec<(u64, Color)> {
+    let mut starts = Vec::new();
+    let mut so_far = 0;
+    while let Some((n, bg)) = next_flash(app, world, tile, for_ms - so_far) {
+        so_far += n;
+        starts.push((so_far, bg));
+    }
+    starts
+}
+
+/// How long each of `flashes` lasts, but the last.
+fn periods(flashes: &[(u64, Color)]) -> Vec<u64> {
+    flashes.windows(2).map(|two| two[1].0 - two[0].0).collect()
+}
+
+#[test]
+fn an_egg_s_flashes_come_faster_and_brighter_as_it_nears_hatching() {
+    // Design §6.9: a flash lasts 120 ms on the last tick and 15 ms more for
+    // each tick further off, 255 ms at 10 ticks, and glows from three
+    // tenths of the way to the sparks' colour at 100 ticks to seven tenths
+    // on the last, evenly: 0.664 of the way at 10.
+    let mut world = lone_line(0);
+    let (mut on, mut off) = twins(&world);
+    let (egg, tile) = until_due_in(&mut world, &mut on, &mut off, 10);
+    let ten_out = flashes(&mut on, &world, tile, 600);
+    assert!(ten_out.len() >= 2, "{ten_out:?}");
+    assert_eq!(
+        periods(&ten_out),
+        vec![255; ten_out.len() - 1],
+        "{ten_out:?}"
+    );
+    let tenth = Color::Rgb(0xAD, 0x9E, 0x6E);
+    assert!(ten_out.iter().all(|&(_, bg)| bg == tenth), "{ten_out:?}");
+    let (due, tile) = until_about_to_hatch(&mut world, &mut on, &mut off);
+    assert_eq!(due, egg);
+    let last_tick = flashes(&mut on, &world, tile, 400);
+    assert!(last_tick.len() >= 3, "{last_tick:?}");
+    assert_eq!(
+        periods(&last_tick),
+        vec![120; last_tick.len() - 1],
+        "{last_tick:?}"
+    );
+    assert!(
+        last_tick.iter().all(|&(_, bg)| bg == LAST_FLASH),
+        "{last_tick:?}"
+    );
+}
+
+#[test]
+fn a_flash_keeps_its_phase_as_a_tick_taken_in_shortens_it() {
+    // Design §6.9: a tick taken in shortens the flash under way, which goes
+    // on from as far through as it had got, with no jump or new start: 100
+    // ms into one of 255 ms, 10 ticks out, is as far through one of 240 ms,
+    // 9 ticks out, with 146 ms to go.
+    let mut world = lone_line(0);
+    let (mut on, mut off) = twins(&world);
+    let (egg, tile) = until_due_in(&mut world, &mut on, &mut off, 10);
+    let first = cell(&on, tile);
+    next_flash(&mut on, &world, tile, 255).expect("a flash starts");
+    let before = frame(&mut on, &world, ms(100))[first].bg;
+    one_tick(&mut world, &mut on, &mut off);
+    let egg = world.egg(egg).expect("not hatched yet");
+    assert_eq!(
+        (egg.pos(), egg.hatches() + 1 - world.tick()),
+        (Some(tile), 9)
+    );
+    let after = frame(&mut on, &world, Duration::ZERO)[first].bg;
+    let (Color::Rgb(r, g, b), Color::Rgb(r2, g2, b2)) = (before, after) else {
+        panic!("{before:?}, {after:?}")
+    };
+    let jump = r.abs_diff(r2).max(g.abs_diff(g2)).max(b.abs_diff(b2));
+    assert!(jump <= 1, "{before:?} to {after:?}");
+    let next = flashes(&mut on, &world, tile, 400);
+    assert!(next.len() >= 2, "{next:?}");
+    assert!(matches!(next[0].0, 145 | 146), "{next:?}");
+    assert_eq!(periods(&next), vec![240; next.len() - 1], "{next:?}");
+}
+
+#[test]
+fn an_egg_picked_up_stops_flashing_and_put_down_flashes_afresh() {
+    // Design §6.9: held, an egg is off the map and the screen forgets its
+    // flashing; put down, its first flash starts at once, so the next comes
+    // a whole flash later: 225 ms, 8 ticks out.
+    let mut world = lone_line(0);
+    let (mut on, mut off) = twins(&world);
+    let (egg, tile) = until_due_in(&mut world, &mut on, &mut off, 10);
+    next_flash(&mut on, &world, tile, 255).expect("a flash starts");
+    frame(&mut on, &world, ms(100));
+    apply(&mut on, &world, Action::Mode(CursorMode::Grab));
+    let pointer = pointer_on(&on, tile);
+    apply(&mut on, &world, Action::left_click(pointer));
+    common::tick(&mut on, &mut world);
+    assert_eq!(world.cursor().holds().map(|held| held.id()), Some(egg));
+    let map = world.map();
+    let free = (0..map.height())
+        .flat_map(|y| (0..map.width()).map(move |x| at(x, y)))
+        .find(|&tile| world.sprite_at(tile).is_none() && world.object_at(tile).is_none())
+        .expect("a free tile");
+    let pointer = pointer_on(&on, free);
+    apply(&mut on, &world, Action::left_click(pointer));
+    common::tick(&mut on, &mut world);
+    let egg = world.egg(egg).expect("not hatched yet");
+    assert_eq!(
+        (egg.pos(), egg.hatches() + 1 - world.tick()),
+        (Some(free), 8)
+    );
+    let next = next_flash(&mut on, &world, free, 300).map(|(n, _)| n);
+    assert_eq!(next, Some(225));
+}
+
+#[test]
+fn a_hatching_takes_over_from_the_flashing_its_last_flash_fading_as_the_young_warms() {
+    // Design §6.9, #306: on its last tick, while no tick comes, an egg
+    // flashes every 120 ms until the young appears, which starts where the
+    // last flash peaks, seven tenths of the way to the sparks' colour, and
+    // the glow fades as the young warms.
     let mut world = lone_line(0);
     let (mut on, mut off) = twins(&world);
     let (egg, tile) = until_about_to_hatch(&mut world, &mut on, &mut off);
-    let first = cell(&on, tile);
-    let start = frame(&mut on, &world, Duration::ZERO);
-    let plain = frame(&mut off, &world, Duration::ZERO);
-    let (symbol, fg) = (plain[first].symbol(), plain[first].fg);
-    assert!(!near(start[first].bg, GLOW), "{:?}", start[first]);
-    let cracking = frame(&mut on, &world, ms(100));
-    assert!(!near(cracking[first].bg, GLOW), "{:?}", cracking[first]);
-    assert_ne!(cracking[first].bg, start[first].bg, "on its way");
-    let cracked = frame(&mut on, &world, ms(200));
-    assert!(near(cracked[first].bg, GLOW), "{:?}", cracked[first]);
-    // Colour only: the egg's glyph is as it is.
-    for screen in [&start, &cracking, &cracked] {
-        assert_eq!((screen[first].symbol(), screen[first].fg), (symbol, fg));
-    }
-    let held = frame(&mut on, &world, ms(5000));
-    assert_eq!(held[first], cracked[first], "held while no tick comes");
-    // It hatches: the young warms from the egg's colour, and the glow
-    // fades with it.
-    let events = world.step();
-    on.record(&events, &world);
-    off.record(&events, &world);
+    frame(&mut on, &world, ms(5000));
+    let later = flashes(&mut on, &world, tile, 400);
+    assert!(later.len() >= 3, "{later:?}");
+    assert_eq!(periods(&later), vec![120; later.len() - 1], "{later:?}");
+    let events = one_tick(&mut world, &mut on, &mut off);
     assert!(
         events
             .iter()
@@ -778,32 +973,57 @@ fn an_egg_about_to_hatch_cracks_and_glows_until_the_young_appears() {
     );
     let young = cell(&on, world.sprite(egg).expect("hatched").pos());
     let start = frame(&mut on, &world, Duration::ZERO);
-    assert!(near(start[young].bg, GLOW), "{:?}", start[young]);
-    let warm = frame(&mut on, &world, ms(500));
+    assert_eq!(start[young].bg, LAST_FLASH);
+    let warming = frame(&mut on, &world, ms(250))[young].bg;
+    assert!(
+        brightness(warming) < brightness(LAST_FLASH) && brightness(warming) > brightness(DARK),
+        "{warming:?}"
+    );
+    let warm = frame(&mut on, &world, ms(250));
     let plain = frame(&mut off, &world, ms(500));
     assert_eq!(warm[young].bg, plain[young].bg);
 }
 
 #[test]
-fn no_egg_cracks_at_4x_or_when_the_policy_says_no() {
-    // Design §6.9: motion thins out at 4× and up, and a hatching's asks
-    // `Emotes` first, as the crack before it does.
-    for faster in [true, false] {
+fn at_4x_an_egg_flashes_as_at_1x() {
+    // Design §6.9: the flashes come at the period of the ticks left, so at
+    // 4× and up they quicken with the game, and the 100 ticks pass in 20 s.
+    let mut world = lone_line(0);
+    let (mut on, mut off) = twins(&world);
+    at_4x(&mut on);
+    at_4x(&mut off);
+    let (_, tile) = until_about_to_hatch(&mut world, &mut on, &mut off);
+    let last_tick = flashes(&mut on, &world, tile, 400);
+    assert!(last_tick.len() >= 3, "{last_tick:?}");
+    assert_eq!(
+        periods(&last_tick),
+        vec![120; last_tick.len() - 1],
+        "{last_tick:?}"
+    );
+    assert!(
+        last_tick.iter().all(|&(_, bg)| bg == LAST_FLASH),
+        "{last_tick:?}"
+    );
+}
+
+#[test]
+fn no_egg_flashes_in_mono_or_when_the_policy_says_no() {
+    // Design §6.9: mono has no colour to flash, and a hatching asks
+    // `Emotes` first, as the flashing before it does.
+    for in_mono in [true, false] {
         let mut world = lone_line(0);
-        let (mut on, mut off) = twins(&world);
-        if faster {
-            at_4x(&mut on);
-            at_4x(&mut off);
-        } else {
+        let theme = if in_mono { mono() } else { Theme::cp437() };
+        let (mut on, mut off) = twins_in(&world, theme, SCREEN);
+        if !in_mono {
             on.set_policy(NoEmotes);
             off.set_policy(NoEmotes);
         }
         let (_, tile) = until_about_to_hatch(&mut world, &mut on, &mut off);
         let first = cell(&on, tile);
-        for step in [0, 300, 1000] {
+        for step in [0, 40, 80, 1000] {
             let shown = frame(&mut on, &world, ms(step));
             let plain = frame(&mut off, &world, ms(step));
-            assert_eq!(shown[first], plain[first], "4x: {faster}, {step} ms");
+            assert_eq!(shown[first], plain[first], "mono: {in_mono}, {step} ms");
         }
     }
 }

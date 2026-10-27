@@ -1,7 +1,7 @@
 //! Motion's switch, and what the app keeps for it (design §6.9): the looks
 //! of the sprites and eggs on the map after each tick it takes in, the
 //! deaths and hatchings those ticks set off, and the eggs about to hatch,
-//! which crack; the levels of the selected sprite's drives, which its bars
+//! which flash; the levels of the selected sprite's drives, which its bars
 //! ease to; and the tile it's on, for its trail. The tab sweeping in starts
 //! as a tab opens (`open`), and a pop-up's fades as the app's clock moves
 //! on (`animate`).
@@ -68,25 +68,28 @@ impl App {
         }
     }
 
-    /// Notes the eggs on the map about to hatch on the next tick, after the
-    /// ticks just taken in, for each to crack (design §6.9). The screen can
-    /// tell: an egg hatches on the tick its stages end, unless the Cursor
-    /// holds it or a sprite stands on it then, and sprites move after.
-    pub(super) fn note_cracks(&mut self, world: &World) {
+    /// Notes the eggs on the map within `motion::FLASH_FROM` ticks of
+    /// hatching, with no sprite on them, and the ticks each has left, after
+    /// the ticks just taken in, for each to flash (design §6.9). The screen
+    /// can tell: an egg hatches on the tick its stages end, unless the
+    /// Cursor holds it or a sprite stands on it then, and sprites move
+    /// after.
+    pub(super) fn note_flashing(&mut self, world: &World) {
         if !self.motion.on() {
             return;
         }
-        let due: Vec<EntityId> = world
+        let due: Vec<(EntityId, u64)> = world
             .eggs()
             .filter(|egg| {
                 egg.pos()
                     .is_some_and(|tile| world.sprite_at(tile).is_none())
-                    && matches!(inspector::hatching(egg, world), Hatching::In(1))
             })
-            .map(|egg| egg.id())
+            .filter_map(|egg| match inspector::hatching(&egg, world) {
+                Hatching::In(left) if left <= motion::FLASH_FROM => Some((egg.id(), left)),
+                _ => None,
+            })
             .collect();
-        self.motion
-            .note_cracks(&due, self.running_for, self.clock.speed());
+        self.motion.note_flashing(&due, self.running_for);
     }
 
     /// Notes the levels of the selected sprite's drives, after the ticks

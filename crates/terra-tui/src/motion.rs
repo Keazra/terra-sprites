@@ -6,7 +6,8 @@
 //! - **What the app keeps** is [`Motion`]: the switch; how each sprite and
 //!   egg was drawn after the last ticks taken in ([`Seen`]), since the world
 //!   removes a dead sprite before it says so; the deaths and hatchings
-//!   playing, and the eggs about to hatch, cracking; the tab sweeping in,
+//!   playing, and the eggs about to hatch, flashing, with how far through a
+//!   flash each had got as the last ticks were taken in; the tab sweeping in,
 //!   which `App::open` starts; what filled the screen at the last frame,
 //!   which the app's clock compares with what does now to see a pop-up
 //!   open or close, and how the last frame drew the pop-ups that closed;
@@ -68,13 +69,23 @@ use crate::ui;
 const DEATH: Duration = Duration::from_millis(1200);
 const HATCHING: Duration = Duration::from_millis(1000);
 
-/// How long an egg about to hatch takes to crack, its tile coming to glow
-/// (design §6.9).
-const CRACK: Duration = Duration::from_millis(300);
+/// How many ticks before it hatches an egg on the map starts to flash
+/// (design §6.9): from 100 ticks left down to the last.
+pub(crate) const FLASH_FROM: u64 = 100;
 
-/// How far a cracked egg's tile glows, from its own background towards the
-/// sparks' colour.
-const GLOW: f32 = 0.4;
+/// How long each flash of an egg about to hatch lasts on its last tick,
+/// and how much longer for each tick further off (design §6.9): 120 ms on
+/// the last, 255 ms at 10 ticks and 1.605 s at 100, so its flashes come
+/// faster and faster.
+const FLASH_QUICKEST: Duration = Duration::from_millis(120);
+const FLASH_SLOWER: Duration = Duration::from_millis(15);
+
+/// How far an egg's flash glows from its tile's own background towards the
+/// sparks' colour (design §6.9): three tenths of the way at 100 ticks from
+/// hatching, growing evenly to seven tenths on the last tick, which is
+/// where a hatching's glow fades from.
+const FLASH_FAINTEST: f32 = 0.3;
+const FLASH_BRIGHTEST: f32 = 0.7;
 
 /// The most deaths and hatchings that play at once (design §6.9), and at
 /// 4× and up.
@@ -115,8 +126,9 @@ const PAN_PAST: i32 = 2;
 
 /// Whether motion's colours play over the screen (design §6.9): while
 /// motion is on, in a palette with colour. Mono has none, so its deaths,
-/// hatchings, cracks, trail, tab sweeps and pop-up fades don't play, though
-/// the pan and the bars, which move no colour, still do (§6.2, #307).
+/// hatchings, flashing eggs, trail, tab sweeps and pop-up fades don't
+/// play, though the pan and the bars, which move no colour, still do (§6.2,
+/// #307).
 pub(crate) fn colours_play(app: &App) -> bool {
     app.motion() && app.theme.has_colour()
 }
@@ -180,9 +192,8 @@ pub(crate) struct Motion {
     seen: BTreeMap<EntityId, Seen>,
     /// The deaths and hatchings playing, oldest first.
     moments: VecDeque<Moment>,
-    /// The eggs on the map about to hatch on the next tick, from when the
-    /// screen first saw so, while they crack and then hold.
-    cracks: BTreeMap<EntityId, Duration>,
+    /// The eggs on the map within `FLASH_FROM` ticks of hatching, flashing.
+    flashing: BTreeMap<EntityId, Flashing>,
     /// The tab sweeping in, if one is.
     sweep: Option<Sweep>,
     /// What filled the screen besides the map when the app last moved its
@@ -201,6 +212,72 @@ pub(crate) struct Motion {
     /// The map view panning to where the viewport is, until the app's
     /// clock sees it end.
     pan: Option<Pan>,
+}
+
+/// An egg on the map about to hatch, flashing (design §6.9): `left` ticks
+/// from hatching, as the ticks last taken in left it, and `into` a flash at
+/// `at`, from which it goes on at the period of the ticks left.
+#[derive(Debug, Clone, Copy)]
+struct Flashing {
+    left: u64,
+    into: Duration,
+    at: Duration,
+}
+
+impl Flashing {
+    /// An egg `left` ticks from hatching, first seen so at `now`: its first
+    /// flash starts then.
+    fn new(left: u64, now: Duration) -> Flashing {
+        Flashing {
+            left,
+            into: Duration::ZERO,
+            at: now,
+        }
+    }
+
+    /// How far into a flash it is at `now`: on from where it had got, at
+    /// the period of the ticks left, and while paused too.
+    fn reached(&self, now: Duration) -> Duration {
+        let period = flash_period(self.left).as_nanos();
+        let into = (self.into + age(self.at, now)).as_nanos() % period;
+        nanos(into)
+    }
+
+    /// The same egg `left` ticks from hatching at `now`, as a tick taken in
+    /// leaves it: the flash keeps its phase, as far through as it had got,
+    /// and goes on from there at the new period, with no jump or new start
+    /// (design §6.9).
+    fn taken_on(self, left: u64, now: Duration) -> Flashing {
+        if left == self.left {
+            return self;
+        }
+        let (was, period) = (flash_period(self.left), flash_period(left));
+        let into = self.reached(now).as_nanos() * period.as_nanos() / was.as_nanos();
+        Flashing {
+            left,
+            into: nanos(into),
+            at: now,
+        }
+    }
+}
+
+/// How long each flash of an egg `left` ticks from hatching lasts (design
+/// §6.9).
+fn flash_period(left: u64) -> Duration {
+    let further = left.clamp(1, FLASH_FROM) - 1;
+    FLASH_QUICKEST + FLASH_SLOWER * u32::try_from(further).unwrap_or(u32::MAX)
+}
+
+/// How far each flash of an egg `left` ticks from hatching glows towards
+/// the sparks' colour, from 0 to 1 (design §6.9).
+fn flash_strength(left: u64) -> f32 {
+    let nearer = (FLASH_FROM - left.clamp(1, FLASH_FROM)) as f32 / (FLASH_FROM - 1) as f32;
+    FLASH_FAINTEST + (FLASH_BRIGHTEST - FLASH_FAINTEST) * nearer
+}
+
+/// `n` nanoseconds, less than a period of a flash.
+fn nanos(n: u128) -> Duration {
+    Duration::from_nanos(u64::try_from(n).unwrap_or(u64::MAX))
 }
 
 /// The map view panning from where it was drawn, `from`, to wherever the
@@ -303,12 +380,12 @@ enum Happening {
         colour: Color,
     },
     /// Sprite `id` hatched from the egg on `tile`, which was drawn in `egg`,
-    /// and had `cracked` if the screen saw it about to hatch.
+    /// and was `flashed` if the screen saw it flashing as it hatched.
     Hatching {
         id: EntityId,
         tile: Pos,
         egg: Color,
-        cracked: bool,
+        flashed: bool,
     },
 }
 
@@ -338,7 +415,7 @@ impl Motion {
             on: true,
             seen: BTreeMap::new(),
             moments: VecDeque::new(),
-            cracks: BTreeMap::new(),
+            flashing: BTreeMap::new(),
             sweep: None,
             screen: Screen::Normal,
             opened: None,
@@ -364,7 +441,7 @@ impl Motion {
         if !on {
             self.seen.clear();
             self.moments.clear();
-            self.cracks.clear();
+            self.flashing.clear();
             self.sweep = None;
             self.opened = None;
             self.closed = None;
@@ -428,7 +505,7 @@ impl Motion {
                         id,
                         tile,
                         egg: colour,
-                        cracked: self.cracks.contains_key(&id),
+                        flashed: self.flashing.contains_key(&id),
                     },
                     HATCHING,
                 )),
@@ -470,7 +547,7 @@ impl Motion {
             return;
         };
         if let Happening::Hatching { id, .. } = happening {
-            self.cracks.remove(&id);
+            self.flashing.remove(&id);
         }
         self.forget_finished(now);
         let drawn = |moment: &Moment| {
@@ -528,19 +605,24 @@ impl Motion {
         }
     }
 
-    /// Notes the eggs on the map about to hatch on the next tick, after the
-    /// ticks just taken in at `now` and `speed`: `due`, by ID. Each starts
-    /// to crack as it's first seen so, and one that no longer is, held or
-    /// stood on, stops. Not at 4× and up, where a frame may run its last
-    /// tick and the next (design §6.9).
-    pub(crate) fn note_cracks(&mut self, due: &[EntityId], now: Duration, speed: Speed) {
-        if !self.on || thins_out(speed) {
-            self.cracks.clear();
+    /// Notes the eggs on the map within `FLASH_FROM` ticks of hatching,
+    /// after the ticks just taken in at `now`: `due`, each by ID with the
+    /// ticks it has left. Each starts to flash as it's first seen so, one
+    /// already flashing goes on from where it had got at the period of the
+    /// ticks it has left, and one that no longer is, held or stood on,
+    /// stops (design §6.9).
+    pub(crate) fn note_flashing(&mut self, due: &[(EntityId, u64)], now: Duration) {
+        if !self.on {
+            self.flashing.clear();
             return;
         }
-        self.cracks.retain(|id, _| due.contains(id));
-        for &id in due {
-            self.cracks.entry(id).or_insert(now);
+        self.flashing
+            .retain(|id, _| due.iter().any(|&(egg, _)| egg == *id));
+        for &(id, left) in due {
+            self.flashing
+                .entry(id)
+                .and_modify(|egg| *egg = egg.taken_on(left, now))
+                .or_insert(Flashing::new(left, now));
         }
     }
 
@@ -791,7 +873,7 @@ pub(crate) fn seen(app: &App, world: &World) -> BTreeMap<EntityId, Seen> {
 }
 
 /// A screen cell of the map view that `ui::draw_tiles` drew an item lying
-/// on the map in, with the item's ID: an egg there may crack (design §6.9).
+/// on the map in, with the item's ID: an egg there may flash (design §6.9).
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Lying {
     pub(crate) cell: Position,
@@ -811,7 +893,7 @@ pub(crate) fn could_draw(app: &App, id: EntityId, tile: Pos) -> bool {
 
 /// Plays the map's motion over the tiles `ui::draw_tiles` drew in `inner`,
 /// before the marks go over them (design §6.9): the trail, each egg about
-/// to hatch cracking among the items `lying` there, and then each death
+/// to hatch flashing among the items `lying` there, and then each death
 /// and hatching, oldest first. `bare` are the screen cells it drew bare
 /// ground in, with no sprite, object or mark, where a death's ghost shows.
 pub(crate) fn play_on_map(
@@ -833,7 +915,7 @@ pub(crate) fn play_on_map(
     };
     let now = app.running_for();
     trail(buf, &on, now);
-    crack(buf, &on, lying, now);
+    flash(buf, &on, lying, now);
     let drawn = |id, tile| could_draw(app, id, tile);
     for moment in app.motion_kept().playing(now, app.clock.speed(), drawn) {
         let age = age(moment.began, now);
@@ -848,9 +930,9 @@ pub(crate) fn play_on_map(
                 id,
                 tile,
                 egg,
-                cracked,
+                flashed,
             } => {
-                let young = Young { id, egg, cracked };
+                let young = Young { id, egg, flashed };
                 hatching(buf, &on, tile, young, moment, age);
             }
         }
@@ -1027,37 +1109,34 @@ fn trail(buf: &mut Buffer, on: &OnMap, now: Duration) {
     }
 }
 
-/// Plays each egg about to hatch cracking, among the items `lying` on the
-/// map (design §6.9): from when the screen first saw it would hatch on the
-/// next tick, its tile's background comes to glow, part way to the sparks'
-/// colour, quick and then slowing, and holds so until the young appears.
-/// Colour only: its glyph stays. It asks the policy first, as its hatching
-/// will (§6.4).
-fn crack(buf: &mut Buffer, on: &OnMap, lying: &[Lying], now: Duration) {
-    if thins_out(on.app.clock.speed()) {
-        return;
-    }
-    let cracks = &on.app.motion_kept().cracks;
+/// Plays each egg about to hatch flashing, among the items `lying` on the
+/// map (design §6.9): from `FLASH_FROM` ticks before it hatches, its tile's
+/// background glows towards the sparks' colour at once and fades back,
+/// quick and then slowing, again and again until the young appears, each
+/// flash sooner and brighter than the last. Colour only: its glyph stays.
+/// It asks the policy first, as its hatching will (§6.4).
+fn flash(buf: &mut Buffer, on: &OnMap, lying: &[Lying], now: Duration) {
+    let flashing = &on.app.motion_kept().flashing;
     for spot in lying {
-        let Some(&began) = cracks.get(&spot.id) else {
+        let Some(egg) = flashing.get(&spot.id) else {
             continue;
         };
         if !on.app.can_view(Panel::Emotes, Subject::Sprite(spot.id)) {
             continue;
         }
-        let age = age(began, now);
-        let bg = glow(buf, on, spot.cell, eased(age, CRACK));
-        play(fx::paint_bg(bg, timer(CRACK)), age, buf, spot.cell);
+        let (into, period) = (egg.reached(now), flash_period(egg.left));
+        let way = flash_strength(egg.left) * (1.0 - eased(into, period));
+        let bg = glow(buf, on, spot.cell, way);
+        play(fx::paint_bg(bg, timer(period)), into, buf, spot.cell);
     }
 }
 
-/// The background of screen cell `cell` `way` of the way from its own to
-/// the glow of a cracked egg, from 0 to 1.
+/// The background of screen cell `cell` `way` of the way from its own
+/// towards the sparks' colour, from 0 to 1: an egg's flash.
 fn glow(buf: &Buffer, on: &OnMap, cell: Position, way: f32) -> Color {
     let dark = campbell::rgb(on.look.dark).unwrap_or(campbell::BACKGROUND);
     let own = campbell::exact(buf[cell].bg, dark);
-    let glow = ColorSpace::Rgb.lerp(&own, &campbell::exact(on.look.spark, dark), GLOW);
-    ColorSpace::Rgb.lerp(&own, &glow, way)
+    ColorSpace::Rgb.lerp(&own, &campbell::exact(on.look.spark, dark), way)
 }
 
 /// `cell`'s colour as an exact one, for a fade to blend from (design §6.9).
@@ -1098,18 +1177,19 @@ fn death(
 }
 
 /// The sprite a hatching hatched, the colour its egg was drawn in, and
-/// whether it had cracked.
+/// whether it was flashing.
 struct Young {
     id: EntityId,
     egg: Color,
-    cracked: bool,
+    flashed: bool,
 }
 
 /// Plays a hatching from the egg on `tile`, `age` into `moment` (design
 /// §6.9): the young starts in the egg's colour and warms to its own over
-/// the first half, the glow of an egg that cracked fading from its tile as
-/// it does, and the tiles round the egg spark at scattered moments and fade
-/// back. On the young's own tile its warming plays rather than a spark.
+/// the first half, the last flash of an egg that was flashing fading from
+/// its tile as it does, and the tiles round the egg spark at scattered
+/// moments and fade back. On the young's own tile its warming plays rather
+/// than a spark.
 fn hatching(buf: &mut Buffer, on: &OnMap, tile: Pos, young: Young, moment: &Moment, age: Duration) {
     let lasts = moment.lasts;
     let warming = lasts / 2;
@@ -1125,9 +1205,10 @@ fn hatching(buf: &mut Buffer, on: &OnMap, tile: Pos, young: Young, moment: &Mome
             play(fx::fade_from_fg(egg, timer(warming)), age, buf, cell);
         }
     }
-    if age < warming && young.cracked {
+    if age < warming && young.flashed {
         for &cell in &drawn {
-            let bg = glow(buf, on, cell, 1.0 - eased(age, warming));
+            let way = FLASH_BRIGHTEST * (1.0 - eased(age, warming));
+            let bg = glow(buf, on, cell, way);
             play(fx::paint_bg(bg, timer(warming)), age, buf, cell);
         }
     }
