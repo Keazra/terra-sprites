@@ -244,7 +244,11 @@ fn legends(
                 heading: None,
                 lines: vec![line],
             };
-            vec![
+            // A palette with no colour can't show a sprite's, so the
+            // legends of them say where they're read instead (design §6.2,
+            // #307).
+            let coloured = app.theme.has_colour();
+            let colours = if coloured {
                 Legend {
                     heading: Some(Line::from(headed(
                         "COLOURS",
@@ -252,14 +256,25 @@ fn legends(
                         look,
                     ))),
                     lines: colour_legend(app, world, width),
-                },
-                Legend {
-                    heading: None,
-                    lines: emote_legend(app, width),
-                },
-                alone(lineage_legend(app)),
-                alone(Line::from(headed("FILES", &format!("    {folder}"), look))),
-            ]
+                }
+            } else {
+                alone(Line::from(headed(
+                    "COLOURS",
+                    ": none in this palette: drives in the sprite list (l), lineage in the \
+                     family tree (k)",
+                    look,
+                )))
+            };
+            let emotes = Legend {
+                heading: None,
+                lines: emote_legend(app, width),
+            };
+            let lineage = coloured.then(|| alone(lineage_legend(app)));
+            let files = alone(Line::from(headed("FILES", &format!("    {folder}"), look)));
+            [Some(colours), Some(emotes), lineage, Some(files)]
+                .into_iter()
+                .flatten()
+                .collect()
         }
         HelpPage::Inspector => {
             let tabs = tab.map_or(Tab::ALL.to_vec(), |tab| vec![tab]);

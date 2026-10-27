@@ -90,7 +90,7 @@ The same key in capitals or lower case does the same thing.
 | `W` `A` `S` `D` or arrows | Scroll the map (hold Shift to scroll 5 tiles) |
 | Mouse | Point at a tile: the status line says what's there. Click a sprite to select it, or its name in a line of the event log. Point at a highlighted name in the inspector, or at the event log's filters, soft blue in the built-in themes, and a tooltip says what it is; point at a sprite's name in a line of the event log and the sprite lights up on the map |
 | `T` | Track: the view follows the selected sprite; again to stop |
-| `b` | Sprite colours: what a sprite's colour shows: its strongest drive, nothing, or its lineage, which marks the selected sprite's parents and grandparents, brothers and sisters, and young and theirs each in a colour, and every other sprite dark gray. The status line says which |
+| `b` | Sprite colours: what a sprite's colour shows: its strongest drive, nothing, or its lineage, which marks the selected sprite's parents and grandparents, brothers and sisters, and young and theirs each in a colour, and every other sprite dark gray. The status line says which. In mono, which can't show them, it says where they're read instead: the sprite list or the family tree |
 | `m` | Event log filter: all events, the selected sprite's, or only the major ones (deaths, lessons learned, refusals) |
 | `v` | Detail view: exactly what the selected sprite is doing |
 | `o` | Square tiles: each tile is drawn two cells wide, so the world looks its true shape rather than twice as tall, and half as much of it fits across. Again to go back. Best on a big window, 140×40 and up. It's off until you turn it on, and the game remembers it, as a row of the settings screen (`Ctrl+T`) |

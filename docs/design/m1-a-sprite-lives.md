@@ -1590,6 +1590,7 @@ The species is dropped into a world it doesn't know and has to learn about it. I
 
 - **Plain:** the sprite's own colour.
 - **Lineage** (from Slice 25): the selected sprite's parents and grandparents light blue, its brothers and sisters light red, its young and theirs light magenta, and every other sprite dark gray; the selected sprite keeps its own colour (M2 design §17.4).
+- **In a palette with no colour** (mono, §6.2, #307), `b` still goes through them, but the strongest drive's and the lineage's colours can't be seen, so the status line says where they're read instead: "Colours: lineage, which this palette can't show: see the family tree (k)", and for the strongest drive, the sprite list (`l`). The help's COLOURS legend says so in a line, "none in this palette: drives in the sprite list (l), lineage in the family tree (k)", and leaves out its row of coloured sprites and the LINEAGE line, which would show the same sprite over and over.
 
 **Emotes** swap with the sprite glyph at about 2 Hz, for about 1 second of **real** time:
 

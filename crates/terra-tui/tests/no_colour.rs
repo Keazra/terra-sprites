@@ -210,3 +210,54 @@ fn in_mono_the_attention_marker_never_reads_as_a_bush_s_fruit() {
     assert!(near.contains(Modifier::UNDERLINED), "{near:?}");
     assert!(!near.contains(Modifier::BOLD), "{near:?}");
 }
+
+#[test]
+fn in_mono_b_says_the_palette_can_t_show_a_sprite_s_colours_and_where_they_re_read() {
+    // Design §6.2, §6.3: mono can't draw a sprite in a drive's colour or the
+    // lineage's, so `b` says where they're read instead.
+    let world = garden_with_sprites();
+    let mut app = app_for(&world, mono(), 100, 30);
+    let mut said = Vec::new();
+    for _ in 0..3 {
+        app.apply(Action::CycleColours, &world);
+        said.push(app.notice().map(str::to_string));
+    }
+    assert_eq!(
+        said,
+        [
+            Some("Colours: plain".to_string()),
+            Some("Colours: lineage, which this palette can't show: see the family tree (k)".into()),
+            Some(
+                "Colours: strongest drive, which this palette can't show: see the sprite list (l)"
+                    .into()
+            ),
+        ]
+    );
+}
+
+#[test]
+fn in_mono_help_says_where_a_sprite_s_colours_are_read_and_leaves_the_lineage_out() {
+    // Design §6.2: the help's COLOURS and LINEAGE legends are drawn in
+    // colours mono can't show, so they'd be a row of the same sprite.
+    let world = garden_with_sprites();
+    let mut app = app_for(&world, mono(), 100, 30);
+    app.apply(Action::Help, &world);
+    let rows = characters(&render(&app, &world, 100, 30));
+    let colours = rows
+        .iter()
+        .find(|row| row.contains(" COLOURS"))
+        .expect("the COLOURS heading");
+    assert!(
+        colours.contains(
+            "COLOURS: none in this palette: drives in the sprite list (l), lineage in the \
+             family tree (k)"
+        ),
+        "{colours}"
+    );
+    assert!(
+        !rows.iter().any(|row| row.contains(" hunger ")),
+        "{rows:#?}"
+    );
+    assert!(!rows.iter().any(|row| row.contains("LINEAGE")), "{rows:#?}");
+    assert!(rows.iter().any(|row| row.contains(" EMOTES ")), "{rows:#?}");
+}
