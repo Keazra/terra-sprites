@@ -154,7 +154,7 @@ A zero, `+.00`, is neither good nor bad, and a chemical's change on the Chem tab
 
 ### `panels`
 
-`panels` is a record of two colours: `shade`, what the inspector and the event log sit on, and `title`, what their title rows sit on (the inspector's tabs, the log's "Events" and its filters). Both are needed. The default theme's are `"#181a22"` and `"#282c3a"`, a shade and two lighter than black. While motion is on, a tab opened sweeps in out of `shade` (design §6.9). The shades are the palette's, so ASCII glyphs in the default palette sit on them. A theme without `panels`, such as high contrast and mono, draws a line instead: `│` between the map and the inspector, and a `─` rule over the log with its title and filters in it (design §6.1).
+`panels` is a record of two colours: `shade`, what the inspector and the event log sit on, and `title`, what their title rows sit on (the inspector's tabs, the log's "Events" and its filters). Both are needed. The default theme's are `"#181a22"` and `"#282c3a"`, a shade and two lighter than black. While motion is on, a tab opened sweeps in out of `shade` (design §6.9). The shades are the palette's, so ASCII glyphs in the default palette sit on them. A theme without `panels`, such as high contrast and mono, draws a line instead: `│` between the map and the inspector, and a `─` rule over the log with its title and filters in it (design §6.1). So does one with [`colour: false`](#colour), even if it has `panels`, since its shades couldn't be seen.
 
 ### `motion`
 

@@ -901,7 +901,7 @@ What a piece of the screen's text is for, which the theme styles: a heading, mut
 _Avoid_: colour scheme, highlight (for a role)
 
 **Panel shade** (#302):
-The background a palette may give the inspector and the event log, a little lighter than the terminal's black, with their title rows lighter again, in place of lines between the panels. A palette without shades, such as high contrast or mono, draws a line instead.
+The background a palette may give the inspector and the event log, a little lighter than the terminal's black, with their title rows lighter again, in place of lines between the panels. A palette without shades, such as high contrast or mono, or with no colour to show them, draws a line instead.
 _Avoid_: border, frame, box (pop-ups have boxes; the panels don't)
 
 **Motion** (#306):

@@ -677,9 +677,10 @@ impl Theme {
 
     /// The shades the inspector and the event log sit on, or `None` for a
     /// theme that draws lines between the panels instead (design §6.1,
-    /// #302).
+    /// #302): one without them, or without colour, whose shades couldn't
+    /// be seen (§6.2, #307).
     pub fn panels(&self) -> Option<PanelLook> {
-        self.panels
+        self.panels.filter(|_| self.colour)
     }
 
     /// Motion's colours (design §6.9).

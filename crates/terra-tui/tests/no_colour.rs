@@ -123,6 +123,28 @@ fn a_palette_with_colour_draws_its_colours() {
     assert!(coloured(&render(&app, &world, 100, 30)).is_some());
 }
 
+/// Each row of `screen`'s characters, without their styles.
+fn characters(screen: &Buffer) -> Vec<String> {
+    common::lines(screen)
+}
+
+#[test]
+fn a_palette_without_colour_draws_lines_between_the_panels_even_with_shades() {
+    // Design §6.1, §6.2: its shades couldn't be seen, so it draws lines,
+    // as mono does.
+    let cp437 = include_str!("../../../themes/cp437.ron");
+    let colourless = cp437.replacen("(\n    tiles: {", "(\n    colour: false,\n    tiles: {", 1);
+    assert_ne!(colourless, cp437);
+    let world = garden_with_sprites();
+    let theme = Theme::from_ron(&colourless, world.data()).expect("a theme");
+    assert!(!theme.has_colour());
+    let drawn =
+        |theme: Theme| characters(&render(&app_for(&world, theme, 100, 30), &world, 100, 30));
+    let lines = drawn(mono());
+    assert_ne!(drawn(Theme::cp437()), lines, "shades in place of lines");
+    assert_eq!(drawn(theme), lines);
+}
+
 #[test]
 fn in_mono_the_tile_the_selected_sprite_attends_to_is_bold() {
     // Design §6.2: the attention marker is a background, which mono can't
