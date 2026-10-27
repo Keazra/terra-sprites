@@ -1,6 +1,6 @@
 # Skills copied from mattpocock/skills
 
-These skills are copied from [mattpocock/skills](https://github.com/mattpocock/skills), plugin version 1.2.3, and adjusted for this project (below). A session on the owner's PC also loads the plugin itself (`mattpocock-skills` from Anthropic's official marketplace, 1.3.1 as of 2026-10-26), which updates itself while these copies stay at the version above. `AGENTS.md` says which to pick.
+These skills are copied from [mattpocock/skills](https://github.com/mattpocock/skills), plugin version 1.2.3, and adjusted for this project (below). A session on the owner's PC also loads the plugin itself (`mattpocock-skills` from Anthropic's official marketplace), which updates itself while these copies stay at the version above. `AGENTS.md` says which to pick. The Anthropic Directory has an older copy of the same plugin, "Skills For Real Engineers". It's added or removed in a claude.ai account's plugins, and the owner has removed it from theirs.
 
 | Skill | From |
 |---|---|
