@@ -741,11 +741,12 @@ pub(crate) fn play_on_panels(buf: &mut Buffer, app: &App, spots: &Spots) {
     let dark_colour = Color::Rgb(r, g, b);
     let under_a_pop_up = |cell: Position| spots.under_a_pop_up(cell);
     if let (Some(sweep), Some(inspector)) = (kept.sweeping(now), app.inspector_area()) {
-        // Out of the panel's shade, or the dark where it has none.
+        // Out of the panel's shade, as Campbell draws it, or the dark
+        // where it has none.
         let faded = app
             .theme
             .panels()
-            .map_or(dark_colour, |panels| panels.shade);
+            .map_or(dark_colour, |panels| campbell::exact(panels.shade, dark));
         let direction = if sweep.from_left {
             tachyonfx::Motion::LeftToRight
         } else {

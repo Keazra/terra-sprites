@@ -986,6 +986,40 @@ fn in_a_theme_without_shades_a_tab_sweeps_in_out_of_motion_s_dark() {
 }
 
 #[test]
+fn a_tab_sweeps_in_out_of_a_shade_the_theme_names_as_campbell_draws_it() {
+    // Design §6.9: a colour the theme names blends from how Campbell draws
+    // it, so a tab still to sweep in never shows the terminal's own grey,
+    // nor tachyonfx's.
+    let theme = Theme::from_ron(
+        &ascii_and("    panels: (shade: dark_gray, title: gray),"),
+        &common::pack(),
+    )
+    .expect("loads");
+    let world = one_on_a_field();
+    let (mut on, mut off) = selected_in(&world, theme, SCREEN);
+    both(&mut on, &mut off, &world, Action::NextTab);
+    let body = tab_body(&on);
+    let (start, plain) = frames(&mut on, &mut off, &world, Duration::ZERO);
+    let grey = Color::Rgb(0x76, 0x76, 0x76);
+    // Hidden in Campbell's dark grey, or in the named one where the cell
+    // was drawn in it, which Campbell draws the same.
+    let hidden = |shown: Color, was: Color| shown == grey || shown == was && was == Color::DarkGray;
+    for cell in body.positions() {
+        assert!(
+            hidden(start[cell].fg, plain[cell].fg),
+            "{cell:?}: {:?}",
+            start[cell]
+        );
+        assert!(
+            hidden(start[cell].bg, plain[cell].bg),
+            "{cell:?}: {:?}",
+            start[cell]
+        );
+    }
+    differs_only_within(&start, &plain, body);
+}
+
+#[test]
 fn a_tab_opened_while_the_inspector_is_hidden_doesn_t_sweep_in_when_it_opens() {
     // Under 100 columns the inspector hides until `i` opens it over the
     // map (design §6.1, #305).
