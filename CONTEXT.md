@@ -19,7 +19,7 @@ The terrarium's edge, which nothing crosses: today the map's edge. On the ship (
 _Avoid_: border, boundary
 
 **Terrain**:
-The kind of ground a tile has: grass, dirt, sand, shallow water, deep water or rock; on the ship (#181), plating, hull and Hydroponics' beds too.
+The kind of ground a tile has: grass, dirt, sand, shallow water, deep water or rock; on the ship (#181), plating, hull and Hydroponics' beds too. Planned (M3, Slice 41c): each terrain also says how well it holds a Nest and its Nest Area.
 _Avoid_: tile type, biome (that's a kind of sector), ground
 
 **Walkable**:
@@ -73,12 +73,24 @@ What a sprite perceives a thing as, such as a bush, fruit, water or a sprite. Th
 _Avoid_: kind, class, genus, plant (a botanist's class, not what a sprite tells apart)
 
 **Fixture**:
-An object attached to the ground, so nothing can push, pull or carry it, such as a bush. Being a fixture and being solid are separate: a crate could be solid yet pushable.
+An object attached to the ground, so nothing can push, pull or carry it, such as a bush. Being a fixture and being solid are separate: a crate could be solid yet pushable. Planned (M3, Slice 41b): a Nest is the first fixture that isn't solid, so a sprite can walk onto it.
 _Avoid_: obstacle
 
 **Item**:
 An object that is neither solid nor a fixture, so a sprite can stand on it and the Cursor can pick it up, such as a berry or a ball.
 _Avoid_: loose item, pickup
+
+**Nest** (M3, Slice 41b):
+A family's home on the map: a flat fixture on one tile that a sprite shapes by touching or pushing the tile underfoot, where its terrain can hold one and no other family's Nest is near. Sprites stand, rest and sleep on it; nothing else shares its tile, so eggs and berries go beside it. It remembers who made it, and its **household** is its makers and their family. It holds warmth from sprites on it or beside it and gives it off slowly, keeping an egg beside it warm while the parents are away until the warmth runs out. Planned (M3 design §15.4).
+_Avoid_: bed (that's Hydroponics'), den, home (being home is the sense of being on it or its Nest Area), burrow
+
+**Nest Area** (M3, Slice 41c):
+The tiles around a Nest that its household has claimed: a mark on each tile, not an object and not a terrain, so things still go on it and the tile is as it was when the mark fades. It starts as the four tiles beside the Nest, grows when the household feels snug and a sprite touches or pushes its Nest, and fades from the outside past what its Nests hold. Each terrain says how well it holds one. Planned (M3 design §15.5).
+_Avoid_: territory, yard, area (alone: that would read as a region or a sector), nest ground
+
+**Camp** (M3, Slice 41c):
+Nests whose Nest Areas touch, which pool the tiles they hold. A growing household makes a camp by shaping another Nest beside its first. Planned (M3 design §15.5).
+_Avoid_: colony, village, settlement, nest site
 
 **Tag**:
 A property an object type either has or lacks. Having the tag means yes; lacking it means no. Solid and fixture are built in: they're physics. Others, such as thorny, are defined in the data, each saying what every contact with a thing that has it does, and every thing with a tag behaves the same way.
@@ -332,7 +344,7 @@ Lasting harm a hard life leaves on a sprite's body, from starving, going without
 _Avoid_: stress (that's what causes it), damage, injury (injury heals)
 
 **Egg** (M2):
-An item a mother lays on a free tile beside her, holding the sprite it hatches into: its genes, parents and name. It's an object, not a sprite: it feels, learns and needs nothing, and nothing a sprite does to it does anything. The Cursor picks it up and puts it down, but never throws, pets or zaps it. Other sprites see it as a thing of its own kind. Planned (M3): a sprite can carry one in an arm, and a sprite or the Cursor can throw one; a thrown egg breaks 3 times in 4, by its data, and the sprite inside dies (Slice 40). From Slice 41 it starts inside its mother, and needs a parent beside it to grow once laid (M3 design §14, §15).
+An item a mother lays on a free tile beside her, holding the sprite it hatches into: its genes, parents and name. It's an object, not a sprite: it feels, learns and needs nothing, and nothing a sprite does to it does anything. The Cursor picks it up and puts it down, but never throws, pets or zaps it. Other sprites see it as a thing of its own kind. Planned (M3): a sprite can carry one in an arm, and a sprite or the Cursor can throw one; a thrown egg breaks 3 times in 4, by its data, and the sprite inside dies (Slice 40). From Slice 41 it starts inside its mother, and needs a parent beside it to grow once laid, or from Slice 41b a warm Nest (M3 design §14, §15).
 _Avoid_: unborn sprite, larva, egg stage (an egg was a life stage until #196)
 
 **Pregnancy** (M3, Slice 41):
@@ -564,6 +576,10 @@ _Avoid_: trapped, stuck (a stuck walker is blocked)
 **Target**:
 The thing an action is aimed at, such as the berry bush a sprite is going to eat from. An action keeps the same target from start to end. Wander and Rest have none.
 _Avoid_: goal (a goal tile is where the sprite stands to act)
+
+**Underfoot** (M3, Slice 41b):
+The tile a sprite stands on, as a target: offered only where its terrain can hold a Nest and nothing stands there. Touching or pushing it shapes a Nest, as its data says. It's the only bare tile a sprite can aim at; choosing another tile waits for choosing where to stand (#246). Planned (M3 design §15.4).
+_Avoid_: ground (that's terrain), floor, spot
 
 ### The brain
 

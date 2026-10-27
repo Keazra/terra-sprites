@@ -97,7 +97,7 @@ The mode is picked in the new world box (M2 design §8.3) and kept for the world
 
 ### 3.2 What the ship is made of
 
-- **Plating:** the ship's metal floor, a terrain that sprites walk on and nothing grows on.
+- **Plating:** the ship's metal floor, a terrain that sprites walk on and nothing grows on. It can't hold a Nest bare, its data says, so soil gives families a better home (M3 design §15.5).
 - **Hull:** the ship's frame, a solid terrain like rock. A sector's walls are hull of its own, so the wall between two sectors, a few tiles thick, is their two walls back to back, with each doorway through both (round 2, Q9).
 - **Glass:** the ship's outer wall, along its flanks and around the engines at the stern, with space past it, as Slice 31 draws it (M2 design §11.2, §11.3). On the ship, the map is the rectangle around the whole ship, and **every tile in it is in one sector, walls included, or is space.** Sprites can't reach or sense space, and the glass is drawn one tile outside a sector wherever it faces space.
 - **The prow:** the ship's front, a blade of iron like a scythe, swept back past the flanks. It's only a look (round 3, Q4): drawn past the wall as glass is, iron instead of stars, with no debris.
@@ -187,7 +187,7 @@ Drawn by hand, tile by tile, in the game's data, as the tests' hand-drawn worlds
 - **Devices never wear out or break** (round 4, Q6). Some have a switch that turns them off and on again, worked like a panel (§7.2) by a sprite, or activated by the keeper (Select mode's right click, or `E`).
 - **A device's data says whether it has a switch** and what it does while off. A curious sprite that pulls the Marsh pump's lever stops it, and the Marsh slowly dries out until a sprite pulls it again, or the keeper activates it.
 - **Hydroponics is a garden to restore, then fill** (round 5, Q1).
-  - **Its beds are a terrain,** fertile like grass while the bay's lights and water are on. With either off, they dry out and nothing new takes root.
+  - **Its beds are a terrain,** fertile like grass while the bay's lights and water are on, and soil that can hold a Nest (M3 design §15.5). With either off, they dry out and nothing new takes root.
   - **At the start it's in disrepair:** its lights are off, the Reservoir's pump that waters it is off, and its beds hold only a few withered bushes. Switching both on brings it back, and it's the first thing a new keeper learns about devices.
   - **What's planted in a bed grows.** A berry dropped on a bed always sprouts, where on grass it's 1 in 10. Once other biomes have plants of their own, their fruit grows in beds too, so the garden holds whatever the keeper and the sprites bring.
   - **Sprites tend it with M3's verbs:** a sprite that carries a berry and drops it on a bed has planted it, and learns to as it learns anything (M3 design §9.2).
