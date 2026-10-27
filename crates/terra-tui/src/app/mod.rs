@@ -545,6 +545,10 @@ pub struct App {
     /// Whether the view follows the selected sprite (`T`, design v21
     /// §6.1).
     tracking: bool,
+    /// What the view last centred on while tracking, and where it was:
+    /// for a new screen size or square tiles to centre on at once, rather
+    /// than pan to as the next tick is taken in (design §6.9).
+    tracked_at: Option<(EntityId, Pos)>,
     /// The event log, its title row included, if the screen has room for
     /// it.
     event_log_area: Option<Rect>,
@@ -810,6 +814,7 @@ impl App {
             policy: Box::new(Omniscient),
             colour_mode: ColourMode::Drive,
             tracking: false,
+            tracked_at: None,
             event_log_area: areas.event_log,
             overlay: areas.overlay,
             event_filter: EventFilter::All,

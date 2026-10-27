@@ -1924,6 +1924,55 @@ fn scrolling_the_tiles_squared_and_a_new_screen_size_jump_even_while_it_pans() {
 }
 
 #[test]
+fn tracking_square_tiles_and_a_new_screen_size_still_jump() {
+    // Design §6.9: Track centres the view on its sprite again for the new
+    // view, and that jumps too, rather than panning as the next tick is
+    // taken in. A new screen size, with the sprite in the middle of a wide
+    // map:
+    let world = WorldBuilder::grass(300, 12).starters(&[at(150, 5)]).build();
+    let (mut on, mut off) = twins(&world);
+    both(&mut on, &mut off, &world, Action::SelectNext);
+    both(&mut on, &mut off, &world, Action::Track);
+    frames(&mut on, &mut off, &world, ms(1000));
+    let (was, bigger) = (on.viewport(), Size::new(160, 30));
+    for app in [&mut on, &mut off] {
+        app.fit(ui::areas(bigger));
+        take_in(app, &world);
+    }
+    assert!(
+        (on.viewport().x - was.x).abs() > 2,
+        "{was:?} to {:?}",
+        on.viewport()
+    );
+    let (shown, plain) = frames_on(&mut on, &mut off, &world, Duration::ZERO, bigger);
+    assert!(
+        same_map_view_on(&shown, &plain, bigger),
+        "a new screen size"
+    );
+    // Square tiles, with #1 near the wall, where the margin past it halves.
+    let world = wide();
+    let (mut on, mut off) = twins(&world);
+    both(&mut on, &mut off, &world, Action::SelectNext);
+    frames(&mut on, &mut off, &world, ms(1000));
+    both(&mut on, &mut off, &world, Action::Track);
+    frames(&mut on, &mut off, &world, ms(1000));
+    let was = on.viewport();
+    both(&mut on, &mut off, &world, Action::Zoom);
+    assert!(
+        (on.viewport().x - was.x).abs() > 2,
+        "{was:?} to {:?}",
+        on.viewport()
+    );
+    let (shown, plain) = frames(&mut on, &mut off, &world, Duration::ZERO);
+    assert!(same_map_view(&shown, &plain), "square tiles");
+    for app in [&mut on, &mut off] {
+        take_in(app, &world);
+    }
+    let (shown, plain) = frames(&mut on, &mut off, &world, Duration::ZERO);
+    assert!(same_map_view(&shown, &plain), "and the next tick");
+}
+
+#[test]
 fn at_4x_and_with_motion_turned_off_the_view_jumps() {
     let world = wide();
     let (mut on, mut off) = twins(&world);

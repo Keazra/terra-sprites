@@ -92,6 +92,7 @@ impl App {
             y: middle.y,
         };
         // It jumps rather than pans (design §6.9).
+        self.jump_to_tracked();
         self.motion.stop_pan();
         self.settle();
         self.tell_player(if self.zoom {
@@ -192,7 +193,8 @@ impl App {
     /// Refits the app to where its panels are now drawn, as after a resize.
     pub fn fit(&mut self, areas: Areas) {
         // On a screen of a new size, the view jumps (design §6.9).
-        if areas.tiles != self.tile_area {
+        let resized = areas.tiles != self.tile_area;
+        if resized {
             self.motion.stop_pan();
         }
         self.tile_area = areas.tiles;
@@ -202,6 +204,9 @@ impl App {
         self.full_screen &= self.inspector != InspectorRoom::Nowhere;
         self.event_log_area = areas.event_log;
         self.overlay = areas.overlay;
+        if resized {
+            self.jump_to_tracked();
+        }
         self.settle();
     }
 
@@ -326,11 +331,25 @@ impl App {
             Some(Selection::Living(id)) if self.tracking => match world.sprite(id) {
                 Some(sprite) => Some(sprite.pos()),
                 None => world.egg(id).and_then(|egg| egg.pos()),
-            },
+            }
+            .map(|pos| (id, pos)),
             _ => None,
         };
-        if let Some(pos) = tracked {
+        self.tracked_at = tracked;
+        if let Some((_, pos)) = tracked {
             self.pan_to(pos);
+        }
+    }
+
+    /// While tracking, centres the viewport at once on where what it tracks
+    /// was last seen, as a new screen size or square tiles move the view:
+    /// those jump, so tracking mustn't then pan there (design §6.9).
+    fn jump_to_tracked(&mut self) {
+        if let (true, Some(Selection::Living(id)), Some((tracked, pos))) =
+            (self.tracking, self.selection, self.tracked_at)
+            && id == tracked
+        {
+            self.viewport = self.centred_on(pos);
         }
     }
 
