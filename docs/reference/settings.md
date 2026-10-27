@@ -13,7 +13,7 @@ The **settings screen** is where you choose how the game looks and feels: its gl
 | Motion | The screen's small movements ([manual](../manual.md#motion), design §6.9) | `on`, the default, or `off` |
 | Square tiles | Each tile drawn two cells wide, so the world looks its true shape; `o` is the same switch (M2 design §11.7) | `off`, the default, or `on` |
 
-`↑` and `↓`, or a row's number, choose a row. `←` and `→`, `Enter` or a click change it, at once, and the status line says what changed, such as "Colours: mono". A theme file that doesn't load is refused: the status line says why, such as "Couldn't use theme night: it has no glyph for terrain(rock)", and the row keeps what it had. Time runs on behind the box, `Esc` closes it and `?` opens the help. [Themes](themes.md) says how to make a theme file of your own and what the built-in ones are.
+`↑` and `↓`, or a row's number, choose a row. `←` and `→`, `Enter` or a click change it, at once, and the status line says what changed, such as "Colours: mono". A theme file that doesn't load is passed over, for the next one along that does, so it never hides those after it: the status line says why, such as "Couldn't use theme night: it has no glyph for terrain(rock)". Time runs on behind the box, `Esc` closes it and `?` opens the help. [Themes](themes.md) says how to make a theme file of your own and what the built-in ones are.
 
 ## settings.ron
 

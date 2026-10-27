@@ -182,37 +182,56 @@ impl App {
     /// Changes row `row` of the settings screen `by` a value along, at
     /// once, says so on the status line, as "Colours: mono", and saves it
     /// (design §6.7, #307): that row alone, so what the flags pick for the
-    /// run is never saved. A theme file that doesn't load is refused, and
-    /// the row keeps what it had.
+    /// run is never saved. A theme file that doesn't load is passed over,
+    /// for the next one along that does, and the status line says why the
+    /// first passed over didn't instead; the row keeps what it had if none
+    /// does.
     pub(super) fn change_setting(&mut self, row: Setting, by: i32, world: &World) {
-        match row {
+        let passed_over = match row {
             Setting::Glyphs => {
-                let pick = App::moved(&self.options::<GlyphSet>(), self.look.glyphs(), by);
-                let Some(theme) = self.theme_for(&pick, world) else {
-                    return;
+                let options = self.options::<GlyphSet>();
+                let (found, passed_over) = loading(&options, self.look.glyphs(), by, world);
+                let Some((pick, theme)) = found else {
+                    return self.refuse_passed_over(passed_over);
                 };
                 self.saved_settings.glyphs = Some(saved_name(&pick));
                 self.use_look(self.look.clone().with_glyphs(pick, theme));
+                passed_over
             }
             Setting::Colours => {
-                let pick = App::moved(&self.options::<ColourPalette>(), self.look.palette(), by);
-                let Some(theme) = self.theme_for(&pick, world) else {
-                    return;
+                let options = self.options::<ColourPalette>();
+                let (found, passed_over) = loading(&options, self.look.palette(), by, world);
+                let Some((pick, theme)) = found else {
+                    return self.refuse_passed_over(passed_over);
                 };
                 self.saved_settings.colours = Some(saved_name(&pick));
                 self.use_look(self.look.clone().with_palette(pick, theme));
+                passed_over
             }
             Setting::Motion => {
                 self.set_motion(!self.motion());
                 self.saved_settings.motion = Some(self.motion());
+                None
             }
             Setting::SquareTiles => {
                 self.set_square_tiles(!self.zoom);
                 self.saved_settings.square_tiles = Some(self.zoom);
+                None
             }
+        };
+        match passed_over {
+            Some(why) => self.refuse(why),
+            None => self.tell_player(format!("{}: {}", row.label(), self.shown_setting(row))),
         }
-        self.tell_player(format!("{}: {}", row.label(), self.shown_setting(row)));
         self.save_settings();
+    }
+
+    /// Says why the theme file passed over didn't load, if one was, as a
+    /// row keeps what it had.
+    fn refuse_passed_over(&mut self, passed_over: Option<String>) {
+        if let Some(why) = passed_over {
+            self.refuse(why);
+        }
     }
 
     /// Draws with `look` from now on.
@@ -220,16 +239,32 @@ impl App {
         self.theme = look.theme();
         self.look = look;
     }
+}
 
-    /// The theme `pick` is taken from, or none, saying why, if it's a file
-    /// that doesn't load.
-    fn theme_for<T: Part>(&mut self, pick: &Pick<T>, world: &World) -> Option<Theme> {
-        match settings::theme_of(pick, world.data()) {
-            Ok(theme) => Some(theme),
+/// The first of the settings screen's `options` `by` a value along from
+/// `current`, a value at a time, round from either end, whose theme loads
+/// against `world`'s data pack, with that theme, or none if none does but
+/// `current`; and why the first theme file passed over didn't load, if one
+/// was (design §6.7, #307).
+fn loading<T: Part>(
+    options: &[Pick<T>],
+    current: &Pick<T>,
+    by: i32,
+    world: &World,
+) -> (Option<(Pick<T>, Theme)>, Option<String>) {
+    let mut passed_over = None;
+    let mut pick = current.clone();
+    for _ in 0..options.len() {
+        pick = App::moved(options, &pick, by);
+        if &pick == current {
+            break;
+        }
+        match settings::theme_of(&pick, world.data()) {
+            Ok(theme) => return (Some((pick, theme)), passed_over),
             Err(why) => {
-                self.refuse(format!("Couldn't use theme {}: {why}", name_of(pick)));
-                None
+                passed_over.get_or_insert(format!("Couldn't use theme {}: {why}", name_of(&pick)));
             }
         }
     }
+    (None, passed_over)
 }

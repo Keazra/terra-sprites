@@ -211,25 +211,51 @@ fn a_theme_file_gives_its_glyphs_on_one_row_and_its_colours_on_the_other() {
 }
 
 #[test]
-fn a_theme_that_doesnt_load_is_refused_and_the_row_keeps_its_value() {
+fn a_theme_that_doesnt_load_is_refused_and_passed_over() {
+    // Design §6.7: a theme file that won't load never hides those after
+    // it, whichever way the row goes, and is still said.
     let folder = scratch_folder("broken");
-    std::fs::write(folder.join("broken.ron"), theme_with_sprite('λ')).unwrap();
+    std::fs::write(folder.join("a_broken.ron"), theme_with_sprite('λ')).unwrap();
+    std::fs::write(folder.join("m_good.ron"), ASCII_THEME).unwrap();
+    std::fs::write(folder.join("z_broken.ron"), "not a theme").unwrap();
     let world = settings_world();
+    let (on, back) = (
+        Action::Scroll { dx: 1, dy: 0 },
+        Action::Scroll { dx: -1, dy: 0 },
+    );
+    // Each row from its last built-in one going on, and from its first
+    // going back.
+    for (row, last_built_in) in [(Setting::Glyphs, 1), (Setting::Colours, 3)] {
+        for action in [on, Action::Enter, back] {
+            let mut app = app_for(&world, &folder);
+            on_row(&mut app, &world, row);
+            if action != back {
+                for _ in 0..last_built_in {
+                    apply(&mut app, &world, on);
+                }
+            }
+            apply(&mut app, &world, action);
+            assert_eq!(shows(&app, row), "m_good", "{row:?} by {action:?}");
+            let passed = if action == back {
+                "z_broken"
+            } else {
+                "a_broken"
+            };
+            let refusal = app.refusal().expect("refused");
+            assert!(
+                refusal.starts_with(&format!("Couldn't use theme {passed}: ")),
+                "{refusal}"
+            );
+            assert_eq!(app.screen(), Screen::Settings);
+        }
+    }
+    // Why it didn't load: a character outside CP437.
     let mut app = app_for(&world, &folder);
     on_row(&mut app, &world, Setting::Glyphs);
-    apply(&mut app, &world, Action::Scroll { dx: -1, dy: 0 });
+    apply(&mut app, &world, on);
+    apply(&mut app, &world, on);
     let refusal = app.refusal().expect("refused");
-    assert!(
-        refusal.starts_with("Couldn't use theme broken: ") && refusal.contains("CP437"),
-        "{refusal}"
-    );
-    assert_eq!(shows(&app, Setting::Glyphs), "CP437");
-    assert_eq!(app.theme, Theme::cp437());
-    assert_eq!(app.screen(), Screen::Settings);
-    apply(&mut app, &world, Action::Pick(2));
-    apply(&mut app, &world, Action::Scroll { dx: -1, dy: 0 });
-    assert!(app.refusal().is_some());
-    assert_eq!(shows(&app, Setting::Colours), "default");
+    assert!(refusal.contains("CP437"), "{refusal}");
 }
 
 #[test]

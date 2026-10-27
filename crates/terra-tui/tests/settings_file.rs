@@ -185,7 +185,8 @@ fn pressing_o_saves_square_tiles() {
 }
 
 #[test]
-fn a_theme_refused_saves_nothing() {
+fn a_theme_refused_is_never_saved() {
+    // Design §6.7: passed over, for the next one along that loads.
     let folder = scratch_folder("refused");
     std::fs::write(folder.join("broken.ron"), "not a theme").unwrap();
     let world = settings_world();
@@ -193,7 +194,7 @@ fn a_theme_refused_saves_nothing() {
     change(&mut app, &world, Setting::Glyphs);
     change(&mut app, &world, Setting::Glyphs);
     assert!(app.refusal().is_some());
-    assert_eq!(saved(&path).glyphs.as_deref(), Some("ASCII"));
+    assert_eq!(saved(&path).glyphs.as_deref(), Some("CP437"));
 }
 
 #[test]
