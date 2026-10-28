@@ -30,11 +30,16 @@
 # talk the reviewer into sending out. A stranger's comment could try the
 # same, on the owner's PR or on an issue it names, so a PR goes to the
 # sandbox only while everything the reviewer reads there was written by the
-# owner or a review bot, and while GitHub can say who wrote it. Without
-# -Sandbox, Gemini only reads, so any PR can be reviewed that way. Either
-# way, a PR whose comments, reviews or conversation GitHub couldn't hand over
-# isn't reviewed: the reviewer would miss what was said, and in the sandbox,
-# who said it.
+# owner or a review bot, and while GitHub can say who wrote it. One review
+# bot, .github/workflows/claude-review.yml, posts as github-actions[bot],
+# which only this repository's own workflows can write as. Its review
+# carries what it read, so every issue the PR's description names is
+# checked too, and so on for a PR among them with a Claude review of its
+# own. Any other comment by github-actions[bot] counts as a stranger's.
+# Without -Sandbox, Gemini only reads, so any PR can be reviewed that way.
+# Either way, a PR whose comments, reviews or conversation GitHub couldn't
+# hand over isn't reviewed: the reviewer would miss what was said, and in
+# the sandbox, who said it.
 #
 # With no PR number, the open PRs are listed with where each stands with
 # Gemini, to tick with the arrow keys and Space. The ones never reviewed, or
@@ -64,6 +69,10 @@ $Owner = $GitHubRepo.Split("/")[0]
 # Who may have written what the reviewer reads in the sandbox: the owner, and
 # the review bots, whose words come from the owner's own PR.
 $SandboxWriters = @($Owner, "Copilot", "copilot-pull-request-reviewer[bot]", "chatgpt-codex-connector[bot]")
+# The Claude review workflow's comments, which it posts as github-actions[bot].
+# Only these of that name's words count as a review bot's.
+$ActionsBot = "github-actions[bot]"
+$ClaudeReview = '^\s*(?:## )?\[Review from Claude\]'
 $SandboxSetup = "Run 'Set up the Gemini sandbox.bat', in the FTA2 folder, again."
 
 function Fail([string]$Why) {
@@ -291,6 +300,56 @@ function Get-Review($Output) {
     try { return ($reply | ConvertFrom-Json) } catch { return $null }
 }
 
+# Who besides the owner and the review bots wrote what the reviewer reads in
+# the sandbox (the opening comment), each as "login on #N": the PR's reviews
+# and review comments ($Said, as fetched for .review), then the PR and each
+# issue it names, with their comments. A Claude review read every issue its
+# PR's description names as #N (the workflow's rule, less its limit of
+# five), so those join the issues checked.
+function Get-OtherWriters([string]$Number, $Named, $Said) {
+    $others = @($Said | Where-Object { $_ } | ForEach-Object { ($_ | ConvertFrom-Json).user } |
+        Where-Object { $SandboxWriters -notcontains $_ } | ForEach-Object { "$_ on #$Number" })
+    $checked = New-Object System.Collections.ArrayList
+    foreach ($n in @($Number) + @($Named)) { if ($checked -notcontains "$n") { [void]$checked.Add("$n") } }
+    # The list grows as Claude reviews are found, so it's walked by index.
+    for ($i = 0; $i -lt $checked.Count; $i++) {
+        $n = $checked[$i]
+        # gh's errors come back too, to tell a number that's no issue from
+        # GitHub not answering.
+        $answer = @(& gh api "repos/$GitHubRepo/issues/$n" --jq '{user: .user.login, body}' 2>&1)
+        if ($LASTEXITCODE -ne 0) {
+            # A number that isn't an issue, such as a colour like #306230,
+            # holds nobody's words. The workflow passes it by too.
+            $why = "$($answer | Where-Object { $_ -is [Management.Automation.ErrorRecord] })"
+            if ($why -match '\(HTTP 4(04|10)\)') { continue }
+            Fail "Couldn't check who wrote #$n, so PR #$Number isn't reviewed in the sandbox."
+        }
+        $item = Join-Lines ($answer | Where-Object { $_ -isnot [Management.Automation.ErrorRecord] }) | ConvertFrom-Json
+        $thread = @(& gh api "repos/$GitHubRepo/issues/$n/comments" --paginate --jq '.[] | {user: .user.login, body}')
+        if ($LASTEXITCODE -ne 0) { Fail "Couldn't check who commented on #$n, so PR #$Number isn't reviewed in the sandbox." }
+        $writers = @($item.user)
+        $reviewed = $false
+        foreach ($line in $thread) {
+            $c = $line | ConvertFrom-Json
+            if ($c.user -ne $ActionsBot) {
+                $writers += $c.user
+            } elseif ("$($c.body)" -match $ClaudeReview) {
+                $reviewed = $true
+            } else {
+                $writers += "$ActionsBot, outside a Claude review,"
+            }
+        }
+        $others += @($writers | Where-Object { $SandboxWriters -notcontains $_ } | ForEach-Object { "$_ on #$n" })
+        if ($reviewed) {
+            foreach ($m in [regex]::Matches("$($item.body)", '(?<![\w/#])#(\d+)\b')) {
+                $ref = $m.Groups[1].Value
+                if ($checked -notcontains $ref) { [void]$checked.Add($ref) }
+            }
+        }
+    }
+    return ,@($others | Select-Object -Unique)
+}
+
 Set-Location $Repo
 # The model goes on agy's command line, so it must be one word.
 if ($Model -and $Model -notmatch '^[A-Za-z0-9._:/-]+$') { Fail "'$Model' isn't a model name." }
@@ -449,19 +508,11 @@ try {
     }
 
     # In the sandbox, everything above must be the owner's or a review bot's
-    # (the opening comment): the PR's own text and the issues it names, with
-    # their comments, and the reviews and review comments.
+    # (the opening comment).
     if ($Sandbox) {
-        $writers = @($comments + $reviews | Where-Object { $_ } | ForEach-Object { ($_ | ConvertFrom-Json).user })
-        foreach ($number in @($Pr) + $named) {
-            $writers += @(& gh api "repos/$GitHubRepo/issues/$number" --jq '.user.login')
-            if ($LASTEXITCODE -ne 0) { Fail "Couldn't check who wrote #$number, so PR #$Pr isn't reviewed in the sandbox." }
-            $writers += @(& gh api "repos/$GitHubRepo/issues/$number/comments" --paginate --jq '.[].user.login')
-            if ($LASTEXITCODE -ne 0) { Fail "Couldn't check who commented on #$number, so PR #$Pr isn't reviewed in the sandbox." }
-        }
-        $others = @($writers | Where-Object { $SandboxWriters -notcontains $_ } | Select-Object -Unique)
+        $others = Get-OtherWriters $Pr $named @($comments + $reviews)
         if ($others.Count -gt 0) {
-            Fail "PR #$Pr, or an issue it names, has words by $($others -join ', '), so it $NotSandboxed"
+            Fail "PR #$Pr, or an issue it names, has words by $($others -join '; '), so it $NotSandboxed"
         }
     }
 
