@@ -215,8 +215,10 @@ The `docs/terra-sprites-docs` folder is empty in your copy. It's where the owner
 |---|---|
 | **M1 — A Sprite Lives** *(done, v0.1.0)* | World, ecology, biochemistry, learning brain, terminal UI, the Cursor, saves and replays |
 | **M2 — Generations** *(done, v0.2.0)* | Memory of places, a title screen, life stages and ageing, breeding, genetics, a family tree, population graphs, fast-forward and a speed cap, learning by watching, a harsher world |
-| **M3 — Body & verbs** | Limbs that are hurt and heal, and the verbs they give: touching, grabbing, gripping, pushing, pulling, throwing and dropping things. Play as a feeling, real sleep, eggs carried and sometimes broken, pregnancy, grief for the deaths a sprite sees, dead bodies, families sharing food and correcting their young, first-steps worlds for new players, and the screen laid out again for it all |
+| **M3 — Body & verbs** | Limbs that are hurt and heal, and the verbs they give: touching, grabbing, gripping, pushing, pulling, throwing and dropping things. Play as a feeling, real sleep, eggs carried and sometimes broken, pregnancy, nests, grief for the deaths a sprite sees, dead bodies, families sharing food and correcting their young, first-steps worlds for new players, and the screen laid out again for it all |
 | **M4 — Terra** | The terrarium is a ship, Terra: its sectors open one by one as the sprites learn |
 | **M5 — Wild Terra** | Critters, more hazards and toys, possibly seasons and weather |
 | **M6 — Words** | Teaching sprites words |
 | **Tiles** | A tile-window front end with sprite-sheet support |
+
+The [road map](https://claude.ai/artifact/8bcCKraEa32we24zPw4Fhe) shows how far along each milestone is, step by step, and moves as each step lands.
