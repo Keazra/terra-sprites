@@ -60,7 +60,7 @@ use std::time::Duration;
 
 use ratatui::buffer::{Buffer, Cell};
 use ratatui::layout::{Position, Rect};
-use ratatui::style::Color;
+use ratatui::style::{Color, Modifier};
 use tachyonfx::{ColorSpace, Effect, EffectTimer, Interpolation, fx};
 use terra_sim::{EntityId, EventKind, Pos, World};
 
@@ -1545,11 +1545,11 @@ fn trail(buf: &mut Buffer, on: &OnMap, now: Duration) {
 }
 
 /// Plays each egg about to hatch flashing, among the items `lying` on the
-/// map (design §6.9): from `FLASH_FROM` ticks before it hatches, its tile's
-/// background glows towards the sparks' colour at once and fades back,
-/// quick and then slowing, again and again until the young appears, each
-/// flash sooner and brighter than the last. Colour only: its glyph stays.
-/// It asks the policy first, as its hatching will (§6.4).
+/// map (design §6.9): from `FLASH_FROM` ticks before it hatches, its tile
+/// glows towards the sparks' colour at once and fades back, quick and then
+/// slowing, again and again until the young appears, each flash sooner and
+/// brighter than the last. Colour only: its glyph stays. It asks the policy
+/// first, as its hatching will (§6.4).
 fn flash(buf: &mut Buffer, on: &OnMap, lying: &[Lying], now: Duration) {
     let flashing = &on.app.motion_kept().flashing;
     for spot in lying {
@@ -1560,18 +1560,41 @@ fn flash(buf: &mut Buffer, on: &OnMap, lying: &[Lying], now: Duration) {
             continue;
         }
         let (into, period) = (egg.reached(now), flash_period(egg.left));
-        let way = flash_strength(egg.left) * (1.0 - eased(into, period));
-        let bg = glow(buf, on, spot.cell, way);
-        play(fx::paint_bg(bg, timer(period)), into, buf, spot.cell);
+        let faded = eased(into, period);
+        glow(
+            buf,
+            on,
+            spot.cell,
+            on.look.spark,
+            (flash_strength(egg.left), faded),
+        );
     }
 }
 
-/// The background of screen cell `cell` `way` of the way from its own
-/// towards the sparks' colour, from 0 to 1: an egg's flash.
-fn glow(buf: &Buffer, on: &OnMap, cell: Position, way: f32) -> Color {
+/// Glows screen cell `cell` towards the colour `light`, `peak` of the way
+/// at first, from 0 to 1, and back as it has `faded`, from 0 to 1 (design
+/// §6.9): an egg's flash, or a death's. It glows the background behind the
+/// cell's glyph. A cell in reverse video, as a selected egg or sprite and
+/// the Cursor's tile are drawn (§6.2), shows its glyph's colour behind the
+/// glyph and its background only in the glyph's strokes, where a glow
+/// would hardly show: there the glow takes the reverse video's place, the
+/// glyph drawn in its colour on the glow as on a cell that isn't
+/// reversed, and the reverse video comes back as the glow fades.
+fn glow(buf: &mut Buffer, on: &OnMap, cell: Position, light: Color, (peak, faded): (f32, f32)) {
     let dark = campbell::rgb(on.look.dark).unwrap_or(campbell::BACKGROUND);
     let own = campbell::exact(buf[cell].bg, dark);
-    ColorSpace::Rgb.lerp(&own, &campbell::exact(on.look.spark, dark), way)
+    let light = campbell::exact(light, dark);
+    if buf[cell].modifier.contains(Modifier::REVERSED) {
+        // Reversed, the cell's foreground fills it, and its background
+        // draws the glyph.
+        let glyph = campbell::exact(buf[cell].fg, own_text(on.app));
+        let lit = ColorSpace::Rgb.lerp(&own, &light, peak);
+        buf[cell]
+            .set_fg(ColorSpace::Rgb.lerp(&lit, &glyph, faded))
+            .set_bg(ColorSpace::Rgb.lerp(&glyph, &own, faded));
+    } else {
+        buf[cell].set_bg(ColorSpace::Rgb.lerp(&own, &light, peak * (1.0 - faded)));
+    }
 }
 
 /// `cell`'s colour as an exact one, for a fade to blend from (design §6.9),
@@ -1582,7 +1605,7 @@ fn exact_fg(buf: &mut Buffer, cell: Position, text: Rgb) {
 }
 
 /// Plays a death on `tile`, `age` into it, for as long as it `lasts`
-/// (design §6.9): the tile's background flashes and fades back, and the
+/// (design §6.9): the tile flashes and fades back, and the
 /// ghost, the sprite's glyph `symbol` in the `colour` it was drawn in,
 /// fades to ash, while the tile shows bare ground.
 fn death(
@@ -1594,9 +1617,7 @@ fn death(
     lasts: Duration,
 ) {
     let look = on.look;
-    let dark = campbell::rgb(look.dark).unwrap_or(campbell::BACKGROUND);
     let text = own_text(on.app);
-    let flash = campbell::exact(look.flash, dark);
     let back = eased(age, lasts);
     for (n, cell) in on.cells(tile).into_iter().enumerate() {
         if on.shows_bare(cell) {
@@ -1607,9 +1628,7 @@ fn death(
             let ash = campbell::exact(look.ash, text);
             play(fx::fade_to_fg(ash, timer(lasts)), age, buf, cell);
         }
-        let own = campbell::exact(buf[cell].bg, dark);
-        let bg = ColorSpace::Rgb.lerp(&flash, &own, back);
-        play(fx::paint_bg(bg, timer(lasts)), age, buf, cell);
+        glow(buf, on, cell, look.flash, (1.0, back));
     }
 }
 
@@ -1645,7 +1664,7 @@ fn hatching(buf: &mut Buffer, on: &OnMap, tile: Pos, young: Young, moment: &Mome
     let emoting = sprite.is_some_and(|sprite| ui::is_emote(on.app, &sprite));
     let egg = campbell::exact(young.egg, own_text(on.app));
     match age.checked_sub(crack) {
-        None => cracked(buf, on, &drawn, (egg, young.flashed), (age, crack)),
+        None => cracked(buf, on, &drawn, (egg, young.flashed)),
         Some(since) => {
             if on.colours {
                 let warming = lasts / 2;
@@ -1660,25 +1679,18 @@ fn hatching(buf: &mut Buffer, on: &OnMap, tile: Pos, young: Young, moment: &Mome
 }
 
 /// Draws the egg cracked on the screen cells `drawn` where the young is,
-/// `age` into a crack that lasts `crack` (design §6.9): in its tile's first
-/// cell, as the young's glyph is, in the egg's colour, `egg`. Where
-/// motion's colours play, an egg that `flashed` glows where its last flash
-/// left it, seven tenths of the way to the sparks' colour.
-fn cracked(
-    buf: &mut Buffer,
-    on: &OnMap,
-    drawn: &[Position],
-    (egg, flashed): (Color, bool),
-    (age, crack): (Duration, Duration),
-) {
+/// while the crack lasts (design §6.9): in its tile's first cell, as the
+/// young's glyph is, in the egg's colour, `egg`. Where motion's colours
+/// play, an egg that `flashed` glows where its last flash left it, seven
+/// tenths of the way to the sparks' colour.
+fn cracked(buf: &mut Buffer, on: &OnMap, drawn: &[Position], (egg, flashed): (Color, bool)) {
     let symbol = on.app.theme.shell().cracked;
     for (n, &cell) in drawn.iter().enumerate() {
         if n == 0 {
             buf[cell].set_char(symbol).set_fg(egg);
         }
         if flashed && on.colours {
-            let bg = glow(buf, on, cell, FLASH_BRIGHTEST);
-            play(fx::paint_bg(bg, timer(crack)), age, buf, cell);
+            glow(buf, on, cell, on.look.spark, (FLASH_BRIGHTEST, 0.0));
         }
     }
 }
@@ -1706,10 +1718,9 @@ fn warms(
         }
     }
     if young.flashed {
+        let faded = eased(since, warming);
         for &cell in drawn {
-            let way = FLASH_BRIGHTEST * (1.0 - eased(since, warming));
-            let bg = glow(buf, on, cell, way);
-            play(fx::paint_bg(bg, timer(warming)), since, buf, cell);
+            glow(buf, on, cell, on.look.spark, (FLASH_BRIGHTEST, faded));
         }
     }
 }

@@ -17,10 +17,10 @@ use std::time::Duration;
 
 use ratatui::buffer::{Buffer, Cell};
 use ratatui::layout::{Position, Rect, Size};
-use ratatui::style::Color;
+use ratatui::style::{Color, Modifier};
 use ratatui::{Terminal, backend::TestBackend};
 use terra_sim::{DeathCause, EntityId, Event, EventKind, Pos, ScriptedAction, Terrain, World};
-use terra_tui::app::{App, ColourMode, CursorMode, Screen, Tab, Ticks};
+use terra_tui::app::{App, ColourMode, CursorMode, Screen, Selection, Tab, Ticks};
 use terra_tui::args::{Args, USAGE};
 use terra_tui::campbell::{self, FOREGROUND};
 use terra_tui::clock::Speed;
@@ -336,6 +336,27 @@ fn at_4x_a_death_is_over_in_half_the_time() {
     assert_eq!(playing[first].symbol(), "☺");
     let over = frame(&mut app, &after, ms(50));
     assert_eq!((over[first].symbol(), over[first].bg), (".", Color::Reset));
+}
+
+#[test]
+fn a_death_on_the_cursor_s_tile_flashes_through_its_reverse_video() {
+    // Design §6.9: the Cursor's tile is drawn in reverse video, as a
+    // selected egg is, so the flash takes the reverse video's place there
+    // too: at once the ghost is drawn in its colour on the flash, and the
+    // reverse video comes back as it fades.
+    let (mut app, ids, after) = before_and_after(&[at(3, 2)]);
+    cursor_to(&mut app, &after, at(3, 2));
+    app.record(&deaths(&ids), &after);
+    let flash = app.theme.motion().flash;
+    let first = cell(&app, at(3, 2));
+    let screen = frame(&mut app, &after, Duration::ZERO);
+    assert!(reversed(&screen, first));
+    assert_eq!(screen[first].symbol(), "☺");
+    assert_eq!((screen[first].fg, screen[first].bg), (flash, WHITE));
+    let over = frame(&mut app, &after, ms(1200));
+    assert!(reversed(&over, first));
+    assert_eq!((over[first].symbol(), over[first].fg), (".", Color::Green));
+    assert_eq!(over[first].bg, Color::Reset);
 }
 
 #[test]
@@ -1298,6 +1319,119 @@ fn an_egg_stood_on_past_its_tick_flashes_once_clear_and_its_young_starts_at_the_
     let young = cell(&on, world.sprite(egg).expect("hatched").pos());
     let start = frame(&mut on, &world, Duration::ZERO);
     assert_eq!(start[young].bg, LAST_FLASH);
+}
+
+/// Selects the egg on `tile` in both twins with a click, as the player
+/// does, which leaves the Cursor on its tile.
+fn click_egg(world: &World, on: &mut App, off: &mut App, egg: EntityId, tile: Pos) {
+    both(on, off, world, Action::left_click(pointer_on(on, tile)));
+    assert_eq!(on.selection(), Some(Selection::Living(egg)));
+    assert_eq!(on.cursor(), tile);
+}
+
+/// Points both twins away from `tile`, so the Cursor leaves it.
+fn point_away(world: &World, on: &mut App, off: &mut App, tile: Pos) {
+    let away = at(if tile.x > 5 { 0 } else { 11 }, 0);
+    both(on, off, world, Action::Point(pointer_on(on, away)));
+    assert_eq!(on.cursor(), away);
+}
+
+/// Whether `colour` is exact and within a step of `to` in each part, as a
+/// fade is a millisecond before its end.
+fn about(colour: Color, to: Color) -> bool {
+    match (colour, to) {
+        (Color::Rgb(r, g, b), Color::Rgb(r2, g2, b2)) => {
+            r.abs_diff(r2) <= 1 && g.abs_diff(g2) <= 1 && b.abs_diff(b2) <= 1
+        }
+        _ => false,
+    }
+}
+
+/// Whether screen cell `cell` is drawn in reverse video.
+fn reversed(screen: &Buffer, cell: Position) -> bool {
+    screen[cell].modifier.contains(Modifier::REVERSED)
+}
+
+#[test]
+fn a_selected_egg_s_flash_shows_through_its_reverse_video() {
+    // Design §6.9, found filming Look 5: a selected egg is drawn in reverse
+    // video, its colour filling its tile and its background showing only
+    // in its glyph's strokes, so a flash glowing the background hardly
+    // showed. There the flash takes the reverse video's place: at once the
+    // egg is drawn in its colour on the glow, as an egg not selected is,
+    // and the reverse video comes back as the flash fades.
+    let [quick, _] = common::QUICK;
+    let mut world = grow(
+        &[quick, SLOW_EGGS, common::LONE],
+        (12, 6),
+        &[(at(1, 4), LONE_MOTHER)],
+        0,
+    );
+    let (mut on, mut off) = twins(&world);
+    let (egg, tile) = until_due_in(&mut world, &mut on, &mut off, 100);
+    click_egg(&world, &mut on, &mut off, egg, tile);
+    point_away(&world, &mut on, &mut off, tile);
+    let first = cell(&on, tile);
+    on.clock.pause();
+    let plain = frame(&mut off, &world, Duration::ZERO);
+    assert!(reversed(&plain, first));
+    let start = frame(&mut on, &world, Duration::ZERO);
+    assert!(reversed(&start, first));
+    assert_eq!(start[first].symbol(), plain[first].symbol());
+    // Reversed, the cell's foreground fills the tile and its background
+    // draws the glyph.
+    assert_eq!((start[first].fg, start[first].bg), (FIRST_FLASH, EGG));
+    let fading = frame(&mut on, &world, ms(802));
+    assert!(reversed(&fading, first));
+    let filling = brightness(fading[first].fg);
+    assert!(
+        filling > brightness(FIRST_FLASH) && filling < brightness(EGG),
+        "{:?}",
+        fading[first].fg
+    );
+    let faded = frame(&mut on, &world, ms(802));
+    assert!(reversed(&faded, first));
+    assert!(about(faded[first].fg, EGG), "back by its end");
+    assert_eq!(faded[first].bg, DARK, "back by its end");
+    let again = frame(&mut on, &world, ms(1));
+    assert_eq!(
+        (again[first].fg, again[first].bg),
+        (FIRST_FLASH, EGG),
+        "the next"
+    );
+}
+
+#[test]
+fn a_selected_egg_s_young_starts_on_the_last_flash_and_its_reverse_video_comes_back() {
+    // Design §6.9: the young keeps the egg's ID, so it's selected too, and
+    // drawn in reverse video but while it shows an emote, as a hatchling
+    // often does; the Cursor's tile, where the click that selected the egg
+    // left it, is drawn so either way. There the glow of the last flash
+    // takes the reverse video's place while the egg shows cracked, and
+    // fades into it as the young warms, from 150 ms to 650.
+    let mut world = lone_line(0);
+    let (mut on, mut off) = twins(&world);
+    let (egg, tile) = until_about_to_hatch(&mut world, &mut on, &mut off);
+    click_egg(&world, &mut on, &mut off, egg, tile);
+    frame(&mut on, &world, ms(5000));
+    let events = one_tick(&mut world, &mut on, &mut off);
+    assert!(
+        events
+            .iter()
+            .any(|event| matches!(event.kind, EventKind::Hatched { id, .. } if id == egg)),
+        "{events:?}"
+    );
+    assert_eq!(on.selection(), Some(Selection::Living(egg)));
+    let young = cell(&on, world.sprite(egg).expect("hatched").pos());
+    let cracked = frame(&mut on, &world, Duration::ZERO);
+    assert!(reversed(&cracked, young));
+    assert_eq!((cracked[young].fg, cracked[young].bg), (LAST_FLASH, EGG));
+    let appears = frame(&mut on, &world, ms(150));
+    assert!(reversed(&appears, young));
+    assert_eq!(appears[young].fg, LAST_FLASH);
+    let warm = frame(&mut on, &world, ms(500));
+    let plain = frame(&mut off, &world, ms(650));
+    assert_eq!(warm[young], plain[young]);
 }
 
 #[test]
