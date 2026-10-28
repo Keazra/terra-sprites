@@ -26,6 +26,9 @@ The game is best in a terminal at least 100 characters wide and 30 lines
 tall, and 140 by 40 is better. A smaller one still plays, with less
 beside the map: press i to see the inspector. The title screen needs 60
 by 20; if the game says "Terminal too small", make the window bigger.
+If its writing is hard to read, as on a terminal with a light
+background, press Ctrl+T and set Colours to mono, or switch the
+terminal to a dark theme.
 
 
 Playing

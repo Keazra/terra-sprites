@@ -39,7 +39,10 @@ From then on it opens straight away. (If you're at home in Terminal,
 this does the same as steps 4 to 6, from this folder:
 xattr -d com.apple.quarantine terra-sprites)
 
-If the game says "Terminal too small", make the window bigger.
+If the game says "Terminal too small", make the window bigger. If its
+writing is hard to read, as on a Terminal with a light background,
+press Ctrl+T and set Colours to mono, or pick a dark profile, such as
+Pro, in Terminal's Settings, under Profiles.
 
 
 Playing
