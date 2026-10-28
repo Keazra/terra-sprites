@@ -111,11 +111,7 @@ fn main() -> ExitCode {
     if let Next::Title { refusal, .. } = &mut first {
         *refusal = unread.take();
     }
-    // The game answers `NO_COLOR` itself, by starting in mono, which draws
-    // no colour. crossterm would also drop every colour a palette the player
-    // picked draws, and with them bold and reverse video, which its colour
-    // codes' reset cancels, so it's told to write them (design §6.2).
-    ratatui::crossterm::style::force_color_output(true);
+    start::write_colours();
 
     // Installs a panic hook that restores the terminal before the panic is reported.
     let mut terminal = match ratatui::try_init() {
