@@ -913,7 +913,7 @@ How fast a drive of the selected sprite usually rises: the average of its last h
 _Avoid_: normal rate, base rate
 
 **Shell** (#306):
-The pieces of an egg drawn as it hatches, part of motion: for a moment the egg cracked where its young will be, and then its two halves either side of the young, sliding a tile further out, and four crumbs on the tiles at its corners, each fading to its tile's own colour, only where bare ground shows. The glyph set gives its characters. It's only drawn: the world has no shell, and it does nothing.
+The pieces of an egg drawn as it hatches, part of motion: for a moment the egg cracked where its young will be, and then its two halves either side of the egg's tile, sliding a tile further out, and four crumbs on the tiles at its corners, each fading to its tile's own colour, only where bare ground shows. The glyph set gives its characters. It's only drawn: the world has no shell, and it does nothing.
 _Avoid_: eggshell, debris, broken egg (M3's thrown egg that breaks, with its young inside)
 
 ### The Cursor

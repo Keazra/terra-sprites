@@ -111,8 +111,8 @@ fn shell(theme: &Theme) -> [char; 7] {
 fn the_themes_draw_a_hatching_s_shell_as_the_design_says() {
     // Design §6.9, as Fauxpaw picked it from the mock-ups: the egg cracked
     // across, `Θ`, which ASCII hasn't, so it's a ring with a break in it,
-    // `Q`; then its halves either side of the young and its crumbs at its
-    // corners, the same in both.
+    // `Q`; then its halves either side of the egg's tile and its crumbs at
+    // its corners, the same in both.
     assert_eq!(shell(&Theme::cp437()), ['Θ', '(', ')', '`', '\'', ',', '.']);
     assert_eq!(shell(&Theme::ascii()), ['Q', '(', ')', '`', '\'', ',', '.']);
 }

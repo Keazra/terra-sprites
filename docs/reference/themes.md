@@ -181,13 +181,13 @@ Motion is the small effects drawn over the screen as things happen, such as a de
 
 ### `shell`
 
-While motion is on, an egg that hatches shows cracked for a moment where its young will be, and then splits: its two halves lie either side of the young and slide a tile further out, and four crumbs lie on the tiles at its corners, each fading from the egg's colour to its tile's own (design §6.9). `shell` is a record of the seven characters it's drawn with, each of which may be left out and is then drawn as the default theme draws it. A field the game doesn't know is refused, naming it. They're the glyph set's characters, and must be in CP437 as the rest are; their colours are the egg's and the ground's.
+While motion is on, an egg that hatches shows cracked for a moment where its young will be, and then splits: its two halves lie either side of the egg's tile and slide a tile further out, and four crumbs lie on the tiles at its corners, each fading from the egg's colour to its tile's own (design §6.9). `shell` is a record of the seven characters it's drawn with, each of which may be left out and is then drawn as the default theme draws it. A field the game doesn't know is refused, naming it. They're the glyph set's characters, and must be in CP437 as the rest are; their colours are the egg's and the ground's.
 
 | Field | Meaning | Default theme | ASCII theme |
 |---|---|---|---|
 | `cracked` | The egg cracked, on the young's tile before it appears. | `'Θ'` | `'Q'` |
-| `left_half`, `right_half` | The shell's halves, left and right of the young. | `'('` `')'` | the same |
-| `up_left`, `up_right`, `down_left`, `down_right` | The crumbs on the tiles at the young's four corners. | `` '`' `` `'\''` `','` `'.'` | the same |
+| `left_half`, `right_half` | The shell's halves, left and right of the egg's tile. | `'('` `')'` | the same |
+| `up_left`, `up_right`, `down_left`, `down_right` | The crumbs on the tiles at the four corners of the egg's tile. | `` '`' `` `'\''` `','` `'.'` | the same |
 
 ASCII has no `Θ`, an egg cracked across, and its egg is `0` and a sprite `@`, so it draws the egg cracked as `Q`, a ring with a break in it. A piece lies only on a tile that shows bare ground, never over a sprite, an object, a mark, the Cursor or the tile the selected sprite attends to, which keep their looks. In a palette with [`colour: false`](#colour), the shell still cracks and splits, in the terminal's own colours.
 

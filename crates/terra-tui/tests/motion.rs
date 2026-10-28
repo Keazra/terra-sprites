@@ -785,11 +785,11 @@ fn cursors_away(on: &mut App, off: &mut App, world: &World) {
 }
 
 #[test]
-fn the_shell_splits_into_halves_either_side_of_the_young_that_slide_out_at_360_ms() {
+fn the_shell_splits_into_halves_either_side_of_the_egg_s_tile_that_slide_out_at_360_ms() {
     // Design §6.9: once the egg has shown cracked, its halves lie either
-    // side of the young, and 210 ms later they slide a tile further out.
-    // The bush left of the young, a seedling yet, `'`, keeps its look: no
-    // half is drawn over it.
+    // side of the egg's tile, where the young stands, and 210 ms later they
+    // slide a tile further out. The bush left of it, a seedling yet, `'`,
+    // keeps its look: no half is drawn over it.
     let (mut on, mut off, world) = hatched_by_a_bush(Theme::cp437());
     cursors_away(&mut on, &mut off, &world);
     let row = |app: &App, screen: &Buffer| symbols(app, screen, at(1, 3), at(7, 3));
@@ -809,11 +809,12 @@ fn the_shell_splits_into_halves_either_side_of_the_young_that_slide_out_at_360_m
 const GRASS: Color = Color::Rgb(0x13, 0xA1, 0x0E);
 
 #[test]
-fn the_shell_leaves_crumbs_on_the_tiles_at_the_young_s_corners_for_600_ms() {
-    // Design §6.9: `` ` `` up and left of the young, `'` up and right, `,`
-    // down and left and `.` down and right, from when the egg stops showing
-    // cracked until 600 ms on. Up and right stands the young's mother, who
-    // keeps her look: no crumb is drawn over her.
+fn the_shell_leaves_crumbs_on_the_tiles_at_the_egg_s_tile_s_corners_for_600_ms() {
+    // Design §6.9: `` ` `` up and left of the egg's tile, where the young
+    // stands, `'` up and right, `,` down and left and `.` down and right,
+    // from when the egg stops showing cracked until 600 ms on. Up and right
+    // stands the young's mother, who keeps her look: no crumb is drawn over
+    // her.
     let (mut on, mut off, world) = hatched_by_a_bush(Theme::cp437());
     cursors_away(&mut on, &mut off, &world);
     let corners = |app: &App, screen: &Buffer| {
@@ -2250,20 +2251,25 @@ fn a_rising_drive_s_crest_runs_up_its_bar_to_the_end() {
     // Design §6.9: hunger at .4, 12 thirds of a block, four blocks full,
     // and rising. A sprite first seen rising rises as usual for it, and
     // the crest runs from before the bar's first block to its end, the
-    // fourth, in 0.52 s, one block every 0.13 s.
+    // fourth, in 0.52 s, one block every 0.13 s: at 0.12, 0.24, 0.36 and
+    // 0.48 s, before it breaks, it's over each block in turn.
     let world = hunger_on_the_move(0.396, 0.004);
     let mut app = watching(&world);
     let (bar, _) = hunger_line(&render(&app, &world));
     assert_eq!(bar, "████░░░░░░");
     let plain = lit(&hunger_blocks(&frame_with_motion_off(&world))[0]);
     let mut crests = Vec::new();
+    let mut blocks = Vec::new();
     for _ in 0..4 {
-        let blocks = hunger_blocks(&frame(&mut app, &world, ms(130)));
+        blocks = hunger_blocks(&frame(&mut app, &world, ms(120)));
         let at = crest(&blocks, 4);
         assert!(lit(&blocks[at]) > plain, "{blocks:?}");
         crests.push(at);
     }
     assert_eq!(crests, [0, 1, 2, 3]);
+    // There it's the crest, a block and a bit wide, lighting the block
+    // before the end too, as the break's flare never does.
+    assert!(lit(&blocks[2]) > plain, "{blocks:?}");
 }
 
 /// The glyphs of `blocks`.
@@ -2374,6 +2380,145 @@ fn a_bar_s_waves_change_only_as_ticks_are_taken_in() {
     take_in(&mut app, &then);
     let (_, reach, _) = waves_over(&mut app, &then, 4000);
     assert_eq!(reach, 3);
+}
+
+/// Twins watching the one sprite of `hunger_on_the_move`, its hunger at .4
+/// and rising as usual for it, 0.3 s into its first wave, as the crest
+/// runs up the bar: the first then takes in a tick of `then`, the same
+/// sprite, and the other takes in none.
+fn mid_crest(then: &World) -> (App, App) {
+    let usual = hunger_on_the_move(0.396, 0.004);
+    let (mut ticked, mut still) = (watching(&usual), watching(&usual));
+    for app in [&mut ticked, &mut still] {
+        frame(app, &usual, ms(300));
+    }
+    take_in(&mut ticked, then);
+    (ticked, still)
+}
+
+/// Plays the twins of `mid_crest` on, frame by frame 10 ms apart, until the
+/// first wave has shown, 1.215 s into it, and checks that they draw the
+/// hunger bar alike all the while, and not plainly: the tick `ticked` took
+/// in, of `then`, left the wave under way as it began.
+fn plays_out(ticked: &mut App, then: &World, still: &mut App) {
+    let usual = hunger_on_the_move(0.396, 0.004);
+    let plain = hunger_blocks(&frame_with_motion_off(then));
+    let mut played = false;
+    for at in (310..1215).step_by(10) {
+        let shown = hunger_blocks(&frame(ticked, then, ms(10)));
+        let unticked = hunger_blocks(&frame(still, &usual, ms(10)));
+        assert_eq!(shown, unticked, "{at} ms into the wave");
+        played |= shown != plain;
+    }
+    assert!(played, "the wave plays");
+}
+
+/// When crests set off up the hunger bar of the one sprite on `world`, four
+/// blocks full, over `app`'s frames 10 ms apart from `from` milliseconds
+/// into its first wave to `to`: each frame where its first block lights
+/// up.
+fn set_off(app: &mut App, world: &World, (from, to): (u64, u64)) -> Vec<u64> {
+    let plain = hunger_blocks(&frame_with_motion_off(world)).remove(0);
+    let mut was_lit = hunger_blocks(&render(app, world))[0] != plain;
+    let mut times = Vec::new();
+    for at in (from + 10..=to).step_by(10) {
+        let lit = hunger_blocks(&frame(app, world, ms(10)))[0] != plain;
+        if lit && !was_lit {
+            times.push(at);
+        }
+        was_lit = lit;
+    }
+    times
+}
+
+/// Checks that the crests `set_off` saw set off at `crests` came at the
+/// moments `due`, in milliseconds into the first wave: each within a frame
+/// of its own.
+fn sets_off_at(crests: &[u64], due: &[u64]) {
+    let near = crests.len() == due.len()
+        && crests
+            .iter()
+            .zip(due)
+            .all(|(at, due)| at.abs_diff(*due) <= 10);
+    assert!(near, "set off at {crests:?}, due at {due:?}");
+}
+
+#[test]
+fn a_quicker_tick_mid_wave_lets_it_play_out_and_the_next_come_once_it_has_shown() {
+    // Design §6.9: hunger rising as usual for it, 0.3 s into a wave that
+    // shows for 1.215 s, and then a tick five times as fast, whose waves
+    // come every 0.8 s, as one lands mid-wave in play at 1×. The wave under
+    // way plays out as it began, without a jump; the next sets off once it
+    // has shown, at 1.215 s, not at once nor at 1.925 s as at the usual
+    // pace; and each after it 0.8 s on.
+    let fast = hunger_on_the_move(0.38, 0.02);
+    let (mut ticked, mut still) = mid_crest(&fast);
+    plays_out(&mut ticked, &fast, &mut still);
+    let crests = set_off(&mut ticked, &fast, (1210, 3000));
+    sets_off_at(&crests, &[1215, 2015, 2815]);
+}
+
+#[test]
+fn a_quicker_tick_after_a_wave_brings_the_next_at_its_pace_or_at_once_if_overdue() {
+    // Design §6.9: hunger rising as usual for it, and a tick taken in 1.3 s
+    // into a wave, once it has shown. Rising 2.5 times as fast, its waves
+    // come every 1.475 s, so the next sets off 1.475 s after the last
+    // began, not at once nor at 1.925 s as at the usual pace.
+    let faster = hunger_on_the_move(0.39, 0.01);
+    let mut app = rising_then(&faster);
+    let crests = set_off(&mut app, &faster, (1300, 4500));
+    sets_off_at(&crests, &[1475, 2950, 4425]);
+    // Five times as fast, every 0.8 s, the next is overdue, so it sets off
+    // at once, and each after it 0.8 s on.
+    let fastest = hunger_on_the_move(0.38, 0.02);
+    let mut app = rising_then(&fastest);
+    let plain = hunger_blocks(&frame_with_motion_off(&fastest));
+    let blocks = hunger_blocks(&render(&app, &fastest));
+    assert!(lit(&blocks[0]) > lit(&plain[0]), "at once: {blocks:?}");
+    let crests = set_off(&mut app, &fastest, (1300, 3000));
+    sets_off_at(&crests, &[2100, 2900]);
+}
+
+#[test]
+fn a_steady_tick_mid_wave_lets_it_play_out_and_brings_no_other() {
+    // Design §6.9: hunger rising as usual for it, 0.3 s into a wave, and
+    // then a tick it holds steady over. The wave under way plays out as it
+    // began, breaking at the bar's end, and no other comes, where at the
+    // usual pace the next would set off at 1.925 s and 3.85 s.
+    let steady = hunger_on_the_move(0.4, 0.0);
+    let (mut ticked, mut still) = mid_crest(&steady);
+    plays_out(&mut ticked, &steady, &mut still);
+    let usual = hunger_on_the_move(0.396, 0.004);
+    let crests = set_off(&mut still, &usual, (1210, 5300));
+    sets_off_at(&crests, &[1925, 3850]);
+    let plain = hunger_blocks(&frame_with_motion_off(&steady));
+    for at in (1220..=5300).step_by(10) {
+        let blocks = hunger_blocks(&frame(&mut ticked, &steady, ms(10)));
+        assert_eq!(blocks, plain, "{at} ms into the wave");
+    }
+}
+
+#[test]
+fn a_sprite_selected_while_paused_shows_its_drive_s_last_change_at_once() {
+    // Design §6.9: paused, no tick comes, and the frame that selects the
+    // sprite takes in none, as most frames at 1× do, yet its hunger rose
+    // over the last tick, so its crest sets off up the bar at once, from
+    // before its first block to its end in 0.52 s.
+    let world = hunger_on_the_move(0.396, 0.004);
+    let mut app = moving(&world);
+    apply(&mut app, &world, Action::TogglePause);
+    apply(&mut app, &world, Action::SelectNext);
+    app.take_in(Ticks::default(), &world);
+    let plain = lit(&hunger_blocks(&frame_with_motion_off(&world))[0]);
+    // Once the tab has swept in: 0.3, 0.4 and 0.48 s on.
+    let mut crests = Vec::new();
+    for step in [300, 100, 80] {
+        let blocks = hunger_blocks(&frame(&mut app, &world, ms(step)));
+        let at = crest(&blocks, 4);
+        assert!(lit(&blocks[at]) > plain, "{blocks:?}");
+        crests.push(at);
+    }
+    assert_eq!(crests, [1, 2, 3]);
 }
 
 #[test]

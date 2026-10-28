@@ -279,14 +279,14 @@ pub struct MotionLook {
 
 /// The pieces of an egg's shell as it hatches, while motion is on (design
 /// §6.9): the egg cracked, on the young's tile for a moment, then its two
-/// halves either side of the young and four crumbs on the tiles at its
-/// corners. Characters only, from the glyph set: they're drawn in the egg's
-/// colour, fading to their tile's own.
+/// halves either side of the egg's tile and four crumbs on the tiles at
+/// its corners. Characters only, from the glyph set: they're drawn in the
+/// egg's colour, fading to their tile's own.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ShellLook {
     /// The egg cracked across, before the young appears.
     pub cracked: char,
-    /// The half left of the young.
+    /// The half left of the egg's tile.
     pub left_half: char,
     /// The half right of it.
     pub right_half: char,
