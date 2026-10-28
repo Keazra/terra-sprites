@@ -13,9 +13,9 @@ Some things that can happen while you watch:
 - A sprite that gets hit becomes wary of whoever hit it, but not of everyone else.
 - Pet a sprite each time it kicks a ball, and it starts kicking balls more often.
 
-![Sprite #545 tries to eat a thornbush, gets hurt and backs away, and its Brain tab stops listing the thornbush among what it's paying attention to](docs/clips/thornbush.gif)
+![Sprite #544 tries to eat a thornbush, gets hurt and backs away, and its Brain tab stops listing the thornbush among what it's paying attention to](docs/clips/thornbush.gif)
 
-That's sprite #545 in seed 7, with its Brain tab open on the right. Once it learns that thornbushes hurt, the thornbush drops off the list of things it's paying attention to.
+That's sprite #544 in seed 7, with its Brain tab open on the right. Once it learns that thornbushes hurt, the thornbush drops off the list of things it's paying attention to.
 
 ## Same seed, same world
 

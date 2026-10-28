@@ -44,11 +44,11 @@ Put that in any bug report.
 Your worlds
 -----------
 
-The game keeps your saves, autosaves and replays in a folder of its own,
-~/.local/share/terra-sprites, or $XDG_DATA_HOME/terra-sprites if you've
-set that (the last line of the help screen, ?, shows it too). A newer
-version finds them there, so to update, unzip the new one and run that
-instead.
+The game keeps your saves, autosaves, replays and settings in a folder
+of its own, ~/.local/share/terra-sprites, or $XDG_DATA_HOME/terra-sprites
+if you've set that (the last line of the help screen, ?, shows it too).
+A newer version finds them there, so to update, unzip the new one and
+run that instead.
 
 
 Removing it
@@ -58,7 +58,7 @@ Removing it
    the folder on your PATH if you moved it there
    (rm ~/.local/bin/terra-sprites). That removes the game.
 
-2. To remove your worlds too, delete the game's own folder:
+2. To remove your worlds and settings too, delete the game's own folder:
 
        rm -rf ~/.local/share/terra-sprites
 

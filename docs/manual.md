@@ -88,7 +88,7 @@ The same key in capitals or lower case does the same thing.
 | `.` | Step while paused: a second's worth of ticks at the current speed, one at 1× and slower, up to 20 at 16× and Max (hold to keep stepping) |
 | `+` / `-` | Faster / slower: each step doubles or halves the speed, from ⅛× up to 4× in a Story world, or on to 16× and then Max in a Lab world (the top bar says `lab` after the speed). The game starts at 1× (1.25 ticks per second, slow enough to watch sprites walk). Holding `+` stops at 1× and at 16×, and holding `-` at 1×; press again to go past |
 | `W` `A` `S` `D` or arrows | Scroll the map (hold Shift to scroll 5 tiles) |
-| Mouse | Point at a tile: the status line says what's there. Click a sprite to select it, or its name in a line of the event log. Point at a highlighted name in the inspector, or at the event log's filters, soft blue in the built-in themes, and a tooltip says what it is; point at a sprite's name in a line of the event log and the sprite lights up on the map |
+| Mouse | Point at a tile: the status line says what's there. Click a sprite to select it, or its name in a line of the event log. Point at a highlighted name in the inspector, or at the event log's filters, drawn in a colour of their own (a soft blue in the default palette, bold in mono), and a tooltip says what it is; point at a sprite's name in a line of the event log and the sprite lights up on the map |
 | `T` | Track: the view follows the selected sprite; again to stop |
 | `b` | Sprite colours: what a sprite's colour shows: its strongest drive, nothing, or its lineage, which marks the selected sprite's parents and grandparents, brothers and sisters, and young and theirs each in a colour, and every other sprite dark gray. The status line says which. In mono and Game Kid, which can't show them, it says where they're read instead: the sprite list or the family tree |
 | `m` | Event log filter: all events, the selected sprite's, or only the major ones (deaths, lessons learned, refusals) |
@@ -110,6 +110,7 @@ The same key in capitals or lower case does the same thing.
 | `g` | Save the selected sprite's genome to the genomes folder (the status line says where); the Place menu reads it back |
 | `[` / `]` | Previous / next inspector tab; or click a tab |
 | `PgUp` / `PgDn`, or the mouse wheel over the inspector | Scroll a long tab |
+| Click a heading in the Brain tab's memory, or its "and N more" line; or `Enter` with the pointer on it | Open or shut it: `►` means more is hidden, `▼` that it's open |
 | `i` | The inspector, bigger: on a window under 100 columns, where it's hidden, open it over the map's right side; otherwise the open tab fills the screen, in as many columns as fit, which suits the Brain and Genome tabs, and every key but the map's and the event log's works as usual (those say so on the status line). Again, `Esc`, or loading a world goes back |
 | `F5` / `F9` | Quicksave / quickload. Loading over a world that has run since it was last saved asks first (`y` to load), and a loaded world starts paused |
 | `Ctrl+S` / `Ctrl+O` | Save under a name you type / pick a save to load, newest first. The world also saves itself every 10 minutes of running time and when you quit, keeping the last 3 autosaves. See [saves](reference/saves.md) |
@@ -194,7 +195,7 @@ The two clips at the top of the README are made the same way, the second at 1× 
 
 ```powershell
 cargo run --release -p terra-tui --example render -- title -o docs/clips/title.gif
-cargo run --release -p terra-tui --example render -- world --seed 7 --from 700 --to 730 --track 545 --tab brain --speed 1x -o docs/clips/thornbush.gif
+cargo run --release -p terra-tui --example render -- world --seed 7 --from 525 --to 555 --track 544 --tab brain --speed 1x -o docs/clips/thornbush.gif
 ```
 
 The file's ending picks the format: `.gif`, `.svg` or `.mp4`. A GIF or an SVG needs nothing else; an MP4 needs [ffmpeg](https://ffmpeg.org/download.html) on the PATH, and the renderer says so if it isn't. The world runs to `--from` unseen, then is drawn frame by frame to `--to`, at `--speed` (`1x`, `4x`, or `max` for 100 ticks a second; past 4× needs `--lab`), each frame showing for `--frame` milliseconds (100 by default). An SVG for a README is best kept under 2 MB, and the renderer says when one isn't: a busy world at a high speed runs past it in a few seconds.

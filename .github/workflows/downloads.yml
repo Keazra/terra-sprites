@@ -162,10 +162,17 @@ jobs:
           fi
       - name: Zip it with the licences and its README
         shell: bash
+        env:
+          # The README links the manual as it is at the release's tag, which
+          # is there once the draft is published, so an older release's
+          # players read about their own copy (#378). A dry run has no tag,
+          # so it links main's, as the README in git does.
+          MANUAL_AT: ${{ github.event_name == 'pull_request' && 'main' || needs.resolve.outputs.name }}
         run: |
           mkdir "$FOLDER"
           cp "target/release/${{ matrix.program }}" LICENSE-MIT LICENSE-APACHE "$FOLDER/"
-          cp ".github/downloads/README-${{ matrix.readme }}.txt" "$FOLDER/README.txt"
+          sed "s#/blob/main/#/blob/$MANUAL_AT/#g" ".github/downloads/README-${{ matrix.readme }}.txt" > "$FOLDER/README.txt"
+          grep -F "/blob/$MANUAL_AT/docs/manual.md" "$FOLDER/README.txt"
           if [ "$RUNNER_OS" = Windows ]; then
             7z a -tzip "$FOLDER.zip" "$FOLDER"
             7z l "$FOLDER.zip"
