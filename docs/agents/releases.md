@@ -13,7 +13,7 @@ One minor number per milestone:
 | v0.3.0 | M3, *Body & verbs* |
 | v0.4.0 | M4, *Terra* |
 
-Later milestones carry on the same way. When the game becomes 1.0 is the owner's call. A patch number is a free update between milestones, such as v0.2.1, which shipped the new look, or a fix to a release that's already out, such as v0.2.2 would be (both below).
+Later milestones carry on the same way. When the game becomes 1.0 is the owner's call. A patch number is an update between milestones, such as v0.2.1, which shipped the new look, or a fix to a release that's already out, such as v0.2.2 would be (both below).
 
 ## When
 
@@ -62,6 +62,8 @@ At the end of the milestone's acceptance slice (M2's is Slice 30b, [#148](https:
 
 ### The notes
 
+Write them straightforwardly, with a subtle, understated humour where it comes on its own, and nothing that sells: no taglines, and an update isn't called free, since the whole game is (the owner, 2026-10-28). The owner reads and OKs them before they go into the version PR.
+
 ```markdown
 # v0.2.0: Generations
 
@@ -96,7 +98,7 @@ The game writes nothing anywhere else. A Rust install also leaves the code it do
 
 Every release's notes end with these steps for a full, clean uninstall (the owner, 2026-10-26), and so does each download's `README.txt` (`.github/downloads/`). If a release makes the game write anywhere new, or install something else, add it to both, and to the manual's "Uninstalling".
 
-## A free update between milestones
+## An update between milestones
 
 Finished work that isn't a milestone can reach players before the next milestone does, as a patch release made from `main`: v0.2.1 shipped the new look, Looks 1 to 6 ([#301](https://github.com/Keazra/terra-sprites/issues/301)), between M2 and M3 (the owner, 2026-10-19, in the Looks plan). It's made just as in "Making one", from the version PR on, with its own notes, and the README's clips drawn again when the update changes how the game looks.
 
