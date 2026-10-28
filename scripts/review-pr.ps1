@@ -33,9 +33,10 @@
 # owner or a review bot, and while GitHub can say who wrote it. One review
 # bot, .github/workflows/claude-review.yml, posts as github-actions[bot],
 # which only this repository's own workflows can write as. Its review
-# carries what it read, so every issue the PR's description names is
-# checked too, and so on for a PR among them with a Claude review of its
-# own. Any other comment by github-actions[bot] counts as a stranger's.
+# carries what it read, so every issue the PR's description names, or once
+# named, is checked too, with its deleted comments, and so on for a PR
+# among them with a Claude review of its own. Any other comment by
+# github-actions[bot] counts as a stranger's.
 # Without -Sandbox, Gemini only reads, so any PR can be reviewed that way.
 # Either way, a PR whose comments, reviews or conversation GitHub couldn't
 # hand over isn't reviewed: the reviewer would miss what was said, and in
@@ -300,31 +301,49 @@ function Get-Review($Output) {
     try { return ($reply | ConvertFrom-Json) } catch { return $null }
 }
 
+# Each earlier version of an issue's or PR's text (as its edits' diffs), and
+# who wrote its deleted comments, which only GraphQL tells; or nothing, if
+# GitHub doesn't answer or there's more than a page of either. Like
+# Get-ReviewState's, the query has no double quotes.
+function Get-History([string]$Number) {
+    $fields = 'userContentEdits(first: 100) { pageInfo { hasNextPage } nodes { diff } } ' +
+        'timelineItems(first: 100, itemTypes: [COMMENT_DELETED_EVENT]) { pageInfo { hasNextPage } ' +
+        'nodes { ... on CommentDeletedEvent { deletedCommentAuthor { __typename login } } } }'
+    $query = 'query($owner: String!, $name: String!, $number: Int!) { repository(owner: $owner, name: $name) ' +
+        '{ issueOrPullRequest(number: $number) { ... on Issue { ' + $fields + ' } ... on PullRequest { ' + $fields + ' } } } }'
+    $owner, $name = $GitHubRepo.Split("/")
+    $answer = Join-Lines (& gh api graphql -f "query=$query" -f "owner=$owner" -f "name=$name" -F "number=$Number")
+    if ($LASTEXITCODE -ne 0) { return $null }
+    $history = ($answer | ConvertFrom-Json).data.repository.issueOrPullRequest
+    if ($history.userContentEdits.pageInfo.hasNextPage -or $history.timelineItems.pageInfo.hasNextPage) { return $null }
+    $history
+}
+
 # Who besides the owner and the review bots wrote what the reviewer reads in
 # the sandbox (the opening comment), each as "login on #N": the PR's reviews
 # and review comments ($Said, as fetched for .review), then the PR and each
-# issue it names, with their comments. A Claude review read every issue its
-# PR's description names as #N (the workflow's rule, less its limit of
-# five), so those join the issues checked.
+# issue it names, with their comments. A Claude review read the issues its
+# PR's description named as #N when it ran (the workflow's rule, less its
+# limit of five), so those join the issues checked, from every version of
+# the description, and their deleted comments count too.
 function Get-OtherWriters([string]$Number, $Named, $Said) {
     $others = @($Said | Where-Object { $_ } | ForEach-Object { ($_ | ConvertFrom-Json).user } |
         Where-Object { $SandboxWriters -notcontains $_ } | ForEach-Object { "$_ on #$Number" })
+    # No issue has a number past the newest, so a colour like #306230 is
+    # passed by, as the workflow passes it by. Any other that can't be read
+    # might have been deleted since a review read it.
+    $newest = "$(& gh api "repos/$GitHubRepo/issues" --method GET -f state=all -f sort=created -f direction=desc -f per_page=1 --jq '.[0].number')"
+    if ($LASTEXITCODE -ne 0 -or $newest -notmatch '^\d+$') { Fail "Couldn't find GitHub's newest issue, so PR #$Number isn't reviewed in the sandbox." }
     $checked = New-Object System.Collections.ArrayList
     foreach ($n in @($Number) + @($Named)) { if ($checked -notcontains "$n") { [void]$checked.Add("$n") } }
+    # The issues a Claude review read.
+    $read = New-Object System.Collections.ArrayList
     # The list grows as Claude reviews are found, so it's walked by index.
     for ($i = 0; $i -lt $checked.Count; $i++) {
         $n = $checked[$i]
-        # gh's errors come back too, to tell a number that's no issue from
-        # GitHub not answering.
-        $answer = @(& gh api "repos/$GitHubRepo/issues/$n" --jq '{user: .user.login, body}' 2>&1)
-        if ($LASTEXITCODE -ne 0) {
-            # A number that isn't an issue, such as a colour like #306230,
-            # holds nobody's words. The workflow passes it by too.
-            $why = "$($answer | Where-Object { $_ -is [Management.Automation.ErrorRecord] })"
-            if ($why -match '\(HTTP 4(04|10)\)') { continue }
-            Fail "Couldn't check who wrote #$n, so PR #$Number isn't reviewed in the sandbox."
-        }
-        $item = Join-Lines ($answer | Where-Object { $_ -isnot [Management.Automation.ErrorRecord] }) | ConvertFrom-Json
+        $item = Join-Lines (& gh api "repos/$GitHubRepo/issues/$n" --jq '{user: .user.login, body}')
+        if ($LASTEXITCODE -ne 0) { Fail "Couldn't check who wrote #$n, so PR #$Number isn't reviewed in the sandbox." }
+        $item = $item | ConvertFrom-Json
         $thread = @(& gh api "repos/$GitHubRepo/issues/$n/comments" --paginate --jq '.[] | {user: .user.login, body}')
         if ($LASTEXITCODE -ne 0) { Fail "Couldn't check who commented on #$n, so PR #$Number isn't reviewed in the sandbox." }
         $writers = @($item.user)
@@ -340,11 +359,26 @@ function Get-OtherWriters([string]$Number, $Named, $Said) {
             }
         }
         $others += @($writers | Where-Object { $SandboxWriters -notcontains $_ } | ForEach-Object { "$_ on #$n" })
-        if ($reviewed) {
-            foreach ($m in [regex]::Matches("$($item.body)", '(?<![\w/#])#(\d+)\b')) {
-                $ref = $m.Groups[1].Value
-                if ($checked -notcontains $ref) { [void]$checked.Add($ref) }
-            }
+        if (-not $reviewed) { continue }
+        $history = Get-History $n
+        if (-not $history) { Fail "Couldn't check #$n's earlier versions, so PR #$Number isn't reviewed in the sandbox." }
+        $text = (@("$($item.body)") + @($history.userContentEdits.nodes | ForEach-Object { "$($_.diff)" })) -join "`n"
+        foreach ($m in [regex]::Matches($text, '(?<![\w/#])#(\d{1,9})\b')) {
+            $ref = "$([int]$m.Groups[1].Value)"
+            if ($ref -eq "0" -or [int]$ref -gt [int]$newest) { continue }
+            if ($read -notcontains $ref) { [void]$read.Add($ref) }
+            if ($checked -notcontains $ref) { [void]$checked.Add($ref) }
+        }
+    }
+    # A comment deleted since a Claude review read it may still be quoted there.
+    foreach ($n in $read) {
+        $history = Get-History $n
+        if (-not $history) { Fail "Couldn't check #$n's deleted comments, so PR #$Number isn't reviewed in the sandbox." }
+        foreach ($deleted in @($history.timelineItems.nodes)) {
+            $who = $deleted.deletedCommentAuthor
+            $login = "$($who.login)"
+            if (-not $login) { $login = "a deleted account" } elseif ($who.__typename -eq "Bot") { $login += "[bot]" }
+            if ($SandboxWriters -notcontains $login) { $others += "$login, in a deleted comment, on #$n" }
         }
     }
     return ,@($others | Select-Object -Unique)
