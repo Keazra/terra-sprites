@@ -92,9 +92,14 @@ impl App {
     /// Ends the aim, sent or not: the Cursor follows the pointer again, as
     /// far as Follow and the leash let it (design v25 §6.5). With the
     /// pointer past the wall, it stays where it is, out of reach, so a
-    /// sprite it leads stands still (M2 design §11.4).
+    /// sprite it leads stands still (M2 design §11.4); and while the view
+    /// pans, it goes once the pan ends (design §6.9).
     pub(super) fn end_aim(&mut self) {
-        if self.aim.take().is_some() && self.followed().is_none() && !self.pointer_past_wall {
+        if self.aim.take().is_some()
+            && self.followed().is_none()
+            && !self.pointer_past_wall
+            && !self.waits_for_the_pan()
+        {
             self.cursor = self.within_leash(self.pointed);
         }
     }

@@ -135,8 +135,10 @@ pub enum Context {
     /// The command palette (#303).
     Palette,
     /// A menu over the map: the Place menu and its genomes (design v28
-    /// §6.5), saves to load and themes (§6.7).
+    /// §6.5) and saves to load (§6.7).
     Menu,
+    /// The settings screen (design §6.7, #307).
+    Settings,
     /// The title screen's menu (M2 design §8).
     TitleMenu,
     /// Naming a sprite (design §6.5).
@@ -346,12 +348,13 @@ pub const LOAD: Control = control(
     &[Heading::Files],
     "open file",
 );
-pub const THEME: Control = control(
+// Design §6.7, #307.
+pub const SETTINGS: Control = control(
     "Ctrl+T",
-    &[presses("Ctrl+T", "pick a theme", Action::OpenThemes)],
-    "pick a theme",
+    &[presses("Ctrl+T", "settings", Action::OpenSettings)],
+    "settings",
     &[Heading::Files],
-    "ascii glyphs colours look",
+    "glyphs ascii colours palette theme mono contrast blind game kid green motion square tiles look options",
 );
 pub const TAKE_OVER: Control = control(
     "Ctrl+R",
@@ -675,6 +678,8 @@ pub const CHOOSE_ROW: Control = hint("↑↓", "choose").needing(Need::Rows);
 
 // The menus (design v28 §6.5, §6.7) and the title screen's (M2 design §8).
 pub const PICK_ITEM: Control = hint("enter", "pick").needing(Need::Rows);
+/// `←→ change` on the settings screen (design §6.7, #307).
+pub const CHANGE: Control = hint("←→", "change");
 pub const TITLE_CHOOSE: Control = hint("↑↓", "choose");
 pub const GO: Control = hint("enter", "go");
 
@@ -713,7 +718,7 @@ pub const CONTROLS: &[Control] = &[
     QUICKSAVE,
     SAVE_AS,
     LOAD,
-    THEME,
+    SETTINGS,
     TAKE_OVER,
     MODES,
     CLICKS,
@@ -773,6 +778,7 @@ pub fn hints(context: Context) -> &'static [Control] {
         Context::HelpSearching => &[SEARCH, CLEAR],
         Context::Palette => &[CHOOSE_ROW, DO_IT, CLOSE],
         Context::Menu => &[CHOOSE_ROW, PICK_ITEM, CLOSE],
+        Context::Settings => &[CHOOSE_ROW, CHANGE, CLOSE],
         Context::TitleMenu => &[TITLE_CHOOSE, GO, BACK],
         Context::Naming => &[NAME_OK, ANOTHER_NAME, CANCEL],
         Context::SaveNaming => &[SAVE, CANCEL],
@@ -786,9 +792,8 @@ pub fn context(app: &App, world: &World) -> Context {
         Screen::Help if app.help_search().is_some() => Context::HelpSearching,
         Screen::Help => Context::Help,
         Screen::Palette => Context::Palette,
-        Screen::PlaceMenu | Screen::GenomeMenu | Screen::LoadMenu | Screen::ThemeMenu => {
-            Context::Menu
-        }
+        Screen::PlaceMenu | Screen::GenomeMenu | Screen::LoadMenu => Context::Menu,
+        Screen::Settings => Context::Settings,
         Screen::SpriteList if app.list_filter().is_some() => Context::FilteredList,
         Screen::SpriteList => Context::SpriteList,
         Screen::Population => Context::Graph,
@@ -848,7 +853,7 @@ fn meets(need: Need, app: &App, world: &World) -> bool {
         Need::Paused => app.clock.is_paused(),
         Need::Rows => match app.screen() {
             Screen::Palette => !app.palette_rows().is_empty(),
-            Screen::PlaceMenu | Screen::GenomeMenu | Screen::LoadMenu | Screen::ThemeMenu => {
+            Screen::PlaceMenu | Screen::GenomeMenu | Screen::LoadMenu | Screen::Settings => {
                 !app.menu_items(world).is_empty()
             }
             _ => !crate::sprite_list::order(app, world).is_empty(),

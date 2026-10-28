@@ -83,14 +83,14 @@ fn the_theme_flag_names_a_theme_file() {
 }
 
 #[test]
-fn the_theme_flag_needs_a_file_and_does_not_mix_with_ascii() {
+fn the_theme_flag_needs_a_file_and_goes_with_ascii() {
     let error = parse(&["--theme"]).expect_err("invalid");
     assert!(error.contains("--theme"), "{error}");
-    let error = parse(&["--ascii", "--theme", "night.ron"]).expect_err("invalid");
-    assert!(
-        error.contains("--ascii") && error.contains("--theme"),
-        "{error}"
-    );
+    // `--ascii` picks only the glyph set, so it draws the file's palette in
+    // ASCII (design §6.2, #307).
+    let args = parse(&["--ascii", "--theme", "night.ron"]).expect("valid");
+    assert!(args.ascii);
+    assert_eq!(args.theme, Some(PathBuf::from("night.ron")));
 }
 
 #[test]

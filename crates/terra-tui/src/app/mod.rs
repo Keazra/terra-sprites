@@ -4,7 +4,8 @@
 //! action. Each area's methods are in a module of its own: the Cursor,
 //! aiming, the map view, the selection, what each tick brings, what shows
 //! for a while, the menus, the sprite list, the population graph, the
-//! family tree, naming, saves and replays.
+//! family tree, naming, saves and replays, motion, and the settings
+//! screen.
 
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
@@ -25,8 +26,10 @@ use crate::family_tree;
 use crate::input::{Action, Button, KeyReports};
 use crate::inspector;
 use crate::listed::listed_enum;
+use crate::motion::Motion;
 use crate::policy::{InfoPolicy, Omniscient, Panel, Subject};
 use crate::saves::{QUICKSAVE, SaveFile};
+use crate::settings::{Look, SavedSettings};
 use crate::space::Place;
 use crate::spots::{Spot, Spots};
 use crate::sprite_list::SortBy;
@@ -39,11 +42,13 @@ mod events;
 mod help;
 mod list;
 mod menus;
+mod motion;
 mod naming;
 mod population;
 mod replay;
 mod saving;
 mod selection;
+mod settings;
 mod spots;
 mod status;
 mod tree;
@@ -85,8 +90,8 @@ pub enum Screen {
     /// "Load …? (y/n)" is waiting for an answer: the world has run since it
     /// was last saved (design §6.7).
     LoadPrompt,
-    /// The list of themes is open (`Ctrl+T`, design v34 §6.7).
-    ThemeMenu,
+    /// The settings screen is open (`Ctrl+T`, design §6.7, #307).
+    Settings,
     /// The help screen is open (design §6.1).
     Help,
     /// The sprite list is open (design §6.1).
@@ -525,9 +530,20 @@ pub struct App {
     /// The folder the player's own themes are read from, if there is one
     /// (design v34 §6.7).
     theme_folder: Option<PathBuf>,
-    /// The theme files the themes menu lists after the built-in themes, by
-    /// name, with their paths.
+    /// The theme files the settings screen offers after the built-in glyph
+    /// sets and palettes, by name, with their paths (design §6.7, #307).
     theme_files: Vec<(String, PathBuf)>,
+    /// The glyph set and the palette the player has picked, which `theme`
+    /// is made from (design §6.2, §6.7, #307).
+    look: Look,
+    /// What the player has changed on the settings screen, as
+    /// `settings.ron` holds it (design §6.7, #307).
+    saved_settings: SavedSettings,
+    /// Where the settings are saved, if anywhere.
+    settings_file: Option<PathBuf>,
+    /// Whether the settings file couldn't be read as the game started, and
+    /// nothing has been saved over it since (design §6.7).
+    settings_unreadable: bool,
     /// While naming: the sprite, the name so far, and whether the player
     /// has typed it, rather than it being an offered random one.
     naming: Option<Naming>,
@@ -543,6 +559,10 @@ pub struct App {
     /// Whether the view follows the selected sprite (`T`, design v21
     /// §6.1).
     tracking: bool,
+    /// What the view last centred on while tracking, and where it was:
+    /// for a new screen size or square tiles to centre on at once, rather
+    /// than pan to as the next tick is taken in (design §6.9).
+    tracked_at: Option<(EntityId, Pos)>,
     /// The event log, its title row included, if the screen has room for
     /// it.
     event_log_area: Option<Rect>,
@@ -611,6 +631,8 @@ pub struct App {
     /// status line (`i`, design §6.1, #305), under whatever's opened from
     /// it, which goes back to it when it closes.
     full_screen: bool,
+    /// The motion it's playing, and whether it's on (design §6.9).
+    motion: Motion,
 }
 
 /// A replay as the screen follows it (design §2.7).
@@ -746,7 +768,9 @@ const EMOTE_FOR: Duration = Duration::from_secs(1);
 
 impl App {
     /// A new UI for `map`, with the cursor at the map's centre and the viewport
-    /// centred on it, and its panels drawn in `areas`.
+    /// centred on it, and its panels drawn in `areas`, in `theme`, taken as
+    /// the CP437 glyph set in the default palette until `use_settings` says
+    /// what the player has picked (design §6.7, #307).
     pub fn new(map: &Map, theme: Theme, seed: u64, areas: Areas) -> App {
         let cursor = Pos {
             x: map.width() / 2,
@@ -754,6 +778,7 @@ impl App {
         };
         let mut app = App {
             clock: Clock::new(),
+            look: Look::of(&theme),
             theme,
             seed,
             screen: Screen::Normal,
@@ -800,12 +825,16 @@ impl App {
             genome_files: Vec::new(),
             theme_folder: None,
             theme_files: Vec::new(),
+            saved_settings: SavedSettings::default(),
+            settings_file: None,
+            settings_unreadable: false,
             naming: None,
             names_offered: 0,
             notice: None,
             policy: Box::new(Omniscient),
             colour_mode: ColourMode::Drive,
             tracking: false,
+            tracked_at: None,
             event_log_area: areas.event_log,
             overlay: areas.overlay,
             event_filter: EventFilter::All,
@@ -832,6 +861,7 @@ impl App {
             on_inspector: false,
             spots: RefCell::default(),
             full_screen: false,
+            motion: Motion::new(),
         };
         app.centre_on(cursor);
         app
@@ -867,6 +897,17 @@ impl App {
             self.since_autosave += elapsed;
         }
         let now = self.running_for;
+        // The Cursor goes to the tile under a still pointer once the view
+        // has panned there (design §6.9).
+        if self.motion.pan_ended(now, self.clock.speed()) {
+            self.repoint();
+        }
+        self.motion.forget_finished(now);
+        // A pop-up opening or closing, against the frame last drawn (design
+        // §6.9).
+        let spots = &self.spots;
+        self.motion
+            .saw(self.screen, || spots.borrow().drawn_fading(), now);
         self.emotes.retain(|_, &mut (_, at)| now - at < EMOTE_FOR);
         self.resting
             .retain(|_, rest| rest.until().is_none_or(|until| now < until));
@@ -943,7 +984,7 @@ impl App {
             return Flow::Quit;
         }
         match self.screen {
-            Screen::PlaceMenu | Screen::GenomeMenu | Screen::LoadMenu | Screen::ThemeMenu => {
+            Screen::PlaceMenu | Screen::GenomeMenu | Screen::LoadMenu | Screen::Settings => {
                 return self.apply_in_menu(action, world);
             }
             Screen::Naming => return self.apply_naming(action, world),
@@ -1080,7 +1121,7 @@ impl App {
             Action::Quickload => self.quickload(world),
             Action::SaveAs => self.start_save_naming(world),
             Action::OpenSaves => self.list_saves(),
-            Action::OpenThemes => self.list_themes(),
+            Action::OpenSettings => self.open_settings(),
             Action::TakeOver => self.take_over(world),
             Action::SelectNext => self.select_along(world, Direction::Next),
             Action::SelectPrevious => self.select_along(world, Direction::Previous),
@@ -1128,7 +1169,23 @@ impl App {
             }
             Action::CycleColours => {
                 self.colour_mode = along(&ColourMode::ALL, self.colour_mode, 1);
-                self.tell_player(format!("Colours: {}", self.colour_mode.label()));
+                let mode = self.colour_mode;
+                // A palette that can't show a sprite's colours, with no
+                // colour or all greens, says where they're read instead
+                // (design §6.2, §6.3).
+                let unseen = match mode {
+                    ColourMode::Drive => Some("the sprite list (l)"),
+                    ColourMode::Lineage => Some("the family tree (k)"),
+                    ColourMode::Plain => None,
+                }
+                .filter(|_| !self.theme.shows_colour_modes());
+                self.tell_player(match unseen {
+                    None => format!("Colours: {}", mode.label()),
+                    Some(read_in) => format!(
+                        "Colours: {}, which this palette can't show: see {read_in}",
+                        mode.label()
+                    ),
+                });
             }
             Action::ToggleVisible => {
                 if !self.visible_in.remove(&self.mode) {

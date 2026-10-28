@@ -5,7 +5,7 @@
 
 mod common;
 use common::{
-    LAYS_ALONE, LONE, Q, WorldBuilder, app_on, at, group, inspector_rows, pack_changing,
+    LAYS_ALONE, LONE, Q, WorldBuilder, app_in, app_on, at, group, inspector_rows, pack_changing,
     pointer_on, render, render_on, row, run, sized_app,
 };
 
@@ -18,7 +18,7 @@ use terra_sim::{DataPack, Pos, World};
 use terra_tui::app::{App, CursorMode, Screen};
 use terra_tui::input::Action;
 use terra_tui::policy::{InfoPolicy, Panel, Subject};
-use terra_tui::theme::Theme;
+use terra_tui::theme::{ColourPalette, GlyphSet, Theme};
 
 /// The built-in pack, in which a female may lay alone at once (M2 design
 /// §15.7).
@@ -220,6 +220,37 @@ fn each_column_is_split_by_share_from_the_bottom_in_the_theme_s_colours() {
     // The pointer picks the column under it, past the labels.
     app.apply(Action::Point(Position::new(FIRST_COLUMN, 9)), &world);
     assert_eq!(app.graph_pick(), Some(100));
+}
+
+#[test]
+fn in_a_palette_without_colour_each_band_has_a_character_of_its_own() {
+    // Design §6.2, #307: mono can't tell the bands by colour, so each is
+    // drawn in its own character from the glyph set, as M2 design §14.2's
+    // page without colour shows them, and a character of two bands shows
+    // the lower. The 2 young are 13 halves of the 38, so the 7th row up is
+    // half young and half adult.
+    let mut world = field(2, 4);
+    run(&mut world, 250);
+    for (glyphs, [egg, young, adult, old]) in [
+        (GlyphSet::Cp437, ['░', '▓', '█', '▒']),
+        (GlyphSet::Ascii, [':', '+', '#', '=']),
+    ] {
+        let mut app = app_in(&world, Theme::built_in(glyphs, ColourPalette::Mono));
+        app.apply(Action::Population, &world);
+        let screen = render(&app, &world);
+        let at = |y: u16| screen[(FIRST_COLUMN, y)].symbol().to_string();
+        assert_eq!(at(BOTTOM), young.to_string(), "{glyphs:?}");
+        assert_eq!(at(BOTTOM - 6), young.to_string(), "{glyphs:?}");
+        assert_eq!(at(BOTTOM - 7), adult.to_string(), "{glyphs:?}");
+        assert_eq!(at(2), adult.to_string(), "{glyphs:?}");
+        assert!(
+            row(&screen, LEGEND).contains(&format!(
+                "{egg} eggs  {young} young  {adult} adults  {old} old"
+            )),
+            "{glyphs:?}: {}",
+            row(&screen, LEGEND)
+        );
+    }
 }
 
 #[test]

@@ -28,6 +28,7 @@ use terra_tui::files;
 use terra_tui::input::{self, Keys};
 use terra_tui::saves;
 use terra_tui::session::{self, Session};
+use terra_tui::settings::{self, SavedSettings, Settings};
 use terra_tui::start;
 use terra_tui::theme::{self, Theme};
 use terra_tui::title::{self, Title, TitleFlow};
@@ -77,7 +78,7 @@ fn main() -> ExitCode {
     } else {
         title_world(&args).map(Next::title)
     };
-    let first = match first {
+    let mut first = match first {
         Ok(first) => first,
         Err(err) => return fail(err),
     };
@@ -85,10 +86,31 @@ fn main() -> ExitCode {
         Next::World(opening) => opening.session.world().data(),
         Next::Title { world, .. } => world.data(),
     };
-    let theme = match start::theme(&args, data) {
-        Ok(theme) => theme,
+    // The flags win for the run, then what the player picked on the
+    // settings screen, saved in the game's folder, then `NO_COLOR` (design
+    // §6.2, §6.7, #307). Any value of it but nothing counts, even one that
+    // isn't Unicode. A settings file that can't be read, or names a theme
+    // that no longer loads, is left alone, and the game starts on its own,
+    // saying why.
+    let no_color = std::env::var_os("NO_COLOR").map(|value| value.to_string_lossy().into_owned());
+    let settings_file = files::settings_file();
+    let saved = settings_file
+        .as_deref()
+        .map_or_else(|| Ok(SavedSettings::default()), settings::read);
+    let theme_folder = files::theme_folder();
+    let (mut settings, mut unread) = match start::settings(
+        &args,
+        saved,
+        theme_folder.as_deref(),
+        no_color.as_deref(),
+        data,
+    ) {
+        Ok(found) => found,
         Err(err) => return fail(err),
     };
+    if let Next::Title { refusal, .. } = &mut first {
+        *refusal = unread.take();
+    }
 
     // Installs a panic hook that restores the terminal before the panic is reported.
     let mut terminal = match ratatui::try_init() {
@@ -148,6 +170,9 @@ fn main() -> ExitCode {
         loop {
             next = match next {
                 Next::Title { world, refusal } => {
+                    // The title screen draws in the look the player has
+                    // (design §6.7, #307).
+                    let theme = settings.look.theme();
                     match run_title(&mut terminal, *world, refusal, &args, &theme, &mut keys)? {
                         Some(opening) => Next::World(opening),
                         None => return Ok(()),
@@ -155,11 +180,16 @@ fn main() -> ExitCode {
                 }
                 Next::World(opening) => {
                     let setup = Setup {
-                        theme: theme.clone(),
+                        settings: settings.clone(),
+                        unread: unread.take(),
                         force_panic: args.force_panic,
                         session_log: session_log.as_deref(),
                     };
-                    let (flow, unwritten) = run_world(&mut terminal, opening, &mut keys, setup)?;
+                    let (flow, unwritten, left) =
+                        run_world(&mut terminal, opening, &mut keys, setup)?;
+                    // The next world, or the title screen, starts as the
+                    // player left the settings (design §6.7, #307).
+                    settings = left;
                     if flow == Flow::Quit {
                         afterwards = unwritten;
                         return Ok(());
@@ -486,7 +516,14 @@ impl Progress {
 
 /// What the frame loop runs with, besides the terminal and the world.
 struct Setup<'a> {
-    theme: Theme,
+    /// The settings the world starts with: the look, motion and square
+    /// tiles, with what the player has changed of them (design §6.7, #307).
+    /// `--ascii`, `--theme` and `--no-motion` give them for every world the
+    /// game opens until the player changes them.
+    settings: Settings,
+    /// Why the saved settings weren't all taken, to say as the world
+    /// opens, if the game started on it.
+    unread: Option<String>,
     force_panic: bool,
     /// Where the session log goes, if anywhere (design §2.7).
     session_log: Option<&'a Path>,
@@ -494,15 +531,16 @@ struct Setup<'a> {
 
 /// Plays `opening` until the player quits or goes back to the title
 /// screen, saying which, with why the world couldn't be autosaved or the
-/// session log written as it was left, if it couldn't. A session that ends
-/// in a panic still writes its replay (design §2.9), as does one the
-/// terminal failed under (design §2.7).
+/// session log written as it was left, if it couldn't, and the settings as
+/// the player left them (design §6.7, #307). A session that ends in a panic
+/// still writes its replay (design §2.9), as does one the terminal failed
+/// under (design §2.7).
 fn run_world(
     terminal: &mut DefaultTerminal,
     opening: Opening,
     keys: &mut Keys,
     setup: Setup,
-) -> io::Result<(Flow, Option<String>)> {
+) -> io::Result<(Flow, Option<String>, Settings)> {
     let Opening {
         mut session,
         replay,
@@ -511,7 +549,16 @@ fn run_world(
     let session_log = setup.session_log;
     let areas = ui::areas(terminal.size()?);
     let world = session.world();
-    let mut app = App::new(world.map(), setup.theme.clone(), world.seed(), areas);
+    let mut app = App::new(
+        world.map(),
+        setup.settings.look.theme(),
+        world.seed(),
+        areas,
+    );
+    app.use_settings(setup.settings.clone());
+    if let Some(path) = files::settings_file() {
+        app.set_settings_file(path);
+    }
     // A save loaded on the title screen starts as a load in a world does
     // (M2 design §8.2).
     if let Some(name) = loaded {
@@ -521,6 +568,9 @@ fn run_world(
         app.load_from_title(*world, name);
         let world = app.take_loaded().expect("the world just handed over");
         session = Session::live(world);
+    }
+    if let Some(why) = &setup.unread {
+        app.note_unread_settings(why.clone());
     }
     let ran = session::writing_session_log_on_panic(&mut session, session_log, |session| {
         run(terminal, session, &mut app, keys, &setup, replay.as_deref())
@@ -536,7 +586,8 @@ fn run_world(
     match ran {
         Ok((flow, unsaved)) => {
             let untold: Vec<String> = unsaved.into_iter().chain(unwritten).collect();
-            Ok((flow, (!untold.is_empty()).then(|| untold.join("; "))))
+            let untold = (!untold.is_empty()).then(|| untold.join("; "));
+            Ok((flow, untold, app.settings()))
         }
         Err(err) => match unwritten {
             Some(unwritten) => Err(io::Error::new(err.kind(), format!("{err}; {unwritten}"))),

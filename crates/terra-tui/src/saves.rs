@@ -7,6 +7,8 @@ use std::time::SystemTime;
 
 use terra_sim::World;
 
+use crate::files;
+
 /// A save file's extension, after the magic every save starts with.
 pub const EXTENSION: &str = "tspr";
 
@@ -104,11 +106,8 @@ fn is_device(stem: &str) -> bool {
 /// that in place, so a save cut short never leaves a broken one where a
 /// good one was.
 pub fn write(folder: &Path, name: &str, bytes: &[u8]) -> io::Result<PathBuf> {
-    std::fs::create_dir_all(folder)?;
     let path = path_for(folder, name);
-    let partial = path.with_extension(format!("{EXTENSION}.partial"));
-    std::fs::write(&partial, bytes)?;
-    std::fs::rename(&partial, &path)?;
+    files::write_in_place(&path, bytes)?;
     Ok(path)
 }
 

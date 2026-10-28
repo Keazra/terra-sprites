@@ -1,6 +1,7 @@
 //! The data-format reference's working examples for the front end's formats
 //! (design §7.4, A9): the theme example in `docs/reference/` loads as
-//! `--theme` would load it. `terra-sim`'s own test covers the data pack's.
+//! `--theme` would load it, and the settings example is what the game
+//! writes. `terra-sim`'s own test covers the data pack's.
 
 // The example reader `terra-sim`'s test uses too, from its `tests/common`.
 #[path = "../../terra-sim/tests/common/reference_example.rs"]
@@ -9,8 +10,9 @@ use reference_example::example;
 
 use ratatui::style::{Color, Style};
 use terra_sim::DataPack;
+use terra_tui::settings::SavedSettings;
 use terra_tui::space::{Depth, Pane};
-use terra_tui::theme::{SemanticTile, Theme};
+use terra_tui::theme::{BarWaves, SemanticTile, Theme};
 
 #[test]
 fn the_theme_example_loads() {
@@ -32,4 +34,22 @@ fn the_theme_example_loads() {
     assert_eq!(text.good, Theme::cp437().text().good);
     let panels = theme.panels().expect("shaded");
     assert_eq!(panels.shade, Color::Rgb(0x1c, 0x1c, 0x1c));
+    let (motion, default) = (theme.motion(), Theme::cp437().motion());
+    assert_eq!(motion.flash, Color::White);
+    assert_eq!(motion.ash, default.ash);
+    assert_eq!(motion.bar, BarWaves::Ripple);
+}
+
+#[test]
+fn the_settings_example_is_what_the_game_writes() {
+    let page = include_str!("../../../docs/reference/settings.md");
+    let text = example(page, "settings");
+    let saved = SavedSettings {
+        glyphs: Some("ASCII".into()),
+        colours: Some("night.ron".into()),
+        motion: Some(false),
+        square_tiles: None,
+    };
+    assert_eq!(SavedSettings::from_ron(&text), Ok(saved.clone()));
+    assert_eq!(saved.to_ron(), format!("{text}\n"));
 }

@@ -91,13 +91,7 @@ impl Session {
         let Some(bytes) = self.replay_bytes() else {
             return Ok(());
         };
-        if let Some(folder) = path.parent() {
-            std::fs::create_dir_all(folder)?;
-        }
-        let mut partial = path.as_os_str().to_owned();
-        partial.push(".partial");
-        std::fs::write(&partial, bytes)?;
-        std::fs::rename(&partial, path)
+        crate::files::write_in_place(path, &bytes)
     }
 
     /// A live world's session log so far.

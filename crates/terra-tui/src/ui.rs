@@ -18,6 +18,7 @@ use crate::app::{
 use crate::controls::{self, Context, Control, Hint, PaletteRow, Says};
 use crate::family_tree::{self, Lineage};
 use crate::inspector::{self, INSPECTOR_WIDTH, NOTHING_SELECTED, TabColumns, first_shown};
+use crate::motion::{self, Lying};
 use crate::policy::{Panel, Subject};
 use crate::space::{self, Place};
 use crate::spots::{Spot, Spots};
@@ -81,6 +82,14 @@ pub fn render(frame: &mut Frame, app: &App, world: &World) {
 /// room the rest leave (M2 design §11.4). The app is to be fitted to `areas_with` the
 /// same parts, so the Cursor and the marks land where it says.
 pub fn render_with(frame: &mut Frame, app: &App, world: &World, parts: Parts) {
+    draw_with(frame, app, world, parts);
+    // A palette with no colour draws none, and Game Kid's draws every grey
+    // in its greens (design §6.2).
+    app.theme.finish(frame.buffer_mut());
+}
+
+/// Draws the frame `render_with` draws, in the theme's colours.
+fn draw_with(frame: &mut Frame, app: &App, world: &World, parts: Parts) {
     let area = frame.area();
     if too_small(area.as_size()) {
         app.keep_spots(Spots::default());
@@ -150,17 +159,17 @@ pub fn render_with(frame: &mut Frame, app: &App, world: &World, parts: Parts) {
         }
         _ => {}
     }
-    // Over whatever's open, so it's in a screenshot of any of them (design
-    // §6.1).
-    if app.debug_overlay() {
-        pop_ups.push(render_debug_overlay(
-            frame.buffer_mut(),
-            map_view_area(area, parts),
-            app,
-        ));
-    }
+    // Each fades in as it opens and out as it closes (design §6.9).
     for pop_up in pop_ups.into_iter().flatten() {
-        spots.note(pop_up, Spot::PopUp);
+        spots.note_pop_up(pop_up, true);
+    }
+    // Over whatever's open, so it's in a screenshot of any of them (design
+    // §6.1). It doesn't fade (§6.9).
+    let debug = app
+        .debug_overlay()
+        .then(|| render_debug_overlay(frame.buffer_mut(), map_view_area(area, parts), app));
+    if let Some(debug) = debug.flatten() {
+        spots.note_pop_up(debug, false);
     }
     // What can be pointed at, what is, and a tooltip saying what it is,
     // between the bars (design §6.1, #304).
@@ -168,6 +177,13 @@ pub fn render_with(frame: &mut Frame, app: &App, world: &World, parts: Parts) {
     tooltip::light_up_spot(frame.buffer_mut(), app, &spots);
     if let Some(Spot::LogLine(id)) = tooltip::pointer(app).and_then(|cell| spots.at(cell)) {
         light_up(frame.buffer_mut(), app, world, *id, &spots);
+    }
+    // Motion over the panels and pop-ups, under the tooltip, which doesn't
+    // move (design §6.9); and the pop-ups as they're drawn, for one that
+    // closes to fade out from.
+    motion::play_on_panels(frame.buffer_mut(), app, &spots);
+    if motion::colours_play(app) {
+        spots.keep_fading(frame.buffer_mut());
     }
     let between_bars = Rect::new(
         area.x,
@@ -401,6 +417,7 @@ pub fn map_view_alone_areas(screen: Size) -> Areas {
 pub fn render_map_view_alone(frame: &mut Frame, app: &App, world: &World) {
     let area = frame.area();
     draw_tiles(frame.buffer_mut(), area, app, world);
+    app.theme.finish(frame.buffer_mut());
 }
 
 /// Draws what the map view shows in `inner`: the tiles in view, the glass
@@ -421,6 +438,11 @@ fn draw_tiles(buf: &mut Buffer, inner: Rect, app: &App, world: &World) {
     let cursor = app.shown_cursor();
     let lineage = lineage_on_map(app, world);
     let width = app.tile_width();
+    // Where bare ground shows, for a death's ghost and a hatching's shell,
+    // and an item lying on the map, for an egg about to hatch, for motion to
+    // play over (design §6.9). The shell plays in mono too, so bare ground
+    // is gathered whenever motion is on.
+    let (mut bare, mut lying) = (Vec::new(), Vec::new());
     for y in inner.top()..inner.bottom() {
         for x in inner.left()..inner.right() {
             // Which of its tile's cells this is: the second while tiles are
@@ -447,21 +469,27 @@ fn draw_tiles(buf: &mut Buffer, inner: Rect, app: &App, world: &World) {
                 }
             };
             // A sprite is drawn over any item on its tile.
+            // A sprite takes the colour mode's colour, unless it's emoting
+            // (design §6.3).
             let glyph = if let Some(sprite) = world.sprite_at(pos) {
                 let emote = app
                     .emote(sprite.id())
                     .filter(|_| app.can_view(Panel::Emotes, Subject::Sprite(sprite.id())));
-                let selected = app.selection() == Some(Selection::Living(sprite.id()));
-                let tile = match emote {
-                    Some(emote) => SemanticTile::Emote(emote),
-                    None => sprite_tile(sprite.life_stage(), selected),
-                };
-                app.theme.glyph(tile)
+                match emote {
+                    Some(emote) => app.theme.glyph(SemanticTile::Emote(emote)),
+                    None => sprite_look(app, &sprite, lineage.as_ref()),
+                }
             } else if let Some((_, look)) = thrown.filter(|&(from, _)| from == pos) {
                 app.theme.object_glyph(look.type_name, look.visual_state)
             } else if destination == Some(pos) {
                 app.theme.glyph(SemanticTile::DecisionMarker)
             } else if let Some(item) = items.at(pos) {
+                if motion::colours_play(app) {
+                    lying.push(Lying {
+                        cell: Position::new(x, y),
+                        id: item.id,
+                    });
+                }
                 let glyph = app.theme.object_glyph(item.type_name, item.visual_state);
                 // Only an egg can be selected, and it's drawn in reverse
                 // video (M2 design §10.7).
@@ -486,27 +514,28 @@ fn draw_tiles(buf: &mut Buffer, inner: Rect, app: &App, world: &World) {
             } else {
                 glyph.symbol
             };
-            // A sprite takes the colour mode's colour, unless it's emoting
-            // (design §6.3).
-            let fg = match world.sprite_at(pos) {
-                Some(sprite) if !is_emote(app, &sprite) => {
-                    sprite_colour(app, &sprite, glyph.fg, lineage.as_ref())
-                }
-                _ => glyph.fg,
-            };
-            let mut style = Style::default().fg(fg);
+            if on_terrain && app.motion() {
+                bare.push(Position::new(x, y));
+            }
+            let mut style = Style::default().fg(glyph.fg);
             if glyph.bold {
                 style = style.add_modifier(Modifier::BOLD);
             }
             if glyph.reversed || cursor == Some(pos) {
                 style = style.add_modifier(Modifier::REVERSED);
             }
-            if attended == Some(pos) {
+            // A palette with no colour can't show the marker's background,
+            // so it underlines the tile, which no glyph is: bold tells a
+            // fruiting bush from a bare one there (design §6.2, #307).
+            if attended == Some(pos) && app.theme.has_colour() {
                 style = style.bg(app.theme.attention_marker());
+            } else if attended == Some(pos) {
+                style = style.add_modifier(Modifier::UNDERLINED);
             }
             buf[(x, y)].set_char(symbol).set_style(style);
         }
     }
+    motion::play_on_map(buf, inner, app, world, (&bare, &lying));
     draw_stars(buf, inner, app);
     if app.flash_on() {
         draw_leash(buf, app, world);
@@ -522,7 +551,7 @@ fn draw_stars(buf: &mut Buffer, inner: Rect, app: &App) {
     // In tiles, so they follow the zoom: each in its tile's first cell.
     let width = app.tile_width();
     let view = Size::new(inner.width.div_ceil(width), inner.height);
-    for (depth, at) in space::stars(view, app.viewport(), app.drift()) {
+    for (depth, at) in space::stars(view, app.shown_viewport(), app.drift()) {
         let cell = Position::new(inner.x + at.x * width, inner.y + at.y);
         if inner.contains(cell) && app.place_from(inner.as_position(), cell) == Place::Space {
             let star = app.theme.star(depth);
@@ -534,7 +563,7 @@ fn draw_stars(buf: &mut Buffer, inner: Rect, app: &App) {
 }
 
 /// Whether `sprite` is drawn as an emote just now.
-fn is_emote(app: &App, sprite: &SpriteView) -> bool {
+pub(crate) fn is_emote(app: &App, sprite: &SpriteView) -> bool {
     let id = sprite.id();
     app.emote(id).is_some() && app.can_view(Panel::Emotes, Subject::Sprite(id))
 }
@@ -542,11 +571,11 @@ fn is_emote(app: &App, sprite: &SpriteView) -> bool {
 /// The selected sprite and those of its lineage the map marks, while it
 /// shows the lineage colours and a sprite is selected, living or dead (M2
 /// design §17.4).
-type Marked = (EntityId, BTreeMap<EntityId, Lineage>);
+pub(crate) type Marked = (EntityId, BTreeMap<EntityId, Lineage>);
 
 /// The lineage the map colours, if it does: not while the policy hides
 /// the selected sprite from the family tree.
-fn lineage_on_map(app: &App, world: &World) -> Option<Marked> {
+pub(crate) fn lineage_on_map(app: &App, world: &World) -> Option<Marked> {
     if app.colour_mode() != ColourMode::Lineage {
         return None;
     }
@@ -557,15 +586,31 @@ fn lineage_on_map(app: &App, world: &World) -> Option<Marked> {
     Some((id, family_tree::lineage(world, id)))
 }
 
+/// How `sprite` is drawn while it isn't emoting: its own glyph, the young
+/// small and the selected one in reverse video, in the colour mode's colour
+/// (design §6.3), `lineage` marking it. A death's ghost is drawn from it
+/// (§6.9).
+pub(crate) fn sprite_look(app: &App, sprite: &SpriteView, lineage: Option<&Marked>) -> Glyph {
+    let selected = app.selection() == Some(Selection::Living(sprite.id()));
+    let glyph = app.theme.glyph(sprite_tile(sprite.life_stage(), selected));
+    Glyph {
+        fg: sprite_colour(app, sprite, glyph.fg, lineage),
+        ..glyph
+    }
+}
+
 /// The colour `sprite` is drawn in, in the colour mode (design §6.3): its
 /// strongest drive's above .5, or else `own`, its glyph's colour; or in the
 /// lineage colours, where it stands in the selected sprite's lineage. The
 /// selected sprite keeps `own`, as every sprite does with none selected (M2
 /// design §17.4). A drive the theme has no colour for draws `own` too, and so
 /// does a sprite whose colour, or place on the family tree, the policy
-/// hides (design §6.4).
+/// hides (design §6.4), and every sprite in a palette that can't show the
+/// colour modes, such as Game Kid (§6.2).
 fn sprite_colour(app: &App, sprite: &SpriteView, own: Color, lineage: Option<&Marked>) -> Color {
-    if !app.can_view(Panel::MapColours, Subject::Sprite(sprite.id())) {
+    if !app.theme.shows_colour_modes()
+        || !app.can_view(Panel::MapColours, Subject::Sprite(sprite.id()))
+    {
         return own;
     }
     match app.colour_mode() {
@@ -599,13 +644,13 @@ fn heading_for(app: &App, world: &World) -> Option<Pos> {
 
 /// The tile of the one thing the selected sprite attends to (design §5.3):
 /// where the map shades the Attention marker.
-fn attended_by(app: &App, world: &World) -> Option<Pos> {
+pub(crate) fn attended_by(app: &App, world: &World) -> Option<Pos> {
     world.sprite(marked(app)?)?.attending_to()
 }
 
 /// The selected sprite, if it's living and the policy lets the map mark
 /// where it's heading and what it attends to (design §6.4).
-fn marked(app: &App) -> Option<EntityId> {
+pub(crate) fn marked(app: &App) -> Option<EntityId> {
     match app.selection() {
         Some(Selection::Living(id)) if app.can_view(Panel::Markers, Subject::Sprite(id)) => {
             Some(id)
@@ -782,7 +827,9 @@ fn line_between(from: Pos, to: Pos) -> Vec<Pos> {
 
 /// Draws the open menu, if any (design v28 §6.5): over the map, from its top-left
 /// tile, its items numbered and the highlighted one in the theme's style for
-/// what's chosen (design §6.2), inside a border; as far as the screen goes.
+/// what's chosen (design §6.2), inside a border, with the key hint in its
+/// corner if it has one, as the settings screen's box does (§6.7, #307); as
+/// far as the screen goes.
 fn render_menu(buf: &mut Buffer, screen: Rect, app: &App, world: &World) -> Option<Rect> {
     let (Some(menu), Some(title)) = (app.menu_area(world), app.menu_title()) else {
         return None;
@@ -791,8 +838,15 @@ fn render_menu(buf: &mut Buffer, screen: Rect, app: &App, world: &World) -> Opti
     if area.width < 3 || area.height < 3 {
         return None;
     }
-    blank(buf, area);
-    draw_border(buf, area, title);
+    match app.menu_corner() {
+        Some(corner) => {
+            clear_box(buf, area, title, corner, app.theme.text());
+        }
+        None => {
+            blank(buf, area);
+            draw_border(buf, area, title);
+        }
+    }
     let items = app.menu_items(world);
     let room = usize::from(area.width - 2);
     if items.is_empty() {

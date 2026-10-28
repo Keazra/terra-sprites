@@ -263,8 +263,9 @@ impl App {
     /// The world just loaded, if one was, for the frame loop to play from
     /// now on. The app starts afresh on it, as for a new world, paused so
     /// the player can see where they are (design §6.7). What's the
-    /// player's rather than the world's carries over: the speed, the theme,
-    /// the colours, the open tab and the folders.
+    /// player's rather than the world's carries over: the speed, the
+    /// settings (the look, motion and square tiles, #307), the colours, the
+    /// open tab and the folders.
     pub fn take_loaded(&mut self) -> Option<World> {
         let (world, name) = self.loaded.take()?;
         let areas = Areas {
@@ -289,11 +290,18 @@ impl App {
         // screen, so the world loaded is in view (design §6.1, #305).
         fresh.inspector = self.inspector;
         fresh.zoom = self.zoom;
+        fresh.motion.switch(self.motion.on());
         fresh.running_for = self.running_for;
         fresh.data_folder = self.data_folder.take();
         fresh.genome_folder = self.genome_folder.take();
         fresh.save_folder = self.save_folder.take();
         fresh.theme_folder = self.theme_folder.take();
+        // The settings (design §6.7, #307): the look as picked, what the
+        // player has changed, and where it's saved.
+        fresh.look = self.look.clone();
+        fresh.saved_settings = std::mem::take(&mut self.saved_settings);
+        fresh.settings_file = self.settings_file.take();
+        fresh.settings_unreadable = self.settings_unreadable;
         // The Cursor as the world left it: where it was, what it has hold
         // of, in Grab mode, which holds and leads, and whether sprites can
         // see it.

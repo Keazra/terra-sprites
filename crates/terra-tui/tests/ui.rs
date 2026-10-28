@@ -26,7 +26,7 @@ use terra_sim::{
 };
 use terra_tui::app::{App, CursorMode, Flow, Selection, Tab};
 use terra_tui::input::{Action, Button};
-use terra_tui::theme::Theme;
+use terra_tui::theme::{ColourPalette, GlyphSet, Theme};
 use terra_tui::ui;
 
 /// A world on a drawn map, using the ascii legend.
@@ -1462,7 +1462,8 @@ fn the_map_view_alone_fills_the_frame_with_tiles_and_nothing_else() {
     let world = drawn_world(&drawing);
     let areas = ui::map_view_alone_areas(Size::new(30, 12));
     assert_eq!(areas.tiles, Rect::new(0, 0, 30, 12));
-    let app = App::new(world.map(), Theme::ascii(), 7, areas);
+    let mut app = App::new(world.map(), Theme::ascii(), 7, areas);
+    app.set_motion(false);
     let mut terminal = Terminal::new(TestBackend::new(30, 12)).unwrap();
     terminal
         .draw(|frame| ui::render_map_view_alone(frame, &app, &world))
@@ -1476,12 +1477,15 @@ fn the_map_view_alone_fills_the_frame_with_tiles_and_nothing_else() {
 /// its app fitted to them.
 fn render_parts(world: &World, parts: ui::Parts) -> Vec<String> {
     let screen = Size::new(100, 30);
-    let app = App::new(
+    // A palette without shades draws lines between the parts (design
+    // §6.1).
+    let mut app = App::new(
         world.map(),
-        Theme::ascii(),
+        Theme::built_in(GlyphSet::Ascii, ColourPalette::HighContrast),
         7,
         ui::areas_with(screen, parts),
     );
+    app.set_motion(false);
     let mut terminal = Terminal::new(TestBackend::new(screen.width, screen.height)).unwrap();
     terminal
         .draw(|frame| ui::render_with(frame, &app, world, parts))

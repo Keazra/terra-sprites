@@ -57,7 +57,7 @@ The number that, together with a world config and a data pack, determines a new 
 
 **World config**:
 The settings a new world is made from, such as the map's size. A **preset** is a file that holds one.
-_Avoid_: settings, options
+_Avoid_: settings (on its own: the settings screen is the player's choice of how the game looks), options
 
 ### Objects
 
@@ -741,6 +741,10 @@ _Avoid_: wide tiles, double width
 The part of the map currently shown in the map view. It can go a quarter of the map view past the wall, where the glass and space show; a map small enough to fit with its glass sits in the middle of it, with space all round (Slice 31, #180).
 _Avoid_: camera
 
+**Pan** (#306):
+The map view easing over to a sprite or egg the view centres on, rather than jumping, as part of motion. Only the drawing moves: the viewport jumps at once, and the Cursor goes to the tile under a still pointer only once the pan has ended (a moving pointer goes by what's drawn).
+_Avoid_: glide, scroll (the player's own moving of the view), camera move
+
 **Glass**:
 How the wall is drawn where it faces space: a line of light cyan one tile outside the map (Slice 31). It isn't a tile, so nothing on the map reaches it. On the ship (#181), it's drawn one tile outside a sector, over a tile of space.
 _Avoid_: window, border
@@ -813,6 +817,10 @@ _Avoid_: destination (that's the tile itself), cursor, highlight
 The steady grey shading on the map of the one thing the selected sprite is paying attention to.
 _Avoid_: highlight, attention mark
 
+**Trail** (#306):
+The fading tint on the tiles the selected sprite has just left, part of motion.
+_Avoid_: path (that's where a throw or an aim line goes), tracks
+
 **Event log**:
 The panel that lists what just happened to sprites, newest first.
 _Avoid_: events panel, console, feed
@@ -823,7 +831,7 @@ _Avoid_: log level, view
 
 **Colour mode**:
 What colours a sprite on the map: its strongest drive once one is above half (each drive's colour is the theme's), plain, its own colour, or lineage (M2), which marks the selected sprite's lineage and grays the rest. `b` goes to the next.
-_Avoid_: tint, palette
+_Avoid_: tint, palette (that's a theme's colours)
 
 **Help screen**:
 The overlay `?` opens, in pages: the World page, every key grouped, the colour, emote and lineage legends, and the game's folder for its files; the Inspector page, the inspector's keys and the open tab's legend; and a page each for the sprite list, the population graph and the family tree. It opens at the page for where the player is, and typing in it searches every page (#303).
@@ -873,16 +881,40 @@ _Avoid_: icon, bubble, flash
 What the map view draws for a tile, named by meaning (such as grass terrain) rather than by character.
 
 **Theme**:
-A mapping from semantic tiles to glyphs and colours, and from each text role to a style; it may also give the panel shades. Two are built in; the player's own go in the themes folder and are picked with `Ctrl+T`.
+A mapping from semantic tiles to glyphs and colours, and from each text role to a style; it may also give the panel shades. It's a glyph set and a palette, chosen apart (#307): the built-in ones, or a theme file of the player's own from the themes folder, picked on the settings screen as either or both.
 _Avoid_: skin
+
+**Glyph set** (#307):
+The characters a theme draws with: the map's, the Cursor's, the emotes', the glass's, the stars', the graph's blocks and bands, and a hatching's shell. Two are built in, CP437 and ASCII (`--ascii`).
+_Avoid_: font, charset, tileset (that's the Tiles milestone's)
+
+**Palette** (#307):
+The rest of a theme: the colours, bold and reverse video of each glyph, the drives', the lineage's and the graph's colours, the text roles, the attention marker, the panel shades, motion's colours and how a drive's bar shows its pace, and whether it has colour, a foreground for the terminal's own text colour, and colours that can show the colour modes. Five are built in: default, high contrast, colour-blind, mono, which has no colour at all and is where `NO_COLOR` starts the game, and Game Kid, greens on black like an old handheld's screen, which can't show the colour modes. The settings screen calls it **Colours**.
+_Avoid_: colour scheme, colour mode (that's which colours a sprite takes, `b`), command palette (that's `:`'s box)
+
+**Settings screen** (#307):
+The box `Ctrl+T` opens, of how the game looks and feels, a row each: the glyph set, the palette, motion and square tiles. What the player changes there is saved in `settings.ron` in the game's folder, never in a world save.
+_Avoid_: options, preferences, config (that's the world config)
 
 **Text role** (#302):
 What a piece of the screen's text is for, which the theme styles: a heading, muted (minor) text, good (a gain, or a reward felt), bad (a loss, or a punishment felt), a key in a hint, selected (what's chosen, such as the open tab), or a spot (what a tooltip can explain, and the name of a log line's sprite). Colour never carries a meaning alone: the signs, arrows and capitals stay.
 _Avoid_: colour scheme, highlight (for a role)
 
 **Panel shade** (#302):
-The background a theme may give the inspector and the event log, a little lighter than the terminal's black, with their title rows lighter again, in place of lines between the panels. A theme without shades, such as ASCII, draws a line instead.
+The background a palette may give the inspector and the event log, a little lighter than the terminal's black, with their title rows lighter again, in place of lines between the panels. A palette without shades, such as high contrast or mono, or with no colour to show them, draws a line instead.
 _Avoid_: border, frame, box (pop-ups have boxes; the panels don't)
+
+**Motion** (#306):
+The small effects drawn over the finished screen in real time, not ticks: a death's flash and ghost, an egg flashing before it hatches and a hatching's shell and sparks, a tab sweeping in, a pop-up fading, a drive's bar easing and its waves, which show how fast the drive moves against its usual rise, the pan and the trail. One switch turns it all off; it thins out at 4× and up.
+_Avoid_: animation (the emotes' swapping is older, and not part of it)
+
+**Usual rise** (#306):
+How fast a drive of the selected sprite usually rises: the average of its last hundred rises a tick that the screen has taken in since the sprite was selected, its falls and steady ticks left out. A drive's bar's waves weigh each rise against it, crashing taller, more often and further the faster. The screen keeps it and never saves it.
+_Avoid_: normal rate, base rate
+
+**Shell** (#306):
+The pieces of an egg drawn as it hatches, part of motion: for a moment the egg cracked where its young will be, and then its two halves either side of the egg's tile, sliding a tile further out, and four crumbs on the tiles at its corners, each fading to its tile's own colour, only where bare ground shows. The glyph set gives its characters. It's only drawn: the world has no shell, and it does nothing.
+_Avoid_: eggshell, debris, broken egg (M3's thrown egg that breaks, with its young inside)
 
 ### The Cursor
 

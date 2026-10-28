@@ -648,6 +648,14 @@ fn ago(elapsed: Duration) -> String {
 
 /// Draws the title screen.
 pub fn render(frame: &mut Frame, title: &Title) {
+    draw(frame, title);
+    // A palette with no colour draws none, the title's own greys included,
+    // and Game Kid's draws them in its greens (design §6.2).
+    title.theme.finish(frame.buffer_mut());
+}
+
+/// Draws the title screen in its theme's colours and its own greys.
+fn draw(frame: &mut Frame, title: &Title) {
     let area = frame.area();
     let buf = frame.buffer_mut();
     if too_small(area.as_size()) {

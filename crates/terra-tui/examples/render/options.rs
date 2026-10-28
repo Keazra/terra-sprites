@@ -8,6 +8,7 @@ use terra_sim::{EntityId, Mode};
 use terra_tui::app::Tab;
 use terra_tui::args::Args;
 use terra_tui::clock::Speed;
+use terra_tui::theme::ColourPalette;
 use terra_tui::ui;
 
 use crate::clip::{Framing, View};
@@ -66,13 +67,18 @@ usage: render title [options] -o <file>
   --cursor             show the Cursor, following the tracked sprite; by
                        default it's out of the picture
   --tab <name>         the inspector tab: body, brain, chem, genome or world
-  --ascii              draw with the ascii theme
-  --theme <file>       draw with a theme of your own
+  --no-motion          draw it without motion: no trail behind the sprite
+                       tracked, and no flash where a sprite dies
+  --ascii              draw with the ASCII glyph set
+  --theme <file>       draw with a theme of your own: its glyphs, unless
+                       --ascii, and its colours, unless --colours
+  --colours <name>     draw in a built-in palette: default, high-contrast,
+                       colour-blind, mono or game-kid
   --font <file.ttf>    draw with this font instead of Cascadia Mono
   --bold-font <file>   and its bold face (default: --font's own)
 
-title takes --seed, --seconds, --size, --cell, --frame, the theme and
-the font; the rest are for a world. The opening scene is always the
+title takes --seed, --seconds, --size, --cell, --frame, the glyphs, the
+colours and the font; the rest are for a world. The opening scene is always the
 default preset's world.
 
 9:16 for Shorts: --size 54x48 --map-view --cell 20x40 is 1080x1920, and
@@ -86,8 +92,11 @@ pub struct Options {
     pub out: PathBuf,
     pub format: Format,
     /// The world's flags, as the game takes them: the seed, the replay,
-    /// the preset, the mode and the theme.
+    /// the preset, the mode, `--ascii` and `--theme`.
     pub world: Args,
+    /// `--colours <name>`: a built-in palette, over `--theme`'s (design
+    /// §6.2, #307).
+    pub colours: Option<ColourPalette>,
     /// The picture's size and shape, and how long each frame shows.
     pub framing: Framing,
     /// A screen cell's size, in pixels.
@@ -123,12 +132,16 @@ pub struct WorldScene {
     pub cursor: bool,
     /// The inspector tab open, if not the one selecting a sprite opens.
     pub tab: Option<Tab>,
+    /// Whether motion plays, as it does in the game unless it's turned off
+    /// (design §6.9).
+    pub motion: bool,
 }
 
 impl WorldScene {
     /// A world's clip as the command line has it unless told otherwise:
     /// from where the world starts to the usual end, at 4×, tracking the
-    /// sprite `Tab` selects first, with no Cursor, on the tab that opens.
+    /// sprite `Tab` selects first, with no Cursor, on the tab that opens,
+    /// with motion.
     pub const USUAL: WorldScene = WorldScene {
         from: None,
         end: End::Usual,
@@ -136,6 +149,7 @@ impl WorldScene {
         track: Track::First,
         cursor: false,
         tab: None,
+        motion: true,
     };
 }
 
@@ -206,6 +220,7 @@ impl Options {
         let mut fonts = Vec::new();
         let mut bold_font = None;
         let mut seconds = None;
+        let mut colours = None;
         // The flags given that only a world's clip takes.
         let mut for_a_world = Vec::new();
         let mut scene = WorldScene::USUAL;
@@ -227,6 +242,7 @@ impl Options {
                     | "--tab"
                     | "--map-view"
                     | "--hide"
+                    | "--no-motion"
             ) {
                 for_a_world.push(flag.clone());
             }
@@ -248,8 +264,10 @@ impl Options {
                 "--track" => scene.track = track(&value()?)?,
                 "--cursor" => scene.cursor = true,
                 "--tab" => scene.tab = Some(tab(&value()?)?),
+                "--no-motion" => scene.motion = false,
                 "--ascii" => world.ascii = true,
                 "--theme" => world.theme = Some(value()?.into()),
+                "--colours" => colours = Some(palette(&value()?)?),
                 "--font" => fonts.push(value()?.into()),
                 "--bold-font" => bold_font = Some(value()?.into()),
                 _ => return Err(format!("`{flag}` isn't a flag the renderer knows")),
@@ -271,6 +289,13 @@ impl Options {
         }
         if world.replay.is_none() {
             world.seed = world.seed.or(Some(DEFAULT_SEED));
+        }
+        if world.ascii && world.theme.is_some() && colours.is_some() {
+            return Err(
+                "--ascii picks the glyphs and --colours the palette, which leave --theme \
+                 nothing to give: use two of them"
+                    .into(),
+            );
         }
         let out = out.ok_or("say where to write it with -o <file>")?;
         let format = format_of(&out)?;
@@ -371,6 +396,7 @@ impl Options {
             out,
             format,
             world,
+            colours,
             framing,
             cell,
             fonts,
@@ -478,6 +504,26 @@ fn tab(value: &str) -> Result<Tab, String> {
         })
 }
 
+/// A built-in palette by the name the game shows (design §6.2), in any
+/// case, with a dash or an underscore for its space: `high-contrast`.
+fn palette(value: &str) -> Result<ColourPalette, String> {
+    let said = |name: &str| name.to_lowercase().replace([' ', '_'], "-");
+    ColourPalette::ALL
+        .into_iter()
+        .find(|palette| said(palette.name()) == said(value))
+        .ok_or_else(|| {
+            let names: Vec<String> = ColourPalette::ALL
+                .iter()
+                .map(|palette| said(palette.name()))
+                .collect();
+            let (last, others) = names.split_last().expect("palettes are built in");
+            format!(
+                "--colours is {} or {last}, not `{value}`",
+                others.join(", ")
+            )
+        })
+}
+
 /// The format a file's extension asks for.
 fn format_of(path: &Path) -> Result<Format, String> {
     let extension = path
@@ -503,6 +549,7 @@ mod tests {
     use terra_sim::{EntityId, Mode};
     use terra_tui::app::Tab;
     use terra_tui::clock::Speed;
+    use terra_tui::theme::ColourPalette;
 
     use super::*;
 
@@ -579,6 +626,53 @@ mod tests {
     }
 
     #[test]
+    fn a_world_clip_plays_motion_unless_told_not_to() {
+        // Design §6.9: on, as in the game, and `--no-motion` turns it off.
+        let motion = |line: &str| match parse(line).unwrap().scene {
+            Scene::World(scene) | Scene::Samples(scene) => scene.motion,
+            other => panic!("{other:?}"),
+        };
+        assert!(motion("world -o a.gif"));
+        assert!(!motion("world --no-motion -o a.gif"));
+        assert!(!motion("samples --no-motion -o a.gif"));
+        assert!(USAGE.contains("--no-motion"));
+    }
+
+    #[test]
+    fn a_clip_is_drawn_in_the_palette_named() {
+        // Design §6.2 (#307): `--colours` picks a built-in palette by the
+        // name the game shows, a dash or an underscore for its space.
+        let colours = |line: &str| parse(line).unwrap().colours;
+        assert_eq!(colours("world -o a.gif"), None, "the flags' own");
+        assert_eq!(
+            colours("world --colours mono -o a.gif"),
+            Some(ColourPalette::Mono)
+        );
+        assert_eq!(
+            colours("title --colours High-Contrast -o a.gif"),
+            Some(ColourPalette::HighContrast)
+        );
+        assert_eq!(
+            colours("samples --colours colour_blind -o a.gif"),
+            Some(ColourPalette::ColourBlind)
+        );
+        assert_eq!(
+            colours("world --ascii --colours default -o a.gif"),
+            Some(ColourPalette::Default)
+        );
+        assert_eq!(
+            colours("world --colours game-kid -o a.gif"),
+            Some(ColourPalette::GameKid)
+        );
+        assert_eq!(
+            colours("title --colours Game_Kid -o a.gif"),
+            Some(ColourPalette::GameKid)
+        );
+        assert!(USAGE.contains("--colours"));
+        assert!(USAGE.contains("game-kid"));
+    }
+
+    #[test]
     fn a_replay_starts_where_it_starts_unless_told() {
         let options = parse("world --replay last_session.replay -o a.gif").unwrap();
         let Scene::World(scene) = &options.scene else {
@@ -634,6 +728,10 @@ mod tests {
         );
         refused("title --from 5 -o a.gif", "--from is for a world's clip");
         refused(
+            "title --no-motion -o a.gif",
+            "--no-motion is for a world's clip",
+        );
+        refused(
             "title --preset a.ron -o a.gif",
             "--preset is for a world's clip",
         );
@@ -652,6 +750,14 @@ mod tests {
         refused("world --from 300 --to 200 -o a.gif", "after --from");
         refused("world --speed 3x -o a.gif", "3x");
         refused("world --track bob -o a.gif", "bob");
+        refused(
+            "world --colours pink -o a.gif",
+            "--colours is default, high-contrast, colour-blind, mono or game-kid, not `pink`",
+        );
+        refused(
+            "world --ascii --theme a.ron --colours mono -o a.gif",
+            "leave --theme nothing to give",
+        );
         for flag in ["--seed 7", "--preset a.ron", "--lab"] {
             refused(
                 &format!("world {flag} --replay a.replay -o a.gif"),

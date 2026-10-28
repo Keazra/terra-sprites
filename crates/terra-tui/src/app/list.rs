@@ -97,14 +97,14 @@ impl App {
         None
     }
 
-    /// Selects sprite `id`, centres the view on it and closes the sprite
-    /// list.
+    /// Selects sprite `id`, centres the view on it, panning there (design
+    /// §6.9), and closes the sprite list.
     fn go_to(&mut self, id: EntityId, world: &World) {
         self.screen = Screen::Normal;
         self.list_filter = None;
         self.select(id);
         if let Some(sprite) = world.sprite(id) {
-            self.centre_on(sprite.pos());
+            self.pan_to(sprite.pos());
         }
         self.settle_cursor(world);
     }

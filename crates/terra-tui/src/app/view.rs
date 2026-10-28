@@ -1,7 +1,9 @@
 //! The map view (design §6.1, M2 design §11): where the viewport is and
 //! how it scrolls, which tile or what past the wall a screen cell shows,
 //! tiles one cell wide or two, where the pointer points, the view tracking
-//! the selected sprite, and the inspector beside it or over it.
+//! the selected sprite, and the inspector beside it or over it. The map
+//! view is drawn from where the pan has reached (design §6.9), and the
+//! pointer points at what's drawn there.
 
 use std::time::Duration;
 
@@ -18,6 +20,15 @@ impl App {
     /// its wall, the map view shows.
     pub fn viewport(&self) -> Origin {
         self.viewport
+    }
+
+    /// Where the map view is drawn from just now: where the pan has
+    /// reached while the view pans to a sprite, and the viewport otherwise
+    /// (design §6.9). Whatever's drawn on the map, and what the pointer
+    /// points at, go by this.
+    pub(crate) fn shown_viewport(&self) -> Origin {
+        self.motion
+            .shown_from(self.viewport, self.running_for, self.clock.speed())
     }
 
     /// How far the stars have drifted, as time at 1× (M2 design §11.3).
@@ -39,7 +50,7 @@ impl App {
     pub(crate) fn place_from(&self, corner: Position, cell: Position) -> Place {
         Place::at(
             self.column_from(corner, cell),
-            self.viewport.y + i32::from(cell.y - corner.y),
+            self.shown_viewport().y + i32::from(cell.y - corner.y),
             self.map_size,
         )
     }
@@ -47,7 +58,7 @@ impl App {
     /// Which column of tiles, past the wall too, the map view, drawing from
     /// screen cell `corner`, draws at screen cell `cell` (M2 design §11.7).
     pub(crate) fn column_from(&self, corner: Position, cell: Position) -> i32 {
-        self.viewport.x + i32::from((cell.x - corner.x) / self.tile_width())
+        self.shown_viewport().x + i32::from((cell.x - corner.x) / self.tile_width())
     }
 
     /// How many screen cells wide a tile is drawn: two while zoomed, so
@@ -68,24 +79,41 @@ impl App {
         width.min(self.tile_area.width).div_ceil(self.tile_width())
     }
 
-    /// `o`: tiles two cells wide, or back to one, keeping the tile at the
-    /// middle of the view where it is (M2 design §11.7, #305).
+    /// `o`: tiles two cells wide, or back to one, as `set_square_tiles`
+    /// does, saying which (M2 design §11.7, #305), and saving it.
     pub(super) fn toggle_zoom(&mut self) {
-        let middle = Origin {
-            x: self.viewport.x + i32::from(self.seen_columns() / 2),
-            y: self.viewport.y,
-        };
-        self.zoom = !self.zoom;
-        self.viewport = Origin {
-            x: middle.x - i32::from(self.seen_columns() / 2),
-            y: middle.y,
-        };
-        self.settle();
+        self.set_square_tiles(!self.zoom);
         self.tell_player(if self.zoom {
             "Tiles two cells wide, so they're square".into()
         } else {
             "Tiles one cell wide".into()
         });
+        // It's saved with the settings (design §6.7, #307).
+        self.saved_settings.square_tiles = Some(self.zoom);
+        self.save_settings();
+    }
+
+    /// Tiles two cells wide, so they're square, or one, `on`, keeping the
+    /// tile at the middle of the view where it is (M2 design §11.7, #305):
+    /// the switch `o` and the settings screen's row turn, and a world
+    /// starts with, as the settings say (#307).
+    pub(super) fn set_square_tiles(&mut self, on: bool) {
+        if self.zoom == on {
+            return;
+        }
+        let middle = Origin {
+            x: self.viewport.x + i32::from(self.seen_columns() / 2),
+            y: self.viewport.y,
+        };
+        self.zoom = on;
+        self.viewport = Origin {
+            x: middle.x - i32::from(self.seen_columns() / 2),
+            y: middle.y,
+        };
+        // It jumps rather than pans (design §6.9).
+        self.jump_to_tracked();
+        self.motion.stop_pan();
+        self.settle();
     }
 
     /// The tile drawn at screen cell `cell`, if the map view draws one there.
@@ -136,10 +164,8 @@ impl App {
             return None;
         }
         let (col, row) = ((pointed.x - area.x) / self.tile_width(), pointed.y - area.y);
-        Some((
-            self.viewport.x + i32::from(col),
-            self.viewport.y + i32::from(row),
-        ))
+        let shown = self.shown_viewport();
+        Some((shown.x + i32::from(col), shown.y + i32::from(row)))
     }
 
     /// Whether `action` is the wheel over the map view, its glass and space
@@ -154,9 +180,24 @@ impl App {
     }
 
     /// The screen cell where `tile` is drawn, its first while tiles are two
-    /// cells wide, if it is in view.
+    /// cells wide, if it is in view: where the pan has reached while the
+    /// view pans (design §6.9).
     pub fn cell_of(&self, tile: Pos) -> Option<Position> {
-        let (area, origin) = (self.tile_area, self.viewport);
+        self.cell_from(self.shown_viewport(), tile)
+    }
+
+    /// Whether `tile` is out of sight once the view has got where it's
+    /// going, after any pan: out of view, or under the inspector open over
+    /// the map view (design §6.1, #305).
+    pub(super) fn out_of_sight(&self, tile: Pos) -> bool {
+        self.cell_from(self.viewport, tile).is_none()
+            || self.under_the_inspector_from(self.viewport, tile)
+    }
+
+    /// The screen cell where `tile` is drawn by a map view drawn from
+    /// `origin`, as `cell_of` says.
+    fn cell_from(&self, origin: Origin, tile: Pos) -> Option<Position> {
+        let area = self.tile_area;
         let col = u16::try_from(i32::from(tile.x) - origin.x).ok()?;
         let row = u16::try_from(i32::from(tile.y) - origin.y).ok()?;
         let x = col.checked_mul(self.tile_width())?;
@@ -165,6 +206,11 @@ impl App {
 
     /// Refits the app to where its panels are now drawn, as after a resize.
     pub fn fit(&mut self, areas: Areas) {
+        // On a screen of a new size, the view jumps (design §6.9).
+        let resized = areas.tiles != self.tile_area;
+        if resized {
+            self.motion.stop_pan();
+        }
         self.tile_area = areas.tiles;
         self.inspector = InspectorRoom::of(&areas, self.inspector);
         // With no room for the inspector, it can't fill the screen either
@@ -172,6 +218,9 @@ impl App {
         self.full_screen &= self.inspector != InspectorRoom::Nowhere;
         self.event_log_area = areas.event_log;
         self.overlay = areas.overlay;
+        if resized {
+            self.jump_to_tracked();
+        }
         self.settle();
     }
 
@@ -229,10 +278,17 @@ impl App {
 
     /// Whether `tile` is drawn under the inspector, open over the map view
     /// (design §6.1, #305).
-    pub(super) fn under_the_inspector(&self, tile: Pos) -> bool {
+    pub(crate) fn under_the_inspector(&self, tile: Pos) -> bool {
+        self.under_the_inspector_from(self.shown_viewport(), tile)
+    }
+
+    /// Whether `tile` is drawn under the inspector, open over the map view,
+    /// by a map view drawn from `origin`: the one rule `under_the_inspector`
+    /// and `out_of_sight` go by (design §6.1, #305).
+    fn under_the_inspector_from(&self, origin: Origin, tile: Pos) -> bool {
         self.inspector_open()
             && self
-                .cell_of(tile)
+                .cell_from(origin, tile)
                 .is_some_and(|cell| self.on_the_inspector(cell))
     }
 
@@ -289,22 +345,54 @@ impl App {
             Some(Selection::Living(id)) if self.tracking => match world.sprite(id) {
                 Some(sprite) => Some(sprite.pos()),
                 None => world.egg(id).and_then(|egg| egg.pos()),
-            },
+            }
+            .map(|pos| (id, pos)),
             _ => None,
         };
-        if let Some(pos) = tracked {
-            self.centre_on(pos);
+        self.tracked_at = tracked;
+        if let Some((_, pos)) = tracked {
+            self.pan_to(pos);
+        }
+    }
+
+    /// While tracking, centres the viewport at once on where what it tracks
+    /// was last seen, as a new screen size or square tiles move the view:
+    /// those jump, so tracking mustn't then pan there (design §6.9).
+    fn jump_to_tracked(&mut self) {
+        if let (true, Some(Selection::Living(id)), Some((tracked, pos))) =
+            (self.tracking, self.selection, self.tracked_at)
+            && id == tracked
+        {
+            self.viewport = self.centred_on(pos);
         }
     }
 
     /// Scrolls the viewport so that `tile` is at its centre, as far as the
-    /// margin past the wall allows (M2 design §11.1).
+    /// margin past the wall allows (M2 design §11.1). The view jumps there,
+    /// as a new world or a load starts it.
     pub(super) fn centre_on(&mut self, tile: Pos) {
-        self.viewport = Origin {
+        self.viewport = self.centred_on(tile);
+        self.settle();
+    }
+
+    /// Centres the view on the sprite or egg on `tile`, as `centre_on`
+    /// does, but the map view pans there when it's more than 2 tiles away,
+    /// from wherever it's drawn just now (design §6.9).
+    pub(super) fn pan_to(&mut self, tile: Pos) {
+        let (was, drawn) = (self.viewport, self.shown_viewport());
+        self.viewport = self.centred_on(tile);
+        self.keep_in_margin();
+        let to = self.viewport;
+        self.motion.centred((was, drawn, to), self.running_for);
+        self.repoint();
+    }
+
+    /// The viewport with `tile` at its centre.
+    fn centred_on(&self, tile: Pos) -> Origin {
+        Origin {
             x: i32::from(tile.x) - i32::from(self.seen_columns() / 2),
             y: i32::from(tile.y) - i32::from(self.tile_area.height / 2),
-        };
-        self.settle();
+        }
     }
 
     pub(super) fn scroll(&mut self, dx: i32, dy: i32) {
@@ -312,12 +400,21 @@ impl App {
             x: self.viewport.x.saturating_add(dx),
             y: self.viewport.y.saturating_add(dy),
         };
+        // Scrolling jumps, a pan under way included (design §6.9).
+        self.motion.stop_pan();
         self.settle();
     }
 
     /// Keeps the viewport within its margin past the wall, and the cursor on
     /// whatever tile a still pointer points at.
     fn settle(&mut self) {
+        self.keep_in_margin();
+        self.repoint();
+    }
+
+    /// Keeps the viewport within its margin past the wall (M2 design
+    /// §11.1).
+    fn keep_in_margin(&mut self) {
         let (map, area) = (self.map_size, self.tile_area);
         let ((left, right), (top, bottom)) =
             (self.origins_across(), origins(area.height, map.height));
@@ -325,9 +422,26 @@ impl App {
             x: self.viewport.x.clamp(left, right),
             y: self.viewport.y.clamp(top, bottom),
         };
-        if let Some(cell) = self.pointer {
+    }
+
+    /// Puts the Cursor on whatever tile a still pointer points at, but not
+    /// while the view pans: only once the pan ends, so the world never
+    /// hears of the tiles between (design §6.9).
+    pub(super) fn repoint(&mut self) {
+        if let Some(cell) = self.pointer
+            && !self.waits_for_the_pan()
+        {
             self.point(cell);
         }
+    }
+
+    /// Whether the Cursor, going back to the pointer as Follow stops or an
+    /// aim ends, waits for the pan under way to end, when `repoint` puts it
+    /// on the tile under the pointer then: the tile last pointed at was
+    /// under it before the view moved, which the world mustn't hear of
+    /// (design §6.9). With no pointer on the map, it goes there at once.
+    pub(super) fn waits_for_the_pan(&self) -> bool {
+        self.pointer.is_some() && self.motion.pans(self.running_for, self.clock.speed())
     }
 
     /// Notes the tile the pointer on screen cell `cell` points at as the

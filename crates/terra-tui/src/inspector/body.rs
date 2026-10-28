@@ -14,6 +14,7 @@ use super::actions::action_line;
 use super::{CURSOR, TabLine, WIDTH, counted, dotted, object_type};
 use crate::app::App;
 use crate::family_tree;
+use crate::motion::{self, Tint};
 use crate::spots::Spot;
 use crate::text::{Words, change, display_name, level, significant, thousands, whole, wrap};
 
@@ -63,19 +64,24 @@ pub(super) fn body_tab(sprite: &SpriteView, app: &App, world: &World) -> Vec<Tab
     lines.push(Line::default().into());
     let chemicals: Vec<ChemicalLevel> = sprite.chemicals().collect();
     for drive in chemicals.iter().filter(|c| c.kind == ChemicalKind::Drive) {
-        // The bar filled in the drive's colour, as the map draws a sprite
-        // it drives, and the rest of it minor (design §6.2).
+        // The bar filled in the drive's colour, a block filled in part too,
+        // as the map draws a sprite it drives, and the rest of it minor
+        // (design §6.2).
         let filled = match app.theme.drive_colour(drive.name) {
             Some(colour) => Style::default().fg(colour),
             None => Style::default(),
         };
-        let [full, empty] = bar_parts(drive.level);
-        let mut spans = vec![
-            Span::raw(format!(" {:<12}", display_name(drive.name))),
-            Span::styled(full, filled),
-            Span::styled(empty, look.muted),
-            Span::raw(format!(" {}", level(drive.level))),
-        ];
+        // Easing to its level a third of a block at a time while motion is
+        // on, and showing how fast it moves in waves (design §6.9).
+        let shown = app.drive_bar(sprite.id(), drive.name, drive.level);
+        let colours = (
+            filled.fg.unwrap_or_default(),
+            look.muted.fg.unwrap_or_default(),
+        );
+        let waves = motion::bar_waves(app, (sprite.id(), drive.name), shown, colours);
+        let mut spans = vec![Span::raw(format!(" {:<12}", display_name(drive.name)))];
+        spans.extend(bar_spans(shown, (filled, look.muted), waves));
+        spans.push(Span::raw(format!(" {}", level(drive.level))));
         let arrow = trend(drive.change);
         if !arrow.is_empty() {
             spans.push(Span::raw(format!(" {arrow}")));
@@ -353,12 +359,52 @@ fn led_line(sprite: &SpriteView, detail: bool, world: &World) -> Option<String> 
     })
 }
 
-/// A level as a bar ten cells long, filled to the nearest tenth: its filled
-/// part and its empty part.
-pub(super) fn bar_parts(level: f32) -> [String; 2] {
+/// How many blocks a drive's bar is long (design §6.1).
+pub(crate) const BLOCKS: u8 = 10;
+
+/// How many thirds of a block a level's bar fills, of its ten blocks'
+/// thirty: to the nearest third (design §6.1).
+pub(crate) fn thirds(level: f32) -> u8 {
     // `as` makes a NaN 0.
-    let filled = ((level * 10.0).round() as usize).min(10);
-    ["█".repeat(filled), "░".repeat(10 - filled)]
+    ((level * f32::from(BLOCKS * 3)).round() as u8).min(BLOCKS * 3)
+}
+
+/// A bar ten blocks long that fills `thirds` thirds of a block (design
+/// §6.1): its filled part, whole blocks `█` and then any block filled a
+/// third `▒` or two thirds `▓`, and its empty part, `░`. All four are CP437,
+/// in every glyph set (§6.2: text stays CP437).
+pub(super) fn bar_parts(thirds: u8) -> [String; 2] {
+    let thirds = thirds.min(BLOCKS * 3);
+    let (whole, part) = (thirds / 3, thirds % 3);
+    let mut filled = "█".repeat(usize::from(whole));
+    filled.push_str(["", "▒", "▓"][usize::from(part)]);
+    let empty = BLOCKS - whole - u8::from(part > 0);
+    [filled, "░".repeat(usize::from(empty))]
+}
+
+/// A drive's bar filling `thirds` thirds of a block, as `bar_parts` draws
+/// it, its filled part in `filled` and its empty part in `empty` (design
+/// §6.1): while a wave shows, each block alone, as `waves` tint it, its
+/// glyph the same (§6.9).
+fn bar_spans(
+    thirds: u8,
+    (filled, empty): (Style, Style),
+    waves: Option<[Tint; BLOCKS as usize]>,
+) -> Vec<Span<'static>> {
+    let [full, rest] = bar_parts(thirds);
+    let Some(waves) = waves else {
+        return vec![Span::styled(full, filled), Span::styled(rest, empty)];
+    };
+    let blocks = full.chars().map(|block| (block, filled));
+    let blocks = blocks.chain(rest.chars().map(|block| (block, empty)));
+    blocks
+        .zip(waves)
+        .map(|((block, style), (fg, bg))| {
+            let style = fg.map_or(style, |fg| style.fg(fg));
+            let style = bg.map_or(style, |bg| style.bg(bg));
+            Span::styled(block.to_string(), style)
+        })
+        .collect()
 }
 
 /// An arrow for which way a level went over the last tick, or nothing when

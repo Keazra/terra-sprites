@@ -220,6 +220,34 @@ fn colon_opens_the_palette_which_finds_a_control_by_the_starts_of_its_words() {
 }
 
 #[test]
+fn the_palette_and_help_find_the_settings_by_each_built_in_palette_s_name() {
+    // Design §6.7: the settings screen's Colours row goes through high
+    // contrast, colour-blind, mono and Game Kid, so a player who has read
+    // of one finds where it's chosen by its name.
+    let world = garden_with_sprites();
+    let mut app = app_for(&world, Theme::cp437(), 100, 30);
+    for typed in ["contrast", "blind", "mono", "game kid", "kid", "green"] {
+        app.apply(Action::Palette, &world);
+        type_in(&mut app, &world, typed);
+        let names: Vec<&str> = app.palette_rows().iter().map(|row| row.key.does).collect();
+        assert!(names.contains(&"settings"), "{typed}: {names:?}");
+        app.apply(Action::Back, &world);
+
+        app.apply(Action::Help, &world);
+        type_in(&mut app, &world, typed);
+        let screen = lines(&render(&app, &world, 100, 30));
+        assert!(
+            screen.iter().any(|row| row.contains("Ctrl+T     settings")),
+            "{typed}:\n{}",
+            screen.join("\n")
+        );
+        app.apply(Action::Back, &world);
+        app.apply(Action::Back, &world);
+        assert_eq!(app.screen(), Screen::Normal);
+    }
+}
+
+#[test]
 fn enter_runs_the_chosen_control_and_esc_closes_the_palette() {
     let world = garden_with_sprites();
     let mut app = app_for(&world, Theme::cp437(), 100, 30);

@@ -11,6 +11,7 @@
 pub mod screen;
 
 use std::path::PathBuf;
+use std::time::Duration;
 
 use ratatui::buffer::Buffer;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
@@ -248,9 +249,12 @@ pub fn grab_app(world: &World) -> App {
 }
 
 /// An app on `world` in the default theme, with only the map view, its
-/// tiles drawn on `tiles`.
+/// tiles drawn on `tiles`. Motion is off, so what it draws stays still
+/// (design §6.9): Look 5's own tests turn it on.
 pub fn map_app(world: &World, tiles: Rect) -> App {
-    App::new(world.map(), Theme::cp437(), world.seed(), map_only(tiles))
+    let mut app = App::new(world.map(), Theme::cp437(), world.seed(), map_only(tiles));
+    app.set_motion(false);
+    app
 }
 
 /// The smallest screen with every panel beside the map view (design
@@ -268,10 +272,12 @@ pub fn app_in(world: &World, theme: Theme) -> App {
 }
 
 /// An app on `world` in `theme`, with its panels laid out for a screen of
-/// `size`. Its help screen shows [`DATA_FOLDER`].
+/// `size`. Its help screen shows [`DATA_FOLDER`]. Motion is off, as in
+/// `map_app`.
 pub fn sized_app(world: &World, theme: Theme, size: Size) -> App {
     let mut app = App::new(world.map(), theme, world.seed(), ui::areas(size));
     app.set_data_folder(PathBuf::from(DATA_FOLDER));
+    app.set_motion(false);
     app
 }
 
@@ -287,6 +293,19 @@ pub fn render_on(app: &App, world: &World, size: Size) -> Buffer {
         .draw(|frame| ui::render(frame, app, world))
         .unwrap();
     terminal.backend().buffer().clone()
+}
+
+/// One frame of the game on a 100×30 screen: the app's clock moved on by
+/// `step`, as the frame loop moves it, and then the screen drawn, so what
+/// moves in real time is drawn where it has got to (design §6.9).
+pub fn frame(app: &mut App, world: &World, step: Duration) -> Buffer {
+    frame_on(app, world, step, SCREEN)
+}
+
+/// One frame of the game, as `frame`, on a screen of `size`.
+pub fn frame_on(app: &mut App, world: &World, step: Duration, size: Size) -> Buffer {
+    app.animate(step);
+    render_on(app, world, size)
 }
 
 /// Row `y` of `screen` as text, without the spaces at its end.
@@ -830,3 +849,76 @@ pub const DRIVE_COLOURS: [(&str, ratatui::style::Color); 9] = {
         ("anxiety", Color::LightGreen),
     ]
 };
+
+// The settings (design §6.2, §6.7, #307).
+
+/// An 11×8 grass world with a starter sprite on (2, 2), for the settings
+/// screen to open over.
+pub fn settings_world() -> World {
+    WorldBuilder::grass(11, 8)
+        .starters(&[at(2, 2)])
+        .seed(7)
+        .build()
+}
+
+/// Settings with every row changed: ASCII glyphs, a theme file's colours,
+/// motion off and square tiles on.
+pub fn every_row() -> terra_tui::settings::SavedSettings {
+    terra_tui::settings::SavedSettings {
+        glyphs: Some("ASCII".into()),
+        colours: Some("night.ron".into()),
+        motion: Some(false),
+        square_tiles: Some(true),
+    }
+}
+
+/// The CP437 glyphs in the mono palette, which has no colour.
+pub fn mono() -> Theme {
+    use terra_tui::theme::{ColourPalette, GlyphSet};
+    Theme::built_in(GlyphSet::Cp437, ColourPalette::Mono)
+}
+
+/// The CP437 glyphs in the Game Kid palette, all greens.
+pub fn game_kid() -> Theme {
+    use terra_tui::theme::{ColourPalette, GlyphSet};
+    Theme::built_in(GlyphSet::Cp437, ColourPalette::GameKid)
+}
+
+/// The hue of `[r, g, b]` in degrees, and its saturation from 0 to 1, as
+/// HSV has them.
+pub fn hue_and_saturation([r, g, b]: [u8; 3]) -> (f64, f64) {
+    let [r, g, b] = [r, g, b].map(|c| f64::from(c) / 255.0);
+    let (max, min) = (r.max(g).max(b), r.min(g).min(b));
+    let range = max - min;
+    let saturation = if max > 0.0 { range / max } else { 0.0 };
+    let hue = if range == 0.0 {
+        0.0
+    } else if max == r {
+        60.0 * ((g - b) / range).rem_euclid(6.0)
+    } else if max == g {
+        60.0 * ((b - r) / range + 2.0)
+    } else {
+        60.0 * ((r - g) / range + 4.0)
+    };
+    (hue, saturation)
+}
+
+/// Whether `[r, g, b]` is a green on the ramp of the original Game Boy's
+/// four, which Game Kid is after (design §6.2): their hues run from
+/// #9bbc0f's 71° to #0f380f's and #306230's 120°, so a hue from 65° to
+/// 125° keeps to them, short of yellow at 60° and of the teal past 130°;
+/// and their saturations from #306230's .51 to #9bbc0f's .92, so one of .3
+/// or more lets in a pale green lighter than the lightest, while still a
+/// green on black, and no grey, which has none.
+pub fn on_the_ramp(colour: [u8; 3]) -> bool {
+    let (hue, saturation) = hue_and_saturation(colour);
+    (65.0..=125.0).contains(&hue) && saturation >= 0.3
+}
+
+/// Opens the settings screen on row `row`, by its number.
+pub fn on_row(app: &mut App, world: &World, row: terra_tui::settings::Setting) {
+    use terra_tui::settings::Setting;
+    apply(app, world, Action::OpenSettings);
+    let number = Setting::ALL.iter().position(|&s| s == row).unwrap() + 1;
+    apply(app, world, Action::Pick(number as u8));
+}

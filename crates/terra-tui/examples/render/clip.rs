@@ -192,6 +192,9 @@ pub fn world_clip(
     let world = session.world();
     let areas = framing.view.areas(framing.screen);
     let mut app = App::new(world.map(), theme, world.seed(), areas);
+    // Set up with motion off, so nothing setting it up starts motion that
+    // the first frame would show half played (design §6.9).
+    app.set_motion(false);
     if let (Some(name), Some(playback)) = (&replay, session.playback()) {
         app.start_replay(name, playback);
         // It starts paused, waiting for the player.
@@ -200,6 +203,7 @@ pub fn world_clip(
     set_pace(&mut app.clock, scene.pace, world.mode())?;
     set_view(&mut app, world, scene)?;
     settle(&mut app, framing.frame);
+    app.set_motion(scene.motion);
 
     let mut terminal = terminal(framing.screen);
     let mut clip = Clip::default();
@@ -500,6 +504,44 @@ mod tests {
         let last = row(&clip.frames.last().unwrap().screen, 0);
         assert!(first.contains("tick 5 "), "{first}");
         assert!(last.contains("tick 15 "), "{last}");
+    }
+
+    #[test]
+    fn a_world_s_clip_plays_motion_unless_told_not_to() {
+        // Design §6.9: the sprite the view tracks leaves a trail, tinting
+        // the tiles it has just left, in a clip as in the game, and with
+        // `--no-motion` it leaves none.
+        let walks = Pos { x: 14, y: 10 };
+        let world = || {
+            field(
+                &[walks],
+                &[(
+                    walks,
+                    ScriptedAction::Wander {
+                        destination: Pos { x: 30, y: 10 },
+                    },
+                )],
+            )
+        };
+        let scene = scene(0, 8, Pace::Game(Speed::X2), Track::First);
+        let framing = framing(Size::new(21, 11), true);
+        let tinted = |clip: &Clip| {
+            clip.frames.iter().any(|frame| {
+                frame
+                    .screen
+                    .content()
+                    .iter()
+                    .any(|cell| matches!(cell.bg, ratatui::style::Color::Rgb(..)))
+            })
+        };
+        let clip = world_clip(live(world()), Theme::cp437(), &scene, &framing).unwrap();
+        assert!(tinted(&clip), "a trail");
+        let still = WorldScene {
+            motion: false,
+            ..scene
+        };
+        let clip = world_clip(live(world()), Theme::cp437(), &still, &framing).unwrap();
+        assert!(!tinted(&clip), "no trail");
     }
 
     #[test]

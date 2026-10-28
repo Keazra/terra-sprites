@@ -1,6 +1,7 @@
 //! The menus and the folders they read: the Place menu and what waits on
 //! the Cursor to be placed (design v28 §6.5), the genome files, and the
-//! themes (v34 §6.7); and saving a genome to its folder (§6.7).
+//! settings screen's box (§6.7, #307); and saving a genome to its folder
+//! (§6.7).
 
 use std::path::{Path, PathBuf};
 
@@ -8,23 +9,17 @@ use ratatui::layout::Rect;
 use terra_sim::{Command, Genome, Pos, World};
 
 use super::{App, Flow, PlaceItem, Placing, Screen, Selection, highlight_moved, shown};
+use crate::controls;
 use crate::input::Action;
-use crate::theme::Theme;
+use crate::settings::Setting;
 
 /// The Place menu's own items, after the object types the data offers.
 const NEW_SPRITE: &str = "new sprite";
 const FROM_A_FILE: &str = "sprite from a genome file";
 
-/// A built-in theme: its name, and how to make it.
-type BuiltInTheme = (&'static str, fn() -> Theme);
-
-/// The themes built into the game, first on the themes menu (design v34
-/// §6.7).
-const BUILT_IN_THEMES: [BuiltInTheme; 2] = [("cp437", Theme::cp437), ("ascii", Theme::ascii)];
-
 /// The `.ron` files in `folder`, by name, with their paths, in order. None
 /// if there's no folder, or it can't be read.
-fn ron_files(folder: Option<&Path>) -> Vec<(String, PathBuf)> {
+pub(super) fn ron_files(folder: Option<&Path>) -> Vec<(String, PathBuf)> {
     let mut files: Vec<(String, PathBuf)> = folder
         .and_then(|folder| std::fs::read_dir(folder).ok())
         .into_iter()
@@ -76,8 +71,9 @@ impl App {
         self.placing.as_ref().map(|placing| &placing.item)
     }
 
-    /// The open menu's items, in order: the Place menu's, or the genome
-    /// files'. Empty with no menu open.
+    /// The open menu's items, in order: the Place menu's, the genome
+    /// files', the saves' or the settings screen's rows. Empty with no menu
+    /// open.
     pub fn menu_items(&self, world: &World) -> Vec<String> {
         match self.screen {
             Screen::PlaceMenu => world
@@ -91,11 +87,7 @@ impl App {
                 .iter()
                 .map(|(name, _)| name.clone())
                 .collect(),
-            Screen::ThemeMenu => BUILT_IN_THEMES
-                .iter()
-                .map(|(name, _)| format!("{name} (built in)"))
-                .chain(self.theme_files.iter().map(|(name, _)| shown(name)))
-                .collect(),
+            Screen::Settings => self.settings_lines(),
             Screen::LoadMenu => self
                 .save_files
                 .iter()
@@ -121,7 +113,7 @@ impl App {
             Screen::PlaceMenu => Some(" Place "),
             Screen::GenomeMenu => Some(" Genome files "),
             Screen::LoadMenu => Some(" Load "),
-            Screen::ThemeMenu => Some(" Themes "),
+            Screen::Settings => Some(" Settings "),
             _ => None,
         }
     }
@@ -129,15 +121,20 @@ impl App {
     /// Where the open menu is drawn: from the map view's top-left tile, as
     /// wide as its longest item, numbered, inside a border, and one row per
     /// item, or one saying there are none. It stays within the map view, so
-    /// a long list shows as many items as fit (see `menu_first`).
+    /// a long list shows as many items as fit (see `menu_first`). The
+    /// settings screen's box has room for `esc close` in its corner too.
     pub fn menu_area(&self, world: &World) -> Option<Rect> {
         let title = self.menu_title()?;
         let items = self.menu_items(world);
         let empty = self.menu_empty();
+        let top = match self.menu_corner() {
+            Some((key, does)) => title.chars().count() + key.len() + does.len() + 4,
+            None => title.chars().count() + 2,
+        };
         let widest = items
             .iter()
             .map(|item| item.chars().count() + 3)
-            .chain([title.chars().count() + 2, empty.chars().count() + 1])
+            .chain([top, empty.chars().count() + 1])
             .max()
             .unwrap_or(0);
         let rows = items.len().max(1);
@@ -148,6 +145,12 @@ impl App {
             (rows + 2).min(usize::from(u16::MAX)) as u16,
         );
         Some(wanted.intersection(self.tile_area))
+    }
+
+    /// The key hint in the open menu's top-right corner, if it has one: the
+    /// settings screen's `esc close` (design §6.7, #307).
+    pub fn menu_corner(&self) -> Option<(&'static str, &'static str)> {
+        (self.screen == Screen::Settings).then(|| controls::CLOSE.corner())
     }
 
     /// How many of the open menu's items fit in it at once.
@@ -189,10 +192,19 @@ impl App {
     /// What an action does while a menu is open: a number or `Enter` picks
     /// an item, the arrow keys or the wheel move the highlight, a click
     /// picks the item under it or, off the menu, closes it, and `Esc`
-    /// closes it. `?` opens help over it (#303).
+    /// closes it. `?` opens help over it (#303). On the settings screen, a
+    /// number only chooses its row, and `←` and `→`, `Enter` or a click
+    /// change it (design §6.7, #307).
     pub(super) fn apply_in_menu(&mut self, action: Action, world: &World) -> Flow {
         let count = self.menu_items(world).len();
+        let settings = self.screen == Screen::Settings;
         match action {
+            Action::Pick(n) if settings && (1..=count).contains(&usize::from(n)) => {
+                self.menu_choice = usize::from(n) - 1;
+            }
+            Action::Scroll { dx, dy: 0 } if settings && dx != 0 => {
+                self.change_setting(Setting::ALL[self.menu_choice], dx.signum(), world);
+            }
             // Numbers count from 1.
             Action::Pick(n) if (1..=count).contains(&usize::from(n)) => {
                 self.choose(usize::from(n) - 1, world);
@@ -230,9 +242,14 @@ impl App {
     /// Picks item `index` of the open menu (design v28 §6.5): an object type the
     /// data offers, or a new sprite, waits on the Cursor; the Place menu's
     /// last item lists the genome files; a genome file is read, and its
-    /// sprite waits.
+    /// sprite waits. A row of the settings screen is chosen and changes to
+    /// what's next, and the screen stays open (§6.7, #307).
     fn choose(&mut self, index: usize, world: &World) {
         let menu = self.screen;
+        if menu == Screen::Settings {
+            self.menu_choice = index;
+            return self.change_setting(Setting::ALL[index], 1, world);
+        }
         let label = self.menu_items(world)[index].clone();
         self.screen = Screen::Normal;
         let placeable: Vec<&str> = world.data().placeable().map(|(name, _)| name).collect();
@@ -241,7 +258,6 @@ impl App {
                 let file = self.save_files[index].clone();
                 return self.ask_to_load(file, world);
             }
-            Screen::ThemeMenu => return self.use_theme(index, world),
             Screen::GenomeMenu => {
                 let (name, path) = &self.genome_files[index];
                 let read = std::fs::read_to_string(path)
@@ -272,38 +288,6 @@ impl App {
     fn list_genome_files(&mut self) {
         self.genome_files = ron_files(self.genome_folder.as_deref());
         self.open_menu(Screen::GenomeMenu);
-    }
-
-    /// `Ctrl+T`: opens the themes menu, listing the built-in themes, then
-    /// the `.ron` files in the themes folder by name, in order (design v34
-    /// §6.7).
-    pub(super) fn list_themes(&mut self) {
-        self.end_aim();
-        self.theme_files = ron_files(self.theme_folder.as_deref());
-        self.open_menu(Screen::ThemeMenu);
-    }
-
-    /// Draws the map with the themes menu's item `index` from now on: a
-    /// built-in theme, or a file read and checked against the world's pack.
-    /// A file that doesn't load is refused, and the theme in use stays.
-    fn use_theme(&mut self, index: usize, world: &World) {
-        let (name, theme) = match BUILT_IN_THEMES.get(index) {
-            Some(&(name, theme)) => (name.to_string(), theme()),
-            None => {
-                let (name, path) = &self.theme_files[index - BUILT_IN_THEMES.len()];
-                let read = std::fs::read_to_string(path)
-                    .map_err(|err| err.to_string())
-                    .and_then(|text| Theme::from_ron(&text, world.data()));
-                match read {
-                    Ok(theme) => (shown(name), theme),
-                    Err(why) => {
-                        return self.refuse(format!("Couldn't use theme {}: {why}", shown(name)));
-                    }
-                }
-            }
-        };
-        self.theme = theme;
-        self.tell_player(format!("Theme: {name}"));
     }
 
     /// Places the item waiting on the Cursor on `tile` (design v28 §6.5).

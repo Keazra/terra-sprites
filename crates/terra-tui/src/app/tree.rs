@@ -117,12 +117,12 @@ impl App {
         match family_tree::Known::of(world, to) {
             family_tree::Known::Living(sprite) => {
                 self.select(to);
-                self.centre_on(sprite.pos());
+                self.pan_to(sprite.pos());
             }
             family_tree::Known::Egg(egg) => {
                 self.select(to);
                 if let Some(pos) = egg.pos() {
-                    self.centre_on(pos);
+                    self.pan_to(pos);
                 }
             }
             family_tree::Known::Dead(dead) => self.select_as(Selection::Dead {

@@ -8,7 +8,7 @@ use terra_sim::Terrain;
 use terra_tui::app::{CursorMode, StatusMark};
 use terra_tui::cp437;
 use terra_tui::space::{Depth, Pane};
-use terra_tui::theme::{self, SemanticTile, Theme};
+use terra_tui::theme::{self, ColourPalette, SemanticTile, Theme};
 
 #[test]
 fn the_themes_draw_terrain_as_the_design_table_says() {
@@ -73,12 +73,69 @@ fn every_terrain_and_object_type_has_its_own_glyphs_in_each_theme() {
 
 #[test]
 fn theme_glyphs_are_cp437_and_the_ascii_themes_are_plain_ascii() {
-    for (symbol, kind) in map_glyphs(&Theme::cp437()) {
+    // A hatching's shell is drawn on the map too (design §6.9).
+    let shell = |theme: &Theme| shell(theme).map(|symbol| (symbol, "the shell".to_string()));
+    let cp437_theme = Theme::cp437();
+    for (symbol, kind) in map_glyphs(&cp437_theme)
+        .into_iter()
+        .chain(shell(&cp437_theme))
+    {
         assert!(cp437::contains(symbol), "{symbol:?} for {kind}");
     }
-    for (symbol, kind) in map_glyphs(&Theme::ascii()) {
+    let ascii_theme = Theme::ascii();
+    for (symbol, kind) in map_glyphs(&ascii_theme)
+        .into_iter()
+        .chain(shell(&ascii_theme))
+    {
         assert!(symbol.is_ascii_graphic(), "{symbol:?} for {kind}");
     }
+}
+
+/// A theme's hatching shell (design §6.9): the egg cracked, its left and
+/// right halves, and its crumbs up left, up right, down left and down
+/// right.
+fn shell(theme: &Theme) -> [char; 7] {
+    let look = theme.shell();
+    [
+        look.cracked,
+        look.left_half,
+        look.right_half,
+        look.up_left,
+        look.up_right,
+        look.down_left,
+        look.down_right,
+    ]
+}
+
+#[test]
+fn the_themes_draw_a_hatching_s_shell_as_the_design_says() {
+    // Design §6.9, as Fauxpaw picked it from the mock-ups: the egg cracked
+    // across, `Θ`, which ASCII hasn't, so it's a ring with a break in it,
+    // `Q`; then its halves either side of the egg's tile and its crumbs at
+    // its corners, the same in both.
+    assert_eq!(shell(&Theme::cp437()), ['Θ', '(', ')', '`', '\'', ',', '.']);
+    assert_eq!(shell(&Theme::ascii()), ['Q', '(', ')', '`', '\'', ',', '.']);
+}
+
+#[test]
+fn a_theme_from_before_the_shell_draws_the_default_theme_s() {
+    // Design §6.9.
+    let theme = ascii_from_before("    // A hatching's shell", "shell:");
+    assert_eq!(theme.shell(), Theme::cp437().shell());
+}
+
+#[test]
+fn a_theme_draws_what_it_leaves_out_of_the_shell_as_the_default_theme_does() {
+    // Design §6.9: a piece at a time.
+    let pack = pack();
+    let edited = ascii_with("        cracked: 'Q',\n", "");
+    let edited = edited.replacen("left_half: '('", "left_half: '['", 1);
+    let theme = Theme::from_ron(&edited, &pack).expect("loads");
+    assert_eq!(shell(&theme), ['Θ', '[', ')', '`', '\'', ',', '.']);
+    // A misspelt key is refused, rather than quietly drawn as the default.
+    let misspelt = ascii_with("cracked:", "craked:");
+    let error = Theme::from_ron(&misspelt, &pack).expect_err("refused");
+    assert!(error.contains("craked"), "{error}");
 }
 
 #[test]
@@ -385,6 +442,7 @@ fn a_theme_glyph_outside_cp437_is_refused() {
             "glass's top_left",
         ),
         ("far:     (glyph: '.'", "far:     (glyph: '✦'", "far stars"),
+        ("cracked: 'Q'", "cracked: 'λ'", "the shell's cracked"),
     ] {
         let error = Theme::from_ron(&ascii_with(from, to), &pack).expect_err("refused");
         let glyph = to.chars().rev().nth(1).unwrap();
@@ -758,23 +816,133 @@ fn a_theme_styles_the_text_it_leaves_out_as_the_default_theme_does() {
 }
 
 #[test]
-fn the_default_theme_shades_its_panels_and_the_ascii_one_draws_lines() {
+fn the_default_palette_shades_its_panels_and_high_contrast_and_mono_draw_lines() {
     // Design §6.1, #302: no named colour is close enough to black for a
-    // shade, so they're exact.
+    // shade, so they're exact. They go with the palette (#307), so the
+    // ASCII glyphs sit on them too.
     let panels = Theme::cp437().panels().expect("shaded");
     assert_eq!(panels.shade, Color::Rgb(0x18, 0x1a, 0x22));
     assert_eq!(panels.title, Color::Rgb(0x28, 0x2c, 0x3a));
-    assert_eq!(Theme::ascii().panels(), None);
-    // A theme of the player's own may shade them.
+    assert_eq!(Theme::ascii().panels(), Some(panels));
+    for palette in [ColourPalette::HighContrast, ColourPalette::Mono] {
+        assert_eq!(palette.source().panels(), None, "{}", palette.name());
+    }
+    // A theme of the player's own may shade them its own way, or leave
+    // them out.
     let shaded = ascii_with(
-        "    text: (",
-        "    panels: (shade: black, title: \"#303030\"),\n    text: (",
+        "panels: (shade: \"#181a22\", title: \"#282c3a\")",
+        "panels: (shade: black, title: \"#303030\")",
     );
     let theme = Theme::from_ron(&shaded, &pack()).expect("loads");
     let panels = theme.panels().expect("shaded");
     assert_eq!(
         (panels.shade, panels.title),
         (Color::Black, Color::Rgb(0x30, 0x30, 0x30))
+    );
+    let lined = ascii_with(
+        "    panels: (shade: \"#181a22\", title: \"#282c3a\"),\n",
+        "",
+    );
+    let theme = Theme::from_ron(&lined, &pack()).expect("loads");
+    assert_eq!(theme.panels(), None);
+}
+
+#[test]
+fn a_theme_file_may_say_its_palette_has_no_colour() {
+    // Design §6.2, #307: as mono does; a theme that doesn't say has colour.
+    let pack = pack();
+    assert!(
+        Theme::from_ron(ASCII_THEME, &pack)
+            .expect("loads")
+            .has_colour()
+    );
+    let colourless = ascii_with("(\n    tiles: {", "(\n    colour: false,\n    tiles: {");
+    let theme = Theme::from_ron(&colourless, &pack).expect("loads");
+    assert!(!theme.has_colour());
+    let wrong = ascii_with("(\n    tiles: {", "(\n    colour: none,\n    tiles: {");
+    let error = Theme::from_ron(&wrong, &pack).expect_err("refused");
+    assert!(error.contains("bool"), "{error}");
+}
+
+#[test]
+fn a_theme_file_may_say_its_palette_can_t_show_the_colour_modes() {
+    // Design §6.2, §6.3: as Game Kid does, whose greens can't tell the
+    // drives or the lineage apart; one with no colour can't either, and a
+    // theme that doesn't say can.
+    let pack = pack();
+    let loaded = |text: &str| Theme::from_ron(text, &pack).expect("loads");
+    assert!(loaded(ASCII_THEME).shows_colour_modes());
+    let with = |value: &str| {
+        let line = format!("(\n    colour_modes: {value},\n    tiles: {{");
+        ascii_with("(\n    tiles: {", &line)
+    };
+    assert!(!loaded(&with("false")).shows_colour_modes());
+    assert!(loaded(&with("true")).shows_colour_modes());
+    let colourless = ascii_with("(\n    tiles: {", "(\n    colour: false,\n    tiles: {");
+    assert!(!loaded(&colourless).shows_colour_modes());
+    let error = Theme::from_ron(&with("none"), &pack).expect_err("refused");
+    assert!(error.contains("bool"), "{error}");
+}
+
+#[test]
+fn a_theme_file_may_give_the_terminal_s_own_text_colour_one_of_its_own() {
+    // Design §6.2: what the game leaves in the terminal's own foreground,
+    // as Game Kid draws it in its green; a theme that doesn't say leaves it
+    // to the terminal.
+    let pack = pack();
+    let loaded = |text: &str| Theme::from_ron(text, &pack).expect("loads");
+    assert_eq!(loaded(ASCII_THEME).foreground(), None);
+    let with = |colour: &str| {
+        let line = format!("(\n    foreground: {colour},\n    tiles: {{");
+        ascii_with("(\n    tiles: {", &line)
+    };
+    assert_eq!(
+        loaded(&with("\"#9bbc0f\"")).foreground(),
+        Some(Color::Rgb(0x9b, 0xbc, 0x0f))
+    );
+    assert_eq!(
+        loaded(&with("light_green")).foreground(),
+        Some(Color::LightGreen)
+    );
+    let error = Theme::from_ron(&with("pink"), &pack).expect_err("refused");
+    assert!(error.contains("pink"), "{error}");
+}
+
+#[test]
+fn every_grey_on_the_screen_is_drawn_in_shades_of_the_foreground() {
+    // Design §6.2: the terminal's own text colour, Campbell's #cccccc, as
+    // the foreground itself; the terminal's black as it is; and a grey
+    // between or past them as far along from black to the foreground,
+    // so #767676 is 106/192 of the way and #f2f2f2 230/192, to the
+    // nearest whole step. What isn't grey, and the terminal's own
+    // background, stay.
+    let green = Color::Rgb(0x9b, 0xbc, 0x0f);
+    let cells = [
+        (Color::Reset, Color::Reset),
+        (Color::Gray, Color::DarkGray),
+        (Color::White, Color::Black),
+        (Color::Rgb(0x0c, 0x0c, 0x0c), Color::Rgb(0x76, 0x76, 0x76)),
+        (Color::Red, Color::Rgb(0x0f, 0x38, 0x0f)),
+        (Color::Rgb(0x08, 0x08, 0x08), Color::Rgb(0xff, 0xff, 0xff)),
+    ];
+    let mut buffer = Buffer::empty(Rect::new(0, 0, cells.len() as u16, 1));
+    for (x, &(fg, bg)) in cells.iter().enumerate() {
+        buffer[(x as u16, 0)].set_fg(fg).set_bg(bg);
+    }
+    theme::in_shades_of(&mut buffer, green);
+    let drawn: Vec<(Color, Color)> = buffer.content.iter().map(|c| (c.fg, c.bg)).collect();
+    let (dark_gray, white) = (Color::Rgb(0x5b, 0x6d, 0x0e), Color::Rgb(0xb7, 0xdf, 0x10));
+    let black = Color::Rgb(0x0c, 0x0c, 0x0c);
+    assert_eq!(
+        drawn,
+        [
+            (green, Color::Reset),
+            (green, dark_gray),
+            (white, black),
+            (black, dark_gray),
+            (Color::Red, Color::Rgb(0x0f, 0x38, 0x0f)),
+            (black, Color::Rgb(0xc1, 0xeb, 0x10)),
+        ]
     );
 }
 

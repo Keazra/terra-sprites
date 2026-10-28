@@ -5,7 +5,7 @@
 // light_green, light_yellow, light_blue, light_magenta, light_cyan, white;
 // or an exact colour, "#rrggbb". A name follows the player's terminal colours,
 // so this theme uses exact ones only where no name fits: the panels' shades,
-// and the soft blue of what the pointer can be on.
+// the soft blue of what the pointer can be on, and motion's colours.
 (
     tiles: {
         terrain(grass):         (glyph: '.', fg: green),
@@ -127,13 +127,15 @@
     // The population graph (M2 design §14): the colour of each life stage
     // and of eggs, stacked from the bottom as eggs, young, adults and old; a
     // whole character of one, and its lower half, which shows the one below
-    // over the one above, or over nothing at the top; and the dotted line at
-    // the world's limit. What a theme leaves out of this section, it draws as
-    // the default theme does.
+    // over the one above, or over nothing at the top; each one's own
+    // character, which a palette with no colour draws it in (design §6.2);
+    // and the dotted line at the world's limit. What a theme leaves out of
+    // this section, it draws as the default theme does.
     population: (
         stages: (young: light_green, adult: cyan, old: gray, egg: light_yellow),
         full: '█',
         half: '▄',
+        bands: (young: '▓', adult: '█', old: '▒', egg: '░'),
         limit: (glyph: '·', fg: dark_gray),
     ),
     // The lineage colours (`b`, M2 design §17): the selected sprite's parents
@@ -167,4 +169,35 @@
     // without this section draws a line between the panels and the map
     // instead, as the ASCII theme does.
     panels: (shade: "#181a22", title: "#282c3a"),
+    // Motion's colours (design §6.9): a death's flash and the ash grey its
+    // ghost fades to, a hatching's sparks, the trail's tint, and the dark a
+    // pop-up fades in from and out to. Exact, since a fade blends exact
+    // colours; what a theme leaves out of this section, it draws as the
+    // default theme does.
+    motion: (
+        flash: "#d0d0d0",
+        ash: "#5c5c5c",
+        spark: "#ffe9a0",
+        trail: "#2b3047",
+        dark: "#0c0c0c",
+        // A drive's bar shows how fast it rises in crashing waves; `ripple`
+        // runs a plain ripple up it instead.
+        bar: crashing,
+    ),
+    // A hatching's shell, while motion is on (design §6.9): the egg cracked
+    // across, on the young's tile for a moment before it appears; then its
+    // two halves, either side of the egg's tile, and four crumbs, on the
+    // tiles at its corners, fading from the egg's colour to their tile's
+    // own. Characters only: their colours are the egg's and the tile's.
+    // What a theme leaves out of this section, it draws as the default
+    // theme does.
+    shell: (
+        cracked: 'Θ',
+        left_half: '(',
+        right_half: ')',
+        up_left: '`',
+        up_right: '\'',
+        down_left: ',',
+        down_right: '.',
+    ),
 )

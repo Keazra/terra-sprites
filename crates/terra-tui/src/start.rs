@@ -1,15 +1,18 @@
 //! What the game starts with, from the command line's flags (design §6.7):
-//! the new world and the theme. `main.rs` asks; the answers are here, so
-//! they can be tested.
+//! the new world and the theme, its glyph set and palette. `main.rs` asks,
+//! and reads what the answers need from the environment; the answers are
+//! here, so they can be tested.
 
 use std::path::{Path, PathBuf};
 
 use terra_sim::{DataError, DataPack, Mode, World, WorldConfig};
 
+use crate::app::shown;
 use crate::args::Args;
 use crate::files;
 use crate::saves;
-use crate::theme::Theme;
+use crate::settings::{self, Look, SavedSettings, Setting, Settings};
+use crate::theme::{ColourPalette, GlyphSet, Part, Pick, Theme};
 
 /// A new world, as the flags ask: from `seed`, with `--preset`, or the data
 /// folder's default preset, or the built-in one; and the data pack
@@ -174,18 +177,71 @@ fn config(args: &Args) -> Result<(WorldConfig, DataPack), String> {
     Ok((config, data))
 }
 
-/// The theme the flags ask for: `--ascii`, `--theme <file>` or the CP437
-/// one. A theme names object types and drives, so it's checked against
-/// `data` (design v34 §6.7).
-pub fn theme(args: &Args, data: &DataPack) -> Result<Theme, String> {
-    match &args.theme {
-        None if args.ascii => Ok(Theme::ascii()),
-        None => Ok(Theme::cp437()),
-        Some(path) => std::fs::read_to_string(path)
-            .map_err(|err| err.to_string())
-            .and_then(|text| Theme::from_ron(&text, data))
-            .map_err(|err| format!("can't use theme {}: {err}", path.display())),
+/// The glyph set the flags give, for their run only (design §6.2, §6.7,
+/// #307): `--ascii`'s, or `--theme`'s file's; none if neither is given.
+fn glyph_set(args: &Args) -> Option<Pick<GlyphSet>> {
+    if args.ascii {
+        Some(Pick::BuiltIn(GlyphSet::Ascii))
+    } else {
+        args.theme.clone().map(Pick::File)
     }
+}
+
+/// The palette the flags give, for their run only (design §6.2, §6.7,
+/// #307): `--theme`'s file's, if it's given.
+fn palette(args: &Args) -> Option<Pick<ColourPalette>> {
+    args.theme.clone().map(Pick::File)
+}
+
+/// The palette the game starts with when neither the flags nor the
+/// settings pick one (design §6.2, #307): mono, where `NO_COLOR`'s value,
+/// `no_color`, is set to anything but nothing, as no-color.org asks; else
+/// the default. `main.rs` reads `NO_COLOR` and passes it in.
+fn unpicked_palette(no_color: Option<&str>) -> ColourPalette {
+    if no_color.is_some_and(|value| !value.is_empty()) {
+        ColourPalette::Mono
+    } else {
+        ColourPalette::Default
+    }
+}
+
+/// The theme a glyph set and a palette make (design §6.2, #307), reading
+/// the theme files they name, once each. A theme names object types and
+/// drives, so it's checked against `data` (design v34 §6.7).
+pub fn theme(
+    glyphs: &Pick<GlyphSet>,
+    palette: &Pick<ColourPalette>,
+    data: &DataPack,
+) -> Result<Theme, String> {
+    let glyph_theme = flagged(glyphs, data)?;
+    let palette_theme = palette_theme(palette, glyphs, &glyph_theme, data)?;
+    Ok(Theme::compose(&glyph_theme, &palette_theme))
+}
+
+/// The theme `palette` is taken from, as the flags name it, beside the
+/// glyph set `glyphs`, taken from `glyph_theme`: a theme file both name is
+/// read once.
+fn palette_theme(
+    palette: &Pick<ColourPalette>,
+    glyphs: &Pick<GlyphSet>,
+    glyph_theme: &Theme,
+    data: &DataPack,
+) -> Result<Theme, String> {
+    match palette {
+        Pick::File(path) if matches!(glyphs, Pick::File(same) if same == path) => {
+            Ok(glyph_theme.clone())
+        }
+        _ => flagged(palette, data),
+    }
+}
+
+/// The theme `pick` is taken from, as the flags name it: one that won't
+/// load stops the game, naming its file.
+fn flagged<T: Part>(pick: &Pick<T>, data: &DataPack) -> Result<Theme, String> {
+    settings::theme_of(pick, data).map_err(|err| match pick {
+        Pick::File(path) => format!("can't use theme {}: {err}", path.display()),
+        Pick::BuiltIn(_) => err,
+    })
 }
 
 /// What's wrong with a data pack, naming the file.
@@ -194,6 +250,100 @@ fn pack_problem(err: DataError) -> String {
         DataError::MissingFile(file) => format!("it has no {file}"),
         DataError::Parse { file, message } | DataError::Invalid { file, message } => {
             format!("{file}: {message}")
+        }
+    }
+}
+
+/// How the game starts to look and feel (design §6.7, #307): the flags,
+/// for their run; then the settings the player saved, `saved` as read, its
+/// theme files in `theme_folder`; then mono, where `NO_COLOR`'s value,
+/// `no_color`, is set to anything but nothing (§6.2); then the defaults.
+/// A theme file the flags name that won't load stops the game; settings
+/// that can't be read, or a theme file they name that won't, fall back to
+/// the defaults, and what's said of it is given back for the status line.
+/// What's saved stays as read: the flags are never saved.
+pub fn settings(
+    args: &Args,
+    saved: Result<SavedSettings, String>,
+    theme_folder: Option<&Path>,
+    no_color: Option<&str>,
+    data: &DataPack,
+) -> Result<(Settings, Option<String>), String> {
+    let mut said = Vec::new();
+    let unreadable = saved.is_err();
+    let saved = saved.unwrap_or_else(|why| {
+        said.push(format!("Couldn't read the settings: {why}"));
+        SavedSettings::default()
+    });
+    let (glyphs, glyph_theme) = match glyph_set(args) {
+        Some(pick) => {
+            let theme = flagged(&pick, data)?;
+            (pick, theme)
+        }
+        None => saved_part(
+            saved.glyphs.as_deref(),
+            Setting::Glyphs,
+            theme_folder,
+            data,
+            &mut said,
+        )
+        .unwrap_or_else(|| (Pick::BuiltIn(GlyphSet::Cp437), GlyphSet::Cp437.source())),
+    };
+    let (palette, palette_theme) = match palette(args) {
+        Some(pick) => {
+            let theme = palette_theme(&pick, &glyphs, &glyph_theme, data)?;
+            (pick, theme)
+        }
+        None => saved_part(
+            saved.colours.as_deref(),
+            Setting::Colours,
+            theme_folder,
+            data,
+            &mut said,
+        )
+        .unwrap_or_else(|| {
+            let palette = unpicked_palette(no_color);
+            (Pick::BuiltIn(palette), palette.source())
+        }),
+    };
+    said.dedup();
+    let settings = Settings {
+        look: Look::new(glyphs, glyph_theme, palette, palette_theme),
+        motion: !args.no_motion && saved.motion.unwrap_or(true),
+        square_tiles: saved.square_tiles.unwrap_or(false),
+        saved,
+        unreadable,
+    };
+    Ok((settings, (!said.is_empty()).then(|| said.join("; "))))
+}
+
+/// The glyph set or palette the settings name `name`, row `row`'s, and the
+/// theme it's taken from; or none, saying why in `said`, if they name none
+/// the game knows, or a theme file that won't load.
+fn saved_part<T: Part>(
+    name: Option<&str>,
+    row: Setting,
+    theme_folder: Option<&Path>,
+    data: &DataPack,
+    said: &mut Vec<String>,
+) -> Option<(Pick<T>, Theme)> {
+    let name = name?;
+    let Some(pick) = settings::named::<T>(name, theme_folder) else {
+        let row = row.label().to_lowercase();
+        said.push(format!(
+            "Couldn't read the settings: there are no {row} called {}",
+            shown(name)
+        ));
+        return None;
+    };
+    match settings::theme_of(&pick, data) {
+        Ok(theme) => Some((pick, theme)),
+        Err(why) => {
+            said.push(format!(
+                "Couldn't use theme {}: {why}",
+                settings::name_of(&pick)
+            ));
+            None
         }
     }
 }

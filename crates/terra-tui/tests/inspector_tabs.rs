@@ -262,7 +262,8 @@ fn the_body_tab_shows_age_life_stage_traits_drives_physical_levels_and_wear() {
             "one of the first sprites · generation 1",
             "",
             "hunger      ████░░░░░░ .40 ▼",
-            "thirst      ██░░░░░░░░ .18",
+            // To the nearest third of a block: .18 is 5 thirds (design §6.1).
+            "thirst      █▓░░░░░░░░ .18",
             "pain        ░░░░░░░░░░ .00",
             "tiredness   ████░░░░░░ .39",
             "boredom     ███░░░░░░░ .30 ▲",

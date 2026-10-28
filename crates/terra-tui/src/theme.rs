@@ -1,9 +1,15 @@
 //! Themes map semantic tiles to glyphs and colours, and each text role to a
-//! style, and may give the panels their shades (design §6.2). They are UI
-//! assets and never affect the simulation. Two are embedded in the binary,
-//! and `--theme <file>` loads one the player has edited (design v34 §6.7).
+//! style, may give the panels their shades (design §6.2), and give motion
+//! its colours, say how a drive's bar shows its drive's pace and give the
+//! characters of a hatching's shell (§6.9).
+//! They are UI assets and never affect the simulation.
+//! A theme is a glyph set, its characters, and a palette, the rest, chosen
+//! apart (#307). Two glyph sets and five palettes are embedded in the
+//! binary, and `--theme <file>` loads one the player has edited (design v34
+//! §6.7).
 
 use std::collections::BTreeMap;
+use std::path::PathBuf;
 
 use ratatui::buffer::Buffer;
 use ratatui::style::{Color, Modifier, Style};
@@ -11,8 +17,10 @@ use serde::Deserialize;
 use terra_sim::{DataPack, Terrain};
 
 use crate::app::{CursorMode, StatusMark};
+use crate::campbell;
 use crate::family_tree::Lineage;
 use crate::graph::Band;
+use crate::listed::listed_enum;
 use crate::space::{Depth, Pane};
 
 /// What the map view draws for a tile, named by meaning rather than by character.
@@ -114,8 +122,9 @@ pub struct Glyph {
 }
 
 /// How a theme draws the population graph (M2 design §14): the colour of
-/// each life stage and of eggs, the blocks they're stacked in, and the
-/// dotted line of the world's limit.
+/// each life stage and of eggs, the blocks they're stacked in, each band's
+/// own character for a palette with no colour, and the dotted line of the
+/// world's limit.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PopulationLook {
     pub young: Color,
@@ -127,8 +136,22 @@ pub struct PopulationLook {
     /// The lower half of a character: drawn in the band below, over the band
     /// above, or over nothing at the top of the stack.
     pub half: char,
+    /// Each band's own character, which a palette with no colour draws it
+    /// in, so the bands are told apart without colour (design §6.2, #307).
+    pub bands: PopulationBands,
     /// A dot of the line at the world's limit.
     pub limit: Glyph,
+}
+
+/// The character of each band of the population graph where the palette
+/// has no colour (design §6.2, #307): in the CP437 glyph set, `░` eggs, `▓`
+/// young, `█` adults and `▒` old, as M2 design §14.2 draws them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PopulationBands {
+    pub young: char,
+    pub adult: char,
+    pub old: char,
+    pub egg: char,
 }
 
 impl PopulationLook {
@@ -139,6 +162,18 @@ impl PopulationLook {
             Band::Adults => self.adult,
             Band::Old => self.old,
             Band::Eggs => self.egg,
+        }
+    }
+
+    /// The character the graph draws `band` in where the palette has no
+    /// colour.
+    pub(crate) fn character(&self, band: Band) -> char {
+        let bands = self.bands;
+        match band {
+            Band::Young => bands.young,
+            Band::Adults => bands.adult,
+            Band::Old => bands.old,
+            Band::Eggs => bands.egg,
         }
     }
 }
@@ -219,8 +254,204 @@ pub struct PanelLook {
     pub title: Color,
 }
 
-/// The default theme's file.
+/// Motion's colours (design §6.9): exact ones in the default theme, since
+/// a fade blends them. A colour a theme names blends from how Campbell, the
+/// renderer's scheme, draws it. And how a drive's bar shows how fast its
+/// drive moves.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MotionLook {
+    /// What a death's tile flashes to, fading back.
+    pub flash: Color,
+    /// The grey a death's ghost fades to.
+    pub ash: Color,
+    /// What a hatching's sparks light the glyphs round the egg with, and
+    /// what the tile of an egg about to hatch glows towards.
+    pub spark: Color,
+    /// The tint the trail leaves on the tiles the selected sprite has just
+    /// left.
+    pub trail: Color,
+    /// The dark a pop-up fades in from and out to, and the background a
+    /// fade takes on a tile that has none of its own.
+    pub dark: Color,
+    /// How a drive's bar shows how fast its drive moves.
+    pub bar: BarWaves,
+}
+
+/// The pieces of an egg's shell as it hatches, while motion is on (design
+/// §6.9): the egg cracked, on the young's tile for a moment, then its two
+/// halves either side of the egg's tile and four crumbs on the tiles at
+/// its corners. Characters only, from the glyph set: they're drawn in the
+/// egg's colour, fading to their tile's own.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ShellLook {
+    /// The egg cracked across, before the young appears.
+    pub cracked: char,
+    /// The half left of the egg's tile.
+    pub left_half: char,
+    /// The half right of it.
+    pub right_half: char,
+    /// The crumb up and left of it.
+    pub up_left: char,
+    /// The crumb up and right of it.
+    pub up_right: char,
+    /// The crumb down and left of it.
+    pub down_left: char,
+    /// The crumb down and right of it.
+    pub down_right: char,
+}
+
+/// How a drive's bar shows how fast its drive moves, while motion is on
+/// (design §6.9): waves that come taller, more often and further the
+/// faster it rises against its usual rise, and a quiet dip while it falls.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BarWaves {
+    /// Crashing waves: a crest runs up the bar to its end, breaks there in
+    /// a flare, and its spray runs on into the empty blocks past the level.
+    Crashing,
+    /// A running ripple: a crest runs up the bar and off its end.
+    Ripple,
+}
+
+/// The default theme's file: the CP437 glyph set and the default palette.
 const CP437: &str = include_str!("../../../themes/cp437.ron");
+
+/// The ASCII glyph set's file, which draws the default palette too.
+const ASCII: &str = include_str!("../../../themes/ascii.ron");
+
+/// The high-contrast palette's file.
+const HIGH_CONTRAST: &str = include_str!("../../../themes/high_contrast.ron");
+
+/// The colour-blind palette's file.
+const COLOUR_BLIND: &str = include_str!("../../../themes/colour_blind.ron");
+
+/// The mono palette's file.
+const MONO: &str = include_str!("../../../themes/mono.ron");
+
+/// The Game Kid palette's file.
+const GAME_KID: &str = include_str!("../../../themes/game_kid.ron");
+
+listed_enum! {
+    /// A glyph set built into the game (design §6.2, #307): the characters a
+    /// theme draws with.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+    pub enum GlyphSet {
+        /// CP437's, the default.
+        Cp437 => "CP437",
+        /// Plain ASCII's, as `--ascii` asks.
+        Ascii => "ASCII",
+    }
+
+    /// Every glyph set built in, in the order the game offers them.
+    pub const ALL;
+
+    /// Its name, as the game shows it (design §6.7).
+    pub fn name(self) -> &'static str;
+}
+
+impl GlyphSet {
+    /// The built-in theme its characters are taken from.
+    pub fn source(self) -> Theme {
+        match self {
+            GlyphSet::Cp437 => Theme::builtin("cp437", CP437),
+            GlyphSet::Ascii => Theme::builtin("ascii", ASCII),
+        }
+    }
+}
+
+listed_enum! {
+    /// A palette built into the game (design §6.2, #307): the colours, bold
+    /// and reverse video a theme draws its glyphs in, and the rest of a theme
+    /// but its characters. Not the command palette, `:`'s box.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+    pub enum ColourPalette {
+        /// The default theme's colours.
+        Default => "default",
+        /// Bright exact colours, each at 7:1 or more against black, and lines
+        /// between the panels.
+        HighContrast => "high contrast",
+        /// Okabe and Ito's colours, for readers who can't tell red from green.
+        ColourBlind => "colour-blind",
+        /// No colour at all, only bold and reverse video, where `NO_COLOR`
+        /// starts the game.
+        Mono => "mono",
+        /// Greens on the terminal's black, after the original Game Boy's
+        /// four.
+        GameKid => "Game Kid",
+    }
+
+    /// Every palette built in, in the order the game offers them.
+    pub const ALL;
+
+    /// Its name, as the game shows it (design §6.7).
+    pub fn name(self) -> &'static str;
+}
+
+impl ColourPalette {
+    /// The built-in theme it's taken from. Each draws the CP437 glyph set,
+    /// so its file reads as a whole theme too.
+    pub fn source(self) -> Theme {
+        match self {
+            ColourPalette::Default => Theme::builtin("cp437", CP437),
+            ColourPalette::HighContrast => Theme::builtin("high contrast", HIGH_CONTRAST),
+            ColourPalette::ColourBlind => Theme::builtin("colour-blind", COLOUR_BLIND),
+            ColourPalette::Mono => Theme::builtin("mono", MONO),
+            ColourPalette::GameKid => Theme::builtin("Game Kid", GAME_KID),
+        }
+    }
+}
+
+/// A glyph set or a palette as the player picks it (design §6.2, §6.7,
+/// #307): one built in, `T`, or a theme file of their own, which gives
+/// whichever part it's picked as.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Pick<T> {
+    /// One built into the game.
+    BuiltIn(T),
+    /// A theme file, not yet read.
+    File(PathBuf),
+}
+
+/// One of the two parts a theme is chosen in, as the game builds them in
+/// (design §6.2, #307): a glyph set or a palette.
+pub trait Part: Copy + Eq + 'static {
+    /// Every one built in, in the order the game offers them.
+    fn all() -> &'static [Self];
+
+    /// Its name, as the game shows it.
+    fn name(self) -> &'static str;
+
+    /// The built-in theme it's taken from.
+    fn source(self) -> Theme;
+}
+
+impl Part for GlyphSet {
+    fn all() -> &'static [GlyphSet] {
+        &GlyphSet::ALL
+    }
+
+    fn name(self) -> &'static str {
+        GlyphSet::name(self)
+    }
+
+    fn source(self) -> Theme {
+        GlyphSet::source(self)
+    }
+}
+
+impl Part for ColourPalette {
+    fn all() -> &'static [ColourPalette] {
+        &ColourPalette::ALL
+    }
+
+    fn name(self) -> &'static str {
+        ColourPalette::name(self)
+    }
+
+    fn source(self) -> Theme {
+        ColourPalette::source(self)
+    }
+}
 
 /// The egg's object type in the built-in data pack (M2 design §10.4), which
 /// a theme from before eggs were items drew with its `egg` tile.
@@ -284,8 +515,10 @@ impl StatusMarks {
     }
 }
 
-/// A mapping from semantic tiles, and the cursor, to glyphs and colours.
-#[derive(Debug, Clone)]
+/// A mapping from semantic tiles, and the cursor, to glyphs and colours:
+/// a glyph set and a palette, which may come from different theme files
+/// ([`Theme::compose`], design §6.2, #307).
+#[derive(Debug, Clone, PartialEq)]
 pub struct Theme {
     tiles: BTreeMap<SemanticTile, Glyph>,
     /// By object type name, then visual state.
@@ -316,17 +549,97 @@ pub struct Theme {
     text: TextLook,
     /// The panels' shades, if it has them (design §6.1).
     panels: Option<PanelLook>,
+    /// Motion's colours, and the bars' waves (design §6.9).
+    motion: MotionLook,
+    /// A hatching's shell, its glyph set's (design §6.9).
+    shell: ShellLook,
+    /// Whether its palette has colour at all: mono's has none (design
+    /// §6.2, #307).
+    colour: bool,
+    /// The colour its palette draws the terminal's own text colour in, if
+    /// it gives one, as Game Kid does (design §6.2).
+    foreground: Option<Color>,
+    /// Whether its palette's colours can tell the drives and the lineage
+    /// apart: Game Kid's greens can't (design §6.2, §6.3).
+    colour_modes: bool,
 }
 
 impl Theme {
-    /// The default theme: CP437 glyphs.
+    /// The default theme: CP437 glyphs in the default palette.
     pub fn cp437() -> Theme {
-        Theme::builtin("cp437", CP437)
+        GlyphSet::Cp437.source()
     }
 
-    /// The `--ascii` theme: the same meanings in plain ASCII.
+    /// The same meanings in plain ASCII, as `--ascii` draws them: ASCII
+    /// glyphs in the default palette (design §6.2, #307).
     pub fn ascii() -> Theme {
-        Theme::builtin("ascii", include_str!("../../../themes/ascii.ron"))
+        Theme::built_in(GlyphSet::Ascii, ColourPalette::Default)
+    }
+
+    /// A built-in glyph set in a built-in palette (design §6.2, #307).
+    pub fn built_in(glyphs: GlyphSet, palette: ColourPalette) -> Theme {
+        Theme::compose(&glyphs.source(), &palette.source())
+    }
+
+    /// `glyphs`' glyph set in `palette`'s palette (design §6.2, #307): every
+    /// character `glyphs` draws, a hatching's shell's too (§6.9), each in
+    /// the colour, bold and reverse video `palette` gives what it stands
+    /// for, and `palette`'s drives, lineage, graph colours, text roles,
+    /// attention marker, panel shades and motion's section. An object one of them has no glyph for falls back
+    /// in that one, as [`Theme::object_glyph`] says.
+    pub fn compose(glyphs: &Theme, palette: &Theme) -> Theme {
+        let tiles = redrawn(&palette.tiles, |tile| glyphs.glyph(tile));
+        let mut objects: BTreeMap<String, BTreeMap<String, Glyph>> = BTreeMap::new();
+        for (object, state) in glyphs.object_states().chain(palette.object_states()) {
+            let glyph = drawn(
+                glyphs.object_glyph(object, state),
+                palette.object_glyph(object, state),
+            );
+            objects
+                .entry(object.to_string())
+                .or_default()
+                .insert(state.to_string(), glyph);
+        }
+        let old_egg = (glyphs.old_egg.is_some() || palette.old_egg.is_some()).then(|| {
+            drawn(
+                glyphs.object_glyph(EGG, "default"),
+                palette.object_glyph(EGG, "default"),
+            )
+        });
+        let graph = palette.population;
+        Theme {
+            tiles,
+            objects,
+            old_egg,
+            arrows: glyphs.arrows,
+            followed_arrows: glyphs.followed_arrows,
+            visible_frame: glyphs.visible_frame,
+            status_marks: glyphs.status_marks,
+            mode_marks: redrawn(&palette.mode_marks, |mode| glyphs.mode_mark(mode)),
+            leash: drawn(glyphs.leash, palette.leash),
+            aim: drawn(glyphs.aim, palette.aim),
+            aim_end: drawn(glyphs.aim_end, palette.aim_end),
+            glass: redrawn(&palette.glass, |pane| glyphs.glass(pane)),
+            stars: redrawn(&palette.stars, |depth| glyphs.star(depth)),
+            population: PopulationLook {
+                full: glyphs.population.full,
+                half: glyphs.population.half,
+                bands: glyphs.population.bands,
+                limit: drawn(glyphs.population.limit, graph.limit),
+                ..graph
+            },
+            shell: glyphs.shell,
+            ..palette.clone()
+        }
+    }
+
+    /// Every object type and visual state this theme has a glyph for.
+    fn object_states(&self) -> impl Iterator<Item = (&str, &str)> {
+        self.objects.iter().flat_map(|(object, states)| {
+            states
+                .keys()
+                .map(move |state| (object.as_str(), state.as_str()))
+        })
     }
 
     /// How this theme draws `tile`.
@@ -434,9 +747,59 @@ impl Theme {
 
     /// The shades the inspector and the event log sit on, or `None` for a
     /// theme that draws lines between the panels instead (design §6.1,
-    /// #302).
+    /// #302): one without them, or without colour, whose shades couldn't
+    /// be seen (§6.2, #307).
     pub fn panels(&self) -> Option<PanelLook> {
-        self.panels
+        self.panels.filter(|_| self.colour)
+    }
+
+    /// Motion's colours, and how a drive's bar shows its drive's pace
+    /// (design §6.9).
+    pub fn motion(&self) -> MotionLook {
+        self.motion
+    }
+
+    /// A hatching's shell: the egg cracked, its halves and its crumbs
+    /// (design §6.9).
+    pub fn shell(&self) -> ShellLook {
+        self.shell
+    }
+
+    /// The colour this theme's palette draws what the game leaves in the
+    /// terminal's own text colour, or `None` to leave it to the terminal
+    /// (design §6.2).
+    pub fn foreground(&self) -> Option<Color> {
+        self.foreground
+    }
+
+    /// What this theme's palette does to the finished screen, which the
+    /// screen's drawing calls last (design §6.2): with no colour, it draws
+    /// none ([`without_colour`]), and with a foreground, every grey in its
+    /// shades ([`in_shades_of`]).
+    pub fn finish(&self, buffer: &mut Buffer) {
+        if !self.colour {
+            without_colour(buffer);
+        } else if let Some(foreground) = self.foreground {
+            in_shades_of(buffer, foreground);
+        }
+    }
+
+    /// Whether this theme's palette can show the colour modes (design §6.2,
+    /// §6.3): a sprite's colour by its strongest drive, or by its lineage.
+    /// One that can't, such as mono, with no colour, or Game Kid, whose
+    /// greens can't tell them apart, draws every sprite in its own colour,
+    /// and `b` and the help say where they're read instead.
+    pub fn shows_colour_modes(&self) -> bool {
+        self.colour && self.colour_modes
+    }
+
+    /// Whether this theme's palette has colour at all (design §6.2, #307).
+    /// One without, such as mono, is drawn in the terminal's own colours,
+    /// with only bold and reverse video ([`without_colour`]); the tile the
+    /// selected sprite attends to is underlined, since its background can't
+    /// be seen, and motion's colours don't play.
+    pub fn has_colour(&self) -> bool {
+        self.colour
     }
 
     /// A theme from the text of a theme file, as `--theme <file>` loads it
@@ -545,6 +908,18 @@ impl Theme {
             .unwrap_or_default()
             .look(builtin.text.unwrap_or_default())
             .expect("the built-in cp437 theme styles every text role");
+        // And any of motion's colours, and the bars' waves (design §6.9).
+        let motion = file
+            .motion
+            .unwrap_or_default()
+            .look(builtin.motion.unwrap_or_default())
+            .expect("the built-in cp437 theme has all of motion's section");
+        // And any piece of a hatching's shell (design §6.9).
+        let shell = file
+            .shell
+            .unwrap_or_default()
+            .look(builtin.shell.unwrap_or_default())
+            .expect("the built-in cp437 theme has every piece of the shell");
         let theme = Theme {
             tiles,
             objects,
@@ -572,6 +947,11 @@ impl Theme {
                 shade: panels.shade.into(),
                 title: panels.title.into(),
             }),
+            motion,
+            shell,
+            colour: file.colour,
+            foreground: file.foreground.map(Color::from),
+            colour_modes: file.colour_modes,
         };
         if let Some((what, symbol)) = theme
             .symbols()
@@ -645,12 +1025,28 @@ impl Theme {
             .stars
             .iter()
             .map(|(depth, glyph)| (format!("the {} stars", snake_case(depth)), glyph.symbol));
+        let bands = self.population.bands;
         let graph = [
             ("the population graph's full", self.population.full),
             ("the population graph's half", self.population.half),
+            ("the population graph's egg band", bands.egg),
+            ("the population graph's young band", bands.young),
+            ("the population graph's adult band", bands.adult),
+            ("the population graph's old band", bands.old),
             ("the population graph's limit", self.population.limit.symbol),
         ]
         .map(|(what, symbol)| (what.to_string(), symbol));
+        let s = self.shell;
+        let shell = [
+            ("cracked", s.cracked),
+            ("left_half", s.left_half),
+            ("right_half", s.right_half),
+            ("up_left", s.up_left),
+            ("up_right", s.up_right),
+            ("down_left", s.down_left),
+            ("down_right", s.down_right),
+        ]
+        .map(|(piece, symbol)| (format!("the shell's {piece}"), symbol));
         tiles
             .chain(objects)
             .chain(arrows)
@@ -660,6 +1056,7 @@ impl Theme {
             .chain(glass)
             .chain(stars)
             .chain(graph)
+            .chain(shell)
             .collect()
     }
 }
@@ -704,6 +1101,26 @@ fn glyphs<K: Ord>(entries: BTreeMap<K, GlyphEntry>) -> BTreeMap<K, Glyph> {
     entries
         .into_iter()
         .map(|(key, entry)| (key, glyph(entry)))
+        .collect()
+}
+
+/// The character of `from`, drawn in the look of `look`: its colour, bold
+/// and reverse video (design §6.2, #307).
+fn drawn(from: Glyph, look: Glyph) -> Glyph {
+    Glyph {
+        symbol: from.symbol,
+        ..look
+    }
+}
+
+/// Each of `looks`, drawn with the character `from` gives its key.
+fn redrawn<K: Ord + Copy>(
+    looks: &BTreeMap<K, Glyph>,
+    from: impl Fn(K) -> Glyph,
+) -> BTreeMap<K, Glyph> {
+    looks
+        .iter()
+        .map(|(&key, &look)| (key, drawn(from(key), look)))
         .collect()
 }
 
@@ -752,6 +1169,40 @@ struct ThemeFile {
     /// lines between the panels, rather than the default theme's shades.
     #[serde(default, deserialize_with = "implicit_some")]
     panels: Option<PanelsFile>,
+    /// Motion's colours, and how a drive's bar shows its drive's pace
+    /// (design §6.9). A theme without them, or without some of them, draws
+    /// the default theme's.
+    #[serde(default, deserialize_with = "implicit_some")]
+    motion: Option<MotionFile>,
+    /// A hatching's shell (design §6.9). A theme without it, or without
+    /// some of it, draws the default theme's.
+    #[serde(default, deserialize_with = "implicit_some")]
+    shell: Option<ShellFile>,
+    /// `false` for a palette with no colour at all, as mono is (design
+    /// §6.2, #307): every colour is drawn as the terminal's own, keeping
+    /// bold and reverse video. A theme without it has colour.
+    #[serde(default = "has_colour")]
+    colour: bool,
+    /// The colour of what the game leaves in the terminal's own text
+    /// colour, as Game Kid gives it (design §6.2). A theme without it
+    /// leaves that to the terminal.
+    #[serde(default, deserialize_with = "implicit_some")]
+    foreground: Option<Colour>,
+    /// `false` for a palette whose colours can't tell the drives or the
+    /// lineage apart, as Game Kid's greens can't (design §6.2, §6.3). A
+    /// theme without it can, if it has colour.
+    #[serde(default = "shows_colour_modes")]
+    colour_modes: bool,
+}
+
+/// A theme file has colour unless it says otherwise.
+fn has_colour() -> bool {
+    true
+}
+
+/// And its colours can show the colour modes.
+fn shows_colour_modes() -> bool {
+    true
 }
 
 /// A section a theme file may leave out, written without `Some(…)` when
@@ -789,6 +1240,9 @@ struct PopulationFile {
     /// The lower half of a character.
     #[serde(default, deserialize_with = "implicit_some")]
     half: Option<char>,
+    /// Each stage's own character, for a palette with no colour.
+    #[serde(default)]
+    bands: BandsFile,
     /// A dot of the line at the world's limit.
     #[serde(default, deserialize_with = "implicit_some")]
     limit: Option<GlyphEntry>,
@@ -799,6 +1253,7 @@ impl PopulationFile {
     /// leaves out: `None` if both leave a part out.
     fn look(self, default: PopulationFile) -> Option<PopulationLook> {
         let (theirs, ours) = (self.stages, default.stages);
+        let (their_bands, our_bands) = (self.bands, default.bands);
         Some(PopulationLook {
             young: theirs.young.or(ours.young)?.into(),
             adult: theirs.adult.or(ours.adult)?.into(),
@@ -806,9 +1261,30 @@ impl PopulationFile {
             egg: theirs.egg.or(ours.egg)?.into(),
             full: self.full.or(default.full)?,
             half: self.half.or(default.half)?,
+            bands: PopulationBands {
+                young: their_bands.young.or(our_bands.young)?,
+                adult: their_bands.adult.or(our_bands.adult)?,
+                old: their_bands.old.or(our_bands.old)?,
+                egg: their_bands.egg.or(our_bands.egg)?,
+            },
             limit: glyph(self.limit.or(default.limit)?),
         })
     }
+}
+
+/// Each life stage's own character on the population graph, for a palette
+/// with no colour.
+#[derive(Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct BandsFile {
+    #[serde(default, deserialize_with = "implicit_some")]
+    young: Option<char>,
+    #[serde(default, deserialize_with = "implicit_some")]
+    adult: Option<char>,
+    #[serde(default, deserialize_with = "implicit_some")]
+    old: Option<char>,
+    #[serde(default, deserialize_with = "implicit_some")]
+    egg: Option<char>,
 }
 
 /// The colour of each life stage on the population graph.
@@ -930,6 +1406,76 @@ struct PanelsFile {
     shade: Colour,
     /// What their title rows sit on.
     title: Colour,
+}
+
+/// A theme file's `motion` section: motion's colours, and how a drive's
+/// bar shows how fast its drive moves (design §6.9).
+#[derive(Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct MotionFile {
+    #[serde(default, deserialize_with = "implicit_some")]
+    flash: Option<Colour>,
+    #[serde(default, deserialize_with = "implicit_some")]
+    ash: Option<Colour>,
+    #[serde(default, deserialize_with = "implicit_some")]
+    spark: Option<Colour>,
+    #[serde(default, deserialize_with = "implicit_some")]
+    trail: Option<Colour>,
+    #[serde(default, deserialize_with = "implicit_some")]
+    dark: Option<Colour>,
+    #[serde(default, deserialize_with = "implicit_some")]
+    bar: Option<BarWaves>,
+}
+
+impl MotionFile {
+    /// What this section gives, with `default`'s for any it leaves out:
+    /// `None` if both leave one out.
+    fn look(self, default: MotionFile) -> Option<MotionLook> {
+        Some(MotionLook {
+            flash: self.flash.or(default.flash)?.into(),
+            ash: self.ash.or(default.ash)?.into(),
+            spark: self.spark.or(default.spark)?.into(),
+            trail: self.trail.or(default.trail)?.into(),
+            dark: self.dark.or(default.dark)?.into(),
+            bar: self.bar.or(default.bar)?,
+        })
+    }
+}
+
+/// A theme file's `shell` section: a hatching's shell (design §6.9).
+#[derive(Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ShellFile {
+    #[serde(default, deserialize_with = "implicit_some")]
+    cracked: Option<char>,
+    #[serde(default, deserialize_with = "implicit_some")]
+    left_half: Option<char>,
+    #[serde(default, deserialize_with = "implicit_some")]
+    right_half: Option<char>,
+    #[serde(default, deserialize_with = "implicit_some")]
+    up_left: Option<char>,
+    #[serde(default, deserialize_with = "implicit_some")]
+    up_right: Option<char>,
+    #[serde(default, deserialize_with = "implicit_some")]
+    down_left: Option<char>,
+    #[serde(default, deserialize_with = "implicit_some")]
+    down_right: Option<char>,
+}
+
+impl ShellFile {
+    /// The pieces this section gives, with `default`'s for any it leaves
+    /// out: `None` if both leave one out.
+    fn look(self, default: ShellFile) -> Option<ShellLook> {
+        Some(ShellLook {
+            cracked: self.cracked.or(default.cracked)?,
+            left_half: self.left_half.or(default.left_half)?,
+            right_half: self.right_half.or(default.right_half)?,
+            up_left: self.up_left.or(default.up_left)?,
+            up_right: self.up_right.or(default.up_right)?,
+            down_left: self.down_left.or(default.down_left)?,
+            down_right: self.down_right.or(default.down_right)?,
+        })
+    }
 }
 
 /// A theme file's `cursor` section.
@@ -1084,6 +1630,55 @@ pub fn in_256_colours(buffer: &mut Buffer) {
     for cell in &mut buffer.content {
         cell.fg = nearest(cell.fg);
         cell.bg = nearest(cell.bg);
+    }
+}
+
+/// Every colour in `buffer` drawn as the terminal's own, keeping bold and
+/// reverse video, for a palette with no colour at all, such as mono (design
+/// §6.2, #307). The screen's drawing calls it last, so no colour can reach
+/// the screen, not even one the game draws itself, such as the title
+/// screen's greys.
+pub fn without_colour(buffer: &mut Buffer) {
+    for cell in &mut buffer.content {
+        cell.fg = Color::Reset;
+        cell.bg = Color::Reset;
+        cell.underline_color = Color::Reset;
+    }
+}
+
+/// Every grey in `buffer` drawn in a shade of `foreground`, for a palette
+/// that gives one, such as Game Kid (design §6.2): the terminal's own text
+/// colour, Campbell's `#cccccc`, as `foreground` itself; the terminal's
+/// black, Campbell's `#0c0c0c`, as it is, and anything darker as that; and
+/// a grey between or past them as far along from that black to
+/// `foreground`, lighter or darker in its hue. So the game's own greys,
+/// such as the title screen's, and the text it leaves in the terminal's own
+/// colour, are drawn in the palette. What isn't grey stays, and so does the
+/// terminal's own background. The screen's drawing calls it last.
+pub fn in_shades_of(buffer: &mut Buffer, foreground: Color) {
+    let Some(to) = campbell::rgb(foreground) else {
+        return;
+    };
+    let [black, own] = [campbell::BACKGROUND[0], campbell::FOREGROUND[0]].map(i32::from);
+    let shade = |colour: Color, terminal_s: Option<campbell::Rgb>| {
+        let Some([r, g, b]) = campbell::rgb(colour).or(terminal_s) else {
+            return colour;
+        };
+        if r != g || g != b {
+            return colour;
+        }
+        let along = (i32::from(r) - black).max(0);
+        let [r, g, b] = to.map(|channel| {
+            let way = along * (i32::from(channel) - black);
+            let steps = (way + (own - black) / 2).div_euclid(own - black);
+            (black + steps).clamp(0, 255) as u8
+        });
+        Color::Rgb(r, g, b)
+    };
+    for cell in &mut buffer.content {
+        cell.fg = shade(cell.fg, Some(campbell::FOREGROUND));
+        cell.bg = shade(cell.bg, None);
+        cell.underline_color = shade(cell.underline_color, None);
     }
 }
 

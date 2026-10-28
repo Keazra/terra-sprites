@@ -30,11 +30,14 @@ pub struct Args {
     pub fast_forward: Option<u64>,
     /// `--save <name>`: the name a fast-forward saves its world under.
     pub save: Option<String>,
-    /// `--ascii`: use the ascii theme.
+    /// `--ascii`: draw with the ASCII glyph set, in whichever palette
+    /// (design §6.2, #307).
     pub ascii: bool,
     /// `--theme <file>`: a theme to use instead of the built-in ones (design
-    /// v34 §6.7).
+    /// v34 §6.7): its palette, and its glyphs too without `--ascii`.
     pub theme: Option<PathBuf>,
+    /// `--no-motion`: start with motion off (design §6.7, §6.9).
+    pub no_motion: bool,
     /// `--version`: print the version and the commit the game was built
     /// from, and stop (design §6.7).
     pub version: bool,
@@ -47,9 +50,9 @@ pub struct Args {
 pub const VERSION: &str = concat!(env!("CARGO_PKG_VERSION"), " (", env!("TERRA_COMMIT"), ")");
 
 /// How to run the game, shown with any flag error.
-pub const USAGE: &str = "usage: terra-sprites [--seed <n>] [--preset <file>] [--data <dir>] [--lab] [--ascii | --theme <file>]\n\
-                         \x20      terra-sprites --load <save> [--ascii | --theme <file>]\n\
-                         \x20      terra-sprites --replay <file> [--ascii | --theme <file>]\n\
+pub const USAGE: &str = "usage: terra-sprites [--seed <n>] [--preset <file>] [--data <dir>] [--lab] [--ascii] [--theme <file>] [--no-motion]\n\
+                         \x20      terra-sprites --load <save> [--ascii] [--theme <file>] [--no-motion]\n\
+                         \x20      terra-sprites --replay <file> [--ascii] [--theme <file>] [--no-motion]\n\
                          \x20      terra-sprites --fast-forward <hours> [--seed <n>] [--preset <file>] [--data <dir> | --load <save>] [--save <name>]\n\
                          \x20      terra-sprites --version";
 
@@ -93,13 +96,11 @@ impl Args {
                 "--save" => parsed.save = Some(value_of(&flag, args.next())?),
                 "--ascii" => parsed.ascii = true,
                 "--theme" => parsed.theme = Some(value_of(&flag, args.next())?.into()),
+                "--no-motion" => parsed.no_motion = true,
                 "--version" => parsed.version = true,
                 "--force-panic" => parsed.force_panic = true,
                 _ => return Err(format!("unknown flag `{flag}`")),
             }
-        }
-        if parsed.ascii && parsed.theme.is_some() {
-            return Err("`--ascii` and `--theme` both pick a theme: use one".into());
         }
         let new_world = [
             ("--seed", parsed.seed.is_some()),
