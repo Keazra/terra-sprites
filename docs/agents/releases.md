@@ -13,7 +13,7 @@ One minor number per milestone:
 | v0.3.0 | M3, *Body & verbs* |
 | v0.4.0 | M4, *Terra* |
 
-Later milestones carry on the same way. When the game becomes 1.0 is the owner's call. A fix to a release that's already out is a patch release, such as v0.2.1 (below).
+Later milestones carry on the same way. When the game becomes 1.0 is the owner's call. A patch number is an update between milestones, such as v0.2.1, which shipped the new look, or a fix to a release that's already out, such as v0.2.2 would be (both below).
 
 ## When
 
@@ -62,6 +62,8 @@ At the end of the milestone's acceptance slice (M2's is Slice 30b, [#148](https:
 
 ### The notes
 
+Write them straightforwardly, with a subtle, understated humour where it comes on its own, and nothing that sells: no taglines, and an update isn't called free, since the whole game is (the owner, 2026-10-28). The owner reads and OKs them before they go into the version PR.
+
 ```markdown
 # v0.2.0: Generations
 
@@ -85,7 +87,7 @@ Either way, it's best in a terminal of 100×30 or more (on Windows, Windows Term
 
 ## Uninstall
 
-Delete the folder you unzipped, the zip if you kept it, and on Linux `terra-sprites` from the folder on your PATH if you moved it there. Or, if you installed it with Rust, run `cargo uninstall terra-tui`. Your worlds stay in the game's own folder, so a newer version finds them, until you delete that too:
+Delete the folder you unzipped, the zip if you kept it, and on Linux `terra-sprites` from the folder on your PATH if you moved it there. Or, if you installed it with Rust, run `cargo uninstall terra-tui`. Your worlds and settings stay in the game's own folder, so a newer version finds them, until you delete that too:
 
 - Windows (PowerShell): `Remove-Item -Recurse "$env:APPDATA\terra-sprites"`
 - Mac: `rm -rf ~/Library/Application\ Support/terra-sprites`
@@ -96,13 +98,19 @@ The game writes nothing anywhere else. A Rust install also leaves the code it do
 
 Every release's notes end with these steps for a full, clean uninstall (the owner, 2026-10-26), and so does each download's `README.txt` (`.github/downloads/`). If a release makes the game write anywhere new, or install something else, add it to both, and to the manual's "Uninstalling".
 
+## An update between milestones
+
+Finished work that isn't a milestone can reach players before the next milestone does, as a patch release made from `main`: v0.2.1 shipped the new look, Looks 1 to 6 ([#301](https://github.com/Keazra/terra-sprites/issues/301)), between M2 and M3 (the owner, 2026-10-19, in the Looks plan). It's made just as in "Making one", from the version PR on, with its own notes, and the README's clips drawn again when the update changes how the game looks.
+
+It works only while `main` holds nothing of the next milestone's code, so it's made after the update's last PR merges and before the next milestone's first slice does. Once that slice is in, a release from `main` would carry its half-built pieces, so later work of the same kind waits for the milestone's release: Looks 7 to 9 ship with v0.3.0.
+
 ## A fix to a release
 
 Only for a serious problem players hit in a release (a crash, a lost save, a world that won't load), and only once `main` has moved on to the next milestone; before that, the fix merges to `main` like any other and the release waits for it.
 
 1. The fix merges to `main` first, as usual.
-2. A branch `release/0.2`, made from the tag, takes the same change in a PR of its own, with the version raised to 0.2.1 (and the title clip with it, as in "Making one") and a short `docs/releases/v0.2.1.md`.
-3. The owner merges it and makes the release `v0.2.1` on that branch: the downloads workflow, as in "Making one", with the tag `v0.2.1`, run from `release/0.2` (`--ref release/0.2`, or that branch under "Use workflow from"). A PR to `main` then points the README's and the manual's install commands and release-page links at `v0.2.1`, and carries the notes file across.
+2. A branch `release/0.2`, made from the newest v0.2 tag, takes the same change in a PR of its own, with the version raised a patch number, to 0.2.2 after v0.2.1 (and the title clip with it, as in "Making one"), and a short `docs/releases/v0.2.2.md`.
+3. The owner merges it and makes the release `v0.2.2` on that branch: the downloads workflow, as in "Making one", with the tag `v0.2.2`, run from `release/0.2` (`--ref release/0.2`, or that branch under "Use workflow from"). A PR to `main` then points the README's and the manual's install commands and release-page links at `v0.2.2`, and carries the notes file across.
 
 ## The first release
 

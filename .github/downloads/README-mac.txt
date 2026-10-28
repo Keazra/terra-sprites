@@ -39,7 +39,10 @@ From then on it opens straight away. (If you're at home in Terminal,
 this does the same as steps 4 to 6, from this folder:
 xattr -d com.apple.quarantine terra-sprites)
 
-If the game says "Terminal too small", make the window bigger.
+If the game says "Terminal too small", make the window bigger. If its
+writing is hard to read, as on a Terminal with a light background,
+press Ctrl+T and set Colours to mono, or pick a dark profile, such as
+Pro, in Terminal's Settings, under Profiles.
 
 
 Playing
@@ -58,10 +61,10 @@ Put that in any bug report.
 Your worlds
 -----------
 
-The game keeps your saves, autosaves and replays in a folder of its own,
-~/Library/Application Support/terra-sprites (the last line of the help
-screen, ?, shows it too). A newer version finds them there, so to
-update, unzip the new one and run that instead.
+The game keeps your saves, autosaves, replays and settings in a folder
+of its own, ~/Library/Application Support/terra-sprites (the last line
+of the help's World page, ?, shows it too). A newer version finds them
+there, so to update, unzip the new one and run that instead.
 
 
 Removing it
@@ -70,10 +73,10 @@ Removing it
 1. Drag this folder to the Trash, and the zip too if Safari kept it.
    That removes the game.
 
-2. To remove your worlds too, delete the game's own folder. In Finder,
-   choose Go, then Go to Folder, type ~/Library/Application Support and
-   press Return, then drag the terra-sprites folder there to the Trash.
-   Or in Terminal:
+2. To remove your worlds and settings too, delete the game's own
+   folder. In Finder, choose Go, then Go to Folder, type
+   ~/Library/Application Support and press Return, then drag the
+   terra-sprites folder there to the Trash. Or in Terminal:
 
        rm -rf ~/Library/Application\ Support/terra-sprites
 

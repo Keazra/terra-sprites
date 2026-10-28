@@ -911,6 +911,17 @@ pub(crate) fn draw_help(buf: &mut Buffer, area: Rect, app: &App, world: &World) 
     let bottom_row = area.bottom().saturating_sub(1);
     buf.set_line(area.x + HELP_TITLE_AT, bottom_row, &bottom, room);
     let lines = crate::help::lines(app, world, usize::from(inner.width));
+    // A page longer than the box, as on a small screen, says it scrolls at
+    // its bottom edge's right, where there's room beside the search (#305).
+    if lines.len() > usize::from(inner.height) {
+        let scrolls = Line::styled(" ↑↓ scroll ", look.muted);
+        let width = scrolls.width() as u16;
+        let after_search = area.x + HELP_TITLE_AT + bottom.width() as u16 + 1;
+        let at = area.right().saturating_sub(width + 2);
+        if at >= after_search {
+            buf.set_line(at, bottom_row, &scrolls, width);
+        }
+    }
     // Scrolled no further than its last line at the bottom.
     let first = app
         .help_scroll()

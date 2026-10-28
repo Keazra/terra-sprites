@@ -111,6 +111,7 @@ fn main() -> ExitCode {
     if let Next::Title { refusal, .. } = &mut first {
         *refusal = unread.take();
     }
+    start::write_colours();
 
     // Installs a panic hook that restores the terminal before the panic is reported.
     let mut terminal = match ratatui::try_init() {

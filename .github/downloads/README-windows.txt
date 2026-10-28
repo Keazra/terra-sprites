@@ -51,10 +51,10 @@ build. Put that in any bug report.
 Your worlds
 -----------
 
-The game keeps your saves, autosaves and replays in a folder of its own,
-%APPDATA%\terra-sprites (the last line of the help screen, ?, shows it
-too). A newer version finds them there, so to update, unzip the new one
-and run that instead.
+The game keeps your saves, autosaves, replays and settings in a folder
+of its own, %APPDATA%\terra-sprites (the last line of the help's World
+page, ?, shows it too). A newer version finds them there, so to update,
+unzip the new one and run that instead.
 
 
 Removing it
@@ -63,9 +63,9 @@ Removing it
 1. Delete this folder, and the zip you downloaded if you kept it. That
    removes the game.
 
-2. To remove your worlds too, delete the game's own folder. Type
-   %APPDATA% in File Explorer's address bar, press Enter, and delete the
-   terra-sprites folder there. Or in PowerShell:
+2. To remove your worlds and settings too, delete the game's own
+   folder. Type %APPDATA% in File Explorer's address bar, press Enter,
+   and delete the terra-sprites folder there. Or in PowerShell:
 
        Remove-Item -Recurse "$env:APPDATA\terra-sprites"
 

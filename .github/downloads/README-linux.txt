@@ -26,6 +26,9 @@ The game is best in a terminal at least 100 characters wide and 30 lines
 tall, and 140 by 40 is better. A smaller one still plays, with less
 beside the map: press i to see the inspector. The title screen needs 60
 by 20; if the game says "Terminal too small", make the window bigger.
+If its writing is hard to read, as on a terminal with a light
+background, press Ctrl+T and set Colours to mono, or switch the
+terminal to a dark theme.
 
 
 Playing
@@ -44,11 +47,11 @@ Put that in any bug report.
 Your worlds
 -----------
 
-The game keeps your saves, autosaves and replays in a folder of its own,
-~/.local/share/terra-sprites, or $XDG_DATA_HOME/terra-sprites if you've
-set that (the last line of the help screen, ?, shows it too). A newer
-version finds them there, so to update, unzip the new one and run that
-instead.
+The game keeps your saves, autosaves, replays and settings in a folder
+of its own, ~/.local/share/terra-sprites, or $XDG_DATA_HOME/terra-sprites
+if you've set that (the last line of the help's World page, ?, shows it
+too). A newer version finds them there, so to update, unzip the new one
+and run that instead.
 
 
 Removing it
@@ -58,7 +61,7 @@ Removing it
    the folder on your PATH if you moved it there
    (rm ~/.local/bin/terra-sprites). That removes the game.
 
-2. To remove your worlds too, delete the game's own folder:
+2. To remove your worlds and settings too, delete the game's own folder:
 
        rm -rf ~/.local/share/terra-sprites
 

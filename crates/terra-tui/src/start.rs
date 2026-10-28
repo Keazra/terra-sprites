@@ -205,6 +205,15 @@ fn unpicked_palette(no_color: Option<&str>) -> ColourPalette {
     }
 }
 
+/// Has crossterm write every colour the screen draws, `NO_COLOR` or not
+/// (design §6.2). The game answers `NO_COLOR` itself, by starting in mono,
+/// which draws no colour. crossterm would also drop every colour a palette
+/// the player picked draws, writing a bare reset in its place, which ends
+/// bold and reverse video too. `main.rs` calls it before drawing.
+pub fn write_colours() {
+    ratatui::crossterm::style::force_color_output(true);
+}
+
 /// The theme a glyph set and a palette make (design §6.2, #307), reading
 /// the theme files they name, once each. A theme names object types and
 /// drives, so it's checked against `data` (design v34 §6.7).

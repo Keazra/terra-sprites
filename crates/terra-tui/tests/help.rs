@@ -3,12 +3,12 @@
 
 mod common;
 use common::{
-    DATA_FOLDER, DRIVE_COLOURS, WorldBuilder, app_in, app_on, at, lines, render, status_line,
-    type_in,
+    DATA_FOLDER, DRIVE_COLOURS, WorldBuilder, app_in, app_on, at, lines, render, render_on,
+    sized_app, status_line, type_in,
 };
 
 use ratatui::buffer::Buffer;
-use ratatui::layout::Position;
+use ratatui::layout::{Position, Size};
 use ratatui::style::Color;
 use terra_sim::World;
 use terra_tui::app::{App, Flow, Screen};
@@ -437,9 +437,33 @@ fn help_scrolls_a_page_too_long_to_fit_and_no_further() {
     // Four rows taller, it's drawn from four lines further up, and goes up
     // from there at once.
     app.apply(Action::Scroll { dx: 0, dy: 1 }, &world);
-    app.fit(terra_tui::ui::areas(ratatui::layout::Size::new(100, 34)));
+    app.fit(terra_tui::ui::areas(Size::new(100, 34)));
     app.apply(Action::Scroll { dx: 0, dy: -1 }, &world);
     assert_eq!(app.help_scroll(), last - 5, "up one from where it's drawn");
+}
+
+#[test]
+fn a_page_too_long_to_fit_says_it_scrolls_at_its_bottom_edge() {
+    let world = field();
+    let mut app = app_on(&world);
+    app.apply(Action::Help, &world);
+    let screen = lines(&render(&app, &world));
+    assert!(
+        !screen[28].contains("scroll"),
+        "the World page fits at 100×30"
+    );
+    type_in(&mut app, &world, "s");
+    let screen = lines(&render(&app, &world));
+    assert!(screen[28].starts_with("└─ search: s_ ─"), "{}", screen[28]);
+    assert!(screen[28].ends_with(" ↑↓ scroll ─┘"), "{}", screen[28]);
+    // On a small screen, the World page doesn't fit.
+    let size = Size::new(60, 20);
+    let mut app = sized_app(&world, Theme::cp437(), size);
+    app.apply(Action::Help, &world);
+    let screen = lines(&render_on(&app, &world, size));
+    let bottom = screen.iter().rev().nth(1).unwrap();
+    assert!(bottom.starts_with("└─ type to search ─"), "{bottom}");
+    assert!(bottom.ends_with(" ↑↓ scroll ─┘"), "{bottom}");
 }
 
 #[test]

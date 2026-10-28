@@ -15,7 +15,7 @@ How to play Terra Sprites and how to work on it: everything past what the [READM
 
 ## Where it's at
 
-Milestone 1 is done: every slice is built ([milestone](https://github.com/Keazra/terra-sprites/milestone/1)), and the owner signed it off after playing it through ([M1 acceptance](acceptance/m1.md)). Milestone 2, *Generations*, is done too, and released as v0.2.0 ([milestone](https://github.com/Keazra/terra-sprites/milestone/2), [M2 acceptance](acceptance/m2.md)): sprites now hatch from eggs, grow up, court, breed and grow old, and the young are born with a mix of their parents' genes. The world is harsher too: water is scarce, so most young die unless another sprite or the player guides them. Milestone 3, *Body & verbs*, is being planned.
+Milestone 1 is done: every slice is built ([milestone](https://github.com/Keazra/terra-sprites/milestone/1)), and the owner signed it off after playing it through ([M1 acceptance](acceptance/m1.md)). Milestone 2, *Generations*, is done too, and released as v0.2.0 ([milestone](https://github.com/Keazra/terra-sprites/milestone/2), [M2 acceptance](acceptance/m2.md)): sprites now hatch from eggs, grow up, court, breed and grow old, and the young are born with a mix of their parents' genes. The world is harsher too: water is scarce, so most young die unless another sprite or the player guides them. Then v0.2.1 gave the screen a new look: panels without boxes, help for the screen you're on and a command palette, tooltips, small screens and square tiles, motion, and palettes with a settings screen. Milestone 3, *Body & verbs*, is designed, and its building comes next.
 
 ## What sprites do
 
@@ -33,14 +33,14 @@ You can select a sprite and look inside it: its Brain tab shows what it's paying
 
 ## Getting started
 
-The game is best in a terminal of 100×30 characters or more, where everything fits beside the map; 140×40 is better. A smaller one still plays: under 100 columns the inspector hides until `i` opens it over the map, under 30 rows the event log goes, and on the smallest the map is drawn alone, down to 20×5. The title screen needs 60×20. On Windows, use Windows Terminal. The easiest way in is the ready-made game for Windows, Mac (Apple silicon) or Linux on the [v0.2.0 release's page](https://github.com/Keazra/terra-sprites/releases/tag/v0.2.0), with no Rust needed: the zip's `README.txt` says how to run it. Or, with [Rust](https://rustup.rs) 1.97.1 or newer (`rustup update stable`), install the game as a command, without downloading the code yourself:
+The game is best in a terminal of 100×30 characters or more, where everything fits beside the map; 140×40 is better. A smaller one still plays: under 100 columns the inspector hides until `i` opens it over the map, under 30 rows the event log goes, and on the smallest the map is drawn alone, down to 20×5. The title screen needs 60×20. On Windows, use Windows Terminal. The easiest way in is the ready-made game for Windows, Mac (Apple silicon) or Linux on the [v0.2.1 release's page](https://github.com/Keazra/terra-sprites/releases/tag/v0.2.1), with no Rust needed: the zip's `README.txt` says how to run it. Or, with [Rust](https://rustup.rs) 1.97.1 or newer (`rustup update stable`), install the game as a command, without downloading the code yourself:
 
 ```bash
-cargo install --git https://github.com/Keazra/terra-sprites --tag v0.2.0 --locked terra-tui
+cargo install --git https://github.com/Keazra/terra-sprites --tag v0.2.1 --locked terra-tui
 terra-sprites
 ```
 
-`--locked` builds it with the release's own library versions. Leave out `--tag v0.2.0` to install the newest work in progress instead, and run the line again, with a newer release's tag, to update. Or, from a copy of the repository:
+`--locked` builds it with the release's own library versions. Leave out `--tag v0.2.1` to install the newest work in progress instead, and run the line again, with a newer release's tag, to update. Or, from a copy of the repository:
 
 ```bash
 cargo run --release
@@ -88,13 +88,13 @@ The same key in capitals or lower case does the same thing.
 | `.` | Step while paused: a second's worth of ticks at the current speed, one at 1× and slower, up to 20 at 16× and Max (hold to keep stepping) |
 | `+` / `-` | Faster / slower: each step doubles or halves the speed, from ⅛× up to 4× in a Story world, or on to 16× and then Max in a Lab world (the top bar says `lab` after the speed). The game starts at 1× (1.25 ticks per second, slow enough to watch sprites walk). Holding `+` stops at 1× and at 16×, and holding `-` at 1×; press again to go past |
 | `W` `A` `S` `D` or arrows | Scroll the map (hold Shift to scroll 5 tiles) |
-| Mouse | Point at a tile: the status line says what's there. Click a sprite to select it, or its name in a line of the event log. Point at a highlighted name in the inspector, or at the event log's filters, soft blue in the built-in themes, and a tooltip says what it is; point at a sprite's name in a line of the event log and the sprite lights up on the map |
+| Mouse | Point at a tile: the status line says what's there. Click a sprite to select it, or its name in a line of the event log. Point at a highlighted name in the inspector, or at the event log's filters, drawn in a colour of their own (a soft blue in the default palette, bold in mono), and a tooltip says what it is; point at a sprite's name in a line of the event log and the sprite lights up on the map |
 | `T` | Track: the view follows the selected sprite; again to stop |
 | `b` | Sprite colours: what a sprite's colour shows: its strongest drive, nothing, or its lineage, which marks the selected sprite's parents and grandparents, brothers and sisters, and young and theirs each in a colour, and every other sprite dark gray. The status line says which. In mono and Game Kid, which can't show them, it says where they're read instead: the sprite list or the family tree |
 | `m` | Event log filter: all events, the selected sprite's, or only the major ones (deaths, lessons learned, refusals) |
 | `v` | Detail view: exactly what the selected sprite is doing |
 | `o` | Square tiles: each tile is drawn two cells wide, so the world looks its true shape rather than twice as tall, and half as much of it fits across. Again to go back. Best on a big window, 140×40 and up. It's off until you turn it on, and the game remembers it, as a row of the settings screen (`Ctrl+T`) |
-| `?` | Help: a page for each part of the game, with its keys and what its colours and marks mean. It opens at the page for what you're looking at: the sprite list's, the graph's or the family tree's over those, the inspector's when you last pointed at it or used its keys, and otherwise the world's, with every key, the colour legend and where the game keeps its files. `←` `→` or `Tab` turn the pages, or click a page's name; the top bar's `? help (World)` says which page it opens; type to search every page, such as `egg`; `Esc` clears the search, then closes it |
+| `?` | Help: a page for each part of the game, with its keys and what its colours and marks mean. It opens at the page for what you're looking at: the sprite list's, the graph's or the family tree's over those, the inspector's when you last pointed at it or used its keys, and otherwise the world's, with every key, the colour legend and where the game keeps its files. `←` `→` or `Tab` turn the pages, or click a page's name; `↑` `↓` or the wheel scroll a page too long for the screen, which `↑↓ scroll` at its bottom edge says; the top bar's `? help (World)` says which page it opens; type to search every page, such as `egg`; `Esc` clears the search, then closes it |
 | `:` | Command palette: type what you want to do, such as `tree` or `save`, and it lists what matches, each with its key; the arrows choose and `Enter` does it. A key it can't press for you, such as `hold E`, is shown grey, to teach it |
 | `F3` | Debug overlay, in the map's top-right corner, and again to hide it: how the game is running on your computer, for a screenshot when it feels slow or a held key misbehaves. Read over the last second: the ticks a second it ran against the speed asked for (or `paused`, or `at Max`), the simulation's time in a frame against its 25 ms budget, and the drawing's time in a frame, with the frames a second. Then whether your terminal reports key releases: `releases reported`, `no releases` (a held key is told from taps only by its repeats), or `kitty protocol`. It measures the game as you play it, drawing included, where the speed example (`cargo run --release -p terra-sim --example speed`) measures the simulation alone |
 | `Z` / `X` / `C` | Cursor mode: Select / Train / Grab. The mouse wheel over the map changes mode too. `C` again in Grab mode opens the Place menu |
@@ -110,6 +110,7 @@ The same key in capitals or lower case does the same thing.
 | `g` | Save the selected sprite's genome to the genomes folder (the status line says where); the Place menu reads it back |
 | `[` / `]` | Previous / next inspector tab; or click a tab |
 | `PgUp` / `PgDn`, or the mouse wheel over the inspector | Scroll a long tab |
+| Click a heading in the Brain tab's memory, or its "and N more" line; or `Enter` with the pointer on it | Open or shut it: `►` means more is hidden, `▼` that it's open |
 | `i` | The inspector, bigger: on a window under 100 columns, where it's hidden, open it over the map's right side; otherwise the open tab fills the screen, in as many columns as fit, which suits the Brain and Genome tabs, and every key but the map's and the event log's works as usual (those say so on the status line). Again, `Esc`, or loading a world goes back |
 | `F5` / `F9` | Quicksave / quickload. Loading over a world that has run since it was last saved asks first (`y` to load), and a loaded world starts paused |
 | `Ctrl+S` / `Ctrl+O` | Save under a name you type / pick a save to load, newest first. The world also saves itself every 10 minutes of running time and when you quit, keeping the last 3 autosaves. See [saves](reference/saves.md) |
@@ -194,7 +195,7 @@ The two clips at the top of the README are made the same way, the second at 1× 
 
 ```powershell
 cargo run --release -p terra-tui --example render -- title -o docs/clips/title.gif
-cargo run --release -p terra-tui --example render -- world --seed 7 --from 714 --to 744 --track 544 --tab brain --speed 1x -o docs/clips/thornbush.gif
+cargo run --release -p terra-tui --example render -- world --seed 7 --from 525 --to 555 --track 544 --tab brain --speed 1x -o docs/clips/thornbush.gif
 ```
 
 The file's ending picks the format: `.gif`, `.svg` or `.mp4`. A GIF or an SVG needs nothing else; an MP4 needs [ffmpeg](https://ffmpeg.org/download.html) on the PATH, and the renderer says so if it isn't. The world runs to `--from` unseen, then is drawn frame by frame to `--to`, at `--speed` (`1x`, `4x`, or `max` for 100 ticks a second; past 4× needs `--lab`), each frame showing for `--frame` milliseconds (100 by default). An SVG for a README is best kept under 2 MB, and the renderer says when one isn't: a busy world at a high speed runs past it in a few seconds.
@@ -232,6 +233,7 @@ The `docs/terra-sprites-docs` folder is empty in your copy. It's where the owner
 |---|---|
 | **M1 — A Sprite Lives** *(done, v0.1.0)* | World, ecology, biochemistry, learning brain, terminal UI, the Cursor, saves and replays |
 | **M2 — Generations** *(done, v0.2.0)* | Memory of places, a title screen, life stages and ageing, breeding, genetics, a family tree, population graphs, fast-forward and a speed cap, learning by watching, a harsher world |
+| **The new look** *(done, v0.2.1)* | Panels without boxes, help for the screen you're on and a command palette, tooltips, small screens and square tiles, motion, palettes and a settings screen |
 | **M3 — Body & verbs** | Limbs that are hurt and heal, and the verbs they give: touching, grabbing, gripping, pushing, pulling, throwing and dropping things. Play as a feeling, real sleep, eggs carried and sometimes broken, pregnancy, nests, grief for the deaths a sprite sees, dead bodies, families sharing food and correcting their young, first-steps worlds for new players, and the screen laid out again for it all |
 | **M4 — Terra** | The terrarium is a ship, Terra: its sectors open one by one as the sprites learn |
 | **M5 — Wild Terra** | Critters, more hazards and toys, possibly seasons and weather |
