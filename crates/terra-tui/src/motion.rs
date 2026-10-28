@@ -55,6 +55,7 @@
 //!   shell's pieces fade, and blended in RGB, and no `sin`, `cos`, `powf` or
 //!   `exp`.
 
+use std::cell::RefCell;
 use std::collections::{BTreeMap, VecDeque};
 use std::time::Duration;
 
@@ -1313,7 +1314,8 @@ pub(crate) fn bar_waves(
 /// and hatching, oldest first. `bare` are the screen cells it drew bare
 /// ground in, with no sprite, object or mark, where a death's ghost and a
 /// hatching's shell show. In a palette with no colour only the hatching's
-/// cracked egg and shell play, which are characters (§6.2).
+/// cracked egg and shell play, which are characters (§6.2). Last, a cell in
+/// reverse video shows its glows through it.
 pub(crate) fn play_on_map(
     buf: &mut Buffer,
     inner: Rect,
@@ -1331,6 +1333,7 @@ pub(crate) fn play_on_map(
         look: app.theme.motion(),
         bare,
         colours: colours_play(app),
+        reversed: RefCell::default(),
     };
     let now = app.running_for();
     if on.colours {
@@ -1359,6 +1362,7 @@ pub(crate) fn play_on_map(
             }
         }
     }
+    on.reversed.take().show(buf, own_text(app));
 }
 
 /// Plays the panels' motion over the finished screen once what can be
@@ -1473,7 +1477,8 @@ fn play_over(
 
 /// The map view that motion plays over: where its tiles are drawn,
 /// `inner`, the app and world drawn there, the theme's colours for motion,
-/// the cells that show bare ground, and whether motion's colours play.
+/// the cells that show bare ground, whether motion's colours play, and the
+/// cells in reverse video that have glowed so far.
 struct OnMap<'a> {
     inner: Rect,
     app: &'a App,
@@ -1481,6 +1486,7 @@ struct OnMap<'a> {
     look: MotionLook,
     bare: &'a [Position],
     colours: bool,
+    reversed: RefCell<Reversed>,
 }
 
 impl OnMap<'_> {
@@ -1574,27 +1580,59 @@ fn flash(buf: &mut Buffer, on: &OnMap, lying: &[Lying], now: Duration) {
 /// Glows screen cell `cell` towards the colour `light`, `peak` of the way
 /// at first, from 0 to 1, and back as it has `faded`, from 0 to 1 (design
 /// §6.9): an egg's flash, or a death's. It glows the background behind the
-/// cell's glyph. A cell in reverse video, as a selected egg or sprite and
-/// the Cursor's tile are drawn (§6.2), shows its glyph's colour behind the
-/// glyph and its background only in the glyph's strokes, where a glow
-/// would hardly show: there the glow takes the reverse video's place, the
-/// glyph drawn in its colour on the glow as on a cell that isn't
-/// reversed, and the reverse video comes back as the glow fades.
+/// cell's glyph, on top of any glow before it this frame. A cell in reverse
+/// video is noted, to show its glows through it once they're all in.
 fn glow(buf: &mut Buffer, on: &OnMap, cell: Position, light: Color, (peak, faded): (f32, f32)) {
     let dark = campbell::rgb(on.look.dark).unwrap_or(campbell::BACKGROUND);
     let own = campbell::exact(buf[cell].bg, dark);
     let light = campbell::exact(light, dark);
+    buf[cell].set_bg(ColorSpace::Rgb.lerp(&own, &light, peak * (1.0 - faded)));
     if buf[cell].modifier.contains(Modifier::REVERSED) {
-        // Reversed, the cell's foreground fills it, and its background
-        // draws the glyph.
-        let glyph = campbell::exact(buf[cell].fg, own_text(on.app));
-        let lit = ColorSpace::Rgb.lerp(&own, &light, peak);
-        buf[cell]
-            .set_fg(ColorSpace::Rgb.lerp(&lit, &glyph, faded))
-            .set_bg(ColorSpace::Rgb.lerp(&glyph, &own, faded));
-    } else {
-        buf[cell].set_bg(ColorSpace::Rgb.lerp(&own, &light, peak * (1.0 - faded)));
+        on.reversed.borrow_mut().note(cell, own, faded);
     }
+}
+
+/// The cells in reverse video that glowed this frame (design §6.9): for
+/// each, its background before any glow, and how far the freshest glow on
+/// it has faded, from 0 to 1. A selected egg or sprite and the Cursor's
+/// tile are drawn in reverse video (§6.2, §6.5, M2 design §10.7), which
+/// shows the glyph's colour behind the glyph and the background only in
+/// its strokes, where a glow would hardly show, so the glows on such a
+/// cell take the reverse video's place instead.
+#[derive(Debug, Default)]
+struct Reversed(BTreeMap<Position, (Color, f32)>);
+
+impl Reversed {
+    /// Notes a glow on `cell`, whose background was `own` before it, that
+    /// has `faded` so far.
+    fn note(&mut self, cell: Position, own: Color, faded: f32) {
+        let (_, freshest) = self.0.entry(cell).or_insert((own, faded));
+        *freshest = freshest.min(faded);
+    }
+
+    /// Shows the glows on each cell noted through its reverse video, in
+    /// `buf`, `text` being the terminal's own text colour.
+    fn show(self, buf: &mut Buffer, text: Rgb) {
+        for (cell, (own, faded)) in self.0 {
+            let glyph = campbell::exact(buf[cell].fg, text);
+            let (fill, strokes) = through_reverse_video(glyph, buf[cell].bg, own, faded);
+            buf[cell].set_fg(fill).set_bg(strokes);
+        }
+    }
+}
+
+/// How a cell in reverse video shows its glows (design §6.9): the
+/// foreground, which fills it, and the background, which draws the glyph's
+/// strokes. While the freshest glow hasn't `faded` at all, the glyph is
+/// drawn in its colour, `glyph`, on `glow`, the background the glows left,
+/// as on a cell that isn't reversed; and once it has, the reverse video is
+/// back, `glyph` filling the cell and `own`, its background before them,
+/// drawing the strokes.
+fn through_reverse_video(glyph: Color, glow: Color, own: Color, faded: f32) -> (Color, Color) {
+    (
+        ColorSpace::Rgb.lerp(&glow, &glyph, faded),
+        ColorSpace::Rgb.lerp(&glyph, &own, faded),
+    )
 }
 
 /// `cell`'s colour as an exact one, for a fade to blend from (design §6.9),
@@ -1913,6 +1951,32 @@ mod tests {
             age(began, Duration::from_millis(450)),
             Duration::from_millis(150)
         );
+    }
+
+    #[test]
+    fn a_cell_in_reverse_video_shows_its_glows_by_the_freshest() {
+        // Design §6.9: the glows add up on its background, and its
+        // background before any of them, with the freshest glow's fading,
+        // decide how far its reverse video is back.
+        let (dark, glow) = (Color::Rgb(12, 12, 12), Color::Rgb(182, 166, 115));
+        let egg = Color::Rgb(0xF9, 0xF1, 0xA5);
+        let shown = |notes: &[(Color, f32)]| {
+            let cell = Position::new(1, 0);
+            let mut buf = Buffer::empty(Rect::new(0, 0, 3, 1));
+            buf[cell].set_fg(Color::LightYellow).set_bg(glow);
+            let mut reversed = Reversed::default();
+            for &(own, faded) in notes {
+                reversed.note(cell, own, faded);
+            }
+            reversed.show(&mut buf, FOREGROUND);
+            (buf[cell].fg, buf[cell].bg)
+        };
+        let later = Color::Rgb(90, 80, 60);
+        assert_eq!(shown(&[(dark, 0.6), (later, 0.0)]), (glow, egg));
+        // Half way, rounded down: (182 + 249) / 2 is 215.
+        let half = (Color::Rgb(215, 203, 140), Color::Rgb(130, 126, 88));
+        assert_eq!(shown(&[(dark, 0.6), (later, 0.5), (later, 0.8)]), half);
+        assert_eq!(through_reverse_video(egg, glow, dark, 1.0), (egg, dark));
     }
 
     /// Whether `a` and `b` are the same to a millionth.

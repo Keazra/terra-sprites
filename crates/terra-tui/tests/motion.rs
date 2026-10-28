@@ -347,13 +347,27 @@ fn a_death_on_the_cursor_s_tile_flashes_through_its_reverse_video() {
     let (mut app, ids, after) = before_and_after(&[at(3, 2)]);
     cursor_to(&mut app, &after, at(3, 2));
     app.record(&deaths(&ids), &after);
-    let flash = app.theme.motion().flash;
+    let MotionLook { flash, ash, .. } = app.theme.motion();
     let first = cell(&app, at(3, 2));
     let screen = frame(&mut app, &after, Duration::ZERO);
     assert!(reversed(&screen, first));
     assert_eq!(screen[first].symbol(), "☺");
     assert_eq!((screen[first].fg, screen[first].bg), (flash, WHITE));
-    let over = frame(&mut app, &after, ms(1200));
+    // Its reverse video back by its end: the ghost, faded to ash, filling
+    // the tile and its strokes dark.
+    let near_end = frame(&mut app, &after, ms(1190));
+    assert!(reversed(&near_end, first));
+    assert!(
+        within(near_end[first].fg, ash, 2),
+        "{:?}",
+        near_end[first].fg
+    );
+    assert!(
+        within(near_end[first].bg, DARK, 1),
+        "{:?}",
+        near_end[first].bg
+    );
+    let over = frame(&mut app, &after, ms(10));
     assert!(reversed(&over, first));
     assert_eq!((over[first].symbol(), over[first].fg), (".", Color::Green));
     assert_eq!(over[first].bg, Color::Reset);
@@ -1336,12 +1350,12 @@ fn point_away(world: &World, on: &mut App, off: &mut App, tile: Pos) {
     assert_eq!(on.cursor(), away);
 }
 
-/// Whether `colour` is exact and within a step of `to` in each part, as a
-/// fade is a millisecond before its end.
-fn about(colour: Color, to: Color) -> bool {
+/// Whether `colour` is exact and within `steps` of `to` in each part, as a
+/// fade is a millisecond or so before its end.
+fn within(colour: Color, to: Color, steps: u8) -> bool {
     match (colour, to) {
         (Color::Rgb(r, g, b), Color::Rgb(r2, g2, b2)) => {
-            r.abs_diff(r2) <= 1 && g.abs_diff(g2) <= 1 && b.abs_diff(b2) <= 1
+            r.abs_diff(r2) <= steps && g.abs_diff(g2) <= steps && b.abs_diff(b2) <= steps
         }
         _ => false,
     }
@@ -1391,7 +1405,7 @@ fn a_selected_egg_s_flash_shows_through_its_reverse_video() {
     );
     let faded = frame(&mut on, &world, ms(802));
     assert!(reversed(&faded, first));
-    assert!(about(faded[first].fg, EGG), "back by its end");
+    assert!(within(faded[first].fg, EGG, 1), "back by its end");
     assert_eq!(faded[first].bg, DARK, "back by its end");
     let again = frame(&mut on, &world, ms(1));
     assert_eq!(
@@ -1429,7 +1443,16 @@ fn a_selected_egg_s_young_starts_on_the_last_flash_and_its_reverse_video_comes_b
     let appears = frame(&mut on, &world, ms(150));
     assert!(reversed(&appears, young));
     assert_eq!(appears[young].fg, LAST_FLASH);
-    let warm = frame(&mut on, &world, ms(500));
+    // Three quarters back at half time: the strokes nearly dark again.
+    let warming = frame(&mut on, &world, ms(250));
+    assert!(reversed(&warming, young));
+    let strokes = brightness(warming[young].bg);
+    assert!(
+        strokes > brightness(DARK) && strokes < brightness(EGG) / 2,
+        "{:?}",
+        warming[young].bg
+    );
+    let warm = frame(&mut on, &world, ms(250));
     let plain = frame(&mut off, &world, ms(650));
     assert_eq!(warm[young], plain[young]);
 }
