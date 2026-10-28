@@ -46,9 +46,9 @@ Your worlds
 
 The game keeps your saves, autosaves, replays and settings in a folder
 of its own, ~/.local/share/terra-sprites, or $XDG_DATA_HOME/terra-sprites
-if you've set that (the last line of the help screen, ?, shows it too).
-A newer version finds them there, so to update, unzip the new one and
-run that instead.
+if you've set that (the last line of the help's World page, ?, shows it
+too). A newer version finds them there, so to update, unzip the new one
+and run that instead.
 
 
 Removing it

@@ -16,22 +16,27 @@ fn a_label_too_long_for_the_title_is_shortened_before_the_tabs_are() {
     // The five tabs take 30 of the row's 45 columns, the open one's spaces
     // included, which leaves 15: a label of 13 with a space each side.
     let fit = |sprite| fitted_label(sprite, 15);
-    assert_eq!(fit(Some(("Sprite #530", "Sprite #530"))), " Sprite #530   ");
-    assert_eq!(fit(Some(("Mira #12", "Mira"))), " Mira #12      ");
+    assert_eq!(fit(Some((EntityId(530), None))), " Sprite #530   ");
+    assert_eq!(fit(Some((EntityId(12), Some("Mira")))), " Mira #12      ");
     assert_eq!(
-        fit(Some(("WWWWWWWWA #538", "WWWWWWWWA"))),
+        fit(Some((EntityId(538), Some("WWWWWWWWA")))),
         " WWWWWWWWA     ",
         "the name alone, when the number doesn't fit beside it"
     );
     assert_eq!(
-        fit(Some(("Abcdefghijklmnop #538", "Abcdefghijklmnop"))),
+        fit(Some((EntityId(538), Some("Abcdefghijklmnop")))),
         " Abcdefghij... ",
         "as much of the name as fits"
     );
     assert_eq!(
-        fit(Some(("Old Bo of Mira #538", "Old Bo of Mira"))),
+        fit(Some((EntityId(538), Some("Old Bo of Mira")))),
         " Old Bo of...  ",
         "with no space before the dots"
+    );
+    assert_eq!(
+        fit(Some((EntityId(108061), None))),
+        " #108061       ",
+        "an unnamed sprite's number alone, when its label doesn't fit"
     );
     assert_eq!(fit(None), " ".repeat(15));
 }

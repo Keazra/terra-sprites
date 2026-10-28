@@ -17,7 +17,7 @@ use terra_sim::{DeathCause, EntityId, Pos, SpriteView, World};
 use crate::app::{App, Selection, Tab};
 use crate::policy::{Panel, Subject};
 use crate::spots::Spot;
-use crate::text::{BOUND, cause_name, fitted, thousands, unbroken, wrap};
+use crate::text::{BOUND, cause_name, fitted, label, thousands, unbroken, wrap};
 
 mod actions;
 mod body;
@@ -118,13 +118,8 @@ pub fn title(app: &App) -> Line<'static> {
         .selection()
         .map(|selection| selection.id())
         .filter(|&id| app.can_view(Panel::Tab(app.tab()), Subject::Sprite(id)))
-        .map(|id| (app.names().label(id), app.names().get(id)));
-    let label = fitted_label(
-        sprite
-            .as_ref()
-            .map(|(label, name)| (label.as_str(), name.unwrap_or(label))),
-        TITLE_ROOM - tabs_width(),
-    );
+        .map(|id| (id, app.names().get(id)));
+    let label = fitted_label(sprite, TITLE_ROOM - tabs_width());
     let mut spans = vec![Span::raw(label)];
     for (i, (tab, text)) in tab_texts(app.tab()).enumerate() {
         if i > 0 {
@@ -178,18 +173,26 @@ pub(crate) fn tab_places(open: Tab) -> Vec<(Tab, Range<usize>)> {
 /// left.
 const TITLE_ROOM: usize = INSPECTOR_WIDTH as usize - 1;
 
-/// What the title row says before the tabs, `room` columns of it: a
-/// sprite's `label`, "Mira #12", if it fits, or else its `name` alone, or
-/// else as much of its name as fits, ending "..." since CP437 has no "…"
-/// (design §6.1, §6.2). A space comes before it, at least one after it, and
-/// the tabs are never cut. An unnamed sprite's name is its label.
-fn fitted_label(sprite: Option<(&str, &str)>, room: usize) -> String {
+/// What the title row says before the tabs, `room` columns of it, for
+/// sprite `id`, called `name` or not yet named: its label, "Mira #12" or
+/// "Sprite #12", if it fits, or else its name alone, or an unnamed sprite's
+/// number alone, "#108061", or else as much of that as fits, ending "..."
+/// since CP437 has no "…" (design §6.1, §6.2). A space comes before it, at
+/// least one after it, and the tabs are never cut.
+fn fitted_label(sprite: Option<(EntityId, Option<&str>)>, room: usize) -> String {
     let fits = room.saturating_sub(2);
     let text = match sprite {
-        Some((label, name)) => [label, name]
-            .into_iter()
-            .find(|text| text.chars().count() <= fits)
-            .map_or_else(|| fitted(name, fits), str::to_string),
+        Some((id, name)) => {
+            let long = label(id, name);
+            let short = name.map_or_else(|| format!("#{}", id.0), str::to_string);
+            if long.chars().count() <= fits {
+                long
+            } else if short.chars().count() <= fits {
+                short
+            } else {
+                fitted(&short, fits)
+            }
+        }
         None => String::new(),
     };
     format!("{:<room$}", format!(" {text}"))
