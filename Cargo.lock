@@ -1883,7 +1883,7 @@ dependencies = [
 
 [[package]]
 name = "terra-sim"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "criterion",
  "libm",
@@ -1897,7 +1897,7 @@ dependencies = [
 
 [[package]]
 name = "terra-tui"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "ab_glyph",
  "ctrlc",

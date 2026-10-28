@@ -15,7 +15,7 @@ How to play Terra Sprites and how to work on it: everything past what the [READM
 
 ## Where it's at
 
-Milestone 1 is done: every slice is built ([milestone](https://github.com/Keazra/terra-sprites/milestone/1)), and the owner signed it off after playing it through ([M1 acceptance](acceptance/m1.md)). Milestone 2, *Generations*, is done too, and released as v0.2.0 ([milestone](https://github.com/Keazra/terra-sprites/milestone/2), [M2 acceptance](acceptance/m2.md)): sprites now hatch from eggs, grow up, court, breed and grow old, and the young are born with a mix of their parents' genes. The world is harsher too: water is scarce, so most young die unless another sprite or the player guides them. Milestone 3, *Body & verbs*, is being planned.
+Milestone 1 is done: every slice is built ([milestone](https://github.com/Keazra/terra-sprites/milestone/1)), and the owner signed it off after playing it through ([M1 acceptance](acceptance/m1.md)). Milestone 2, *Generations*, is done too, and released as v0.2.0 ([milestone](https://github.com/Keazra/terra-sprites/milestone/2), [M2 acceptance](acceptance/m2.md)): sprites now hatch from eggs, grow up, court, breed and grow old, and the young are born with a mix of their parents' genes. The world is harsher too: water is scarce, so most young die unless another sprite or the player guides them. Then v0.2.1, a free update, gave the screen a new look: panels without boxes, help for the screen you're on and a command palette, tooltips, small screens and square tiles, motion, and palettes with a settings screen. Milestone 3, *Body & verbs*, is designed, and its building comes next.
 
 ## What sprites do
 
@@ -33,14 +33,14 @@ You can select a sprite and look inside it: its Brain tab shows what it's paying
 
 ## Getting started
 
-The game is best in a terminal of 100×30 characters or more, where everything fits beside the map; 140×40 is better. A smaller one still plays: under 100 columns the inspector hides until `i` opens it over the map, under 30 rows the event log goes, and on the smallest the map is drawn alone, down to 20×5. The title screen needs 60×20. On Windows, use Windows Terminal. The easiest way in is the ready-made game for Windows, Mac (Apple silicon) or Linux on the [v0.2.0 release's page](https://github.com/Keazra/terra-sprites/releases/tag/v0.2.0), with no Rust needed: the zip's `README.txt` says how to run it. Or, with [Rust](https://rustup.rs) 1.97.1 or newer (`rustup update stable`), install the game as a command, without downloading the code yourself:
+The game is best in a terminal of 100×30 characters or more, where everything fits beside the map; 140×40 is better. A smaller one still plays: under 100 columns the inspector hides until `i` opens it over the map, under 30 rows the event log goes, and on the smallest the map is drawn alone, down to 20×5. The title screen needs 60×20. On Windows, use Windows Terminal. The easiest way in is the ready-made game for Windows, Mac (Apple silicon) or Linux on the [v0.2.1 release's page](https://github.com/Keazra/terra-sprites/releases/tag/v0.2.1), with no Rust needed: the zip's `README.txt` says how to run it. Or, with [Rust](https://rustup.rs) 1.97.1 or newer (`rustup update stable`), install the game as a command, without downloading the code yourself:
 
 ```bash
-cargo install --git https://github.com/Keazra/terra-sprites --tag v0.2.0 --locked terra-tui
+cargo install --git https://github.com/Keazra/terra-sprites --tag v0.2.1 --locked terra-tui
 terra-sprites
 ```
 
-`--locked` builds it with the release's own library versions. Leave out `--tag v0.2.0` to install the newest work in progress instead, and run the line again, with a newer release's tag, to update. Or, from a copy of the repository:
+`--locked` builds it with the release's own library versions. Leave out `--tag v0.2.1` to install the newest work in progress instead, and run the line again, with a newer release's tag, to update. Or, from a copy of the repository:
 
 ```bash
 cargo run --release
@@ -194,7 +194,7 @@ The two clips at the top of the README are made the same way, the second at 1× 
 
 ```powershell
 cargo run --release -p terra-tui --example render -- title -o docs/clips/title.gif
-cargo run --release -p terra-tui --example render -- world --seed 7 --from 714 --to 744 --track 544 --tab brain --speed 1x -o docs/clips/thornbush.gif
+cargo run --release -p terra-tui --example render -- world --seed 7 --from 700 --to 730 --track 545 --tab brain --speed 1x -o docs/clips/thornbush.gif
 ```
 
 The file's ending picks the format: `.gif`, `.svg` or `.mp4`. A GIF or an SVG needs nothing else; an MP4 needs [ffmpeg](https://ffmpeg.org/download.html) on the PATH, and the renderer says so if it isn't. The world runs to `--from` unseen, then is drawn frame by frame to `--to`, at `--speed` (`1x`, `4x`, or `max` for 100 ticks a second; past 4× needs `--lab`), each frame showing for `--frame` milliseconds (100 by default). An SVG for a README is best kept under 2 MB, and the renderer says when one isn't: a busy world at a high speed runs past it in a few seconds.
@@ -232,6 +232,7 @@ The `docs/terra-sprites-docs` folder is empty in your copy. It's where the owner
 |---|---|
 | **M1 — A Sprite Lives** *(done, v0.1.0)* | World, ecology, biochemistry, learning brain, terminal UI, the Cursor, saves and replays |
 | **M2 — Generations** *(done, v0.2.0)* | Memory of places, a title screen, life stages and ageing, breeding, genetics, a family tree, population graphs, fast-forward and a speed cap, learning by watching, a harsher world |
+| **The new look** *(done, v0.2.1)* | Panels without boxes, help for the screen you're on and a command palette, tooltips, small screens and square tiles, motion, palettes and a settings screen |
 | **M3 — Body & verbs** | Limbs that are hurt and heal, and the verbs they give: touching, grabbing, gripping, pushing, pulling, throwing and dropping things. Play as a feeling, real sleep, eggs carried and sometimes broken, pregnancy, nests, grief for the deaths a sprite sees, dead bodies, families sharing food and correcting their young, first-steps worlds for new players, and the screen laid out again for it all |
 | **M4 — Terra** | The terrarium is a ship, Terra: its sectors open one by one as the sprites learn |
 | **M5 — Wild Terra** | Critters, more hazards and toys, possibly seasons and weather |
